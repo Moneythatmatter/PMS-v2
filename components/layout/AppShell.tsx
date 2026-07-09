@@ -1,0 +1,38 @@
+"use client";
+
+import type { NavItem, UserProfile } from "@/app/data/types";
+import { Header } from "./Header";
+import { TopNav } from "./TopNav";
+import { MobileNavProvider } from "./MobileNavContext";
+
+interface AppShellProps {
+  children: React.ReactNode;
+  navItems: NavItem[];
+  user: UserProfile;
+  moduleSidebar?: React.ReactNode;
+  subNav?: React.ReactNode;
+}
+
+export function AppShell({ children, navItems, user, moduleSidebar, subNav }: AppShellProps) {
+  return (
+    <MobileNavProvider enabled={!!moduleSidebar}>
+      <div className="flex h-screen min-w-0 overflow-hidden bg-slate-100">
+        {moduleSidebar}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <Header user={user} />
+          <div className="shrink-0 border-b border-slate-800 bg-slate-900 px-3 py-2 sm:px-4 lg:px-6">
+            <TopNav items={navItems} />
+          </div>
+          {subNav && (
+            <div className="shrink-0 border-b border-slate-200 bg-white px-3 sm:px-4 lg:px-6">
+              {subNav}
+            </div>
+          )}
+          <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6">
+            {children}
+          </main>
+        </div>
+      </div>
+    </MobileNavProvider>
+  );
+}
