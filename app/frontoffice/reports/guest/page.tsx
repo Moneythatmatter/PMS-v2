@@ -1,5 +1,5 @@
-import { ReportView } from "@/components/frontoffice/ServiceViews";
+import { GuestReportView } from "@/components/frontoffice/ReportsViews";
 
 export default function GuestReportPage() {
-  return <ReportView title="Guest Report" description="Guest statistics and demographics." />;
+  return <GuestReportView />;
 }

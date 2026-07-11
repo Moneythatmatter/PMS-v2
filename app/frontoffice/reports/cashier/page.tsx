@@ -1,5 +1,5 @@
-import { ReportView } from "@/components/frontoffice/ServiceViews";
+import { CashierReportView } from "@/components/frontoffice/ReportsViews";
 
 export default function CashierReportPage() {
-  return <ReportView title="Cashier Report" description="Cashier shift collections and settlements." />;
+  return <CashierReportView />;
 }

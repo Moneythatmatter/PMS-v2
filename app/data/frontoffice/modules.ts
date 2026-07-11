@@ -390,6 +390,8 @@ export const wakeUpCalls: WakeUpCall[] = [
   { id: "W-01", guest: "James Wilson", room: "112", date: "24 Jun 2026", time: "06:00 AM", notes: "Call front desk if no answer", completed: false },
   { id: "W-02", guest: "Michael Brown", room: "305", date: "24 Jun 2026", time: "05:30 AM", notes: "Early flight", completed: false },
   { id: "W-03", guest: "Rahul Sharma", room: "204", date: "23 Jun 2026", time: "07:00 AM", completed: true },
+  { id: "W-04", guest: "Priya Patel", room: "501", date: "23 Jun 2026", time: "06:15 AM", notes: "Room service tea first", completed: false },
+  { id: "W-05", guest: "James Wilson", room: "112", date: "23 Jun 2026", time: "05:45 AM", notes: "Second attempt if no answer by 5:50", completed: false },
 ];
 
 export const taxiBookings: TaxiBooking[] = [

@@ -1,5 +1,5 @@
-import { ReportView } from "@/components/frontoffice/ServiceViews";
+import { TaxReportView } from "@/components/frontoffice/ReportsViews";
 
 export default function TaxReportPage() {
-  return <ReportView title="Tax Report" description="GST and tax collection summary." />;
+  return <TaxReportView />;
 }

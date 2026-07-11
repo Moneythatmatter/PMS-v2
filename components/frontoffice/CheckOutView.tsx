@@ -15,9 +15,10 @@ import {
   Receipt,
   Search,
   Users,
+  SplitSquareHorizontal,
 } from "lucide-react";
-import { checkoutFolios, computeCheckoutTotals } from "@/app/data";
-import type { CheckoutFolio } from "@/app/data/frontoffice/checkout";
+import { checkoutFolios, computeCheckoutTotals, computeCheckoutBills } from "@/app/data";
+import type { CheckoutFolio, SplittableChargeKey } from "@/app/data/frontoffice/checkout";
 import { paymentModes } from "@/app/data/frontoffice/constants";
 import { Button } from "@/components/ui/Button";
 import {
@@ -40,6 +41,18 @@ const steps: { id: Step; label: string; num: number }[] = [
   { id: "done", label: "Complete", num: 4 },
 ];
 
+type BillLineKey = SplittableChargeKey | "roomCharges" | "gst";
+
+const BILL_LINES: { key: BillLineKey; label: string; splittable: boolean }[] = [
+  { key: "roomCharges", label: "Room Charges", splittable: false },
+  { key: "restaurantCharges", label: "Restaurant Charges", splittable: true },
+  { key: "laundry", label: "Laundry", splittable: true },
+  { key: "miniBar", label: "Mini Bar", splittable: true },
+  { key: "extraBed", label: "Extra Bed", splittable: true },
+  { key: "otherCharges", label: "Other Charges", splittable: true },
+  { key: "gst", label: "Tax (GST)", splittable: false },
+];
+
 function getInitials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
@@ -52,7 +65,10 @@ export function CheckOutView() {
   const [discount, setDiscount] = useState(0);
   const [paymentMode, setPaymentMode] = useState("UPI");
   const [amountReceived, setAmountReceived] = useState(0);
-  const [invoiceNo, setInvoiceNo] = useState<string | null>(null);
+  const [invoiceNos, setInvoiceNos] = useState<Record<string, string>>({});
+  const [activeInvoiceBillId, setActiveInvoiceBillId] = useState<string | null>(null);
+  const [splitBilling, setSplitBilling] = useState(false);
+  const [separateBillItems, setSeparateBillItems] = useState<SplittableChargeKey[]>([]);
   const [showInvoice, setShowInvoice] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
@@ -62,10 +78,16 @@ export function CheckOutView() {
     [folios],
   );
 
-  const totals = useMemo(() => {
+  const billBreakdown = useMemo(() => {
     if (!selected) return null;
-    return computeCheckoutTotals(selected, discount);
-  }, [selected, discount]);
+    return computeCheckoutBills(
+      selected,
+      discount,
+      splitBilling ? separateBillItems : [],
+    );
+  }, [selected, discount, splitBilling, separateBillItems]);
+
+  const totals = billBreakdown?.totals ?? null;
 
   const currentStep: Step = completed
     ? "done"
@@ -85,7 +107,10 @@ export function CheckOutView() {
     setAmountReceived(computeCheckoutTotals(folio).pending);
     setLookupError("");
     setCompleted(false);
-    setInvoiceNo(null);
+    setInvoiceNos({});
+    setActiveInvoiceBillId(null);
+    setSplitBilling(false);
+    setSeparateBillItems([]);
     setShowInvoice(false);
   };
 
@@ -106,25 +131,68 @@ export function CheckOutView() {
     loadGuest(found);
   };
 
-  const handleGenerateInvoice = () => {
-    if (!selected || !totals) return;
-    const no = invoiceNo ?? `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    setInvoiceNo(no);
-    setShowInvoice(true);
-    setToast(`Invoice ${no} generated for ${selected.guestName}.`);
+  const toggleSeparateBillItem = (key: SplittableChargeKey) => {
+    setSeparateBillItems((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+    setInvoiceNos({});
+    setActiveInvoiceBillId(null);
   };
 
-  const invoiceData = selected && totals && invoiceNo
+  const getBillAmount = (key: BillLineKey) => {
+    if (!selected) return 0;
+    if (key === "gst") return selected.gst;
+    return selected[key];
+  };
+
+  const generateInvoiceNo = () => `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  const handleGenerateInvoice = (billId?: string) => {
+    if (!selected || !totals || !billBreakdown) return;
+    const targetBill = billId
+      ? billBreakdown.bills.find((b) => b.id === billId)
+      : billBreakdown.bills[0];
+    if (!targetBill) return;
+
+    const no = invoiceNos[targetBill.id] ?? generateInvoiceNo();
+    setInvoiceNos((prev) => ({ ...prev, [targetBill.id]: no }));
+    setActiveInvoiceBillId(targetBill.id);
+    setShowInvoice(true);
+    setToast(
+      splitBilling && billBreakdown.bills.length > 1
+        ? `${targetBill.label} invoice ${no} generated for ${selected.guestName}.`
+        : `Invoice ${no} generated for ${selected.guestName}.`,
+    );
+  };
+
+  const handleGenerateAllInvoices = () => {
+    if (!selected || !billBreakdown) return;
+    const next: Record<string, string> = { ...invoiceNos };
+    for (const bill of billBreakdown.bills) {
+      if (!next[bill.id]) next[bill.id] = generateInvoiceNo();
+    }
+    setInvoiceNos(next);
+    setActiveInvoiceBillId(billBreakdown.bills[0]?.id ?? null);
+    setShowInvoice(true);
+    setToast(
+      `${billBreakdown.bills.length} split invoice${billBreakdown.bills.length !== 1 ? "s" : ""} generated for ${selected.guestName}.`,
+    );
+  };
+
+  const activeBill = billBreakdown?.bills.find((b) => b.id === activeInvoiceBillId) ?? billBreakdown?.bills[0];
+  const invoiceData = selected && totals && activeBill && invoiceNos[activeBill.id]
     ? {
-        invoiceNo,
+        invoiceNo: invoiceNos[activeBill.id],
         invoiceDate: new Date().toLocaleDateString("en-IN", {
           day: "2-digit",
           month: "short",
           year: "numeric",
         }),
         folio: selected,
-        discount,
+        discount: activeBill.discount,
         paymentMode,
+        bill: splitBilling && billBreakdown && billBreakdown.bills.length > 1 ? activeBill : undefined,
+        billTitle: splitBilling && billBreakdown && billBreakdown.bills.length > 1 ? activeBill.label : undefined,
       }
     : null;
 
@@ -136,8 +204,12 @@ export function CheckOutView() {
     }
     setFolios((prev) => prev.filter((f) => f.id !== selected.id));
     setCompleted(true);
+    const billNote =
+      splitBilling && billBreakdown && billBreakdown.bills.length > 1
+        ? ` across ${billBreakdown.bills.length} bills`
+        : "";
     setToast(
-      `${selected.guestName} checked out from Room ${selected.room}. ${formatINR(totals.pending)} collected via ${paymentMode}.`,
+      `${selected.guestName} checked out from Room ${selected.room}. ${formatINR(totals.pending)} collected via ${paymentMode}${billNote}.`,
     );
   };
 
@@ -145,9 +217,14 @@ export function CheckOutView() {
     setSelected(null);
     setSearch("");
     setCompleted(false);
-    setInvoiceNo(null);
+    setInvoiceNos({});
+    setActiveInvoiceBillId(null);
+    setSplitBilling(false);
+    setSeparateBillItems([]);
     setLookupError("");
   };
+
+  const hasAnyInvoice = Object.keys(invoiceNos).length > 0;
 
   return (
     <div className="space-y-6">
@@ -177,18 +254,24 @@ export function CheckOutView() {
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
-                onClick={() => (invoiceNo ? setShowInvoice(true) : handleGenerateInvoice())}
+                onClick={() => {
+                  if (hasAnyInvoice && activeInvoiceBillId) setShowInvoice(true);
+                  else if (splitBilling && billBreakdown && billBreakdown.bills.length > 1) handleGenerateAllInvoices();
+                  else handleGenerateInvoice();
+                }}
               >
                 <FileText className="h-3.5 w-3.5" />
-                {invoiceNo ? "View Invoice" : "Generate Invoice"}
+                {hasAnyInvoice ? "View Invoice" : splitBilling && billBreakdown && billBreakdown.bills.length > 1 ? "Generate Invoices" : "Generate Invoice"}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
                 onClick={() => {
-                  if (!invoiceNo) handleGenerateInvoice();
-                  else setShowInvoice(true);
+                  if (!hasAnyInvoice) {
+                    if (splitBilling && billBreakdown && billBreakdown.bills.length > 1) handleGenerateAllInvoices();
+                    else handleGenerateInvoice();
+                  } else setShowInvoice(true);
                 }}
               >
                 <Printer className="h-3.5 w-3.5" />
@@ -249,8 +332,10 @@ export function CheckOutView() {
           <p className="mt-1 text-sm text-slate-600">
             {selected.guestName} · Room {selected.room} · {formatINR(totals.pending)} via {paymentMode}
           </p>
-          {invoiceNo && (
-            <p className="mt-2 text-xs font-medium text-emerald-700">Invoice: {invoiceNo}</p>
+          {hasAnyInvoice && (
+            <p className="mt-2 text-xs font-medium text-emerald-700">
+              {Object.entries(invoiceNos).map(([id, no]) => no).join(" · ")}
+            </p>
           )}
           <Button variant="outline" className="mt-6" onClick={reset}>
             Process Another Checkout
@@ -390,30 +475,104 @@ export function CheckOutView() {
 
                 {/* Bill summary */}
                 <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <h3 className="text-sm font-semibold text-slate-900">Bill Summary</h3>
-                    {invoiceNo && (
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                        {invoiceNo}
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSplitBilling((v) => !v);
+                        if (splitBilling) setSeparateBillItems([]);
+                        setInvoiceNos({});
+                        setActiveInvoiceBillId(null);
+                      }}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors",
+                        splitBilling
+                          ? "bg-violet-100 text-violet-700 ring-1 ring-violet-200"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                      )}
+                    >
+                      <SplitSquareHorizontal className="h-3.5 w-3.5" />
+                      Split Billing
+                    </button>
                   </div>
+
+                  {splitBilling && (
+                    <p className="mb-3 rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-700">
+                      Select charges to bill separately — e.g. laundry, mini bar, or restaurant for company reimbursement.
+                    </p>
+                  )}
+
                   <div className="space-y-0 divide-y divide-slate-50">
-                    {[
-                      ["Room Charges", selected.roomCharges],
-                      ["Restaurant Charges", selected.restaurantCharges],
-                      ["Laundry", selected.laundry],
-                      ["Mini Bar", selected.miniBar],
-                      ["Extra Bed", selected.extraBed],
-                      ...(selected.otherCharges > 0 ? [["Other Charges", selected.otherCharges] as const] : []),
-                      ["Tax (GST)", selected.gst],
-                    ].map(([label, amount]) => (
-                      <div key={label} className="flex items-center justify-between py-2.5 text-sm">
-                        <span className="text-slate-600">{label}</span>
-                        <span className="font-medium text-slate-900">{formatINR(amount as number)}</span>
-                      </div>
-                    ))}
+                    {BILL_LINES.map(({ key, label, splittable }) => {
+                      const amount = getBillAmount(key);
+                      if (amount <= 0) return null;
+                      const isSeparate =
+                        splittable &&
+                        splitBilling &&
+                        separateBillItems.includes(key as SplittableChargeKey);
+
+                      return (
+                        <div key={key} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                          <div className="flex min-w-0 items-center gap-2">
+                            {splittable && splitBilling && (
+                              <input
+                                type="checkbox"
+                                checked={separateBillItems.includes(key as SplittableChargeKey)}
+                                onChange={() => toggleSeparateBillItem(key as SplittableChargeKey)}
+                                className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                                aria-label={`Bill ${label} separately`}
+                              />
+                            )}
+                            <span className={cn("text-slate-600", isSeparate && "text-violet-700")}>
+                              {label}
+                            </span>
+                            {isSeparate && (
+                              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                                Separate bill
+                              </span>
+                            )}
+                          </div>
+                          <span className="shrink-0 font-medium text-slate-900">{formatINR(amount)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
+
+                  {splitBilling && separateBillItems.length > 0 && billBreakdown && billBreakdown.bills.length > 1 && (
+                    <div className="mt-4 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Split Bills</p>
+                      {billBreakdown.bills.map((bill) => (
+                        <div
+                          key={bill.id}
+                          className={cn(
+                            "flex items-center justify-between rounded-xl border px-3 py-2.5",
+                            bill.isMain
+                              ? "border-blue-100 bg-blue-50/50"
+                              : "border-violet-100 bg-violet-50/50",
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-900">{bill.label}</p>
+                            <p className="text-[11px] text-slate-500">
+                              Incl. GST {formatINR(bill.gst)}
+                              {bill.discount > 0 ? ` · Disc. ${formatINR(bill.discount)}` : ""}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-slate-900">{formatINR(bill.due)}</p>
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateInvoice(bill.id)}
+                              className="text-[11px] font-semibold text-blue-600 hover:text-blue-700"
+                            >
+                              {invoiceNos[bill.id] ? "View" : "Invoice"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
                     <div className="flex items-center justify-between text-sm">
@@ -424,9 +583,12 @@ export function CheckOutView() {
                           min={0}
                           value={discount}
                           onChange={(e) => {
-                            setDiscount(Number(e.target.value));
-                            const t = computeCheckoutTotals(selected, Number(e.target.value));
+                            const nextDiscount = Number(e.target.value);
+                            setDiscount(nextDiscount);
+                            const t = computeCheckoutTotals(selected, nextDiscount);
                             setAmountReceived(t.pending);
+                            setInvoiceNos({});
+                            setActiveInvoiceBillId(null);
                           }}
                           className="h-8 w-24 rounded-lg text-right text-sm"
                         />
@@ -441,8 +603,15 @@ export function CheckOutView() {
                   <div className="mt-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs font-medium text-blue-100">Amount Due</p>
+                        <p className="text-xs font-medium text-blue-100">
+                          {splitBilling && separateBillItems.length > 0 ? "Total Amount Due" : "Amount Due"}
+                        </p>
                         <p className="text-2xl font-bold">{formatINR(totals.pending)}</p>
+                        {splitBilling && separateBillItems.length > 0 && billBreakdown && (
+                          <p className="mt-0.5 text-xs text-blue-200">
+                            Across {billBreakdown.bills.length} bill{billBreakdown.bills.length !== 1 ? "s" : ""}
+                          </p>
+                        )}
                       </div>
                       <CreditCard className="h-8 w-8 text-blue-200" />
                     </div>
@@ -497,6 +666,30 @@ export function CheckOutView() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {showInvoice && splitBilling && billBreakdown && billBreakdown.bills.length > 1 && (
+        <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          {billBreakdown.bills.map((bill) => (
+            <button
+              key={bill.id}
+              type="button"
+              onClick={() => setActiveInvoiceBillId(bill.id)}
+              className={cn(
+                "rounded-xl px-3 py-2 text-left text-xs transition-colors",
+                activeInvoiceBillId === bill.id
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200",
+              )}
+            >
+              <p className="font-semibold">{bill.label}</p>
+              <p className={cn("mt-0.5", activeInvoiceBillId === bill.id ? "text-blue-100" : "text-slate-500")}>
+                {formatINR(bill.due)}
+                {invoiceNos[bill.id] ? ` · ${invoiceNos[bill.id]}` : ""}
+              </p>
+            </button>
+          ))}
         </div>
       )}
 

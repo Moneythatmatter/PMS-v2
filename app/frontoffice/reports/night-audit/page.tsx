@@ -1,5 +1,5 @@
-import { ReportView } from "@/components/frontoffice/ServiceViews";
+import { NightAuditReportView } from "@/components/frontoffice/ReportsViews";
 
 export default function NightAuditReportPage() {
-  return <ReportView title="Night Audit Report" description="End-of-day audit summary and reconciliation." />;
+  return <NightAuditReportView />;
 }

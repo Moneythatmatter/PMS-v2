@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   BedDouble,
+  Building2,
   CalendarDays,
   CheckCircle2,
   CreditCard,
@@ -12,18 +13,14 @@ import {
 } from "lucide-react";
 import {
   bookingSources,
-  countries,
-  genders,
-  idProofTypes,
   mealPlans,
-  nationalities,
   paymentModes,
   ratePlans,
-  reservationStatuses,
   roomNumbers,
   roomTypes,
-  states,
 } from "@/app/data/frontoffice/constants";
+import { CompanySearchSelect } from "@/components/frontoffice/CompanySearchSelect";
+import { SearchSelect } from "@/components/frontoffice/SearchSelect";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -104,22 +101,21 @@ function SectionCard({
 
 const inputClass = "rounded-xl";
 
+const bookingTypeOptions = [
+  { id: "Individual", label: "Individual", hint: "Personal" },
+  { id: "Company", label: "Company", hint: "Corporate" },
+] as const;
+
 export function NewReservationForm() {
   const [ref] = useState(generateRef);
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
-    gender: "",
-    dob: "",
-    nationality: "",
     mobile: "",
     email: "",
-    address: "",
-    city: "",
-    state: "",
-    country: "",
-    idProofType: "",
-    idNumber: "",
+    bookingType: "" as "" | "Individual" | "Company",
+    companyName: "",
+    companyId: "",
     checkIn: "",
     checkOut: "",
     adults: 1,
@@ -131,7 +127,6 @@ export function NewReservationForm() {
     source: "",
     advancePaid: 0,
     paymentMode: "",
-    bookingStatus: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
@@ -194,32 +189,34 @@ export function NewReservationForm() {
     setSavedStatus(null);
   };
 
-  const validate = (confirmed = false) => {
+  const validate = () => {
     const next: Record<string, string> = {};
     if (!form.firstName.trim()) next.firstName = "Required";
     if (!form.lastName.trim()) next.lastName = "Required";
     if (!form.mobile.trim()) next.mobile = "Required";
+    if (!form.email.trim()) next.email = "Required";
+    if (!form.bookingType) next.bookingType = "Required";
+    if (form.bookingType === "Company" && !form.companyId)
+      next.companyName = "Please select a company";
     if (!form.checkIn) next.checkIn = "Required";
     if (!form.checkOut) next.checkOut = "Required";
     if (form.checkIn && form.checkOut && nights <= 0)
       next.checkOut = "Must be after check-in";
     if (!form.roomType) next.roomType = "Required";
-    if (confirmed && !form.paymentMode) next.paymentMode = "Required for confirmed booking";
     setErrors(next);
     return Object.keys(next).length === 0;
   };
 
-  const handleSave = (confirmed = false) => {
-    if (!validate(confirmed)) {
+  const handleSave = () => {
+    if (!validate()) {
       setToastVariant("error");
       setToast("Please fill in all required fields marked with *.");
       return;
     }
-    const status = confirmed ? "Confirmed" : form.bookingStatus || "Reserved";
-    setSavedStatus(status);
+    setSavedStatus("Reserved");
     setToastVariant("success");
     setToast(
-      `Reservation ${ref} saved as ${status} for ${form.firstName} ${form.lastName}. Total: ${formatINR(totalAmount)}`,
+      `Reservation ${ref} saved as Reserved for ${form.firstName} ${form.lastName}. Total: ${formatINR(totalAmount)}`,
     );
   };
 
@@ -234,7 +231,7 @@ export function NewReservationForm() {
       <FOPageHeader
         eyebrow="Reservations"
         title="New Reservation"
-        description="Create a confirmed or tentative booking with guest details, stay dates, room allocation, and payment."
+        description="Capture essential guest contact and booking details. Full guest profile is completed at check-in."
         badge={
           <div className="flex items-center gap-2 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-2.5">
             <CalendarDays className="h-4 w-4 text-blue-600" />
@@ -307,7 +304,7 @@ export function NewReservationForm() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Form columns */}
           <div className="space-y-5 lg:col-span-2">
-            <SectionCard icon={User} title="Guest Details" description="Primary guest information and ID proof">
+            <SectionCard icon={User} title="Guest Details" description="Basic contact only — ID, address, and other details are collected at check-in">
               <FormField label="First Name" required>
                 <TextInput className={inputClass} placeholder="Enter first name" value={form.firstName} onChange={(e) => update("firstName", e.target.value)} />
                 {errors.firstName && <p className="text-xs text-red-500">{errors.firstName}</p>}
@@ -316,55 +313,58 @@ export function NewReservationForm() {
                 <TextInput className={inputClass} placeholder="Enter last name" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
                 {errors.lastName && <p className="text-xs text-red-500">{errors.lastName}</p>}
               </FormField>
-              <FormField label="Gender">
-                <SelectInput className={inputClass} value={form.gender} onChange={(e) => update("gender", e.target.value)}>
-                  {emptyOption("Select gender")}
-                  {genders.map((g) => <option key={g} value={g}>{g}</option>)}
-                </SelectInput>
-              </FormField>
-              <FormField label="DOB">
-                <TextInput className={inputClass} type="date" value={form.dob} onChange={(e) => update("dob", e.target.value)} />
-              </FormField>
-              <FormField label="Nationality">
-                <SelectInput className={inputClass} value={form.nationality} onChange={(e) => update("nationality", e.target.value)}>
-                  {emptyOption("Select nationality")}
-                  {nationalities.map((n) => <option key={n} value={n}>{n}</option>)}
-                </SelectInput>
-              </FormField>
               <FormField label="Mobile" required>
-                <TextInput className={inputClass} placeholder="Enter mobile" value={form.mobile} onChange={(e) => update("mobile", e.target.value)} />
+                <TextInput className={inputClass} placeholder="Enter mobile number" value={form.mobile} onChange={(e) => update("mobile", e.target.value)} />
                 {errors.mobile && <p className="text-xs text-red-500">{errors.mobile}</p>}
               </FormField>
-              <FormField label="Email">
+              <FormField label="Email" required>
                 <TextInput className={inputClass} type="email" placeholder="Enter email" value={form.email} onChange={(e) => update("email", e.target.value)} />
+                {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
               </FormField>
-              <FormField label="Address">
-                <TextInput className={inputClass} placeholder="Enter address" value={form.address} onChange={(e) => update("address", e.target.value)} />
+              <FormField label="Booking Type" required>
+                <SearchSelect
+                  options={[...bookingTypeOptions]}
+                  selectedId={form.bookingType || null}
+                  placeholder="Search booking type…"
+                  inputClassName={inputClass}
+                  onSelect={(option) => {
+                    update("bookingType", option.id);
+                    if (option.id === "Individual") {
+                      update("companyName", "");
+                      update("companyId", "");
+                    }
+                  }}
+                  onClear={() => {
+                    update("bookingType", "");
+                    update("companyName", "");
+                    update("companyId", "");
+                  }}
+                />
+                {errors.bookingType && <p className="text-xs text-red-500">{errors.bookingType}</p>}
               </FormField>
-              <FormField label="City">
-                <TextInput className={inputClass} placeholder="Enter city" value={form.city} onChange={(e) => update("city", e.target.value)} />
-              </FormField>
-              <FormField label="State">
-                <SelectInput className={inputClass} value={form.state} onChange={(e) => update("state", e.target.value)}>
-                  {emptyOption("Select state")}
-                  {states.map((s) => <option key={s} value={s}>{s}</option>)}
-                </SelectInput>
-              </FormField>
-              <FormField label="Country">
-                <SelectInput className={inputClass} value={form.country} onChange={(e) => update("country", e.target.value)}>
-                  {emptyOption("Select country")}
-                  {countries.map((c) => <option key={c} value={c}>{c}</option>)}
-                </SelectInput>
-              </FormField>
-              <FormField label="ID Proof Type">
-                <SelectInput className={inputClass} value={form.idProofType} onChange={(e) => update("idProofType", e.target.value)}>
-                  {emptyOption("Select id proof type")}
-                  {idProofTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-                </SelectInput>
-              </FormField>
-              <FormField label="ID Number">
-                <TextInput className={inputClass} placeholder="Enter id number" value={form.idNumber} onChange={(e) => update("idNumber", e.target.value)} />
-              </FormField>
+              {form.bookingType === "Company" && (
+                <FormField label="Company" required className="sm:col-span-2">
+                  <CompanySearchSelect
+                    value={form.companyName}
+                    selectedCompanyId={form.companyId || null}
+                    onChange={(v) => {
+                      update("companyName", v);
+                      update("companyId", "");
+                    }}
+                    onSelect={(c) => {
+                      update("companyName", c.name);
+                      update("companyId", c.id);
+                    }}
+                    onClear={() => {
+                      update("companyName", "");
+                      update("companyId", "");
+                    }}
+                    placeholder="Search company name or code…"
+                    inputClassName={inputClass}
+                  />
+                  {errors.companyName && <p className="text-xs text-red-500">{errors.companyName}</p>}
+                </FormField>
+              )}
             </SectionCard>
 
             <SectionCard icon={BedDouble} title="Booking Details" description="Stay dates, room allocation, and rate plan">
@@ -418,7 +418,7 @@ export function NewReservationForm() {
               </FormField>
             </SectionCard>
 
-            <SectionCard icon={CreditCard} title="Payment & Status" description="Advance collection and booking status">
+            <SectionCard icon={CreditCard} title="Payment" description="Advance collection and pending balance">
               <FormField label="Advance Paid">
                 <TextInput className={inputClass} type="number" min={0} value={form.advancePaid} onChange={(e) => update("advancePaid", Number(e.target.value))} />
               </FormField>
@@ -431,12 +431,6 @@ export function NewReservationForm() {
               </FormField>
               <FormField label="Pending Amount">
                 <TextInput className={cn(inputClass, "bg-slate-50 font-semibold")} type="number" value={pendingAmount} readOnly />
-              </FormField>
-              <FormField label="Booking Status">
-                <SelectInput className={inputClass} value={form.bookingStatus} onChange={(e) => update("bookingStatus", e.target.value)}>
-                  {emptyOption("Select booking status")}
-                  {reservationStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
-                </SelectInput>
               </FormField>
             </SectionCard>
           </div>
@@ -455,7 +449,9 @@ export function NewReservationForm() {
                     { icon: CalendarDays, label: "Check-out", value: form.checkOut || "—" },
                     { icon: BedDouble, label: "Room", value: form.roomType ? `${form.roomNumber || "TBA"} · ${form.roomType}` : "—" },
                     { icon: Users, label: "Guests", value: form.adults ? `${form.adults} Adult${form.adults !== 1 ? "s" : ""}${form.children ? `, ${form.children} Child${form.children !== 1 ? "ren" : ""}` : ""}` : "—" },
+                    { icon: form.bookingType === "Company" ? Building2 : User, label: "Booking Type", value: form.bookingType === "Company" ? `${form.companyName || "Company"}` : form.bookingType === "Individual" ? "Individual" : "—" },
                     { icon: MapPin, label: "Source", value: form.source || "—" },
+                    { icon: CheckCircle2, label: "Status", value: "Reserved" },
                   ].map(({ icon: Icon, label, value }) => (
                     <div key={label} className="flex items-start gap-2.5">
                       <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
@@ -492,11 +488,8 @@ export function NewReservationForm() {
               </div>
 
               <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-2">
-                <Button onClick={() => handleSave(false)} className="h-11 w-full bg-slate-900 hover:bg-slate-800">
+                <Button onClick={handleSave} className="h-11 w-full bg-slate-900 hover:bg-slate-800">
                   Save Reservation
-                </Button>
-                <Button variant="outline" onClick={() => handleSave(true)} className="h-11 w-full">
-                  Save as Confirmed
                 </Button>
                 <button type="button" onClick={() => window.history.back()} className="w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-700">
                   Cancel

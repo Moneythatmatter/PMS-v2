@@ -111,7 +111,7 @@ export function PosBillingView() {
       )}
 
       <FOPageHeader
-        eyebrow="Front Office"
+        eyebrow="Food & Beverages"
         title="POS Billing"
         description="Restaurant billing for walk-in customers or in-house guests."
         badge={

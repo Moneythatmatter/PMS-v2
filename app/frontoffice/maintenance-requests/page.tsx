@@ -1,5 +1,5 @@
-import { MaintenanceRequestsView } from "@/components/frontoffice/ServiceViews";
+import { redirect } from "next/navigation";
 
-export default function MaintenanceRequestsPage() {
-  return <MaintenanceRequestsView />;
+export default function FrontOfficeMaintenanceRequestsPage() {
+  redirect("/housekeeping/maintenance-requests");
 }

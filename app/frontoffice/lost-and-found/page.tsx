@@ -1,5 +1,5 @@
-import { LostFoundView } from "@/components/frontoffice/ServiceViews";
+import { redirect } from "next/navigation";
 
-export default function LostFoundPage() {
-  return <LostFoundView />;
+export default function FrontOfficeLostFoundPage() {
+  redirect("/housekeeping/lost-and-found");
 }

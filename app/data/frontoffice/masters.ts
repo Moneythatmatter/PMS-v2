@@ -40,6 +40,22 @@ export interface MarketSegmentMaster {
   status: "Active" | "Inactive";
 }
 
+export interface CompanyMaster {
+  id: string;
+  code: string;
+  name: string;
+  type: "Corporate" | "Travel Agent" | "Government" | "Event";
+  contactPerson: string;
+  email: string;
+  phone: string;
+  gstNumber?: string;
+  address: string;
+  city: string;
+  corporateDiscount: number;
+  creditLimit: number;
+  status: "Active" | "Inactive";
+}
+
 export const roomTypeMasters: RoomTypeMaster[] = [
   {
     id: "RT-01",
@@ -230,6 +246,82 @@ export const marketSegmentMasters: MarketSegmentMaster[] = [
     discountPercent: 12,
     description: "Registered travel agents and tour operators.",
     commissionPercent: 10,
+    status: "Inactive",
+  },
+];
+
+export const companyMasters: CompanyMaster[] = [
+  {
+    id: "CO-01",
+    code: "TCS",
+    name: "Tata Consultancy Services",
+    type: "Corporate",
+    contactPerson: "Rajesh Mehta",
+    email: "travel.desk@tcs.com",
+    phone: "+91 98765 43210",
+    gstNumber: "27AAACT2727Q1ZW",
+    address: "TCS House, Raveline Street, Fort",
+    city: "Mumbai",
+    corporateDiscount: 15,
+    creditLimit: 500000,
+    status: "Active",
+  },
+  {
+    id: "CO-02",
+    code: "INFY",
+    name: "Infosys Limited",
+    type: "Corporate",
+    contactPerson: "Priya Nair",
+    email: "corporate.travel@infosys.com",
+    phone: "+91 98001 23456",
+    gstNumber: "29AABCI1234E1Z5",
+    address: "Electronics City, Hosur Road",
+    city: "Bengaluru",
+    corporateDiscount: 12,
+    creditLimit: 350000,
+    status: "Active",
+  },
+  {
+    id: "CO-03",
+    code: "SOTC",
+    name: "SOTC Travel",
+    type: "Travel Agent",
+    contactPerson: "Amit Kapoor",
+    email: "b2b@sotc.in",
+    phone: "+91 91234 56789",
+    gstNumber: "27AABCS1234F1Z8",
+    address: "Maker Chambers IV, Nariman Point",
+    city: "Mumbai",
+    corporateDiscount: 10,
+    creditLimit: 200000,
+    status: "Active",
+  },
+  {
+    id: "CO-04",
+    code: "GOVT",
+    name: "Maharashtra Tourism Development",
+    type: "Government",
+    contactPerson: "Dr. S. Patil",
+    email: "bookings@mtdc.gov.in",
+    phone: "+91 92222 33444",
+    address: "MTDC Building, CDO Hutments",
+    city: "Mumbai",
+    corporateDiscount: 20,
+    creditLimit: 150000,
+    status: "Active",
+  },
+  {
+    id: "CO-05",
+    code: "WEDG",
+    name: "Wedding Planners India",
+    type: "Event",
+    contactPerson: "Neha Sharma",
+    email: "events@weddingplanners.in",
+    phone: "+91 99887 76655",
+    address: "12, Linking Road, Bandra West",
+    city: "Mumbai",
+    corporateDiscount: 18,
+    creditLimit: 100000,
     status: "Inactive",
   },
 ];

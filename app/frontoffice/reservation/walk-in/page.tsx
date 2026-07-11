@@ -1,5 +1,5 @@
-import { WalkInForm } from "@/components/frontoffice/reservation/WalkInForm";
+import { redirect } from "next/navigation";
 
 export default function WalkInPage() {
-  return <WalkInForm />;
+  redirect("/frontoffice/check-in");
 }

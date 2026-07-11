@@ -10,6 +10,7 @@ import {
   bookings,
   navItems,
   currentUser,
+  wakeUpCalls,
 } from "@/app/data";
 import { AppShell } from "@/components/layout/AppShell";
 import { StatCard } from "@/components/ui/StatCard";
@@ -21,6 +22,7 @@ import { RoomOccupancy } from "@/components/dashboard/RoomOccupancy";
 import { OverallRatings } from "@/components/dashboard/OverallRatings";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { BookingList } from "@/components/dashboard/BookingList";
+import { WakeUpCallsAlert } from "@/components/frontoffice/WakeUpCallsAlert";
 
 export default function DashboardPage() {
   return (
@@ -52,6 +54,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="space-y-4 xl:col-span-4">
+            <WakeUpCallsAlert calls={wakeUpCalls} />
             <RoomOccupancy data={occupancyData} />
             <OverallRatings data={ratingsData} />
             <RecentActivity activities={activityLog} />

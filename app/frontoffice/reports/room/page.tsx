@@ -1,5 +1,5 @@
-import { ReportView } from "@/components/frontoffice/ServiceViews";
+import { RoomReportView } from "@/components/frontoffice/ReportsViews";
 
 export default function RoomReportPage() {
-  return <ReportView title="Room Report" description="Room utilization and status summary." />;
+  return <RoomReportView />;
 }

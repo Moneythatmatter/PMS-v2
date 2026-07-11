@@ -88,8 +88,17 @@ export interface ReservationBooking {
   balance: number;
   status: ReservationStatus;
   arrivingToday?: boolean;
-  // Extended detail fields
+  bookingType?: "Individual" | "Company";
+  companyName?: string;
+  // Extended detail fields — collected at check-in
+  gender?: string;
+  dob?: string;
   nationality?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
   idProofType?: string;
   idNumber?: string;
   adults?: number;

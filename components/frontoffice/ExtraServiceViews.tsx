@@ -294,7 +294,7 @@ export function HousekeepingRequestsView() {
   };
 
   return (
-    <ModuleShell toast={toast} setToast={setToast}
+    <ModuleShell toast={toast} setToast={setToast} eyebrow="Housekeeping"
       header={{ title: "Housekeeping Requests", desc: "Log and track guest housekeeping requests.", btn: "New Request", onBtn: () => setFormOpen(true) }}
       stats={[
         { label: "Open", value: items.filter((r) => r.status === "Open").length, accent: "#64748b", icon: Sparkles, sublabel: "Awaiting assignment" },
@@ -360,7 +360,7 @@ export function MaintenanceRequestsView() {
   };
 
   return (
-    <ModuleShell toast={toast} setToast={setToast}
+    <ModuleShell toast={toast} setToast={setToast} eyebrow="Housekeeping"
       header={{ title: "Maintenance Requests", desc: "Log and track room maintenance issues.", btn: "Log Issue", onBtn: () => setFormOpen(true) }}
       stats={[
         { label: "Open", value: items.filter((r) => r.status === "Open").length, icon: Wrench, sublabel: "Needs attention" },
@@ -435,7 +435,7 @@ export function LostFoundView() {
   };
 
   return (
-    <ModuleShell toast={toast} setToast={setToast}
+    <ModuleShell toast={toast} setToast={setToast} eyebrow="Housekeeping"
       header={{ title: "Lost & Found", desc: "Track lost and found items for guests.", btn: "Log Item", onBtn: () => setFormOpen(true) }}
       stats={[
         { label: "Stored", value: items.filter((r) => r.status === "Stored").length, accent: "#f59e0b", icon: PackageSearch, sublabel: "In custody" },
@@ -1107,11 +1107,12 @@ function invoiceRecordToData(record: InvoiceRecord): InvoiceData {
 /* ── Shared layout shells ── */
 
 function ModuleShell({
-  toast, setToast, header, stats, search, setSearch, searchPh, filters,
+  toast, setToast, eyebrow = "Front Office", header, stats, search, setSearch, searchPh, filters,
   sort, resultCount, hasActiveAdvancedFilters, onClearAdvancedFilters,
   advancedFilters, selectionBar, children,
 }: {
   toast: string | null; setToast: (v: string | null) => void;
+  eyebrow?: string;
   header: { title: string; desc: string; btn?: string; onBtn?: () => void };
   stats: { label: string; value: string | number; accent?: string; icon?: LucideIcon; sublabel?: string }[];
   search: string; setSearch: (v: string) => void; searchPh: string;
@@ -1150,7 +1151,7 @@ function ModuleShell({
   return (
     <div className="space-y-5">
       {toast && <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />}
-      <FOPageHeader eyebrow="Front Office" title={header.title} description={header.desc}
+      <FOPageHeader eyebrow={eyebrow} title={header.title} description={header.desc}
         action={header.btn && header.onBtn && (
           <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={header.onBtn}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />{header.btn}

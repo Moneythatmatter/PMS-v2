@@ -4,18 +4,36 @@ import { useMemo, useState } from "react";
 import {
   ArrowRight,
   BedDouble,
+  Building2,
   Calendar,
+  CalendarCheck,
+  CalendarDays,
   CheckCircle2,
   CreditCard,
   KeyRound,
+  MapPin,
   Phone,
   Search,
   Upload,
+  User,
   UserCheck,
   Users,
+  Zap,
 } from "lucide-react";
+import { CompanySearchSelect } from "@/components/frontoffice/CompanySearchSelect";
+import { SearchSelect } from "@/components/frontoffice/SearchSelect";
 import { reservationBookings } from "@/app/data";
-import { roomNumbers } from "@/app/data/frontoffice/constants";
+import type { ReservationBooking } from "@/app/data/types/frontoffice";
+import {
+  countries,
+  genders,
+  idProofTypes,
+  nationalities,
+  paymentModes,
+  roomNumbers,
+  roomTypes,
+  states,
+} from "@/app/data/frontoffice/constants";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -28,14 +46,87 @@ import {
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 
-type Step = "find" | "verify" | "assign" | "done";
+const emptyOption = (label: string) => (
+  <option value="" disabled hidden>{label}</option>
+);
 
-const steps: { id: Step; label: string; num: number }[] = [
+type Step = "find" | "verify" | "assign" | "done";
+type CheckInMode = "reserved" | "walkin";
+
+const walkInRates: Record<string, number> = {
+  Standard: 3500,
+  Deluxe: 5200,
+  Suite: 8500,
+  Premium: 6200,
+};
+
+const baseSteps: { id: Step; label: string; num: number }[] = [
   { id: "find", label: "Find Booking", num: 1 },
   { id: "verify", label: "Verify Guest", num: 2 },
   { id: "assign", label: "Assign Room", num: 3 },
   { id: "done", label: "Complete", num: 4 },
 ];
+
+const inputClass = "rounded-xl";
+
+const bookingTypeOptions = [
+  { id: "Individual", label: "Individual", hint: "Personal" },
+  { id: "Company", label: "Company", hint: "Corporate" },
+] as const;
+
+const defaultWalkIn = {
+  firstName: "",
+  lastName: "",
+  mobile: "",
+  email: "",
+  bookingType: "" as "" | "Individual" | "Company",
+  companyName: "",
+  companyId: "",
+  roomType: "Standard",
+  room: "112",
+  adults: 1,
+  nights: 1,
+  paymentMode: "Cash",
+};
+
+function generateWalkInRef() {
+  return `WI-${String(Date.now()).slice(-6)}`;
+}
+
+function SectionCard({
+  icon: Icon,
+  title,
+  description,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+      <div className="mb-5 flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+          {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+    </section>
+  );
+}
+
+function formatStayDate(date: Date) {
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 function getInitials(name: string) {
   return name
@@ -47,15 +138,30 @@ function getInitials(name: string) {
 }
 
 export function CheckInForm() {
+  const [checkInMode, setCheckInMode] = useState<CheckInMode>("reserved");
   const [bookingId, setBookingId] = useState("");
   const [lookupError, setLookupError] = useState("");
-  const [booking, setBooking] = useState<(typeof reservationBookings)[0] | null>(null);
-  const [assignedRoom, setAssignedRoom] = useState("");
+  const [booking, setBooking] = useState<ReservationBooking | null>(null);
+  const [walkInRef, setWalkInRef] = useState(generateWalkInRef);
+  const [walkIn, setWalkIn] = useState({ ...defaultWalkIn });
+  const [assignedRoom, setAssignedRoom] = useState("112");
   const [keyCard, setKeyCard] = useState("");
   const [deposit, setDeposit] = useState(0);
   const [vehicle, setVehicle] = useState("");
   const [remarks, setRemarks] = useState("");
   const [idFile, setIdFile] = useState("");
+  const [guestDetails, setGuestDetails] = useState({
+    gender: "",
+    dob: "",
+    nationality: "",
+    address: "",
+    city: "",
+    state: "",
+    country: "",
+    pincode: "",
+    idProofType: "",
+    idNumber: "",
+  });
   const [toast, setToast] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
 
@@ -70,17 +176,75 @@ export function CheckInForm() {
     [],
   );
 
+  const steps = useMemo(
+    () =>
+      baseSteps.map((step) =>
+        step.id === "find" && checkInMode === "walkin"
+          ? { ...step, label: "Guest & Stay" }
+          : step,
+      ),
+    [checkInMode],
+  );
+
+  const walkInRate = walkInRates[walkIn.roomType] ?? 3500;
+  const walkInTotal = walkInRate * walkIn.nights * walkIn.adults;
+  const walkInGuestName =
+    [walkIn.firstName, walkIn.lastName].filter(Boolean).join(" ") || "Guest";
+  const walkInCheckIn = useMemo(() => formatStayDate(new Date()), []);
+  const walkInCheckOut = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + walkIn.nights);
+    return formatStayDate(d);
+  }, [walkIn.nights]);
+
+  const availableWalkInRooms = useMemo(
+    () =>
+      roomNumbers.filter((r) => {
+        const prefix =
+          walkIn.roomType === "Standard"
+            ? "1"
+            : walkIn.roomType === "Deluxe"
+              ? "2"
+              : walkIn.roomType === "Suite"
+                ? "5"
+                : "";
+        return prefix ? r.startsWith(prefix) : true;
+      }),
+    [walkIn.roomType],
+  );
+
+  function isGuestProfileComplete(details: typeof guestDetails) {
+    return (
+      details.gender &&
+      details.dob &&
+      details.nationality &&
+      details.address.trim() &&
+      details.city.trim() &&
+      details.state &&
+      details.country &&
+      details.pincode.trim() &&
+      details.idProofType &&
+      details.idNumber.trim()
+    );
+  }
+
   const currentStep: Step = completed
     ? "done"
-    : !booking
-      ? "find"
-      : !idFile
-        ? "verify"
-        : "assign";
+    : checkInMode === "walkin"
+      ? !walkIn.firstName.trim() || !walkIn.lastName.trim() || !walkIn.mobile.trim()
+        ? "find"
+        : !isGuestProfileComplete(guestDetails) || !idFile
+          ? "verify"
+          : "assign"
+      : !booking
+        ? "find"
+        : !isGuestProfileComplete(guestDetails) || !idFile
+          ? "verify"
+          : "assign";
 
   const stepIndex = steps.findIndex((s) => s.id === currentStep);
 
-  const loadBooking = (found: (typeof reservationBookings)[0]) => {
+  const loadBooking = (found: ReservationBooking) => {
     setBooking(found);
     setBookingId(found.id);
     setAssignedRoom(found.roomNo);
@@ -91,6 +255,18 @@ export function CheckInForm() {
     setKeyCard("");
     setVehicle("");
     setRemarks("");
+    setGuestDetails({
+      gender: found.gender ?? "",
+      dob: found.dob ?? "",
+      nationality: found.nationality ?? "",
+      address: found.address ?? "",
+      city: found.city ?? "",
+      state: found.state ?? "",
+      country: found.country ?? "",
+      pincode: found.pincode ?? "",
+      idProofType: found.idProofType ?? "",
+      idNumber: found.idNumber ?? "",
+    });
   };
 
   const handleLookup = () => {
@@ -116,10 +292,77 @@ export function CheckInForm() {
     loadBooking(found);
   };
 
+  const handleWalkInComplete = () => {
+    setLookupError("");
+    if (!walkIn.firstName.trim() || !walkIn.lastName.trim()) {
+      setLookupError("First name and last name are required.");
+      return;
+    }
+    if (!walkIn.mobile.trim()) {
+      setLookupError("Mobile number is required.");
+      return;
+    }
+    if (!isGuestProfileComplete(guestDetails)) {
+      setLookupError("Please complete all guest profile fields before check-in.");
+      return;
+    }
+    if (!idFile) {
+      setLookupError("Please upload guest ID proof before check-in.");
+      return;
+    }
+    const room = assignedRoom || walkIn.room;
+    if (!room) {
+      setLookupError("Please assign a room before completing check-in.");
+      return;
+    }
+
+    const record: ReservationBooking = {
+      id: walkInRef,
+      guestName: walkInGuestName,
+      phone: walkIn.mobile.trim(),
+      email: walkIn.email.trim() || undefined,
+      source: "Walk-in",
+      roomNo: room,
+      roomType: walkIn.roomType,
+      checkIn: walkInCheckIn,
+      checkOut: walkInCheckOut,
+      balance: walkInTotal,
+      status: "Checked In",
+      adults: walkIn.adults,
+      nights: walkIn.nights,
+      roomRate: walkInRate,
+      totalAmount: walkInTotal,
+      paymentMode: walkIn.paymentMode,
+      bookingType: walkIn.bookingType || undefined,
+      companyName: walkIn.companyName || undefined,
+      gender: guestDetails.gender,
+      dob: guestDetails.dob,
+      nationality: guestDetails.nationality,
+      address: guestDetails.address,
+      city: guestDetails.city,
+      state: guestDetails.state,
+      country: guestDetails.country,
+      pincode: guestDetails.pincode,
+      idProofType: guestDetails.idProofType,
+      idNumber: guestDetails.idNumber,
+    };
+
+    setBooking(record);
+    setAssignedRoom(room);
+    setCompleted(true);
+    setToast(
+      `Walk-in guest ${record.guestName} checked in to Room ${room}. ${formatINR(walkInTotal)} collected via ${walkIn.paymentMode}.`,
+    );
+  };
+
   const handleComplete = () => {
     if (!booking) return;
     if (!assignedRoom) {
       setLookupError("Please assign a room before completing check-in.");
+      return;
+    }
+    if (!isGuestProfileComplete(guestDetails)) {
+      setLookupError("Please complete all guest profile fields before check-in.");
       return;
     }
     if (!idFile) {
@@ -127,9 +370,17 @@ export function CheckInForm() {
       return;
     }
     setCompleted(true);
+    const isWalkIn = booking.source === "Walk-in";
     setToast(
-      `${booking.guestName} checked in to Room ${assignedRoom}. Key card: ${keyCard || "Pending"}. Deposit: ${formatINR(deposit)}.`,
+      isWalkIn
+        ? `Walk-in guest ${booking.guestName} checked in to Room ${assignedRoom}. ${formatINR(booking.balance)} collected via ${booking.paymentMode ?? walkIn.paymentMode}.`
+        : `${booking.guestName} checked in to Room ${assignedRoom}. Key card: ${keyCard || "Pending"}. Deposit: ${formatINR(deposit)}.`,
     );
+  };
+
+  const updateGuestDetail = (field: keyof typeof guestDetails, value: string) => {
+    setGuestDetails((prev) => ({ ...prev, [field]: value }));
+    setLookupError("");
   };
 
   const clearSelection = () => {
@@ -137,6 +388,48 @@ export function CheckInForm() {
     setBookingId("");
     setLookupError("");
     setCompleted(false);
+    setIdFile("");
+    setKeyCard("");
+    setVehicle("");
+    setRemarks("");
+    setWalkIn({ ...defaultWalkIn });
+    setWalkInRef(generateWalkInRef());
+    setAssignedRoom(defaultWalkIn.room);
+    setGuestDetails({
+      gender: "",
+      dob: "",
+      nationality: "",
+      address: "",
+      city: "",
+      state: "",
+      country: "",
+      pincode: "",
+      idProofType: "",
+      idNumber: "",
+    });
+  };
+
+  const switchMode = (mode: CheckInMode) => {
+    setCheckInMode(mode);
+    clearSelection();
+  };
+
+  const updateWalkIn = (field: keyof typeof walkIn, value: string | number) => {
+    setWalkIn((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === "roomType") {
+        const prefix =
+          value === "Standard" ? "1" : value === "Deluxe" ? "2" : value === "Suite" ? "5" : "";
+        const rooms = prefix ? roomNumbers.filter((r) => r.startsWith(prefix)) : roomNumbers;
+        next.room = rooms[0] ?? prev.room;
+        setAssignedRoom(next.room);
+      }
+      if (field === "room") {
+        setAssignedRoom(String(value));
+      }
+      return next;
+    });
+    setLookupError("");
   };
 
   return (
@@ -149,25 +442,73 @@ export function CheckInForm() {
       <FOPageHeader
         eyebrow="Front Office"
         title="Check-In"
-        description="Verify guest details, assign room, collect deposit, and complete check-in."
+        description="Complete guest profile, verify ID, assign room, and check in."
         badge={
-          <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50 px-4 py-2.5">
-            <Users className="h-4 w-4 text-emerald-600" />
-            <div>
-              <p className="text-xs font-medium text-slate-500">Arriving today</p>
-              <p className="text-sm font-semibold text-slate-800">
-                {arrivalsToday.length} guest{arrivalsToday.length !== 1 ? "s" : ""}
-              </p>
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-2.5">
+            <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50 px-4 py-2.5 shadow-sm">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/70 shadow-sm">
+                <Users className="h-4 w-4 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-emerald-700/80">Arriving today</p>
+                <p className="text-sm font-bold text-slate-800">
+                  {arrivalsToday.length} guest{arrivalsToday.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+
+            <div
+              role="group"
+              aria-label="Check-in type"
+              className="inline-flex rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 p-1 shadow-sm"
+            >
+              {([
+                {
+                  id: "reserved" as const,
+                  label: "Reserved",
+                  icon: CalendarCheck,
+                  active: "bg-white text-blue-600 shadow-md shadow-blue-100/60 ring-1 ring-blue-100",
+                },
+                {
+                  id: "walkin" as const,
+                  label: "Walk-in",
+                  icon: Zap,
+                  active: "bg-white text-amber-600 shadow-md shadow-amber-100/60 ring-1 ring-amber-100",
+                },
+              ]).map(({ id, label, icon: Icon, active }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => switchMode(id)}
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition-all duration-200 sm:px-4",
+                    checkInMode === id ? active : "text-slate-500 hover:bg-white/60 hover:text-slate-700",
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
         }
         action={
-          booking && !completed ? (
+          checkInMode === "walkin" && !completed ? (
+            <Button
+              size="sm"
+              className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+              onClick={handleWalkInComplete}
+              disabled={currentStep !== "assign" || !assignedRoom}
+            >
+              <UserCheck className="h-3.5 w-3.5" />
+              Complete Check-in
+            </Button>
+          ) : checkInMode === "reserved" && booking && !completed ? (
             <Button
               size="sm"
               className="gap-1.5 bg-blue-600 hover:bg-blue-700"
               onClick={handleComplete}
-              disabled={!idFile || !assignedRoom}
+              disabled={!idFile || !assignedRoom || !isGuestProfileComplete(guestDetails)}
             >
               <UserCheck className="h-3.5 w-3.5" />
               Complete Check-in
@@ -223,6 +564,277 @@ export function CheckInForm() {
         </div>
       </div>
 
+      {checkInMode === "walkin" ? (
+        completed ? (
+          <div className="flex min-h-[360px] flex-col items-center justify-center rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-8 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-200">
+              <CheckCircle2 className="h-8 w-8" />
+            </div>
+            <p className="mt-4 text-xl font-bold text-slate-900">Check-in Complete</p>
+            <p className="mt-1 text-sm text-slate-600">
+              {booking?.guestName ?? walkInGuestName} is now in Room {assignedRoom}
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <Button variant="outline" onClick={clearSelection}>Check In Another Guest</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="space-y-5 lg:col-span-2">
+              {lookupError && (
+                <p className="rounded-lg bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                  {lookupError}
+                </p>
+              )}
+
+              <SectionCard icon={User} title="Guest Details" description="Contact information and booking type">
+                <FormField label="First Name" required>
+                  <TextInput className={inputClass} placeholder="Enter first name" value={walkIn.firstName} onChange={(e) => updateWalkIn("firstName", e.target.value)} />
+                </FormField>
+                <FormField label="Last Name" required>
+                  <TextInput className={inputClass} placeholder="Enter last name" value={walkIn.lastName} onChange={(e) => updateWalkIn("lastName", e.target.value)} />
+                </FormField>
+                <FormField label="Mobile" required>
+                  <TextInput className={inputClass} placeholder="Enter mobile number" value={walkIn.mobile} onChange={(e) => updateWalkIn("mobile", e.target.value)} />
+                </FormField>
+                <FormField label="Email">
+                  <TextInput className={inputClass} type="email" placeholder="Enter email (optional)" value={walkIn.email} onChange={(e) => updateWalkIn("email", e.target.value)} />
+                </FormField>
+                <FormField label="Booking Type">
+                  <SearchSelect
+                    options={[...bookingTypeOptions]}
+                    selectedId={walkIn.bookingType || null}
+                    placeholder="Search booking type…"
+                    inputClassName={inputClass}
+                    onSelect={(option) => {
+                      updateWalkIn("bookingType", option.id);
+                      if (option.id === "Individual") {
+                        updateWalkIn("companyName", "");
+                        updateWalkIn("companyId", "");
+                      }
+                    }}
+                    onClear={() => {
+                      updateWalkIn("bookingType", "");
+                      updateWalkIn("companyName", "");
+                      updateWalkIn("companyId", "");
+                    }}
+                  />
+                </FormField>
+                {walkIn.bookingType === "Company" && (
+                  <FormField label="Company" className="sm:col-span-2">
+                    <CompanySearchSelect
+                      value={walkIn.companyName}
+                      selectedCompanyId={walkIn.companyId || null}
+                      onChange={(v) => {
+                        updateWalkIn("companyName", v);
+                        updateWalkIn("companyId", "");
+                      }}
+                      onSelect={(c) => {
+                        updateWalkIn("companyName", c.name);
+                        updateWalkIn("companyId", c.id);
+                      }}
+                      onClear={() => {
+                        updateWalkIn("companyName", "");
+                        updateWalkIn("companyId", "");
+                      }}
+                      placeholder="Search company name or code…"
+                      inputClassName={inputClass}
+                    />
+                  </FormField>
+                )}
+              </SectionCard>
+
+              <SectionCard icon={UserCheck} title="Guest Profile" description="ID, address, and verification details collected at check-in">
+                <FormField label="Gender" required>
+                  <SelectInput className={inputClass} value={guestDetails.gender} onChange={(e) => updateGuestDetail("gender", e.target.value)}>
+                    {emptyOption("Select gender")}
+                    {genders.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </SelectInput>
+                </FormField>
+                <FormField label="Date of Birth" required>
+                  <TextInput className={inputClass} type="date" value={guestDetails.dob} onChange={(e) => updateGuestDetail("dob", e.target.value)} />
+                </FormField>
+                <FormField label="Nationality" required>
+                  <SelectInput className={inputClass} value={guestDetails.nationality} onChange={(e) => updateGuestDetail("nationality", e.target.value)}>
+                    {emptyOption("Select nationality")}
+                    {nationalities.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </SelectInput>
+                </FormField>
+                <FormField label="ID Proof Type" required>
+                  <SelectInput className={inputClass} value={guestDetails.idProofType} onChange={(e) => updateGuestDetail("idProofType", e.target.value)}>
+                    {emptyOption("Select ID proof")}
+                    {idProofTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </SelectInput>
+                </FormField>
+                <FormField label="ID Number" required className="sm:col-span-2">
+                  <TextInput className={inputClass} placeholder="Enter ID / passport / Aadhaar number" value={guestDetails.idNumber} onChange={(e) => updateGuestDetail("idNumber", e.target.value)} />
+                </FormField>
+                <FormField label="Address" required className="sm:col-span-2 lg:col-span-3">
+                  <TextInput className={inputClass} placeholder="Street address" value={guestDetails.address} onChange={(e) => updateGuestDetail("address", e.target.value)} />
+                </FormField>
+                <FormField label="City" required>
+                  <TextInput className={inputClass} placeholder="City" value={guestDetails.city} onChange={(e) => updateGuestDetail("city", e.target.value)} />
+                </FormField>
+                <FormField label="State" required>
+                  <SelectInput className={inputClass} value={guestDetails.state} onChange={(e) => updateGuestDetail("state", e.target.value)}>
+                    {emptyOption("Select state")}
+                    {states.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </SelectInput>
+                </FormField>
+                <FormField label="Country" required>
+                  <SelectInput className={inputClass} value={guestDetails.country} onChange={(e) => updateGuestDetail("country", e.target.value)}>
+                    {emptyOption("Select country")}
+                    {countries.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </SelectInput>
+                </FormField>
+                <FormField label="Pincode" required>
+                  <TextInput className={inputClass} placeholder="Pincode" value={guestDetails.pincode} onChange={(e) => updateGuestDetail("pincode", e.target.value)} />
+                </FormField>
+              </SectionCard>
+
+              <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+                <div className="mb-5 flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+                    <Upload className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-slate-900">ID Verification</h2>
+                    <p className="mt-0.5 text-xs text-slate-500">Upload passport, Aadhaar, or driving licence</p>
+                  </div>
+                </div>
+                <label
+                  className={cn(
+                    "flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-8 transition-colors",
+                    idFile ? "border-emerald-300 bg-emerald-50/50" : "border-slate-200 bg-slate-50/50 hover:border-blue-300 hover:bg-blue-50/30",
+                  )}
+                >
+                  <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => setIdFile(e.target.files?.[0]?.name ?? "")} />
+                  {idFile ? (
+                    <>
+                      <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+                      <p className="mt-2 text-sm font-medium text-emerald-700">{idFile}</p>
+                      <p className="mt-0.5 text-xs text-emerald-600">Click to replace</p>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-8 w-8 text-slate-400" />
+                      <p className="mt-2 text-sm font-medium text-slate-600">Drop file or click to upload</p>
+                      <p className="mt-0.5 text-xs text-slate-400">PNG, JPG or PDF up to 5MB</p>
+                    </>
+                  )}
+                </label>
+              </section>
+
+              <SectionCard icon={BedDouble} title="Stay & Room" description="Room allocation and stay duration">
+                <FormField label="Room Type">
+                  <SelectInput className={inputClass} value={walkIn.roomType} onChange={(e) => updateWalkIn("roomType", e.target.value)}>
+                    {roomTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </SelectInput>
+                </FormField>
+                <FormField label="Room Number">
+                  <SelectInput className={inputClass} value={walkIn.room} onChange={(e) => updateWalkIn("room", e.target.value)}>
+                    {(availableWalkInRooms.length > 0 ? availableWalkInRooms : roomNumbers).map((r) => (
+                      <option key={r} value={r}>{r} — {walkIn.roomType}</option>
+                    ))}
+                  </SelectInput>
+                </FormField>
+                <FormField label="Adults">
+                  <TextInput className={inputClass} type="number" min={1} value={walkIn.adults} onChange={(e) => updateWalkIn("adults", Number(e.target.value))} />
+                </FormField>
+                <FormField label="Nights">
+                  <TextInput className={inputClass} type="number" min={1} value={walkIn.nights} onChange={(e) => updateWalkIn("nights", Number(e.target.value))} />
+                </FormField>
+                <FormField label="Rate / Night">
+                  <TextInput className={cn(inputClass, "bg-slate-50")} value={formatINR(walkInRate)} readOnly />
+                </FormField>
+                <FormField label="Payment Mode">
+                  <SelectInput className={inputClass} value={walkIn.paymentMode} onChange={(e) => updateWalkIn("paymentMode", e.target.value)}>
+                    {paymentModes.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </SelectInput>
+                </FormField>
+              </SectionCard>
+
+              <SectionCard icon={KeyRound} title="Check-in Details" description="Key card, deposit, and optional notes">
+                <FormField label="Assigned Room">
+                  <SelectInput className={inputClass} value={assignedRoom} onChange={(e) => setAssignedRoom(e.target.value)}>
+                    {roomNumbers.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </SelectInput>
+                </FormField>
+                <FormField label="Key Card Number">
+                  <TextInput className={inputClass} placeholder="Key card #" value={keyCard} onChange={(e) => setKeyCard(e.target.value)} />
+                </FormField>
+                <FormField label="Security Deposit">
+                  <TextInput className={inputClass} type="number" min={0} value={deposit} onChange={(e) => setDeposit(Number(e.target.value))} />
+                </FormField>
+                <FormField label="Vehicle Number">
+                  <TextInput className={inputClass} placeholder="Optional" value={vehicle} onChange={(e) => setVehicle(e.target.value)} />
+                </FormField>
+                <FormField label="Remarks" className="sm:col-span-2 lg:col-span-3">
+                  <TextAreaInput className={inputClass} placeholder="Special requests or notes" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+                </FormField>
+              </SectionCard>
+            </div>
+
+            <div className="lg:col-span-1">
+              <div className="sticky top-4 space-y-4">
+                <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50/40 to-white p-5 shadow-sm">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-amber-600" />
+                    <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">Walk-in Preview</p>
+                  </div>
+                  <p className="text-lg font-bold text-slate-900">{walkInGuestName}</p>
+                  <p className="text-xs text-slate-500">{walkInRef}</p>
+
+                  <div className="mt-4 space-y-2.5 text-sm">
+                    {[
+                      { icon: CalendarDays, label: "Check-in", value: walkInCheckIn },
+                      { icon: CalendarDays, label: "Check-out", value: walkInCheckOut },
+                      { icon: BedDouble, label: "Room", value: walkIn.roomType ? `${walkIn.room || assignedRoom} · ${walkIn.roomType}` : "—" },
+                      { icon: Users, label: "Guests", value: walkIn.adults ? `${walkIn.adults} Adult${walkIn.adults !== 1 ? "s" : ""}` : "—" },
+                      { icon: walkIn.bookingType === "Company" ? Building2 : User, label: "Booking Type", value: walkIn.bookingType === "Company" ? walkIn.companyName || "Company" : walkIn.bookingType || "Walk-in" },
+                      { icon: MapPin, label: "Source", value: "Walk-in" },
+                      { icon: CreditCard, label: "Payment", value: walkIn.paymentMode },
+                    ].map(({ icon: Icon, label, value }) => (
+                      <div key={label} className="flex items-start gap-2.5">
+                        <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-medium uppercase text-slate-400">{label}</p>
+                          <p className="truncate font-medium text-slate-800">{value}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {walkIn.nights > 0 && (
+                    <div className="mt-4 space-y-1.5 border-t border-slate-100 pt-4 text-sm">
+                      <div className="flex justify-between text-slate-600">
+                        <span>{formatINR(walkInRate)} × {walkIn.nights} night{walkIn.nights !== 1 ? "s" : ""}</span>
+                        <span>{formatINR(walkInTotal)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 p-4 text-white">
+                    <p className="text-xs font-medium text-amber-100">Total to Collect</p>
+                    <p className="text-2xl font-bold">{formatINR(walkInTotal)}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+                  <Button
+                    onClick={handleWalkInComplete}
+                    className="h-11 w-full gap-2 bg-blue-600 hover:bg-blue-700"
+                    disabled={currentStep !== "assign" || !assignedRoom}
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    Complete Check-in
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      ) : (
       <div className="grid gap-6 lg:grid-cols-5">
         {/* Left column — search & arrivals */}
         <div className="space-y-5 lg:col-span-2">
@@ -419,6 +1031,123 @@ export function CheckInForm() {
                 </div>
               </div>
 
+              {/* Guest profile — collected at check-in */}
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Guest Profile</p>
+                    <p className="text-xs text-slate-500">
+                      Complete guest details not captured during reservation
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField label="Gender" required>
+                    <SelectInput
+                      className="rounded-xl"
+                      value={guestDetails.gender}
+                      onChange={(e) => updateGuestDetail("gender", e.target.value)}
+                    >
+                      {emptyOption("Select gender")}
+                      {genders.map((g) => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </SelectInput>
+                  </FormField>
+                  <FormField label="Date of Birth" required>
+                    <TextInput
+                      className="rounded-xl"
+                      type="date"
+                      value={guestDetails.dob}
+                      onChange={(e) => updateGuestDetail("dob", e.target.value)}
+                    />
+                  </FormField>
+                  <FormField label="Nationality" required>
+                    <SelectInput
+                      className="rounded-xl"
+                      value={guestDetails.nationality}
+                      onChange={(e) => updateGuestDetail("nationality", e.target.value)}
+                    >
+                      {emptyOption("Select nationality")}
+                      {nationalities.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </SelectInput>
+                  </FormField>
+                  <FormField label="ID Proof Type" required>
+                    <SelectInput
+                      className="rounded-xl"
+                      value={guestDetails.idProofType}
+                      onChange={(e) => updateGuestDetail("idProofType", e.target.value)}
+                    >
+                      {emptyOption("Select ID proof")}
+                      {idProofTypes.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </SelectInput>
+                  </FormField>
+                  <FormField label="ID Number" required className="sm:col-span-2">
+                    <TextInput
+                      className="rounded-xl"
+                      placeholder="Enter ID / passport / Aadhaar number"
+                      value={guestDetails.idNumber}
+                      onChange={(e) => updateGuestDetail("idNumber", e.target.value)}
+                    />
+                  </FormField>
+                  <FormField label="Address" required className="sm:col-span-2">
+                    <TextInput
+                      className="rounded-xl"
+                      placeholder="Street address"
+                      value={guestDetails.address}
+                      onChange={(e) => updateGuestDetail("address", e.target.value)}
+                    />
+                  </FormField>
+                  <FormField label="City" required>
+                    <TextInput
+                      className="rounded-xl"
+                      placeholder="City"
+                      value={guestDetails.city}
+                      onChange={(e) => updateGuestDetail("city", e.target.value)}
+                    />
+                  </FormField>
+                  <FormField label="State" required>
+                    <SelectInput
+                      className="rounded-xl"
+                      value={guestDetails.state}
+                      onChange={(e) => updateGuestDetail("state", e.target.value)}
+                    >
+                      {emptyOption("Select state")}
+                      {states.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </SelectInput>
+                  </FormField>
+                  <FormField label="Country" required>
+                    <SelectInput
+                      className="rounded-xl"
+                      value={guestDetails.country}
+                      onChange={(e) => updateGuestDetail("country", e.target.value)}
+                    >
+                      {emptyOption("Select country")}
+                      {countries.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </SelectInput>
+                  </FormField>
+                  <FormField label="Pincode" required>
+                    <TextInput
+                      className="rounded-xl"
+                      placeholder="Pincode"
+                      value={guestDetails.pincode}
+                      onChange={(e) => updateGuestDetail("pincode", e.target.value)}
+                    />
+                  </FormField>
+                </div>
+              </div>
+
               {/* ID upload */}
               <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
                 <div className="mb-4 flex items-center gap-2">
@@ -525,7 +1254,7 @@ export function CheckInForm() {
               <Button
                 className="h-12 w-full gap-2 bg-blue-600 hover:bg-blue-700 lg:hidden"
                 onClick={handleComplete}
-                disabled={!idFile || !assignedRoom}
+                disabled={!idFile || !assignedRoom || !isGuestProfileComplete(guestDetails)}
               >
                 <UserCheck className="h-4 w-4" />
                 Complete Check-in
@@ -534,6 +1263,7 @@ export function CheckInForm() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

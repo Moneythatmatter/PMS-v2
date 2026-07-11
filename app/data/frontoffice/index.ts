@@ -11,8 +11,18 @@ export {
   reservationSummaryStats,
   reservationBookings,
 } from "./reservations";
-export { checkoutFolios, computeCheckoutTotals } from "./checkout";
-export type { CheckoutFolio } from "./checkout";
+export {
+  checkoutFolios,
+  computeCheckoutTotals,
+  computeCheckoutBills,
+  SPLITTABLE_CHARGE_LABELS,
+} from "./checkout";
+export type {
+  CheckoutFolio,
+  SplittableChargeKey,
+  CheckoutBillGroup,
+} from "./checkout";
 export * from "./closing";
 export * from "./masters";
 export * from "./modules";
+export * from "./reports";

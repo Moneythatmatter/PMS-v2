@@ -1,5 +1,5 @@
-import { ReportView } from "@/components/frontoffice/ServiceViews";
+import { DailyArrivalReportView } from "@/components/frontoffice/ReportsViews";
 
 export default function ArrivalReportPage() {
-  return <ReportView title="Daily Arrival Report" description="Guests arriving today and upcoming arrivals." />;
+  return <DailyArrivalReportView />;
 }

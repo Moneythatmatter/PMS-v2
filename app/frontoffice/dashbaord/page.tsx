@@ -6,6 +6,7 @@ import {
   weeklyFlow,
   bookingSources,
   deskActivity,
+  wakeUpCalls,
 } from "@/app/data";
 import { FrontOfficeStatCard } from "@/components/frontoffice/FrontOfficeStatCard";
 import { ArrivalsList } from "@/components/frontoffice/ArrivalsList";
@@ -14,6 +15,7 @@ import { RoomInventory } from "@/components/frontoffice/RoomInventory";
 import { WeeklyFlowChart } from "@/components/frontoffice/WeeklyFlowChart";
 import { BookingSourcesChart } from "@/components/frontoffice/BookingSourcesChart";
 import { DeskActivityFeed } from "@/components/frontoffice/DeskActivityFeed";
+import { WakeUpCallsAlert } from "@/components/frontoffice/WakeUpCallsAlert";
 
 export default function FrontOfficeDashboardPage() {
   return (
@@ -31,7 +33,8 @@ export default function FrontOfficeDashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <WakeUpCallsAlert calls={wakeUpCalls} />
         <ArrivalsList arrivals={todaysArrivals} />
         <RoomInventory data={roomInventory} />
         <DeparturesList departures={todaysDepartures} />

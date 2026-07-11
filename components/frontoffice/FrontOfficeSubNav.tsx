@@ -6,8 +6,6 @@ import {
   CalendarPlus,
   List,
   LogIn,
-  Zap,
-  Clock,
   LogOut,
 } from "lucide-react";
 import { reservationNavItems } from "@/app/data/navigation/reservation";
@@ -17,8 +15,6 @@ const iconMap = {
   "calendar-plus": CalendarPlus,
   list: List,
   "log-in": LogIn,
-  zap: Zap,
-  clock: Clock,
   "log-out": LogOut,
 };
 
@@ -34,10 +30,6 @@ function isNavActive(pathname: string, href: string) {
 
   if (href === "/frontoffice/reservation/new") {
     return pathname.startsWith("/frontoffice/reservation/new");
-  }
-
-  if (href === "/frontoffice/reservation/walk-in") {
-    return pathname.startsWith("/frontoffice/reservation/walk-in");
   }
 
   return pathname === href || pathname.startsWith(`${href}/`);

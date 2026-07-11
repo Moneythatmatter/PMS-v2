@@ -1,5 +1,5 @@
-import { LuggageManagementView } from "@/components/frontoffice/ServiceViews";
+import { redirect } from "next/navigation";
 
-export default function LuggageManagementPage() {
-  return <LuggageManagementView />;
+export default function FrontOfficeLuggagePage() {
+  redirect("/housekeeping/luggage-management");
 }

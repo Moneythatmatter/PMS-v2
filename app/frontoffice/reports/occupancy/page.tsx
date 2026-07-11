@@ -1,5 +1,5 @@
-import { ReportView } from "@/components/frontoffice/ServiceViews";
+import { OccupancyReportView } from "@/components/frontoffice/ReportsViews";
 
 export default function OccupancyReportPage() {
-  return <ReportView title="Occupancy Report" description="Room occupancy and availability statistics." />;
+  return <OccupancyReportView />;
 }

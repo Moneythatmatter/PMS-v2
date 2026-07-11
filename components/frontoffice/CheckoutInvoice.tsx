@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, Printer } from "lucide-react";
-import type { CheckoutFolio } from "@/app/data/frontoffice/checkout";
-import { computeCheckoutTotals } from "@/app/data/frontoffice/checkout";
+import type { CheckoutFolio, CheckoutBillGroup, SplittableChargeKey } from "@/app/data/frontoffice/checkout";
+import { computeCheckoutTotals, SPLITTABLE_CHARGE_LABELS } from "@/app/data/frontoffice/checkout";
 import { Button } from "@/components/ui/Button";
 import { Drawer, formatINR } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,8 @@ export interface InvoiceData {
   folio: CheckoutFolio;
   discount: number;
   paymentMode: string;
+  bill?: CheckoutBillGroup;
+  billTitle?: string;
 }
 
 interface CheckoutInvoiceDrawerProps {
@@ -34,35 +36,88 @@ interface CheckoutInvoiceDrawerProps {
   data: InvoiceData | null;
 }
 
-function buildLineItems(folio: CheckoutFolio) {
-  const items: { desc: string; sac: string; qty: number; rate: number; amount: number }[] = [];
+function lineItemForCharge(
+  folio: CheckoutFolio,
+  key: SplittableChargeKey | "roomCharges",
+) {
+  const configs: Record<
+    SplittableChargeKey | "roomCharges",
+    { desc: string; sac: string; qty: number; rate: number; amount: number } | null
+  > = {
+    roomCharges:
+      folio.roomCharges > 0
+        ? {
+            desc: `Room Charges — ${folio.roomType} (Room ${folio.room})`,
+            sac: "996311",
+            qty: folio.nights,
+            rate: Math.round(folio.roomCharges / folio.nights),
+            amount: folio.roomCharges,
+          }
+        : null,
+    restaurantCharges:
+      folio.restaurantCharges > 0
+        ? {
+            desc: "Restaurant / F&B Charges",
+            sac: "996331",
+            qty: 1,
+            rate: folio.restaurantCharges,
+            amount: folio.restaurantCharges,
+          }
+        : null,
+    laundry:
+      folio.laundry > 0
+        ? {
+            desc: "Laundry Services",
+            sac: "999799",
+            qty: 1,
+            rate: folio.laundry,
+            amount: folio.laundry,
+          }
+        : null,
+    miniBar:
+      folio.miniBar > 0
+        ? {
+            desc: "Mini Bar Consumption",
+            sac: "996331",
+            qty: 1,
+            rate: folio.miniBar,
+            amount: folio.miniBar,
+          }
+        : null,
+    extraBed:
+      folio.extraBed > 0
+        ? {
+            desc: "Extra Bed Charges",
+            sac: "996311",
+            qty: 1,
+            rate: folio.extraBed,
+            amount: folio.extraBed,
+          }
+        : null,
+    otherCharges:
+      folio.otherCharges > 0
+        ? {
+            desc: "Miscellaneous Charges",
+            sac: "999799",
+            qty: 1,
+            rate: folio.otherCharges,
+            amount: folio.otherCharges,
+          }
+        : null,
+  };
 
-  if (folio.roomCharges > 0) {
-    items.push({
-      desc: `Room Charges — ${folio.roomType} (Room ${folio.room})`,
-      sac: "996311",
-      qty: folio.nights,
-      rate: Math.round(folio.roomCharges / folio.nights),
-      amount: folio.roomCharges,
-    });
-  }
-  if (folio.restaurantCharges > 0) {
-    items.push({ desc: "Restaurant / F&B Charges", sac: "996331", qty: 1, rate: folio.restaurantCharges, amount: folio.restaurantCharges });
-  }
-  if (folio.laundry > 0) {
-    items.push({ desc: "Laundry Services", sac: "999799", qty: 1, rate: folio.laundry, amount: folio.laundry });
-  }
-  if (folio.miniBar > 0) {
-    items.push({ desc: "Mini Bar Consumption", sac: "996331", qty: 1, rate: folio.miniBar, amount: folio.miniBar });
-  }
-  if (folio.extraBed > 0) {
-    items.push({ desc: "Extra Bed Charges", sac: "996311", qty: 1, rate: folio.extraBed, amount: folio.extraBed });
-  }
-  if (folio.otherCharges > 0) {
-    items.push({ desc: "Miscellaneous Charges", sac: "999799", qty: 1, rate: folio.otherCharges, amount: folio.otherCharges });
-  }
+  return configs[key];
+}
 
-  return items;
+function buildLineItems(folio: CheckoutFolio, bill?: CheckoutBillGroup) {
+  const keys = bill?.chargeKeys ?? [
+    "roomCharges",
+    ...(Object.keys(SPLITTABLE_CHARGE_LABELS) as SplittableChargeKey[]),
+  ];
+
+  return keys
+    .map((key) => lineItemForCharge(folio, key))
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 }
 
 export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDrawerProps) {
@@ -75,12 +130,23 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
 
   if (!data) return null;
 
-  const { invoiceNo, invoiceDate, folio, discount, paymentMode } = data;
-  const totals = computeCheckoutTotals(folio, discount);
-  const lineItems = buildLineItems(folio);
-  const taxableAmount = totals.charges;
-  const cgst = Math.round(folio.gst / 2);
-  const sgst = Math.round(folio.gst / 2);
+  const { invoiceNo, invoiceDate, folio, discount, paymentMode, bill, billTitle } = data;
+  const totals = bill
+    ? {
+        charges: bill.charges,
+        subtotalWithTax: bill.charges + bill.gst,
+        grandTotal: bill.charges + bill.gst - bill.discount,
+        pending: bill.due,
+        discount: bill.discount,
+      }
+    : computeCheckoutTotals(folio, discount);
+  const lineItems = buildLineItems(folio, bill);
+  const taxableAmount = bill?.charges ?? totals.charges;
+  const billGst = bill?.gst ?? folio.gst;
+  const cgst = Math.round(billGst / 2);
+  const sgst = Math.round(billGst / 2);
+  const advancePaid = bill?.advance ?? folio.advancePaid;
+  const billDiscount = bill?.discount ?? discount;
 
   const handlePrint = () => {
     const content = printRef.current;
@@ -119,7 +185,7 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
     <Drawer
       open={open}
       onClose={onClose}
-      title="Tax Invoice"
+      title={billTitle ? `${billTitle}` : "Tax Invoice"}
       description={invoiceNo}
       width="xl"
       fullScreen={fullScreen}
@@ -156,7 +222,9 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
             </p>
           </div>
           <div className="text-right">
-            <p className="text-lg font-bold uppercase tracking-wide text-blue-600">Tax Invoice</p>
+            <p className="text-lg font-bold uppercase tracking-wide text-blue-600">
+              {bill ? "Split Bill Invoice" : "Tax Invoice"}
+            </p>
             <p className="mt-2 text-sm font-semibold text-slate-900">{invoiceNo}</p>
             <p className="mt-1 text-xs text-slate-500">Date: {invoiceDate}</p>
             <p className="mt-1 text-xs text-slate-500">Place of Supply: {HOTEL.state} ({HOTEL.stateCode})</p>
@@ -239,15 +307,15 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
                 <td className="py-2 font-medium text-slate-800">Subtotal (incl. tax)</td>
                 <td className="py-2 text-right font-semibold text-slate-900">{formatINR(totals.subtotalWithTax)}</td>
               </tr>
-              {discount > 0 && (
+              {billDiscount > 0 && (
                 <tr>
                   <td className="py-1.5 text-emerald-600">Discount</td>
-                  <td className="py-1.5 text-right text-emerald-600">− {formatINR(discount)}</td>
+                  <td className="py-1.5 text-right text-emerald-600">− {formatINR(billDiscount)}</td>
                 </tr>
               )}
               <tr>
                 <td className="py-1.5 text-emerald-600">Advance Paid</td>
-                <td className="py-1.5 text-right text-emerald-600">− {formatINR(folio.advancePaid)}</td>
+                <td className="py-1.5 text-right text-emerald-600">− {formatINR(advancePaid)}</td>
               </tr>
               <tr className="border-t-2 border-slate-900">
                 <td className="py-3 text-base font-bold text-slate-900">Amount Due</td>
