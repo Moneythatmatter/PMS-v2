@@ -50,10 +50,10 @@ const statusConfig: Record<
   },
   booked: {
     label: "Booked",
-    cell: "bg-gradient-to-br from-blue-500 to-blue-600 border-blue-400 text-white shadow-sm shadow-blue-200/60 hover:from-blue-600 hover:to-blue-700 hover:shadow-md hover:shadow-blue-200/80",
-    dot: "bg-blue-500",
-    legend: "bg-blue-500 border-blue-400",
-    ring: "ring-blue-300/60",
+    cell: "bg-gradient-to-br from-emerald-500 to-emerald-600 border-emerald-400 text-white shadow-sm shadow-emerald-200/60 hover:from-emerald-600 hover:to-emerald-700 hover:shadow-md hover:shadow-emerald-200/80",
+    dot: "bg-emerald-500",
+    legend: "bg-emerald-500 border-emerald-400",
+    ring: "ring-emerald-300/60",
   },
   blocked: {
     label: "Blocked",
@@ -66,7 +66,7 @@ const statusConfig: Record<
 
 const statCards = [
   { key: "rooms", label: "Rooms Shown", icon: DoorOpen, gradient: "from-slate-500 to-slate-700", bg: "bg-slate-50" },
-  { key: "occupancy", label: "Occupancy", icon: BedDouble, gradient: "from-blue-500 to-indigo-600", bg: "bg-blue-50" },
+  { key: "occupancy", label: "Occupancy", icon: BedDouble, gradient: "from-emerald-600 to-emerald-800", bg: "bg-emerald-50" },
   { key: "available", label: "Available Slots", icon: Sparkles, gradient: "from-emerald-500 to-teal-600", bg: "bg-emerald-50" },
   { key: "blocked", label: "Blocked", icon: Lock, gradient: "from-slate-400 to-slate-500", bg: "bg-slate-50" },
 ] as const;
@@ -150,7 +150,7 @@ export function RoomAvailabilityView() {
         title="Room Availability"
         description="Visual tape chart — scan inventory, spot gaps, and plan allocations at a glance."
         badge={
-          <div className="flex items-center gap-3 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-2.5">
+          <div className="flex items-center gap-3 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-green-50 px-4 py-2.5">
             <div className="relative flex h-10 w-10 items-center justify-center">
               <svg className="h-10 w-10 -rotate-90" viewBox="0 0 36 36">
                 <circle cx="18" cy="18" r="15" fill="none" stroke="#e2e8f0" strokeWidth="3" />
@@ -159,13 +159,13 @@ export function RoomAvailabilityView() {
                   cy="18"
                   r="15"
                   fill="none"
-                  stroke="#3b82f6"
+                  stroke="#16a34a"
                   strokeWidth="3"
                   strokeDasharray={`${stats.occupancy} ${100 - stats.occupancy}`}
                   strokeLinecap="round"
                 />
               </svg>
-              <span className="absolute text-[10px] font-bold text-blue-700">
+              <span className="absolute text-[10px] font-bold text-emerald-800">
                 {stats.occupancy}%
               </span>
             </div>
@@ -248,7 +248,7 @@ export function RoomAvailabilityView() {
                   className={cn(
                     "rounded-lg px-3.5 py-1.5 text-xs font-medium transition-all duration-200 sm:text-sm",
                     availFilter === pill.id
-                      ? "bg-white text-blue-600 shadow-sm"
+                      ? "bg-white text-emerald-700 shadow-sm"
                       : "text-slate-500 hover:text-slate-700",
                   )}
                 >
@@ -279,7 +279,7 @@ export function RoomAvailabilityView() {
         {/* Chart header */}
         <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-4 py-3.5 sm:px-5">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
               <CalendarRange className="h-4 w-4" />
             </div>
             <div>
@@ -309,8 +309,8 @@ export function RoomAvailabilityView() {
               className={cn(
                 "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
                 weekOffset === 0
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-blue-600 hover:bg-blue-50",
+                  ? "bg-emerald-700 text-white shadow-sm"
+                  : "text-emerald-700 hover:bg-emerald-50",
               )}
             >
               Today
@@ -350,14 +350,14 @@ export function RoomAvailabilityView() {
                         key={d}
                         className={cn(
                           "min-w-[76px] border-b border-slate-100 px-1 py-3 text-center",
-                          isToday && "bg-blue-50/80",
+                          isToday && "bg-emerald-50/80",
                           isWeekend && !isToday && "bg-slate-50/60",
                         )}
                       >
                         <span
                           className={cn(
                             "block text-[11px] font-semibold",
-                            isToday ? "text-blue-600" : "text-slate-600",
+                            isToday ? "text-emerald-700" : "text-slate-600",
                           )}
                         >
                           {dayName}
@@ -366,7 +366,7 @@ export function RoomAvailabilityView() {
                           className={cn(
                             "mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium",
                             isToday
-                              ? "bg-blue-600 text-white"
+                              ? "bg-emerald-700 text-white"
                               : "text-slate-400",
                           )}
                         >
@@ -386,7 +386,7 @@ export function RoomAvailabilityView() {
                         className="sticky left-0 bg-slate-50/90 px-4 py-2 backdrop-blur-sm"
                       >
                         <div className="flex items-center gap-2">
-                          <span className="h-1 w-1 rounded-full bg-blue-500" />
+                          <span className="h-1 w-1 rounded-full bg-emerald-500" />
                           <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                             {floorName}
                           </span>
@@ -400,13 +400,13 @@ export function RoomAvailabilityView() {
                       <tr
                         key={row.room}
                         className={cn(
-                          "group/row transition-colors hover:bg-blue-50/30",
+                          "group/row transition-colors hover:bg-emerald-50/30",
                           rowIdx % 2 === 0 ? "bg-white" : "bg-slate-50/30",
                         )}
                       >
                         <td className="sticky left-0 z-10 border-r border-slate-100 bg-inherit px-4 py-2.5 backdrop-blur-sm">
                           <div className="flex items-center gap-2.5">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-700 group-hover/row:bg-blue-100 group-hover/row:text-blue-700 transition-colors">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-700 group-hover/row:bg-emerald-100 group-hover/row:text-emerald-800 transition-colors">
                               {row.room}
                             </div>
                             <div className="min-w-0">
@@ -431,7 +431,7 @@ export function RoomAvailabilityView() {
                               key={d}
                               className={cn(
                                 "px-1.5 py-2.5 text-center",
-                                isToday && "bg-blue-50/40",
+                                isToday && "bg-emerald-50/40",
                               )}
                             >
                               <button
@@ -507,10 +507,10 @@ export function RoomAvailabilityView() {
               Close
             </Button>
             {selectedCell?.status === "available" && (
-              <Button className="bg-blue-600 hover:bg-blue-700">Create Booking</Button>
+              <Button className="bg-emerald-700 hover:bg-emerald-800">Create Booking</Button>
             )}
             {selectedCell?.status === "booked" && (
-              <Button className="bg-blue-600 hover:bg-blue-700">View Reservation</Button>
+              <Button className="bg-emerald-700 hover:bg-emerald-800">View Reservation</Button>
             )}
             {selectedCell?.status === "blocked" && (
               <Button variant="outline">Unblock Room</Button>
@@ -524,7 +524,7 @@ export function RoomAvailabilityView() {
               className={cn(
                 "flex items-center gap-3 rounded-xl border p-4",
                 selectedCell.status === "available" && "border-emerald-200 bg-emerald-50",
-                selectedCell.status === "booked" && "border-blue-200 bg-blue-50",
+                selectedCell.status === "booked" && "border-emerald-200 bg-emerald-50",
                 selectedCell.status === "blocked" && "border-slate-200 bg-slate-50",
               )}
             >

@@ -126,7 +126,7 @@ export function PosBillingView() {
         <StatMiniCard label="Subtotal" value={formatINR(subtotal)} icon={Receipt} />
         <StatMiniCard label="GST (18%)" value={formatINR(gst)} icon={Percent} />
         <StatMiniCard label="Discount" value={formatINR(discount)} accent="#f59e0b" icon={Tag} />
-        <StatMiniCard label="Total" value={formatINR(total)} accent="#2563eb" icon={ShoppingCart} />
+        <StatMiniCard label="Total" value={formatINR(total)} accent="#15803d" icon={ShoppingCart} />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-5">
@@ -154,7 +154,7 @@ export function PosBillingView() {
                       className={cn(
                         "flex-1 rounded-lg py-2 text-sm font-medium transition-colors",
                         billingType === opt.id
-                          ? "bg-white text-blue-600 shadow-sm"
+                          ? "bg-white text-emerald-700 shadow-sm"
                           : "text-slate-600",
                       )}
                     >
@@ -192,7 +192,7 @@ export function PosBillingView() {
                   className={cn(
                     "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium",
                     category === cat
-                      ? "bg-blue-600 text-white"
+                      ? "bg-emerald-700 text-white"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200",
                   )}
                 >
@@ -207,17 +207,17 @@ export function PosBillingView() {
                   key={item.id}
                   type="button"
                   onClick={() => addToCart(item)}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 p-3 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/40"
+                  className="flex items-center justify-between rounded-lg border border-slate-100 p-3 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/40"
                 >
                   <div>
                     <p className="text-sm font-medium text-slate-900">{item.name}</p>
                     <p className="text-xs text-slate-500">{item.category}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-blue-600">
+                    <span className="text-sm font-semibold text-emerald-700">
                       {formatINR(item.price)}
                     </span>
-                    <Plus className="h-4 w-4 text-blue-500" />
+                    <Plus className="h-4 w-4 text-emerald-600" />
                   </div>
                 </button>
               ))}
@@ -227,7 +227,7 @@ export function PosBillingView() {
 
         <div className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">
-            <Receipt className="h-4 w-4 text-blue-500" />
+            <Receipt className="h-4 w-4 text-emerald-600" />
             <h2 className="text-sm font-semibold text-slate-900">Current Order</h2>
           </div>
 
@@ -294,7 +294,7 @@ export function PosBillingView() {
 
               <div className="flex flex-col gap-2 pt-2">
                 <Button
-                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  className="w-full bg-emerald-700 hover:bg-emerald-800"
                   onClick={handleSettle}
                 >
                   Settle Bill — {formatINR(total)}

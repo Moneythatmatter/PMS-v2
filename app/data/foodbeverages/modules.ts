@@ -1,0 +1,1828 @@
+export type OutletScope = "restaurant" | "banquet" | "kitchen" | "bar" | "none";
+
+export interface FbOutlet {
+  id: string;
+  name: string;
+  type: "restaurant" | "cafe" | "bar" | "banquet" | "kitchen";
+}
+
+export const restaurantOutlets: FbOutlet[] = [
+  { id: "rest-1", name: "Restaurant #1", type: "restaurant" },
+  { id: "rest-2", name: "Restaurant #2", type: "restaurant" },
+  { id: "cafe-1", name: "Lobby Cafe", type: "cafe" },
+  { id: "cafe-2", name: "Pool Cafe", type: "cafe" },
+];
+
+export const banquetVenues: FbOutlet[] = [
+  { id: "conf-a", name: "Conference Hall A", type: "banquet" },
+  { id: "conf-b", name: "Conference Hall B", type: "banquet" },
+  { id: "lawn", name: "Lawn", type: "banquet" },
+  { id: "pool", name: "Pool Side", type: "banquet" },
+  { id: "rooftop", name: "Roof Top", type: "banquet" },
+];
+
+export const kitchenOutlets: FbOutlet[] = [
+  { id: "main-kitchen", name: "Main Kitchen", type: "kitchen" },
+  { id: "indian-kitchen", name: "Indian Kitchen", type: "kitchen" },
+  { id: "continental-kitchen", name: "Continental Kitchen", type: "kitchen" },
+  { id: "italian-kitchen", name: "Italian Kitchen", type: "kitchen" },
+];
+
+export const barOutlets: FbOutlet[] = [
+  { id: "main-bar", name: "Main Bar", type: "bar" },
+  { id: "lobby-bar", name: "Lobby Bar", type: "bar" },
+];
+
+export interface FbStat {
+  label: string;
+  value: string | number;
+  accent?: string;
+  sublabel?: string;
+}
+
+export interface FbColumn {
+  key: string;
+  header: string;
+}
+
+export interface FbRow {
+  id: string;
+  status?: string;
+  outletId?: string;
+  [key: string]: string | number | undefined;
+}
+
+export interface FbPageDefinition {
+  title: string;
+  description: string;
+  outletScope?: OutletScope;
+  stats: FbStat[];
+  columns: FbColumn[];
+  rows: FbRow[];
+  searchPlaceholder: string;
+  filterOptions?: { id: string; label: string }[];
+  actionLabel?: string;
+  secondaryActions?: string[];
+  statusStyle?: "pill" | "live";
+}
+
+const statusColors: Record<string, string> = {
+  Available: "bg-emerald-50 text-emerald-700",
+  Reserved: "bg-orange-50 text-orange-700",
+  Occupied: "bg-red-50 text-red-700",
+  Billing: "bg-violet-50 text-violet-700",
+  Open: "bg-emerald-50 text-emerald-800",
+  Confirmed: "bg-emerald-50 text-emerald-800",
+  Seated: "bg-emerald-50 text-emerald-700",
+  "No Show": "bg-slate-100 text-slate-600",
+  Cancelled: "bg-red-50 text-red-700",
+  Pending: "bg-amber-50 text-amber-700",
+  Preparing: "bg-amber-50 text-amber-700",
+  Ready: "bg-emerald-50 text-emerald-700",
+  Served: "bg-slate-100 text-slate-600",
+  Settled: "bg-emerald-50 text-emerald-700",
+  Closed: "bg-slate-100 text-slate-600",
+  Active: "bg-emerald-50 text-emerald-700",
+  Draft: "bg-slate-100 text-slate-600",
+  Approved: "bg-emerald-50 text-emerald-700",
+  Issued: "bg-emerald-50 text-emerald-800",
+  Received: "bg-emerald-50 text-emerald-700",
+  "In Progress": "bg-amber-50 text-amber-700",
+  Completed: "bg-emerald-50 text-emerald-700",
+  Posted: "bg-emerald-50 text-emerald-700",
+  "Dine In": "bg-emerald-50 text-emerald-800",
+  Takeaway: "bg-violet-50 text-violet-700",
+  "Room Service": "bg-amber-50 text-amber-700",
+  Online: "bg-cyan-50 text-cyan-700",
+};
+
+const liveStatusMeta: Record<string, { dot: string; className: string }> = {
+  Available: { dot: "bg-emerald-500", className: "bg-emerald-50 text-emerald-800" },
+  Reserved: { dot: "bg-orange-500", className: "bg-orange-50 text-orange-800" },
+  Occupied: { dot: "bg-red-500", className: "bg-red-50 text-red-800" },
+  Billing: { dot: "bg-violet-500", className: "bg-violet-50 text-violet-800" },
+};
+
+export function fbStatusClass(status: string) {
+  return statusColors[status] ?? "bg-slate-100 text-slate-600";
+}
+
+export function fbLiveStatusMeta(status: string) {
+  return liveStatusMeta[status] ?? { dot: "bg-slate-400", className: "bg-slate-100 text-slate-600" };
+}
+
+function page(
+  partial: FbPageDefinition,
+): FbPageDefinition {
+  return partial;
+}
+
+export const fbPageDefinitions: Record<string, FbPageDefinition> = {
+  /* ——— Restaurants ——— */
+  "/food-beverages/restaurants/outlets": page({
+    title: "Outlets",
+    description: "Manage restaurant and cafe outlets. Select an outlet on operational pages.",
+    outletScope: "none",
+    actionLabel: "Add Outlet",
+    searchPlaceholder: "Search outlet…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Active", label: "Active" },
+      { id: "Inactive", label: "Inactive" },
+    ],
+    stats: [
+      { label: "Outlets", value: 4, sublabel: "Restaurants & cafes" },
+      { label: "Active", value: 4, accent: "#10b981", sublabel: "Open today" },
+      { label: "Tables", value: 48, sublabel: "Across outlets" },
+      { label: "Covers Today", value: 186, accent: "#15803d", sublabel: "All outlets" },
+    ],
+    columns: [
+      { key: "name", header: "Outlet" },
+      { key: "type", header: "Type" },
+      { key: "tables", header: "Tables" },
+      { key: "covers", header: "Covers Today" },
+      { key: "sales", header: "Sales" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "O1", name: "Restaurant #1", type: "Restaurant", tables: 16, covers: 72, sales: "₹48,620", status: "Active", outletId: "rest-1" },
+      { id: "O2", name: "Restaurant #2", type: "Restaurant", tables: 12, covers: 54, sales: "₹31,200", status: "Active", outletId: "rest-2" },
+      { id: "O3", name: "Lobby Cafe", type: "Cafe", tables: 10, covers: 38, sales: "₹14,800", status: "Active", outletId: "cafe-1" },
+      { id: "O4", name: "Pool Cafe", type: "Cafe", tables: 10, covers: 22, sales: "₹9,400", status: "Active", outletId: "cafe-2" },
+    ],
+  }),
+
+  "/food-beverages/restaurants/tables": page({
+    title: "Tables",
+    description: "Add, edit, merge, split tables, and manage table map / QR codes.",
+    outletScope: "restaurant",
+    actionLabel: "Add Table",
+    secondaryActions: ["Merge Tables", "Split Tables", "Table Map", "QR Codes"],
+    searchPlaceholder: "Search table…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Available", label: "Available" },
+      { id: "Occupied", label: "Occupied" },
+      { id: "Reserved", label: "Reserved" },
+    ],
+    stats: [
+      { label: "Tables", value: 16, sublabel: "Selected outlet" },
+      { label: "Available", value: 8, accent: "#10b981", sublabel: "Ready to seat" },
+      { label: "Occupied", value: 5, accent: "#ef4444", sublabel: "In service" },
+      { label: "Reserved", value: 3, accent: "#f59e0b", sublabel: "Upcoming" },
+    ],
+    columns: [
+      { key: "tableNo", header: "Table" },
+      { key: "section", header: "Section" },
+      { key: "capacity", header: "Capacity" },
+      { key: "shape", header: "Shape" },
+      { key: "qr", header: "QR" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "T1", tableNo: "T-01", section: "Garden", capacity: 2, shape: "Round", qr: "Linked", status: "Available", outletId: "rest-1" },
+      { id: "T2", tableNo: "T-02", section: "Garden", capacity: 4, shape: "Square", qr: "Linked", status: "Occupied", outletId: "rest-1" },
+      { id: "T3", tableNo: "T-04", section: "Indoor", capacity: 4, shape: "Square", qr: "Linked", status: "Occupied", outletId: "rest-1" },
+      { id: "T4", tableNo: "T-07", section: "Indoor", capacity: 6, shape: "Rectangle", qr: "Pending", status: "Reserved", outletId: "rest-1" },
+      { id: "T5", tableNo: "T-09", section: "Window", capacity: 2, shape: "Round", qr: "Linked", status: "Available", outletId: "rest-1" },
+      { id: "T6", tableNo: "T-01", section: "Main", capacity: 4, shape: "Square", qr: "Linked", status: "Available", outletId: "rest-2" },
+      { id: "T7", tableNo: "T-03", section: "Main", capacity: 8, shape: "Rectangle", qr: "Linked", status: "Occupied", outletId: "rest-2" },
+    ],
+  }),
+
+  "/food-beverages/restaurants/live-table-status": page({
+    title: "Live Table Status",
+    description: "Real-time table occupancy for the selected outlet.",
+    outletScope: "restaurant",
+    statusStyle: "live",
+    searchPlaceholder: "Search table or server…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Available", label: "Available" },
+      { id: "Reserved", label: "Reserved" },
+      { id: "Occupied", label: "Occupied" },
+      { id: "Billing", label: "Billing" },
+    ],
+    stats: [
+      { label: "Available", value: 6, accent: "#10b981", sublabel: "🟢 Ready" },
+      { label: "Reserved", value: 2, accent: "#f97316", sublabel: "🟠 Upcoming" },
+      { label: "Occupied", value: 5, accent: "#ef4444", sublabel: "🔴 In service" },
+      { label: "Billing", value: 1, accent: "#8b5cf6", sublabel: "🟣 Settling" },
+    ],
+    columns: [
+      { key: "tableNo", header: "Table" },
+      { key: "section", header: "Section" },
+      { key: "covers", header: "Covers" },
+      { key: "guest", header: "Guest" },
+      { key: "server", header: "Server" },
+      { key: "duration", header: "Duration" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "L1", tableNo: "T-01", section: "Garden", covers: 0, guest: "—", server: "—", duration: "—", status: "Available", outletId: "rest-1" },
+      { id: "L2", tableNo: "T-02", section: "Garden", covers: 3, guest: "Rahul Sharma", server: "Meena", duration: "32 min", status: "Occupied", outletId: "rest-1" },
+      { id: "L3", tableNo: "T-04", section: "Indoor", covers: 4, guest: "Priya Patel", server: "Amit", duration: "48 min", status: "Occupied", outletId: "rest-1" },
+      { id: "L4", tableNo: "T-07", section: "Indoor", covers: 6, guest: "Corporate", server: "—", duration: "—", status: "Reserved", outletId: "rest-1" },
+      { id: "L5", tableNo: "T-12", section: "Window", covers: 2, guest: "James Wilson", server: "Neha", duration: "1h 05m", status: "Billing", outletId: "rest-1" },
+      { id: "L6", tableNo: "T-03", section: "Main", covers: 2, guest: "Walk-in", server: "Ravi", duration: "18 min", status: "Occupied", outletId: "rest-2" },
+    ],
+  }),
+
+  "/food-beverages/restaurants/reservations": page({
+    title: "Reservations",
+    description: "Table reservations for dine-in guests.",
+    outletScope: "restaurant",
+    actionLabel: "New Reservation",
+    searchPlaceholder: "Search guest, phone, or table…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Confirmed", label: "Confirmed" },
+      { id: "Seated", label: "Seated" },
+      { id: "No Show", label: "No Show" },
+      { id: "Cancelled", label: "Cancelled" },
+    ],
+    stats: [
+      { label: "Today", value: 14, accent: "#15803d", sublabel: "Reservations" },
+      { label: "Confirmed", value: 9, accent: "#10b981", sublabel: "Awaiting arrival" },
+      { label: "Seated", value: 3, sublabel: "Already dining" },
+      { label: "Covers Booked", value: 42, sublabel: "Tonight" },
+    ],
+    columns: [
+      { key: "resNo", header: "Res #" },
+      { key: "guest", header: "Guest" },
+      { key: "phone", header: "Phone" },
+      { key: "time", header: "Time" },
+      { key: "covers", header: "Covers" },
+      { key: "tableNo", header: "Table" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "R1", resNo: "TR-1042", guest: "Anita Desai", phone: "+91 98765 11111", time: "7:30 PM", covers: 4, tableNo: "T-07", status: "Confirmed", outletId: "rest-1" },
+      { id: "R2", resNo: "TR-1043", guest: "Michael Brown", phone: "+91 98765 22222", time: "8:00 PM", covers: 2, tableNo: "T-09", status: "Confirmed", outletId: "rest-1" },
+      { id: "R3", resNo: "TR-1040", guest: "Priya Patel", phone: "+91 98765 33333", time: "1:00 PM", covers: 4, tableNo: "T-04", status: "Seated", outletId: "rest-1" },
+      { id: "R4", resNo: "TR-1038", guest: "Sarah Chen", phone: "+91 98765 44444", time: "7:00 PM", covers: 6, tableNo: "—", status: "Cancelled", outletId: "rest-2" },
+    ],
+  }),
+
+  "/food-beverages/restaurants/orders": page({
+    title: "Orders",
+    description: "Dine-in, takeaway, room service, and online orders.",
+    outletScope: "restaurant",
+    actionLabel: "New Order",
+    searchPlaceholder: "Search order, table, or guest…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Dine In", label: "Dine In" },
+      { id: "Takeaway", label: "Takeaway" },
+      { id: "Room Service", label: "Room Service" },
+      { id: "Online", label: "Online" },
+    ],
+    stats: [
+      { label: "Open Orders", value: 11, accent: "#f59e0b", sublabel: "In progress" },
+      { label: "Dine In", value: 6, accent: "#15803d", sublabel: "Active tables" },
+      { label: "Room Service", value: 3, sublabel: "In-house" },
+      { label: "Takeaway / Online", value: 2, sublabel: "Pickup queue" },
+    ],
+    columns: [
+      { key: "orderNo", header: "Order" },
+      { key: "type", header: "Type" },
+      { key: "ref", header: "Table / Room" },
+      { key: "guest", header: "Guest" },
+      { key: "items", header: "Items" },
+      { key: "amount", header: "Amount" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "OR1", orderNo: "ORD-501", type: "Dine In", ref: "T-04", guest: "Priya Patel", items: 5, amount: "₹2,180", status: "Preparing", outletId: "rest-1" },
+      { id: "OR2", orderNo: "ORD-502", type: "Room Service", ref: "Room 501", guest: "Priya Patel", items: 3, amount: "₹1,240", status: "Ready", outletId: "rest-1" },
+      { id: "OR3", orderNo: "ORD-503", type: "Takeaway", ref: "Counter", guest: "Walk-in", items: 2, amount: "₹480", status: "Pending", outletId: "rest-1" },
+      { id: "OR4", orderNo: "ORD-504", type: "Online", ref: "Zomato", guest: "Rahul S.", items: 4, amount: "₹920", status: "Preparing", outletId: "rest-2" },
+      { id: "OR5", orderNo: "ORD-505", type: "Dine In", ref: "T-02", guest: "Rahul Sharma", items: 6, amount: "₹3,120", status: "Served", outletId: "rest-1" },
+    ],
+  }),
+
+  "/food-beverages/restaurants/cashier": page({
+    title: "Cashier",
+    description: "Shift opening, shift closing, and cash report for the outlet.",
+    outletScope: "restaurant",
+    actionLabel: "Open Shift",
+    secondaryActions: ["Close Shift", "Cash Report"],
+    searchPlaceholder: "Search cashier or shift…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Open", label: "Open" },
+      { id: "Closed", label: "Closed" },
+    ],
+    stats: [
+      { label: "Open Shifts", value: 1, accent: "#f59e0b", sublabel: "Needs close" },
+      { label: "Shift Sales", value: "₹28,400", accent: "#15803d", sublabel: "Current shift" },
+      { label: "Expected Cash", value: "₹8,200", sublabel: "System" },
+      { label: "Variance", value: "−₹50", accent: "#ef4444", sublabel: "Last close" },
+    ],
+    columns: [
+      { key: "cashier", header: "Cashier" },
+      { key: "shift", header: "Shift" },
+      { key: "openedAt", header: "Opened" },
+      { key: "openingFloat", header: "Opening" },
+      { key: "sales", header: "Sales" },
+      { key: "declared", header: "Declared" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "C1", cashier: "Amit Kumar", shift: "Lunch", openedAt: "11:00 AM", openingFloat: "₹2,000", sales: "₹28,400", declared: "—", status: "Open", outletId: "rest-1" },
+      { id: "C2", cashier: "Neha Singh", shift: "Breakfast", openedAt: "7:00 AM", openingFloat: "₹1,500", sales: "₹14,200", declared: "₹14,180", status: "Closed", outletId: "rest-1" },
+      { id: "C3", cashier: "Ravi Menon", shift: "Dinner", openedAt: "—", openingFloat: "—", sales: "—", declared: "—", status: "Pending", outletId: "rest-2" },
+    ],
+  }),
+
+  "/food-beverages/restaurants/day-close": page({
+    title: "Day Close",
+    description: "End-of-day close checklist for the selected restaurant outlet.",
+    outletScope: "restaurant",
+    actionLabel: "Run Day Close",
+    searchPlaceholder: "Search checkpoint…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Pending", label: "Pending" },
+      { id: "Completed", label: "Completed" },
+    ],
+    stats: [
+      { label: "Business Date", value: "13 Jul", sublabel: "Current day" },
+      { label: "Open Checks", value: 1, accent: "#f59e0b", sublabel: "Must settle" },
+      { label: "Day Sales", value: "₹48,620", accent: "#15803d", sublabel: "Gross" },
+      { label: "Status", value: "Open", accent: "#f59e0b", sublabel: "Not closed" },
+    ],
+    columns: [
+      { key: "checkpoint", header: "Checkpoint" },
+      { key: "detail", header: "Detail" },
+      { key: "count", header: "Count" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "D1", checkpoint: "Open tables", detail: "Active covers must be closed", count: 1, status: "Pending", outletId: "rest-1" },
+      { id: "D2", checkpoint: "Cashier shifts", detail: "All shifts closed", count: 0, status: "Completed", outletId: "rest-1" },
+      { id: "D3", checkpoint: "Void / comps", detail: "Manager approval complete", count: 2, status: "Completed", outletId: "rest-1" },
+      { id: "D4", checkpoint: "Sales post to FO", detail: "Room charge sync", count: 3, status: "Pending", outletId: "rest-1" },
+    ],
+  }),
+
+  /* ——— Banquet ——— */
+  "/food-beverages/banquet/venues": page({
+    title: "Venues",
+    description: "Banquet and event venues — conference halls, lawn, pool side, rooftop.",
+    outletScope: "none",
+    actionLabel: "Add Venue",
+    searchPlaceholder: "Search venue…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Available", label: "Available" },
+      { id: "Occupied", label: "Occupied" },
+    ],
+    stats: [
+      { label: "Venues", value: 5, sublabel: "Configured" },
+      { label: "In Use Today", value: 2, accent: "#f59e0b", sublabel: "Events on" },
+      { label: "Capacity", value: 620, sublabel: "Total pax" },
+      { label: "Booked MTD", value: 18, accent: "#15803d", sublabel: "Events" },
+    ],
+    columns: [
+      { key: "name", header: "Venue" },
+      { key: "capacity", header: "Capacity" },
+      { key: "area", header: "Area" },
+      { key: "todayEvent", header: "Today" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "V1", name: "Conference Hall A", capacity: 80, area: "Indoor", todayEvent: "Board Meeting", status: "Occupied", outletId: "conf-a" },
+      { id: "V2", name: "Conference Hall B", capacity: 40, area: "Indoor", todayEvent: "—", status: "Available", outletId: "conf-b" },
+      { id: "V3", name: "Lawn", capacity: 250, area: "Outdoor", todayEvent: "Product Launch", status: "Occupied", outletId: "lawn" },
+      { id: "V4", name: "Pool Side", capacity: 100, area: "Outdoor", todayEvent: "—", status: "Available", outletId: "pool" },
+      { id: "V5", name: "Roof Top", capacity: 150, area: "Outdoor", todayEvent: "—", status: "Available", outletId: "rooftop" },
+    ],
+  }),
+
+  "/food-beverages/banquet/bookings": page({
+    title: "Bookings",
+    description: "Event and hall bookings across banquet venues.",
+    outletScope: "banquet",
+    actionLabel: "New Booking",
+    searchPlaceholder: "Search booking, company, or event…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Confirmed", label: "Confirmed" },
+      { id: "In Progress", label: "In Progress" },
+      { id: "Completed", label: "Completed" },
+    ],
+    stats: [
+      { label: "Today", value: 2, accent: "#15803d", sublabel: "Events" },
+      { label: "This Week", value: 7, sublabel: "Confirmed" },
+      { label: "Pax", value: 186, sublabel: "Today covers" },
+      { label: "Value", value: "₹2.4L", sublabel: "Booked today" },
+    ],
+    columns: [
+      { key: "bookingNo", header: "Booking" },
+      { key: "event", header: "Event" },
+      { key: "company", header: "Company" },
+      { key: "date", header: "Date" },
+      { key: "pax", header: "Pax" },
+      { key: "amount", header: "Amount" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "B1", bookingNo: "HB-118", event: "Board Meeting", company: "Acme Corp", date: "13 Jul", pax: 24, amount: "₹48,000", status: "In Progress", outletId: "conf-a" },
+      { id: "B2", bookingNo: "HB-119", event: "Product Launch", company: "Nova Tech", date: "13 Jul", pax: 80, amount: "₹1,20,000", status: "Confirmed", outletId: "lawn" },
+      { id: "B3", bookingNo: "HB-120", event: "Training Day", company: "FinServe", date: "15 Jul", pax: 40, amount: "₹62,000", status: "Confirmed", outletId: "conf-b" },
+      { id: "B4", bookingNo: "HB-115", event: "Wedding Reception", company: "Private", date: "12 Jul", pax: 150, amount: "₹3,50,000", status: "Completed", outletId: "lawn" },
+    ],
+  }),
+
+  "/food-beverages/banquet/menu-packages": page({
+    title: "Menu Packages",
+    description: "Banquet menu packages and posting to event folios.",
+    outletScope: "banquet",
+    actionLabel: "Add Package",
+    searchPlaceholder: "Search package…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Active", label: "Active" },
+      { id: "Draft", label: "Draft" },
+    ],
+    stats: [
+      { label: "Packages", value: 8, sublabel: "Configured" },
+      { label: "Posted Today", value: 2, accent: "#10b981", sublabel: "To folios" },
+      { label: "Pending Post", value: 1, accent: "#f59e0b", sublabel: "Draft menus" },
+      { label: "Avg Rate", value: "₹850", sublabel: "Per pax" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Package" },
+      { key: "rate", header: "Rate/Pax" },
+      { key: "courses", header: "Courses" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "MP1", code: "PKG-01", name: "Executive Lunch", rate: "₹850", courses: 3, status: "Active", outletId: "conf-a" },
+      { id: "MP2", code: "PKG-02", name: "Cocktail + Canapés", rate: "₹650", courses: 1, status: "Active", outletId: "lawn" },
+      { id: "MP3", code: "PKG-03", name: "Wedding Buffet", rate: "₹1,200", courses: 5, status: "Active", outletId: "lawn" },
+      { id: "MP4", code: "PKG-04", name: "Hi-Tea Deluxe", rate: "₹450", courses: 2, status: "Draft", outletId: "conf-b" },
+    ],
+  }),
+
+  "/food-beverages/banquet/requirements": page({
+    title: "Requirements",
+    description: "AV, seating, and F&B setup requirements for events.",
+    outletScope: "banquet",
+    actionLabel: "Add Requirement",
+    searchPlaceholder: "Search requirement…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Pending", label: "Pending" },
+      { id: "In Progress", label: "In Progress" },
+      { id: "Completed", label: "Completed" },
+    ],
+    stats: [
+      { label: "Open", value: 5, accent: "#f59e0b", sublabel: "Need fulfilment" },
+      { label: "AV", value: 2, sublabel: "Today" },
+      { label: "F&B Setup", value: 3, sublabel: "Today" },
+      { label: "Done", value: 8, accent: "#10b981", sublabel: "This week" },
+    ],
+    columns: [
+      { key: "bookingNo", header: "Booking" },
+      { key: "requirement", header: "Requirement" },
+      { key: "dept", header: "Department" },
+      { key: "time", header: "Time" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "RQ1", bookingNo: "HB-118", requirement: "Projector + mic", dept: "AV", time: "9:00 AM", status: "Completed", outletId: "conf-a" },
+      { id: "RQ2", bookingNo: "HB-118", requirement: "Tea / coffee service", dept: "F&B", time: "10:30 AM", status: "In Progress", outletId: "conf-a" },
+      { id: "RQ3", bookingNo: "HB-119", requirement: "Stage backdrop", dept: "Banquet", time: "4:00 PM", status: "Pending", outletId: "lawn" },
+      { id: "RQ4", bookingNo: "HB-119", requirement: "Welcome drinks", dept: "F&B", time: "6:00 PM", status: "Pending", outletId: "lawn" },
+    ],
+  }),
+
+  "/food-beverages/banquet/billing": page({
+    title: "Billing",
+    description: "Event charges, advances, and banquet invoices.",
+    outletScope: "banquet",
+    actionLabel: "Post Charges",
+    searchPlaceholder: "Search booking or invoice…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Pending", label: "Pending" },
+      { id: "Settled", label: "Settled" },
+    ],
+    stats: [
+      { label: "Outstanding", value: "₹52,000", accent: "#ef4444", sublabel: "Unsettled" },
+      { label: "Billed Today", value: "₹1.68L", accent: "#15803d", sublabel: "Posted" },
+      { label: "Advances", value: "₹80,000", sublabel: "Received" },
+      { label: "Invoices", value: 3, sublabel: "Today" },
+    ],
+    columns: [
+      { key: "bookingNo", header: "Booking" },
+      { key: "event", header: "Event" },
+      { key: "charges", header: "Charges" },
+      { key: "paid", header: "Paid" },
+      { key: "balance", header: "Balance" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "BL1", bookingNo: "HB-118", event: "Board Meeting", charges: "₹48,000", paid: "₹48,000", balance: "₹0", status: "Settled", outletId: "conf-a" },
+      { id: "BL2", bookingNo: "HB-119", event: "Product Launch", charges: "₹1,20,000", paid: "₹68,000", balance: "₹52,000", status: "Pending", outletId: "lawn" },
+      { id: "BL3", bookingNo: "HB-115", event: "Wedding Reception", charges: "₹3,50,000", paid: "₹3,50,000", balance: "₹0", status: "Settled", outletId: "lawn" },
+    ],
+  }),
+
+  "/food-beverages/banquet/close-event": page({
+    title: "Close Event",
+    description: "Final settlement and close for completed banquet events.",
+    outletScope: "banquet",
+    actionLabel: "Close Event",
+    searchPlaceholder: "Search event to close…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Pending", label: "Pending" },
+      { id: "Closed", label: "Closed" },
+    ],
+    stats: [
+      { label: "Ready to Close", value: 2, accent: "#f59e0b", sublabel: "Menus posted" },
+      { label: "Closed Today", value: 1, accent: "#10b981", sublabel: "Completed" },
+      { label: "Outstanding", value: "₹52,000", accent: "#ef4444", sublabel: "Block close" },
+      { label: "Avg Close", value: "18m", sublabel: "Settlement time" },
+    ],
+    columns: [
+      { key: "bookingNo", header: "Booking" },
+      { key: "event", header: "Event" },
+      { key: "venue", header: "Venue" },
+      { key: "balance", header: "Balance" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "CE1", bookingNo: "HB-118", event: "Board Meeting", venue: "Conference Hall A", balance: "₹0", status: "Pending", outletId: "conf-a" },
+      { id: "CE2", bookingNo: "HB-119", event: "Product Launch", venue: "Lawn", balance: "₹52,000", status: "Pending", outletId: "lawn" },
+      { id: "CE3", bookingNo: "HB-115", event: "Wedding Reception", venue: "Lawn", balance: "₹0", status: "Closed", outletId: "lawn" },
+    ],
+  }),
+
+  /* ——— Menu ——— */
+  "/food-beverages/menu/categories": page({
+    title: "Categories",
+    description: "Menu categories shared across outlets.",
+    outletScope: "none",
+    actionLabel: "Add Category",
+    searchPlaceholder: "Search category…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }, { id: "Draft", label: "Draft" }],
+    stats: [
+      { label: "Categories", value: 12, sublabel: "Configured" },
+      { label: "Active", value: 10, accent: "#10b981", sublabel: "On menu" },
+      { label: "Items Linked", value: 86, sublabel: "Across categories" },
+      { label: "Draft", value: 2, accent: "#f59e0b", sublabel: "Unpublished" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Category" },
+      { key: "items", header: "Items" },
+      { key: "order", header: "Sort" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "MC1", code: "CAT-01", name: "Starters", items: 14, order: 1, status: "Active" },
+      { id: "MC2", code: "CAT-02", name: "Main Course", items: 22, order: 2, status: "Active" },
+      { id: "MC3", code: "CAT-03", name: "Breads & Rice", items: 10, order: 3, status: "Active" },
+      { id: "MC4", code: "CAT-04", name: "Desserts", items: 8, order: 4, status: "Active" },
+      { id: "MC5", code: "CAT-05", name: "Seasonal", items: 4, order: 5, status: "Draft" },
+    ],
+  }),
+
+  "/food-beverages/menu/items": page({
+    title: "Items",
+    description: "Sellable menu items with pricing and availability.",
+    outletScope: "none",
+    actionLabel: "Add Item",
+    searchPlaceholder: "Search item or code…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }, { id: "86'd", label: "86'd" }],
+    stats: [
+      { label: "Items", value: 86, sublabel: "In menu" },
+      { label: "Active", value: 79, accent: "#10b981", sublabel: "Sellable" },
+      { label: "86'd", value: 4, accent: "#ef4444", sublabel: "Out of stock" },
+      { label: "Avg Price", value: "₹312", sublabel: "Sell price" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Item" },
+      { key: "category", header: "Category" },
+      { key: "price", header: "Price" },
+      { key: "cost", header: "Cost" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "MI1", code: "IT-101", name: "Butter Chicken", category: "Main Course", price: "₹420", cost: "₹145", status: "Active" },
+      { id: "MI2", code: "IT-102", name: "Dal Makhani", category: "Main Course", price: "₹280", cost: "₹72", status: "Active" },
+      { id: "MI3", code: "IT-103", name: "Paneer Tikka", category: "Starters", price: "₹320", cost: "₹98", status: "Active" },
+      { id: "MI4", code: "IT-104", name: "Fresh Lime Soda", category: "Beverages", price: "₹120", cost: "₹25", status: "86'd" },
+    ],
+  }),
+
+  "/food-beverages/menu/modifiers": page({
+    title: "Modifiers",
+    description: "Add-ons and modifiers linked to menu items.",
+    outletScope: "none",
+    actionLabel: "Add Modifier",
+    searchPlaceholder: "Search modifier…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }, { id: "Draft", label: "Draft" }],
+    stats: [
+      { label: "Modifiers", value: 18, sublabel: "Configured" },
+      { label: "Active", value: 15, accent: "#10b981", sublabel: "On POS" },
+      { label: "Linked Items", value: 42, sublabel: "Menu links" },
+      { label: "Avg Price", value: "₹65", sublabel: "Per modifier" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Modifier" },
+      { key: "group", header: "Group" },
+      { key: "price", header: "Price" },
+      { key: "items", header: "Linked" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "MD1", code: "AO-01", name: "Extra Cheese", group: "Toppings", price: "₹40", items: 12, status: "Active" },
+      { id: "MD2", code: "AO-02", name: "Extra Spicy", group: "Spice", price: "₹0", items: 20, status: "Active" },
+      { id: "MD3", code: "AO-03", name: "Garlic Bread", group: "Sides", price: "₹80", items: 6, status: "Active" },
+      { id: "MD4", code: "AO-04", name: "Truffle Oil", group: "Premium", price: "₹120", items: 4, status: "Draft" },
+    ],
+  }),
+
+  "/food-beverages/menu/recipes": page({
+    title: "Recipes",
+    description: "Recipe cards with ingredients, yield, and food cost.",
+    outletScope: "none",
+    actionLabel: "Add Recipe",
+    searchPlaceholder: "Search recipe…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Recipes", value: 64, sublabel: "Costed" },
+      { label: "Avg Food Cost", value: "32%", accent: "#15803d", sublabel: "Target 30%" },
+      { label: "High Cost", value: 7, accent: "#ef4444", sublabel: "Above target" },
+      { label: "Linked Items", value: 58, sublabel: "Menu mapped" },
+    ],
+    columns: [
+      { key: "recipe", header: "Recipe" },
+      { key: "yield", header: "Yield" },
+      { key: "cost", header: "Cost" },
+      { key: "pct", header: "Cost %" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "RC1", recipe: "Butter Chicken", yield: "4 portions", cost: "₹145", pct: "34.5%", status: "Active" },
+      { id: "RC2", recipe: "Dal Makhani", yield: "6 portions", cost: "₹72", pct: "25.7%", status: "Active" },
+      { id: "RC3", recipe: "Paneer Tikka", yield: "4 portions", cost: "₹98", pct: "30.6%", status: "Active" },
+    ],
+  }),
+
+  "/food-beverages/menu/combos": page({
+    title: "Combos",
+    description: "Combo meals and bundled offerings.",
+    outletScope: "none",
+    actionLabel: "Add Combo",
+    searchPlaceholder: "Search combo…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Combos", value: 9, sublabel: "Configured" },
+      { label: "Active", value: 7, accent: "#10b981", sublabel: "On menu" },
+      { label: "Avg Save", value: "12%", sublabel: "vs à la carte" },
+      { label: "Sold Today", value: 18, accent: "#15803d", sublabel: "Combos" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Combo" },
+      { key: "items", header: "Items" },
+      { key: "price", header: "Price" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "CB1", code: "CMB-01", name: "Lunch Thali", items: 5, price: "₹399", status: "Active" },
+      { id: "CB2", code: "CMB-02", name: "Family Feast", items: 8, price: "₹1,499", status: "Active" },
+      { id: "CB3", code: "CMB-03", name: "Business Lunch", items: 3, price: "₹549", status: "Active" },
+    ],
+  }),
+
+  "/food-beverages/menu/pricing": page({
+    title: "Pricing",
+    description: "Outlet-wise and channel pricing rules.",
+    outletScope: "restaurant",
+    actionLabel: "Add Price Rule",
+    searchPlaceholder: "Search item or rule…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Price Lists", value: 4, sublabel: "Channels" },
+      { label: "Overrides", value: 12, accent: "#f59e0b", sublabel: "Outlet specific" },
+      { label: "Happy Hour", value: 2, sublabel: "Active rules" },
+      { label: "Last Update", value: "Today", sublabel: "Synced" },
+    ],
+    columns: [
+      { key: "item", header: "Item" },
+      { key: "base", header: "Base" },
+      { key: "outlet", header: "Outlet Price" },
+      { key: "online", header: "Online" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "PR1", item: "Butter Chicken", base: "₹420", outlet: "₹420", online: "₹450", status: "Active", outletId: "rest-1" },
+      { id: "PR2", item: "Dal Makhani", base: "₹280", outlet: "₹260", online: "₹299", status: "Active", outletId: "rest-1" },
+      { id: "PR3", item: "Paneer Tikka", base: "₹320", outlet: "₹320", online: "₹349", status: "Active", outletId: "rest-2" },
+    ],
+  }),
+
+  /* ——— Kitchen ——— */
+  "/food-beverages/kitchen/kds": page({
+    title: "KDS",
+    description: "Kitchen display system — live tickets by station.",
+    outletScope: "kitchen",
+    searchPlaceholder: "Search ticket or item…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Pending", label: "Pending" },
+      { id: "Preparing", label: "Preparing" },
+      { id: "Ready", label: "Ready" },
+    ],
+    stats: [
+      { label: "Open Tickets", value: 8, accent: "#f59e0b", sublabel: "On screen" },
+      { label: "Avg Prep", value: "11 min", sublabel: "Today" },
+      { label: "Over SLA", value: 2, accent: "#ef4444", sublabel: "> 15 min" },
+      { label: "Ready", value: 3, accent: "#10b981", sublabel: "Awaiting pickup" },
+    ],
+    columns: [
+      { key: "ticket", header: "Ticket" },
+      { key: "station", header: "Station" },
+      { key: "items", header: "Items" },
+      { key: "table", header: "Table" },
+      { key: "elapsed", header: "Elapsed" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "K1", ticket: "KDS-88", station: "Hot", items: "Butter Chicken ×2", table: "T-04", elapsed: "8 min", status: "Preparing", outletId: "indian-kitchen" },
+      { id: "K2", ticket: "KDS-89", station: "Tandoor", items: "Paneer Tikka ×1", table: "T-02", elapsed: "4 min", status: "Pending", outletId: "indian-kitchen" },
+      { id: "K3", ticket: "KDS-90", station: "Pastry", items: "Gulab Jamun ×2", table: "T-12", elapsed: "12 min", status: "Ready", outletId: "main-kitchen" },
+      { id: "K4", ticket: "KDS-91", station: "Grill", items: "Steak Medium ×1", table: "T-03", elapsed: "16 min", status: "Preparing", outletId: "continental-kitchen" },
+    ],
+  }),
+
+  "/food-beverages/kitchen/orders": page({
+    title: "Kitchen Orders",
+    description: "All kitchen tickets routed from restaurant and room service.",
+    outletScope: "kitchen",
+    searchPlaceholder: "Search order…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Pending", label: "Pending" },
+      { id: "Preparing", label: "Preparing" },
+      { id: "Ready", label: "Ready" },
+      { id: "Served", label: "Served" },
+    ],
+    stats: [
+      { label: "Orders Today", value: 64, accent: "#15803d", sublabel: "All kitchens" },
+      { label: "In Prep", value: 8, accent: "#f59e0b", sublabel: "Active" },
+      { label: "Completed", value: 52, accent: "#10b981", sublabel: "Served" },
+      { label: "Cancelled", value: 4, accent: "#ef4444", sublabel: "Voided" },
+    ],
+    columns: [
+      { key: "orderNo", header: "Order" },
+      { key: "source", header: "Source" },
+      { key: "items", header: "Items" },
+      { key: "priority", header: "Priority" },
+      { key: "time", header: "Fired" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "KO1", orderNo: "ORD-501", source: "Restaurant #1", items: 5, priority: "Normal", time: "1:12 PM", status: "Preparing", outletId: "indian-kitchen" },
+      { id: "KO2", orderNo: "ORD-502", source: "Room 501", items: 3, priority: "High", time: "1:18 PM", status: "Ready", outletId: "main-kitchen" },
+      { id: "KO3", orderNo: "ORD-504", source: "Online", items: 4, priority: "Normal", time: "1:22 PM", status: "Pending", outletId: "indian-kitchen" },
+    ],
+  }),
+
+  "/food-beverages/kitchen/preparation-queue": page({
+    title: "Preparation Queue",
+    description: "Sequenced prep list by start time and course.",
+    outletScope: "kitchen",
+    searchPlaceholder: "Search item or ticket…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Queued", label: "Queued" },
+      { id: "Preparing", label: "Preparing" },
+      { id: "Ready", label: "Ready" },
+    ],
+    stats: [
+      { label: "In Queue", value: 14, accent: "#f59e0b", sublabel: "Waiting start" },
+      { label: "Cooking", value: 6, sublabel: "On stove" },
+      { label: "Bump Ready", value: 3, accent: "#10b981", sublabel: "Pass" },
+      { label: "Avg Wait", value: "6 min", sublabel: "Queue time" },
+    ],
+    columns: [
+      { key: "seq", header: "#" },
+      { key: "item", header: "Item" },
+      { key: "course", header: "Course" },
+      { key: "table", header: "Table" },
+      { key: "start", header: "Start" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "PQ1", seq: 1, item: "Tomato Soup ×2", course: "Starter", table: "T-04", start: "Now", status: "Preparing", outletId: "main-kitchen" },
+      { id: "PQ2", seq: 2, item: "Butter Chicken ×2", course: "Main", table: "T-04", start: "+8 min", status: "Queued", outletId: "indian-kitchen" },
+      { id: "PQ3", seq: 3, item: "Pasta Alfredo ×1", course: "Main", table: "T-08", start: "Now", status: "Preparing", outletId: "italian-kitchen" },
+      { id: "PQ4", seq: 4, item: "Chocolate Mousse ×2", course: "Dessert", table: "T-12", start: "Ready", status: "Ready", outletId: "main-kitchen" },
+    ],
+  }),
+
+  /* ——— Inventory ——— */
+  "/food-beverages/inventory/ingredients": page({
+    title: "Ingredients",
+    description: "Raw materials and perishable stock items.",
+    outletScope: "none",
+    actionLabel: "Add Ingredient",
+    searchPlaceholder: "Search ingredient…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }, { id: "Low Stock", label: "Low Stock" }],
+    stats: [
+      { label: "SKUs", value: 186, sublabel: "Ingredients" },
+      { label: "Low Stock", value: 9, accent: "#ef4444", sublabel: "Below reorder" },
+      { label: "Value On Hand", value: "₹4.8L", accent: "#15803d", sublabel: "Store" },
+      { label: "Expiring 7d", value: 6, accent: "#f59e0b", sublabel: "Watch list" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Ingredient" },
+      { key: "uom", header: "UOM" },
+      { key: "onHand", header: "On Hand" },
+      { key: "reorder", header: "Reorder" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "IN1", code: "RM-01", name: "Basmati Rice", uom: "kg", onHand: 86, reorder: 40, status: "Active" },
+      { id: "IN2", code: "RM-02", name: "Paneer", uom: "kg", onHand: 12, reorder: 15, status: "Low Stock" },
+      { id: "IN3", code: "RM-03", name: "Chicken", uom: "kg", onHand: 48, reorder: 25, status: "Active" },
+      { id: "IN4", code: "RM-04", name: "Fresh Cream", uom: "L", onHand: 8, reorder: 10, status: "Low Stock" },
+    ],
+  }),
+
+  "/food-beverages/inventory/suppliers": page({
+    title: "Suppliers",
+    description: "Vendor master for F&B purchasing.",
+    outletScope: "none",
+    actionLabel: "Add Supplier",
+    searchPlaceholder: "Search supplier…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Suppliers", value: 24, sublabel: "On file" },
+      { label: "Active", value: 21, accent: "#10b981", sublabel: "Approved" },
+      { label: "Open POs", value: 5, accent: "#f59e0b", sublabel: "Awaiting delivery" },
+      { label: "MTD Spend", value: "₹6.2L", sublabel: "Purchases" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Supplier" },
+      { key: "category", header: "Category" },
+      { key: "phone", header: "Phone" },
+      { key: "leadDays", header: "Lead Days" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "SU1", code: "SUP-01", name: "Fresh Farms Co", category: "Produce", phone: "+91 80 1111 0001", leadDays: 1, status: "Active" },
+      { id: "SU2", code: "SUP-02", name: "Metro Meats", category: "Meat", phone: "+91 80 1111 0002", leadDays: 2, status: "Active" },
+      { id: "SU3", code: "SUP-03", name: "Dairy Delight", category: "Dairy", phone: "+91 80 1111 0003", leadDays: 1, status: "Active" },
+    ],
+  }),
+
+  "/food-beverages/inventory/purchase-orders": page({
+    title: "Purchase Orders",
+    description: "Create and track purchase orders to suppliers.",
+    outletScope: "none",
+    actionLabel: "New PO",
+    searchPlaceholder: "Search PO or supplier…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Pending", label: "Pending" },
+      { id: "Approved", label: "Approved" },
+      { id: "Received", label: "Received" },
+    ],
+    stats: [
+      { label: "Open POs", value: 5, accent: "#f59e0b", sublabel: "In pipeline" },
+      { label: "Value Open", value: "₹1.4L", accent: "#15803d", sublabel: "Committed" },
+      { label: "Received MTD", value: 18, accent: "#10b981", sublabel: "Closed POs" },
+      { label: "Avg Lead", value: "1.6d", sublabel: "Delivery" },
+    ],
+    columns: [
+      { key: "poNo", header: "PO #" },
+      { key: "supplier", header: "Supplier" },
+      { key: "items", header: "Items" },
+      { key: "value", header: "Value" },
+      { key: "eta", header: "ETA" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "PO1", poNo: "PO-441", supplier: "Fresh Farms Co", items: 12, value: "₹28,400", eta: "14 Jul", status: "Approved" },
+      { id: "PO2", poNo: "PO-442", supplier: "Metro Meats", items: 6, value: "₹42,000", eta: "15 Jul", status: "Pending" },
+      { id: "PO3", poNo: "PO-438", supplier: "Dairy Delight", items: 8, value: "₹16,200", eta: "12 Jul", status: "Received" },
+    ],
+  }),
+
+  "/food-beverages/inventory/grn": page({
+    title: "GRN",
+    description: "Goods receipt notes against purchase orders.",
+    outletScope: "none",
+    actionLabel: "Create GRN",
+    searchPlaceholder: "Search GRN or PO…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Pending", label: "Pending" }, { id: "Received", label: "Received" }],
+    stats: [
+      { label: "Today", value: 2, accent: "#15803d", sublabel: "GRNs" },
+      { label: "Pending QC", value: 1, accent: "#f59e0b", sublabel: "Awaiting check" },
+      { label: "Value Received", value: "₹44,600", sublabel: "Today" },
+      { label: "Variance", value: "2 lines", accent: "#ef4444", sublabel: "Short / excess" },
+    ],
+    columns: [
+      { key: "grnNo", header: "GRN #" },
+      { key: "poNo", header: "PO #" },
+      { key: "supplier", header: "Supplier" },
+      { key: "items", header: "Items" },
+      { key: "value", header: "Value" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "G1", grnNo: "GRN-220", poNo: "PO-438", supplier: "Dairy Delight", items: 8, value: "₹16,200", status: "Received" },
+      { id: "G2", grnNo: "GRN-221", poNo: "PO-441", supplier: "Fresh Farms Co", items: 12, value: "₹28,400", status: "Pending" },
+    ],
+  }),
+
+  "/food-beverages/inventory/stock-movement": page({
+    title: "Stock Movement",
+    description: "Transfers between store, kitchens, and outlets.",
+    outletScope: "none",
+    actionLabel: "New Transfer",
+    searchPlaceholder: "Search transfer…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Issued", label: "Issued" },
+      { id: "Received", label: "Received" },
+      { id: "Pending", label: "Pending" },
+    ],
+    stats: [
+      { label: "Today", value: 7, accent: "#15803d", sublabel: "Movements" },
+      { label: "In Transit", value: 2, accent: "#f59e0b", sublabel: "Pending receive" },
+      { label: "Value Moved", value: "₹22,600", sublabel: "Today" },
+      { label: "Locations", value: 8, sublabel: "Active stores" },
+    ],
+    columns: [
+      { key: "moveNo", header: "Move #" },
+      { key: "from", header: "From" },
+      { key: "to", header: "To" },
+      { key: "items", header: "Items" },
+      { key: "value", header: "Value" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "SM1", moveNo: "MV-088", from: "Main Store", to: "Restaurant #1", items: 10, value: "₹3,200", status: "Received" },
+      { id: "SM2", moveNo: "MV-089", from: "Main Store", to: "Main Bar", items: 6, value: "₹5,800", status: "Issued" },
+      { id: "SM3", moveNo: "MV-090", from: "Main Kitchen", to: "Lawn", items: 4, value: "₹1,450", status: "Pending" },
+    ],
+  }),
+
+  "/food-beverages/inventory/wastage": page({
+    title: "Wastage",
+    description: "Spoilage, breakage, and write-off logging.",
+    outletScope: "none",
+    actionLabel: "Log Wastage",
+    searchPlaceholder: "Search item or reason…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Spoilage", label: "Spoilage" },
+      { id: "Breakage", label: "Breakage" },
+    ],
+    stats: [
+      { label: "Today", value: 3, accent: "#f59e0b", sublabel: "Entries" },
+      { label: "Spoilage MTD", value: "₹12.4K", accent: "#ef4444", sublabel: "Food" },
+      { label: "Breakage MTD", value: "₹3.2K", sublabel: "Crockery" },
+      { label: "% of Sales", value: "0.9%", sublabel: "Target < 1%" },
+    ],
+    columns: [
+      { key: "entryNo", header: "Entry" },
+      { key: "type", header: "Type" },
+      { key: "item", header: "Item" },
+      { key: "qty", header: "Qty" },
+      { key: "value", header: "Value" },
+      { key: "reason", header: "Reason" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "W1", entryNo: "WS-041", type: "Spoilage", item: "Fresh Cream", qty: "2 L", value: "₹480", reason: "Expired", status: "Pending" },
+      { id: "W2", entryNo: "WS-040", type: "Breakage", item: "Wine Glass", qty: "3", value: "₹450", reason: "Service drop", status: "Approved" },
+      { id: "W3", entryNo: "WS-039", type: "Spoilage", item: "Salad Greens", qty: "1.5 kg", value: "₹320", reason: "Wilted", status: "Approved" },
+    ],
+  }),
+
+  "/food-beverages/inventory/stock-count": page({
+    title: "Stock Count",
+    description: "Physical inventory counts and variance review.",
+    outletScope: "none",
+    actionLabel: "Start Count",
+    searchPlaceholder: "Search store or count…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Open", label: "Open" }, { id: "Completed", label: "Completed" }],
+    stats: [
+      { label: "Open Counts", value: 1, accent: "#f59e0b", sublabel: "In progress" },
+      { label: "Variance", value: "₹2,140", accent: "#ef4444", sublabel: "Last count" },
+      { label: "Accuracy", value: "97.8%", accent: "#10b981", sublabel: "Matched" },
+      { label: "Last Count", value: "10 Jul", sublabel: "Main Store" },
+    ],
+    columns: [
+      { key: "countNo", header: "Count #" },
+      { key: "store", header: "Store" },
+      { key: "items", header: "Items" },
+      { key: "variance", header: "Variance" },
+      { key: "date", header: "Date" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "SC1", countNo: "CNT-014", store: "Main Store", items: 120, variance: "₹2,140", date: "13 Jul", status: "Open" },
+      { id: "SC2", countNo: "CNT-013", store: "Bar Store", items: 45, variance: "₹320", date: "10 Jul", status: "Completed" },
+    ],
+  }),
+
+  "/food-beverages/inventory/adjustments": page({
+    title: "Adjustments",
+    description: "Stock quantity adjustments with reason codes.",
+    outletScope: "none",
+    actionLabel: "New Adjustment",
+    searchPlaceholder: "Search adjustment…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Pending", label: "Pending" }, { id: "Approved", label: "Approved" }],
+    stats: [
+      { label: "Pending", value: 2, accent: "#f59e0b", sublabel: "Awaiting approval" },
+      { label: "MTD Adj", value: 14, sublabel: "Posted" },
+      { label: "Value", value: "₹6,800", accent: "#ef4444", sublabel: "Net write-down" },
+      { label: "Top Reason", value: "Damage", sublabel: "This month" },
+    ],
+    columns: [
+      { key: "adjNo", header: "Adj #" },
+      { key: "item", header: "Item" },
+      { key: "qty", header: "Qty" },
+      { key: "reason", header: "Reason" },
+      { key: "value", header: "Value" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "AD1", adjNo: "ADJ-31", item: "Olive Oil", qty: "-2 L", reason: "Damage", value: "₹1,200", status: "Pending" },
+      { id: "AD2", adjNo: "ADJ-30", item: "Basmati Rice", qty: "+5 kg", reason: "Count correction", value: "₹400", status: "Approved" },
+    ],
+  }),
+
+  /* ——— Bar ——— */
+  "/food-beverages/bar/drink-categories": page({
+    title: "Drink Categories",
+    description: "Bar menu categories — spirits, beer, wine, soft drinks.",
+    outletScope: "bar",
+    actionLabel: "Add Category",
+    searchPlaceholder: "Search category…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Categories", value: 8, sublabel: "Bar menu" },
+      { label: "Active", value: 8, accent: "#10b981", sublabel: "On POS" },
+      { label: "Drinks Linked", value: 64, sublabel: "SKUs" },
+      { label: "Top Category", value: "Spirits", sublabel: "By sales" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Category" },
+      { key: "items", header: "Drinks" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "BC1", code: "BR-01", name: "Spirits", items: 22, status: "Active", outletId: "main-bar" },
+      { id: "BC2", code: "BR-02", name: "Beer", items: 12, status: "Active", outletId: "main-bar" },
+      { id: "BC3", code: "BR-03", name: "Wine", items: 18, status: "Active", outletId: "main-bar" },
+      { id: "BC4", code: "BR-04", name: "Cocktails", items: 16, status: "Active", outletId: "main-bar" },
+    ],
+  }),
+
+  "/food-beverages/bar/drinks": page({
+    title: "Drinks",
+    description: "Bar drink catalogue with pour sizes and pricing.",
+    outletScope: "bar",
+    actionLabel: "Add Drink",
+    searchPlaceholder: "Search drink…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }, { id: "86'd", label: "86'd" }],
+    stats: [
+      { label: "Drinks", value: 64, sublabel: "Catalogue" },
+      { label: "Active", value: 60, accent: "#10b981", sublabel: "Sellable" },
+      { label: "86'd", value: 2, accent: "#ef4444", sublabel: "Unavailable" },
+      { label: "Avg Price", value: "₹380", sublabel: "Per drink" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Drink" },
+      { key: "category", header: "Category" },
+      { key: "pour", header: "Pour" },
+      { key: "price", header: "Price" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "DR1", code: "DR-01", name: "Single Malt 30ml", category: "Spirits", pour: "30 ml", price: "₹450", status: "Active", outletId: "main-bar" },
+      { id: "DR2", code: "DR-02", name: "Craft IPA", category: "Beer", pour: "330 ml", price: "₹320", status: "Active", outletId: "main-bar" },
+      { id: "DR3", code: "DR-03", name: "House Red", category: "Wine", pour: "150 ml", price: "₹380", status: "Active", outletId: "lobby-bar" },
+      { id: "DR4", code: "DR-04", name: "Imported Lager", category: "Beer", pour: "330 ml", price: "₹280", status: "86'd", outletId: "main-bar" },
+    ],
+  }),
+
+  "/food-beverages/bar/cocktails": page({
+    title: "Cocktails",
+    description: "Signature and classic cocktails with recipes.",
+    outletScope: "bar",
+    actionLabel: "Add Cocktail",
+    searchPlaceholder: "Search cocktail…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Cocktails", value: 16, sublabel: "On menu" },
+      { label: "Signature", value: 6, accent: "#15803d", sublabel: "House specials" },
+      { label: "Sold Today", value: 28, sublabel: "Covers" },
+      { label: "Top Seller", value: "Mojito", sublabel: "Today" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Cocktail" },
+      { key: "base", header: "Base Spirit" },
+      { key: "price", header: "Price" },
+      { key: "cost", header: "Cost" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "CK1", code: "CK-01", name: "Classic Mojito", base: "White Rum", price: "₹420", cost: "₹95", status: "Active", outletId: "main-bar" },
+      { id: "CK2", code: "CK-02", name: "Old Fashioned", base: "Whiskey", price: "₹520", cost: "₹140", status: "Active", outletId: "main-bar" },
+      { id: "CK3", code: "CK-03", name: "Hotel Special", base: "Gin", price: "₹480", cost: "₹110", status: "Active", outletId: "lobby-bar" },
+    ],
+  }),
+
+  "/food-beverages/bar/happy-hour": page({
+    title: "Happy Hour",
+    description: "Time-based promotions and discounted drink pricing.",
+    outletScope: "bar",
+    actionLabel: "Add Promotion",
+    searchPlaceholder: "Search promotion…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }, { id: "Scheduled", label: "Scheduled" }],
+    stats: [
+      { label: "Active Now", value: 1, accent: "#10b981", sublabel: "Running" },
+      { label: "Scheduled", value: 2, accent: "#f59e0b", sublabel: "Upcoming" },
+      { label: "Uplift Today", value: "+18%", accent: "#15803d", sublabel: "vs base hours" },
+      { label: "Covers", value: 42, sublabel: "Happy hour" },
+    ],
+    columns: [
+      { key: "name", header: "Promotion" },
+      { key: "window", header: "Time" },
+      { key: "discount", header: "Discount" },
+      { key: "days", header: "Days" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "HH1", name: "Weekday Happy Hour", window: "5–7 PM", discount: "20%", days: "Mon–Fri", status: "Active", outletId: "main-bar" },
+      { id: "HH2", name: "Sunday Sangria", window: "12–4 PM", discount: "25%", days: "Sun", status: "Scheduled", outletId: "lobby-bar" },
+    ],
+  }),
+
+  "/food-beverages/bar/orders": page({
+    title: "Bar Orders",
+    description: "Live bar tickets from lounge, restaurant, and room service.",
+    outletScope: "bar",
+    actionLabel: "New Order",
+    searchPlaceholder: "Search order…",
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Pending", label: "Pending" },
+      { id: "Preparing", label: "Preparing" },
+      { id: "Served", label: "Served" },
+    ],
+    stats: [
+      { label: "Open", value: 7, accent: "#f59e0b", sublabel: "Tickets" },
+      { label: "Today Sales", value: "₹38,400", accent: "#15803d", sublabel: "Bar" },
+      { label: "Covers", value: 56, sublabel: "Drinks served" },
+      { label: "Avg Ticket", value: "₹685", sublabel: "Per order" },
+    ],
+    columns: [
+      { key: "orderNo", header: "Order" },
+      { key: "source", header: "Source" },
+      { key: "items", header: "Items" },
+      { key: "amount", header: "Amount" },
+      { key: "time", header: "Time" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "BO1", orderNo: "BAR-201", source: "Lounge T-3", items: 3, amount: "₹1,260", time: "6:40 PM", status: "Preparing", outletId: "main-bar" },
+      { id: "BO2", orderNo: "BAR-202", source: "Room 305", items: 2, amount: "₹840", time: "6:55 PM", status: "Pending", outletId: "main-bar" },
+      { id: "BO3", orderNo: "BAR-198", source: "Restaurant #1", items: 4, amount: "₹1,520", time: "6:10 PM", status: "Served", outletId: "lobby-bar" },
+    ],
+  }),
+
+  "/food-beverages/bar/stock": page({
+    title: "Stock",
+    description: "Bar store inventory levels and par stock.",
+    outletScope: "bar",
+    searchPlaceholder: "Search stock item…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }, { id: "Low Stock", label: "Low Stock" }],
+    stats: [
+      { label: "SKUs", value: 48, sublabel: "Bar store" },
+      { label: "Low Stock", value: 4, accent: "#ef4444", sublabel: "Reorder" },
+      { label: "Value", value: "₹2.1L", accent: "#15803d", sublabel: "On hand" },
+      { label: "Open Bottles", value: 22, sublabel: "In use" },
+    ],
+    columns: [
+      { key: "item", header: "Item" },
+      { key: "uom", header: "UOM" },
+      { key: "onHand", header: "On Hand" },
+      { key: "par", header: "Par" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "BS1", item: "Single Malt 750ml", uom: "Bottle", onHand: 6, par: 8, status: "Low Stock", outletId: "main-bar" },
+      { id: "BS2", item: "Craft IPA 330ml", uom: "Case", onHand: 14, par: 10, status: "Active", outletId: "main-bar" },
+      { id: "BS3", item: "House Red 750ml", uom: "Bottle", onHand: 18, par: 12, status: "Active", outletId: "lobby-bar" },
+    ],
+  }),
+
+  "/food-beverages/bar/bottle-tracking": page({
+    title: "Bottle Tracking",
+    description: "Open bottle tracking, pour control, and variance.",
+    outletScope: "bar",
+    actionLabel: "Open Bottle",
+    searchPlaceholder: "Search bottle or brand…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Open", label: "Open" }, { id: "Closed", label: "Closed" }],
+    stats: [
+      { label: "Open Bottles", value: 22, accent: "#f59e0b", sublabel: "In service" },
+      { label: "Pours Today", value: 148, accent: "#15803d", sublabel: "Logged" },
+      { label: "Variance", value: "1.8%", accent: "#ef4444", sublabel: "Theo vs actual" },
+      { label: "Finished", value: 5, sublabel: "Emptied today" },
+    ],
+    columns: [
+      { key: "bottleId", header: "Bottle ID" },
+      { key: "brand", header: "Brand" },
+      { key: "opened", header: "Opened" },
+      { key: "pours", header: "Pours" },
+      { key: "remaining", header: "Remaining" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "BT1", bottleId: "BT-118", brand: "Single Malt 12Y", opened: "12 Jul", pours: 14, remaining: "42%", status: "Open", outletId: "main-bar" },
+      { id: "BT2", bottleId: "BT-119", brand: "Premium Vodka", opened: "13 Jul", pours: 8, remaining: "68%", status: "Open", outletId: "main-bar" },
+      { id: "BT3", bottleId: "BT-110", brand: "House Gin", opened: "10 Jul", pours: 24, remaining: "0%", status: "Closed", outletId: "lobby-bar" },
+    ],
+  }),
+
+  /* ——— Reports ——— */
+  "/food-beverages/reports/daily-sales": page({
+    title: "Daily Sales",
+    description: "Day-wise F&B sales across outlets.",
+    outletScope: "none",
+    searchPlaceholder: "Search date or outlet…",
+    filterOptions: [{ id: "all", label: "All" }],
+    stats: [
+      { label: "Today", value: "₹1.24L", accent: "#15803d", sublabel: "Gross sales" },
+      { label: "Bills", value: 186, sublabel: "Settled" },
+      { label: "Covers", value: 412, sublabel: "Guests" },
+      { label: "vs Yesterday", value: "+6.2%", accent: "#10b981", sublabel: "Growth" },
+    ],
+    columns: [
+      { key: "date", header: "Date" },
+      { key: "bills", header: "Bills" },
+      { key: "covers", header: "Covers" },
+      { key: "sales", header: "Sales" },
+      { key: "avgCheck", header: "Avg Check" },
+      { key: "growth", header: "vs Prev" },
+    ],
+    rows: [
+      { id: "DS1", date: "13 Jul", bills: 186, covers: 412, sales: "₹1,24,000", avgCheck: "₹667", growth: "+6.2%" },
+      { id: "DS2", date: "12 Jul", bills: 172, covers: 390, sales: "₹1,16,800", avgCheck: "₹679", growth: "+2.1%" },
+      { id: "DS3", date: "11 Jul", bills: 168, covers: 378, sales: "₹1,14,400", avgCheck: "₹681", growth: "-1.4%" },
+    ],
+  }),
+
+  "/food-beverages/reports/item-sales": page({
+    title: "Item Sales",
+    description: "Top-selling menu items and contribution.",
+    outletScope: "none",
+    searchPlaceholder: "Search item…",
+    filterOptions: [{ id: "all", label: "All" }],
+    stats: [
+      { label: "Items Sold", value: 1240, sublabel: "MTD qty" },
+      { label: "Top Item", value: "Butter Chicken", accent: "#15803d", sublabel: "186 sold" },
+      { label: "Revenue", value: "₹8.4L", sublabel: "Item sales" },
+      { label: "Unique SKUs", value: 64, sublabel: "Sold MTD" },
+    ],
+    columns: [
+      { key: "item", header: "Item" },
+      { key: "category", header: "Category" },
+      { key: "qty", header: "Qty" },
+      { key: "sales", header: "Sales" },
+      { key: "share", header: "Share" },
+    ],
+    rows: [
+      { id: "IS1", item: "Butter Chicken", category: "Main", qty: 186, sales: "₹78,120", share: "9.3%" },
+      { id: "IS2", item: "Dal Makhani", category: "Main", qty: 154, sales: "₹43,120", share: "5.1%" },
+      { id: "IS3", item: "Classic Mojito", category: "Bar", qty: 128, sales: "₹53,760", share: "6.4%" },
+    ],
+  }),
+
+  "/food-beverages/reports/category-sales": page({
+    title: "Category Sales",
+    description: "Sales mix by menu category.",
+    outletScope: "none",
+    searchPlaceholder: "Search category…",
+    filterOptions: [{ id: "all", label: "All" }],
+    stats: [
+      { label: "Categories", value: 12, sublabel: "With sales" },
+      { label: "Top Category", value: "Main Course", accent: "#15803d", sublabel: "38% mix" },
+      { label: "Beverages", value: "22%", sublabel: "Of total" },
+      { label: "Desserts", value: "8%", sublabel: "Of total" },
+    ],
+    columns: [
+      { key: "category", header: "Category" },
+      { key: "qty", header: "Qty" },
+      { key: "sales", header: "Sales" },
+      { key: "share", header: "Share" },
+      { key: "growth", header: "vs LM" },
+    ],
+    rows: [
+      { id: "CS1", category: "Main Course", qty: 420, sales: "₹3.2L", share: "38%", growth: "+7%" },
+      { id: "CS2", category: "Starters", qty: 310, sales: "₹1.6L", share: "19%", growth: "+4%" },
+      { id: "CS3", category: "Beverages / Bar", qty: 510, sales: "₹1.85L", share: "22%", growth: "+11%" },
+    ],
+  }),
+
+  "/food-beverages/reports/outlet-sales": page({
+    title: "Outlet Sales",
+    description: "Performance comparison across F&B outlets.",
+    outletScope: "none",
+    searchPlaceholder: "Search outlet…",
+    filterOptions: [{ id: "all", label: "All" }],
+    stats: [
+      { label: "Outlets", value: 8, sublabel: "Reporting" },
+      { label: "Top Outlet", value: "Restaurant #1", accent: "#15803d", sublabel: "₹4.2L MTD" },
+      { label: "MTD Total", value: "₹12.4L", sublabel: "All outlets" },
+      { label: "Growth", value: "+8.4%", accent: "#10b981", sublabel: "vs last month" },
+    ],
+    columns: [
+      { key: "outlet", header: "Outlet" },
+      { key: "bills", header: "Bills" },
+      { key: "covers", header: "Covers" },
+      { key: "sales", header: "Sales" },
+      { key: "avgCheck", header: "Avg Check" },
+      { key: "growth", header: "vs LM" },
+    ],
+    rows: [
+      { id: "OS1", outlet: "Restaurant #1", bills: 312, covers: 780, sales: "₹4.2L", avgCheck: "₹1,346", growth: "+9.2%" },
+      { id: "OS2", outlet: "Restaurant #2", bills: 248, covers: 610, sales: "₹3.1L", avgCheck: "₹1,250", growth: "+5.1%" },
+      { id: "OS3", outlet: "Main Bar", bills: 410, covers: 520, sales: "₹2.8L", avgCheck: "₹683", growth: "+11.0%" },
+      { id: "OS4", outlet: "Banquet", bills: 28, covers: 960, sales: "₹2.3L", avgCheck: "₹8,214", growth: "+4.2%" },
+    ],
+  }),
+
+  "/food-beverages/reports/cashier": page({
+    title: "Cashier Report",
+    description: "Shift-wise cashier collections and variances.",
+    outletScope: "restaurant",
+    searchPlaceholder: "Search cashier…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Closed", label: "Closed" }, { id: "Open", label: "Open" }],
+    stats: [
+      { label: "Collected", value: "₹1.42L", accent: "#15803d", sublabel: "Today" },
+      { label: "Cash", value: "₹38.5K", sublabel: "27%" },
+      { label: "Digital", value: "₹1.03L", sublabel: "Card + UPI" },
+      { label: "Variance", value: "−₹70", accent: "#ef4444", sublabel: "Net" },
+    ],
+    columns: [
+      { key: "cashier", header: "Cashier" },
+      { key: "outlet", header: "Outlet" },
+      { key: "shift", header: "Shift" },
+      { key: "sales", header: "Sales" },
+      { key: "variance", header: "Variance" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "CR1", cashier: "Amit Kumar", outlet: "Restaurant #1", shift: "Lunch", sales: "₹28,400", variance: "—", status: "Open", outletId: "rest-1" },
+      { id: "CR2", cashier: "Neha Singh", outlet: "Restaurant #1", shift: "Breakfast", sales: "₹14,200", variance: "−₹20", status: "Closed", outletId: "rest-1" },
+      { id: "CR3", cashier: "Ravi Menon", outlet: "Main Bar", shift: "Evening", sales: "₹22,800", variance: "−₹50", status: "Closed", outletId: "main-bar" },
+    ],
+  }),
+
+  "/food-beverages/reports/table-turnover": page({
+    title: "Table Turnover",
+    description: "Table utilisation and turn time analytics.",
+    outletScope: "restaurant",
+    searchPlaceholder: "Search table or section…",
+    filterOptions: [{ id: "all", label: "All" }],
+    stats: [
+      { label: "Avg Turn", value: "68 min", accent: "#15803d", sublabel: "Per table" },
+      { label: "Turns / Table", value: 2.4, sublabel: "Today" },
+      { label: "Peak Util", value: "86%", accent: "#10b981", sublabel: "Dinner" },
+      { label: "Idle Tables", value: 3, accent: "#f59e0b", sublabel: "Now" },
+    ],
+    columns: [
+      { key: "tableNo", header: "Table" },
+      { key: "section", header: "Section" },
+      { key: "turns", header: "Turns" },
+      { key: "avgDuration", header: "Avg Duration" },
+      { key: "revenue", header: "Revenue" },
+      { key: "util", header: "Util %" },
+    ],
+    rows: [
+      { id: "TT1", tableNo: "T-04", section: "Indoor", turns: 3, avgDuration: "62 min", revenue: "₹6,840", util: "92%", outletId: "rest-1" },
+      { id: "TT2", tableNo: "T-02", section: "Garden", turns: 2, avgDuration: "74 min", revenue: "₹4,120", util: "78%", outletId: "rest-1" },
+      { id: "TT3", tableNo: "T-07", section: "Indoor", turns: 1, avgDuration: "95 min", revenue: "₹3,200", util: "55%", outletId: "rest-1" },
+    ],
+  }),
+
+  "/food-beverages/reports/food-cost": page({
+    title: "Food Cost",
+    description: "Theoretical vs actual food cost by outlet.",
+    outletScope: "none",
+    searchPlaceholder: "Search outlet…",
+    filterOptions: [{ id: "all", label: "All" }],
+    stats: [
+      { label: "Food Cost %", value: "31.2%", accent: "#15803d", sublabel: "MTD" },
+      { label: "Target", value: "30%", sublabel: "Budget" },
+      { label: "Variance", value: "+1.2%", accent: "#ef4444", sublabel: "Over" },
+      { label: "Potential Save", value: "₹18.4K", sublabel: "If on target" },
+    ],
+    columns: [
+      { key: "outlet", header: "Outlet" },
+      { key: "sales", header: "Sales" },
+      { key: "cost", header: "Cost" },
+      { key: "pct", header: "Cost %" },
+      { key: "target", header: "Target" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "FC1", outlet: "Restaurant #1", sales: "₹4.2L", cost: "₹1.35L", pct: "32.1%", target: "30%", status: "Over" },
+      { id: "FC2", outlet: "Restaurant #2", sales: "₹3.1L", cost: "₹0.89L", pct: "28.7%", target: "30%", status: "Under" },
+      { id: "FC3", outlet: "Main Bar", sales: "₹2.8L", cost: "₹0.78L", pct: "27.9%", target: "28%", status: "Under" },
+    ],
+  }),
+
+  "/food-beverages/reports/inventory": page({
+    title: "Inventory Report",
+    description: "Stock valuation and movement summary.",
+    outletScope: "none",
+    searchPlaceholder: "Search store or item…",
+    filterOptions: [{ id: "all", label: "All" }],
+    stats: [
+      { label: "On Hand Value", value: "₹6.9L", accent: "#15803d", sublabel: "All stores" },
+      { label: "Receipts MTD", value: "₹2.4L", sublabel: "GRN value" },
+      { label: "Issues MTD", value: "₹1.9L", sublabel: "Transfers out" },
+      { label: "Wastage", value: "₹15.6K", accent: "#ef4444", sublabel: "MTD" },
+    ],
+    columns: [
+      { key: "store", header: "Store" },
+      { key: "skus", header: "SKUs" },
+      { key: "value", header: "Value" },
+      { key: "lowStock", header: "Low Stock" },
+      { key: "lastCount", header: "Last Count" },
+    ],
+    rows: [
+      { id: "IR1", store: "Main Store", skus: 120, value: "₹4.8L", lowStock: 6, lastCount: "10 Jul" },
+      { id: "IR2", store: "Bar Store", skus: 48, value: "₹2.1L", lowStock: 4, lastCount: "10 Jul" },
+    ],
+  }),
+
+  "/food-beverages/reports/kitchen-performance": page({
+    title: "Kitchen Performance",
+    description: "Ticket times, SLA breaches, and station throughput.",
+    outletScope: "kitchen",
+    searchPlaceholder: "Search kitchen…",
+    filterOptions: [{ id: "all", label: "All" }],
+    stats: [
+      { label: "Avg Ticket", value: "11 min", accent: "#15803d", sublabel: "Prep time" },
+      { label: "SLA Hit", value: "91%", accent: "#10b981", sublabel: "< 15 min" },
+      { label: "Over SLA", value: 18, accent: "#ef4444", sublabel: "Today" },
+      { label: "Tickets", value: 214, sublabel: "Completed" },
+    ],
+    columns: [
+      { key: "kitchen", header: "Kitchen" },
+      { key: "tickets", header: "Tickets" },
+      { key: "avgTime", header: "Avg Time" },
+      { key: "sla", header: "SLA %" },
+      { key: "overSla", header: "Over SLA" },
+    ],
+    rows: [
+      { id: "KP1", kitchen: "Indian Kitchen", tickets: 96, avgTime: "10 min", sla: "93%", overSla: 6, outletId: "indian-kitchen" },
+      { id: "KP2", kitchen: "Main Kitchen", tickets: 72, avgTime: "12 min", sla: "89%", overSla: 8, outletId: "main-kitchen" },
+      { id: "KP3", kitchen: "Italian Kitchen", tickets: 46, avgTime: "11 min", sla: "92%", overSla: 4, outletId: "italian-kitchen" },
+    ],
+  }),
+
+  "/food-beverages/reports/cancelled-bills": page({
+    title: "Cancelled Bills",
+    description: "Voids, cancellations, and manager approvals.",
+    outletScope: "restaurant",
+    searchPlaceholder: "Search bill…",
+    filterOptions: [{ id: "all", label: "All" }],
+    stats: [
+      { label: "Cancelled Today", value: 4, accent: "#ef4444", sublabel: "Bills" },
+      { label: "Value", value: "₹6,820", accent: "#ef4444", sublabel: "Voided" },
+      { label: "MTD", value: 28, sublabel: "Cancellations" },
+      { label: "% of Bills", value: "1.4%", sublabel: "Target < 2%" },
+    ],
+    columns: [
+      { key: "billNo", header: "Bill" },
+      { key: "outlet", header: "Outlet" },
+      { key: "amount", header: "Amount" },
+      { key: "reason", header: "Reason" },
+      { key: "approvedBy", header: "Approved By" },
+      { key: "time", header: "Time" },
+    ],
+    rows: [
+      { id: "XB1", billNo: "FB-2391", outlet: "Restaurant #1", amount: "₹1,240", reason: "Wrong order", approvedBy: "Manager", time: "1:10 PM", outletId: "rest-1" },
+      { id: "XB2", billNo: "FB-2388", outlet: "Main Bar", amount: "₹820", reason: "Guest left", approvedBy: "Manager", time: "12:40 PM", outletId: "main-bar" },
+    ],
+  }),
+
+  "/food-beverages/reports/discount": page({
+    title: "Discount Report",
+    description: "Discounts, comps, and promotional reductions.",
+    outletScope: "restaurant",
+    searchPlaceholder: "Search bill or reason…",
+    filterOptions: [{ id: "all", label: "All" }],
+    stats: [
+      { label: "Discount Value", value: "₹18.4K", accent: "#f59e0b", sublabel: "Today" },
+      { label: "Bills", value: 22, sublabel: "With discount" },
+      { label: "% of Sales", value: "3.1%", sublabel: "Target < 4%" },
+      { label: "Top Reason", value: "Staff meal", sublabel: "Today" },
+    ],
+    columns: [
+      { key: "billNo", header: "Bill" },
+      { key: "outlet", header: "Outlet" },
+      { key: "gross", header: "Gross" },
+      { key: "discount", header: "Discount" },
+      { key: "reason", header: "Reason" },
+      { key: "by", header: "By" },
+    ],
+    rows: [
+      { id: "DC1", billNo: "FB-2401", outlet: "Restaurant #1", gross: "₹2,400", discount: "₹220", reason: "Happy hour", by: "Amit", outletId: "rest-1" },
+      { id: "DC2", billNo: "FB-2405", outlet: "Restaurant #2", gross: "₹1,800", discount: "₹1,800", reason: "Staff meal", by: "Manager", outletId: "rest-2" },
+    ],
+  }),
+
+  /* ——— Settings ——— */
+  "/food-beverages/settings/taxes": page({
+    title: "Taxes",
+    description: "GST and tax configuration for F&B outlets.",
+    outletScope: "none",
+    actionLabel: "Add Tax",
+    searchPlaceholder: "Search tax…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Tax Codes", value: 4, sublabel: "Configured" },
+      { label: "Default GST", value: "5% / 18%", sublabel: "Food / liquor" },
+      { label: "Active", value: 4, accent: "#10b981", sublabel: "In use" },
+      { label: "Last Change", value: "01 Apr", sublabel: "FY update" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Tax" },
+      { key: "rate", header: "Rate" },
+      { key: "appliesTo", header: "Applies To" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "TX1", code: "GST5", name: "GST 5%", rate: "5%", appliesTo: "Food", status: "Active" },
+      { id: "TX2", code: "GST18", name: "GST 18%", rate: "18%", appliesTo: "Liquor / AC", status: "Active" },
+      { id: "TX3", code: "CGST", name: "CGST", rate: "2.5% / 9%", appliesTo: "Split", status: "Active" },
+    ],
+  }),
+
+  "/food-beverages/settings/discounts": page({
+    title: "Discounts",
+    description: "Discount reasons and approval limits.",
+    outletScope: "none",
+    actionLabel: "Add Discount",
+    searchPlaceholder: "Search discount…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Reasons", value: 8, sublabel: "Configured" },
+      { label: "Max %", value: "25%", accent: "#f59e0b", sublabel: "Manager limit" },
+      { label: "Require Auth", value: 5, sublabel: "Need approval" },
+      { label: "Active", value: 8, accent: "#10b981", sublabel: "On POS" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Reason" },
+      { key: "maxPct", header: "Max %" },
+      { key: "approval", header: "Approval" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "DI1", code: "D-01", name: "Happy Hour", maxPct: "20%", approval: "Cashier", status: "Active" },
+      { id: "DI2", code: "D-02", name: "Staff Meal", maxPct: "100%", approval: "Manager", status: "Active" },
+      { id: "DI3", code: "D-03", name: "Comp", maxPct: "100%", approval: "Manager", status: "Active" },
+    ],
+  }),
+
+  "/food-beverages/settings/service-charge": page({
+    title: "Service Charge",
+    description: "Service charge rules by outlet and order type.",
+    outletScope: "none",
+    actionLabel: "Add Rule",
+    searchPlaceholder: "Search rule…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Rules", value: 3, sublabel: "Configured" },
+      { label: "Default", value: "10%", accent: "#15803d", sublabel: "Dine-in" },
+      { label: "Room Service", value: "5%", sublabel: "Charge" },
+      { label: "Active", value: 3, accent: "#10b981", sublabel: "Rules" },
+    ],
+    columns: [
+      { key: "name", header: "Rule" },
+      { key: "orderType", header: "Order Type" },
+      { key: "rate", header: "Rate" },
+      { key: "outlets", header: "Outlets" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "SC1", name: "Dine-in SC", orderType: "Dine In", rate: "10%", outlets: "All restaurants", status: "Active" },
+      { id: "SC2", name: "Room Service SC", orderType: "Room Service", rate: "5%", outlets: "All", status: "Active" },
+      { id: "SC3", name: "Banquet SC", orderType: "Banquet", rate: "0%", outlets: "Banquet", status: "Active" },
+    ],
+  }),
+
+  "/food-beverages/settings/kitchen-printers": page({
+    title: "Kitchen Printers",
+    description: "Route tickets to kitchen and bar printers.",
+    outletScope: "none",
+    actionLabel: "Add Printer",
+    searchPlaceholder: "Search printer…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Online", label: "Online" }, { id: "Offline", label: "Offline" }],
+    stats: [
+      { label: "Printers", value: 6, sublabel: "Configured" },
+      { label: "Online", value: 5, accent: "#10b981", sublabel: "Ready" },
+      { label: "Offline", value: 1, accent: "#ef4444", sublabel: "Needs check" },
+      { label: "Routes", value: 12, sublabel: "Category maps" },
+    ],
+    columns: [
+      { key: "name", header: "Printer" },
+      { key: "station", header: "Station" },
+      { key: "ip", header: "IP" },
+      { key: "routes", header: "Routes" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "KP1", name: "Hot Kitchen", station: "Main Kitchen", ip: "192.168.1.41", routes: 4, status: "Online" },
+      { id: "KP2", name: "Tandoor", station: "Indian Kitchen", ip: "192.168.1.42", routes: 3, status: "Online" },
+      { id: "KP3", name: "Bar Printer", station: "Main Bar", ip: "192.168.1.50", routes: 2, status: "Offline" },
+    ],
+  }),
+
+  "/food-beverages/settings/order-types": page({
+    title: "Order Types",
+    description: "Dine-in, takeaway, room service, online, and banquet.",
+    outletScope: "none",
+    actionLabel: "Add Order Type",
+    searchPlaceholder: "Search type…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Types", value: 5, sublabel: "Configured" },
+      { label: "Active", value: 5, accent: "#10b981", sublabel: "On POS" },
+      { label: "Default", value: "Dine In", sublabel: "Restaurants" },
+      { label: "Channels", value: 2, sublabel: "Online linked" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Order Type" },
+      { key: "chargeTo", header: "Charge To" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "OT1", code: "DI", name: "Dine In", chargeTo: "Table bill", status: "Active" },
+      { id: "OT2", code: "TA", name: "Takeaway", chargeTo: "Counter", status: "Active" },
+      { id: "OT3", code: "RS", name: "Room Service", chargeTo: "Guest folio", status: "Active" },
+      { id: "OT4", code: "OL", name: "Online", chargeTo: "Aggregator", status: "Active" },
+    ],
+  }),
+
+  "/food-beverages/settings/payment-modes": page({
+    title: "Payment Modes",
+    description: "Accepted tender types for F&B settlement.",
+    outletScope: "none",
+    actionLabel: "Add Mode",
+    searchPlaceholder: "Search mode…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Modes", value: 6, sublabel: "Configured" },
+      { label: "Active", value: 6, accent: "#10b981", sublabel: "On POS" },
+      { label: "Digital Share", value: "72%", accent: "#15803d", sublabel: "Today" },
+      { label: "Cash Share", value: "28%", sublabel: "Today" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Mode" },
+      { key: "type", header: "Type" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "PM1", code: "CASH", name: "Cash", type: "Cash", status: "Active" },
+      { id: "PM2", code: "CARD", name: "Card", type: "Card", status: "Active" },
+      { id: "PM3", code: "UPI", name: "UPI", type: "Digital", status: "Active" },
+      { id: "PM4", code: "ROOM", name: "Room Charge", type: "Folio", status: "Active" },
+    ],
+  }),
+
+  "/food-beverages/settings/modifiers": page({
+    title: "Modifiers Setup",
+    description: "Modifier groups and forced choice rules.",
+    outletScope: "none",
+    actionLabel: "Add Group",
+    searchPlaceholder: "Search group…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Groups", value: 6, sublabel: "Modifier groups" },
+      { label: "Options", value: 28, sublabel: "Choices" },
+      { label: "Forced", value: 2, accent: "#f59e0b", sublabel: "Required picks" },
+      { label: "Active", value: 6, accent: "#10b981", sublabel: "On menu" },
+    ],
+    columns: [
+      { key: "group", header: "Group" },
+      { key: "options", header: "Options" },
+      { key: "min", header: "Min" },
+      { key: "max", header: "Max" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "MG1", group: "Spice Level", options: 4, min: 1, max: 1, status: "Active" },
+      { id: "MG2", group: "Toppings", options: 8, min: 0, max: 5, status: "Active" },
+      { id: "MG3", group: "Cooking Preference", options: 3, min: 1, max: 1, status: "Active" },
+    ],
+  }),
+
+  "/food-beverages/settings/table-types": page({
+    title: "Table Types",
+    description: "Table shapes, capacities, and section templates.",
+    outletScope: "none",
+    actionLabel: "Add Type",
+    searchPlaceholder: "Search type…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Types", value: 5, sublabel: "Configured" },
+      { label: "In Use", value: 48, sublabel: "Tables mapped" },
+      { label: "Default Cap", value: 4, sublabel: "Covers" },
+      { label: "Active", value: 5, accent: "#10b981", sublabel: "Types" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Type" },
+      { key: "shape", header: "Shape" },
+      { key: "capacity", header: "Capacity" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "TT1", code: "TT-2", name: "2-Top", shape: "Round", capacity: 2, status: "Active" },
+      { id: "TT2", code: "TT-4", name: "4-Top", shape: "Square", capacity: 4, status: "Active" },
+      { id: "TT3", code: "TT-6", name: "6-Top", shape: "Rectangle", capacity: 6, status: "Active" },
+    ],
+  }),
+
+  "/food-beverages/settings/reason-masters": page({
+    title: "Reason Masters",
+    description: "Void, cancel, wastage, and adjustment reason codes.",
+    outletScope: "none",
+    actionLabel: "Add Reason",
+    searchPlaceholder: "Search reason…",
+    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }],
+    stats: [
+      { label: "Reasons", value: 16, sublabel: "All types" },
+      { label: "Void", value: 5, sublabel: "Bill void" },
+      { label: "Wastage", value: 6, sublabel: "Inventory" },
+      { label: "Active", value: 16, accent: "#10b981", sublabel: "In use" },
+    ],
+    columns: [
+      { key: "code", header: "Code" },
+      { key: "name", header: "Reason" },
+      { key: "type", header: "Type" },
+      { key: "status", header: "Status" },
+    ],
+    rows: [
+      { id: "RM1", code: "V-01", name: "Wrong order", type: "Void", status: "Active" },
+      { id: "RM2", code: "V-02", name: "Guest left", type: "Cancel", status: "Active" },
+      { id: "RM3", code: "W-01", name: "Expired", type: "Wastage", status: "Active" },
+      { id: "RM4", code: "W-02", name: "Service drop", type: "Breakage", status: "Active" },
+    ],
+  }),
+};
+
+export function getFbPage(path: string): FbPageDefinition | undefined {
+  return fbPageDefinitions[path];
+}
+
+export function getOutletsForScope(scope?: OutletScope): FbOutlet[] {
+  switch (scope) {
+    case "restaurant":
+      return restaurantOutlets;
+    case "banquet":
+      return banquetVenues;
+    case "kitchen":
+      return kitchenOutlets;
+    case "bar":
+      return barOutlets;
+    default:
+      return [];
+  }
+}
+
+export const fbDefaultRedirect = "/food-beverages/dashboard";
+

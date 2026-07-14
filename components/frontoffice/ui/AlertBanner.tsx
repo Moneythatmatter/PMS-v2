@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +20,7 @@ const variants: Record<
   },
   info: {
     icon: Info,
-    className: "border-blue-200 bg-blue-50 text-blue-800",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-900",
   },
 };
 
@@ -27,6 +28,8 @@ interface AlertBannerProps {
   variant: AlertVariant;
   message: string;
   onDismiss?: () => void;
+  /** Auto-hide after ms when onDismiss is provided. Default 3s for success, 4s for info. Set 0 to disable. */
+  autoDismissMs?: number;
   className?: string;
 }
 
@@ -34,9 +37,20 @@ export function AlertBanner({
   variant,
   message,
   onDismiss,
+  autoDismissMs,
   className,
 }: AlertBannerProps) {
   const { icon: Icon, className: variantClass } = variants[variant];
+  const timeout =
+    autoDismissMs ?? (variant === "success" ? 3000 : variant === "info" ? 4000 : 0);
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
+  useEffect(() => {
+    if (!onDismissRef.current || !timeout) return;
+    const id = window.setTimeout(() => onDismissRef.current?.(), timeout);
+    return () => window.clearTimeout(id);
+  }, [message, timeout]);
 
   return (
     <div

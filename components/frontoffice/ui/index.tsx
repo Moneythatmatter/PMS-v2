@@ -25,7 +25,7 @@ export function FOPageHeader({
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
         {eyebrow && (
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
             {eyebrow}
           </p>
         )}
@@ -72,7 +72,7 @@ export function SearchInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+        className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
       />
     </div>
   );
@@ -108,7 +108,7 @@ export function StatMiniCard({
   label,
   value,
   sublabel,
-  accent = "#3b82f6",
+  accent = "#16a34a",
   icon: Icon,
 }: StatMiniCardProps) {
   return (
@@ -318,7 +318,7 @@ export function FilterPills({ options, active, onChange }: FilterPillsProps) {
           className={cn(
             "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all sm:px-3 sm:text-xs",
             active === opt.id
-              ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+              ? "border-emerald-700 bg-emerald-700 text-white shadow-sm"
               : "border-slate-200 bg-white text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800",
           )}
         >
@@ -353,7 +353,7 @@ export function ActionButtons({
               "rounded-md px-2 py-1 text-xs font-medium transition-colors",
               item.variant === "danger"
                 ? "text-red-600 hover:bg-red-50"
-                : "text-blue-600 hover:bg-blue-50",
+                : "text-emerald-700 hover:bg-emerald-50",
             )}
           >
             {item.label}
@@ -376,7 +376,7 @@ export function SummaryRow({
   return (
     <div className="flex items-center justify-between py-2 text-sm">
       <span className="text-slate-600">{label}</span>
-      <span className={cn("font-medium", highlight ? "text-blue-600" : "text-slate-900")}>
+      <span className={cn("font-medium", highlight ? "text-emerald-700" : "text-slate-900")}>
         {value}
       </span>
     </div>

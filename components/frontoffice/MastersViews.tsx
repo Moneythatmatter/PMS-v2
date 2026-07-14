@@ -28,6 +28,7 @@ import type {
 } from "@/app/data/frontoffice/masters";
 import { mealPlans } from "@/app/data/frontoffice/constants";
 import { Button } from "@/components/ui/Button";
+import { ModulePageShell } from "@/components/pms";
 import {
   AlertBanner,
   Drawer,
@@ -74,7 +75,7 @@ function MasterTable({
             key={String((row as { id: string }).id)}
             type="button"
             onClick={() => onRowClick(row)}
-            className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/30"
+            className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
           >
             {columns.slice(0, 3).map((col) => (
               <div key={col.key} className="text-sm">
@@ -100,7 +101,7 @@ function MasterTable({
               <tr
                 key={String((row as { id: string }).id)}
                 onClick={() => onRowClick(row)}
-                className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-blue-50/40"
+                className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-emerald-50/40"
               >
                 {columns.map((col) => (
                   <td key={col.key} className="py-3.5 pr-4">
@@ -194,46 +195,39 @@ export function RoomTypesView() {
   };
 
   return (
-    <div className="space-y-5">
-      {toast && (
-        <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />
-      )}
-
-      <FOPageHeader
-        eyebrow="Front Office · Masters"
-        title="Room Types"
-        description="Manage room categories, occupancy limits, and base rates."
-        action={
-          <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => { resetForm(); setFormOpen(true); }}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Add Room Type
-          </Button>
-        }
-      />
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatMiniCard label="Room Types" value={stats.total} icon={BedDouble} />
-        <StatMiniCard label="Active" value={stats.active} accent="#10b981" icon={CheckCircle2} />
-        <StatMiniCard label="Total Rooms" value={stats.rooms} icon={Users} />
-        <StatMiniCard label="Avg. Base Rate" value={formatINR(stats.avgRate)} accent="#2563eb" icon={IndianRupee} />
-      </div>
-
-      <FOSearchToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search code, name…"
-        filterPills={{
-          active: statusFilter,
-          onChange: setStatusFilter,
-          options: [
-            { id: "all", label: "All" },
-            { id: "active", label: "Active" },
-            { id: "inactive", label: "Inactive" },
-          ],
-        }}
-      />
-
-        <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+    <>
+    <ModulePageShell
+      toast={toast}
+      onDismissToast={() => setToast(null)}
+      eyebrow="Front Office · Masters"
+      title="Room Types"
+      description="Manage room categories, occupancy limits, and base rates."
+      primaryAction={{
+        label: "Add Room Type",
+        onClick: () => {
+          resetForm();
+          setFormOpen(true);
+        },
+      }}
+      stats={[
+        { label: "Room Types", value: stats.total, icon: BedDouble },
+        { label: "Active", value: stats.active, accent: "#10b981", icon: CheckCircle2 },
+        { label: "Total Rooms", value: stats.rooms, icon: Users },
+        { label: "Avg. Base Rate", value: formatINR(stats.avgRate), accent: "#15803d", icon: IndianRupee },
+      ]}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder="Search code, name…"
+      filterPills={{
+        active: statusFilter,
+        onChange: setStatusFilter,
+        options: [
+          { id: "all", label: "All" },
+          { id: "active", label: "Active" },
+          { id: "inactive", label: "Inactive" },
+        ],
+      }}
+    >
           <MasterTable
             rows={filtered as never[]}
             onRowClick={(r) => setPreview(r as RoomTypeMaster)}
@@ -242,7 +236,7 @@ export function RoomTypesView() {
                 key: "code",
                 header: "Code",
                 render: (r: RoomTypeMaster) => (
-                  <span className="font-mono text-xs font-semibold text-blue-600">{r.code}</span>
+                  <span className="font-mono text-xs font-semibold text-emerald-700">{r.code}</span>
                 ),
               },
               {
@@ -277,7 +271,7 @@ export function RoomTypesView() {
               },
             ]}
           />
-        </div>
+    </ModulePageShell>
 
       <Drawer
         open={formOpen}
@@ -288,7 +282,7 @@ export function RoomTypesView() {
         footer={
           <>
             <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleSave}>Save</Button>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave}>Save</Button>
           </>
         }
       >
@@ -329,7 +323,7 @@ export function RoomTypesView() {
         {preview && (
           <div className="space-y-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
                 <BedDouble className="h-6 w-6" />
               </div>
               <div>
@@ -365,7 +359,7 @@ export function RoomTypesView() {
           </div>
         )}
       </Drawer>
-    </div>
+    </>
   );
 }
 
@@ -455,7 +449,7 @@ export function RatePlansView() {
         title="Rate Plans"
         description="Configure nightly rates, meal plans, and cancellation policies."
         action={
-          <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => { resetForm(); setFormOpen(true); }}>
+          <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800" onClick={() => { resetForm(); setFormOpen(true); }}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Add Rate Plan
           </Button>
@@ -465,7 +459,7 @@ export function RatePlansView() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <StatMiniCard label="Rate Plans" value={stats.total} icon={Tag} />
         <StatMiniCard label="Active" value={stats.active} accent="#10b981" icon={CheckCircle2} />
-        <StatMiniCard label="Avg. Base Rate" value={formatINR(stats.avgRate)} accent="#2563eb" icon={Percent} />
+        <StatMiniCard label="Avg. Base Rate" value={formatINR(stats.avgRate)} accent="#15803d" icon={Percent} />
       </div>
 
       <FOSearchToolbar
@@ -492,7 +486,7 @@ export function RatePlansView() {
                 key: "code",
                 header: "Code",
                 render: (r: RatePlanMaster) => (
-                  <span className="font-mono text-xs font-semibold text-blue-600">{r.code}</span>
+                  <span className="font-mono text-xs font-semibold text-emerald-700">{r.code}</span>
                 ),
               },
               {
@@ -535,7 +529,7 @@ export function RatePlansView() {
         footer={
           <>
             <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleSave}>Save</Button>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave}>Save</Button>
           </>
         }
       >
@@ -585,7 +579,7 @@ export function RatePlansView() {
         {preview && (
           <div className="space-y-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
                 <Tag className="h-6 w-6" />
               </div>
               <div>
@@ -657,7 +651,7 @@ export function MarketSegmentsView() {
   );
 
   const categoryColors: Record<MarketSegmentMaster["category"], string> = {
-    Corporate: "bg-blue-50 text-blue-700",
+    Corporate: "bg-emerald-50 text-emerald-800",
     Leisure: "bg-emerald-50 text-emerald-700",
     OTA: "bg-purple-50 text-purple-700",
     Government: "bg-amber-50 text-amber-700",
@@ -703,7 +697,7 @@ export function MarketSegmentsView() {
         title="Market Segments"
         description="Define corporate, leisure, OTA, and group booking segments."
         action={
-          <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => { resetForm(); setFormOpen(true); }}>
+          <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800" onClick={() => { resetForm(); setFormOpen(true); }}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Add Segment
           </Button>
@@ -713,7 +707,7 @@ export function MarketSegmentsView() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <StatMiniCard label="Segments" value={stats.total} icon={PieChart} />
         <StatMiniCard label="Active" value={stats.active} accent="#10b981" icon={CheckCircle2} />
-        <StatMiniCard label="Categories" value={stats.categories} accent="#2563eb" icon={Building2} />
+        <StatMiniCard label="Categories" value={stats.categories} accent="#15803d" icon={Building2} />
       </div>
 
       <FOSearchToolbar
@@ -743,7 +737,7 @@ export function MarketSegmentsView() {
                 key: "code",
                 header: "Code",
                 render: (r: MarketSegmentMaster) => (
-                  <span className="font-mono text-xs font-semibold text-blue-600">{r.code}</span>
+                  <span className="font-mono text-xs font-semibold text-emerald-700">{r.code}</span>
                 ),
               },
               {
@@ -794,7 +788,7 @@ export function MarketSegmentsView() {
         footer={
           <>
             <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleSave}>Save</Button>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave}>Save</Button>
           </>
         }
       >
@@ -837,7 +831,7 @@ export function MarketSegmentsView() {
         {preview && (
           <div className="space-y-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
                 <PieChart className="h-6 w-6" />
               </div>
               <div>
@@ -930,7 +924,7 @@ export function CompaniesView() {
   );
 
   const typeColors: Record<CompanyMaster["type"], string> = {
-    Corporate: "bg-blue-50 text-blue-700",
+    Corporate: "bg-emerald-50 text-emerald-800",
     "Travel Agent": "bg-purple-50 text-purple-700",
     Government: "bg-amber-50 text-amber-700",
     Event: "bg-pink-50 text-pink-700",
@@ -989,7 +983,7 @@ export function CompaniesView() {
         action={
           <Button
             size="sm"
-            className="bg-blue-600 hover:bg-blue-700"
+            className="bg-emerald-700 hover:bg-emerald-800"
             onClick={() => {
               resetForm();
               setFormOpen(true);
@@ -1004,7 +998,7 @@ export function CompaniesView() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatMiniCard label="Companies" value={stats.total} icon={Building2} />
         <StatMiniCard label="Active" value={stats.active} accent="#10b981" icon={CheckCircle2} />
-        <StatMiniCard label="Corporate" value={stats.corporate} accent="#2563eb" icon={Users} />
+        <StatMiniCard label="Corporate" value={stats.corporate} accent="#15803d" icon={Users} />
         <StatMiniCard
           label="Avg. Discount"
           value={`${stats.avgDiscount}%`}
@@ -1052,7 +1046,7 @@ export function CompaniesView() {
               key: "code",
               header: "Code",
               render: (r: CompanyMaster) => (
-                <span className="font-mono text-xs font-semibold text-blue-600">{r.code}</span>
+                <span className="font-mono text-xs font-semibold text-emerald-700">{r.code}</span>
               ),
             },
             {
@@ -1112,7 +1106,7 @@ export function CompaniesView() {
         footer={
           <>
             <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleSave}>Save</Button>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave}>Save</Button>
           </>
         }
       >
@@ -1205,7 +1199,7 @@ export function CompaniesView() {
         {preview && (
           <div className="space-y-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
                 <Building2 className="h-6 w-6" />
               </div>
               <div>

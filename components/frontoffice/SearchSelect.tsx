@@ -72,7 +72,7 @@ export function SearchSelect({
         onBlur={() => setTimeout(() => setIsOpen(false), 150)}
         placeholder={placeholder}
         className={cn(
-          "h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100",
+          "h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100",
           showClear ? "pr-9" : "pr-3",
           inputClassName,
         )}
@@ -101,8 +101,8 @@ export function SearchSelect({
                 setIsOpen(false);
               }}
               className={cn(
-                "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-blue-50",
-                selectedId === option.id && "bg-blue-50/60",
+                "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-emerald-50",
+                selectedId === option.id && "bg-emerald-50/60",
               )}
             >
               <span className="min-w-0 truncate font-medium text-slate-900">{option.label}</span>

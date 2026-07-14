@@ -55,6 +55,7 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import type { LucideIcon } from "lucide-react";
+import { ModulePageShell } from "@/components/pms";
 import { cn } from "@/lib/utils";
 
 function ClickableTable<T extends { id: string }>({
@@ -83,7 +84,7 @@ function ClickableTable<T extends { id: string }>({
                 onRowClick(row);
               }
             }}
-            className="w-full cursor-pointer rounded-xl border border-slate-100 p-4 text-left hover:border-blue-200 hover:bg-blue-50/30"
+            className="w-full cursor-pointer rounded-xl border border-slate-100 p-4 text-left hover:border-emerald-200 hover:bg-emerald-50/30"
           >
             {columns.slice(0, 3).map((col) => (
               <div key={col.key} className="text-sm">{col.render(row)}</div>
@@ -106,7 +107,7 @@ function ClickableTable<T extends { id: string }>({
               <tr
                 key={row.id}
                 onClick={() => onRowClick(row)}
-                className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-blue-50/40"
+                className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-emerald-50/40"
               >
                 {columns.map((col) => (
                   <td key={col.key} className="py-3.5 pr-4">{col.render(row)}</td>
@@ -139,8 +140,8 @@ const statusColors: Record<string, string> = {
   Completed: "bg-emerald-50 text-emerald-700",
   Stored: "bg-amber-50 text-amber-700",
   Returned: "bg-emerald-50 text-emerald-700",
-  Claimed: "bg-blue-50 text-blue-700",
-  Scheduled: "bg-blue-50 text-blue-700",
+  Claimed: "bg-emerald-50 text-emerald-800",
+  Scheduled: "bg-emerald-50 text-emerald-800",
   "In Transit": "bg-amber-50 text-amber-700",
   Cancelled: "bg-red-50 text-red-700",
   Paid: "bg-emerald-50 text-emerald-700",
@@ -150,7 +151,7 @@ const statusColors: Record<string, string> = {
 
 const priorityColors: Record<string, string> = {
   Low: "bg-slate-100 text-slate-600",
-  Medium: "bg-blue-50 text-blue-700",
+  Medium: "bg-emerald-50 text-emerald-800",
   High: "bg-amber-50 text-amber-700",
   Critical: "bg-red-50 text-red-700",
 };
@@ -249,7 +250,7 @@ export function WakeUpCallsView() {
         <FormField label="Notes"><TextAreaInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Special instructions…" /></FormField>
       </FormDrawer>
       <PreviewDrawer open={!!preview} onClose={() => setPreview(null)} title={preview?.guest ?? ""} desc={`Room ${preview?.room} · ${preview?.time}`}
-        footer={preview && !preview.completed && <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => markDone(preview.id)}>Mark Done</Button>}>
+        footer={preview && !preview.completed && <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={() => markDone(preview.id)}>Mark Done</Button>}>
         {preview && <PreviewGrid icon={Bell} rows={[["Date", preview.date], ["Time", preview.time], ["Notes", preview.notes ?? "—"], ["Status", preview.completed ? "Completed" : "Pending"]]} />}
       </PreviewDrawer>
     </ModuleShell>
@@ -469,7 +470,7 @@ export function LostFoundView() {
         <FormField label="Description"><TextAreaInput value={description} onChange={(e) => setDescription(e.target.value)} /></FormField>
       </FormDrawer>
       <PreviewDrawer open={!!preview} onClose={() => setPreview(null)} title={preview?.item ?? ""} desc={preview?.guest}
-        footer={preview?.status === "Stored" && <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => markReturned(preview.id)}>Mark Returned</Button>}>
+        footer={preview?.status === "Stored" && <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={() => markReturned(preview.id)}>Mark Returned</Button>}>
         {preview && <PreviewGrid icon={PackageSearch} rows={[["Guest", preview.guest], ["Room", preview.room], ["Found By", preview.foundBy], ["Found Date", preview.foundDate], ["Description", preview.description ?? "—"], ["Status", preview.status], ["Returned", preview.returnedDate ?? "—"]]} />}
       </PreviewDrawer>
     </ModuleShell>
@@ -518,7 +519,7 @@ export function GuestFeedbackView() {
     <ModuleShell toast={toast} setToast={setToast}
       header={{ title: "Guest Feedback", desc: "Collect and review guest satisfaction scores.", btn: "Add Feedback", onBtn: () => setFormOpen(true) }}
       stats={[
-        { label: "Avg. Rating", value: `${avgRating}/10`, accent: "#2563eb", icon: Star, sublabel: "Overall score" },
+        { label: "Avg. Rating", value: `${avgRating}/10`, accent: "#15803d", icon: Star, sublabel: "Overall score" },
         { label: "Total Reviews", value: items.length, icon: MessageSquare },
         { label: "Excellent (9+)", value: items.filter((r) => r.rating >= 9).length, accent: "#10b981", icon: CheckCircle2 },
       ]}
@@ -598,7 +599,7 @@ export function TaxiBookingView() {
     <ModuleShell toast={toast} setToast={setToast}
       header={{ title: "Taxi / Cab Booking", desc: "Arrange transport for in-house and departing guests.", btn: "Book Taxi", onBtn: () => setFormOpen(true) }}
       stats={[
-        { label: "Scheduled", value: items.filter((r) => r.status === "Scheduled").length, accent: "#2563eb", icon: Car, sublabel: "Upcoming trips" },
+        { label: "Scheduled", value: items.filter((r) => r.status === "Scheduled").length, accent: "#15803d", icon: Car, sublabel: "Upcoming trips" },
         { label: "Completed", value: items.filter((r) => r.status === "Completed").length, accent: "#10b981", icon: CheckCircle2 },
         { label: "Total Revenue", value: formatINR(items.filter((r) => r.status === "Completed").reduce((s, r) => s + r.fare, 0)), icon: Clock },
       ]}
@@ -688,7 +689,7 @@ export function MessagesView() {
     >
       <ClickableTable rows={list} onRowClick={(r) => { setPreview(r); if (!r.read) markRead(r.id); }}
         columns={[
-          { key: "subject", header: "Subject", render: (r) => <><p className={cn("font-medium", !r.read && "text-slate-900")}>{r.subject}{!r.read && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-blue-500" />}</p><p className="text-xs text-slate-400">{r.type}</p></> },
+          { key: "subject", header: "Subject", render: (r) => <><p className={cn("font-medium", !r.read && "text-slate-900")}>{r.subject}{!r.read && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />}</p><p className="text-xs text-slate-400">{r.type}</p></> },
           { key: "guest", header: "Guest", render: (r) => r.guest },
           { key: "date", header: "Date", render: (r) => r.date },
           { key: "priority", header: "Priority", render: (r) => <Pill className={r.priority === "High" ? priorityColors.High : priorityColors.Low}>{r.priority}</Pill> },
@@ -816,7 +817,7 @@ export function InvoiceHistoryView() {
         <StatMiniCard
           label="Total Invoices"
           value={items.length}
-          accent="#2563eb"
+          accent="#15803d"
           icon={FileText}
           sublabel={`${items.length} tax invoices on record`}
         />
@@ -887,8 +888,8 @@ export function InvoiceHistoryView() {
         }
         selectionBar={
           selected.size > 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-blue-50 px-4 py-3">
-              <span className="text-sm font-medium text-blue-800">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50 px-4 py-3">
+              <span className="text-sm font-medium text-emerald-900">
                 {selected.size} invoice{selected.size !== 1 ? "s" : ""} selected
               </span>
               <div className="flex flex-wrap gap-2">
@@ -902,7 +903,7 @@ export function InvoiceHistoryView() {
                 </Button>
                 <button
                   type="button"
-                  className="text-xs font-medium text-blue-600 hover:underline"
+                  className="text-xs font-medium text-emerald-700 hover:underline"
                   onClick={() => setSelected(new Set())}
                 >
                   Clear selection
@@ -989,7 +990,7 @@ function SelectableInvoiceTable({
               className="min-w-0 flex-1 cursor-pointer text-left"
             >
               <div className="flex items-start justify-between gap-2">
-                <span className="font-mono text-xs font-semibold text-blue-600">{row.invoiceNo}</span>
+                <span className="font-mono text-xs font-semibold text-emerald-700">{row.invoiceNo}</span>
                 <Pill className={statusColors[row.status]}>{row.status}</Pill>
               </div>
               <p className="mt-1 font-medium text-slate-900">{row.guest}</p>
@@ -1029,7 +1030,7 @@ function SelectableInvoiceTable({
               <tr
                 key={row.id}
                 onClick={() => onRowClick(row)}
-                className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-blue-50/40"
+                className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-emerald-50/40"
               >
                 <td className="py-3.5 pr-3" onClick={(e) => e.stopPropagation()}>
                   <input
@@ -1041,7 +1042,7 @@ function SelectableInvoiceTable({
                   />
                 </td>
                 <td className="py-3.5 pr-4">
-                  <span className="font-mono text-xs font-semibold text-blue-600">{row.invoiceNo}</span>
+                  <span className="font-mono text-xs font-semibold text-emerald-700">{row.invoiceNo}</span>
                 </td>
                 <td className="py-3.5 pr-4">
                   <p className="font-medium">{row.guest}</p>
@@ -1104,7 +1105,7 @@ function invoiceRecordToData(record: InvoiceRecord): InvoiceData {
   };
 }
 
-/* ── Shared layout shells ── */
+/* ── Shared layout shells (delegates to PMS kit) ── */
 
 function ModuleShell({
   toast, setToast, eyebrow = "Front Office", header, stats, search, setSearch, searchPh, filters,
@@ -1125,63 +1126,32 @@ function ModuleShell({
   selectionBar?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const builtAdvancedFilters = (sort || resultCount) ? (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {sort && (
-        <FormField label="Sort By">
-          <SelectInput value={sort.value} onChange={(e) => sort.onChange(e.target.value)}>
-            {sort.options.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </SelectInput>
-        </FormField>
-      )}
-      {resultCount && (
-        <FormField label="Showing">
-          <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
-            {resultCount.shown} of {resultCount.total} records
-          </div>
-        </FormField>
-      )}
-    </div>
-  ) : undefined;
-
-  const panelFilters = advancedFilters ?? builtAdvancedFilters;
-
   return (
-    <div className="space-y-5">
-      {toast && <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />}
-      <FOPageHeader eyebrow={eyebrow} title={header.title} description={header.desc}
-        action={header.btn && header.onBtn && (
-          <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={header.onBtn}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />{header.btn}
-          </Button>
-        )}
-      />
-      <div className={cn("grid gap-3", stats.length === 4 ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-1 sm:grid-cols-3")}>
-        {stats.map((s) => (
-          <StatMiniCard
-            key={s.label}
-            label={s.label}
-            value={s.value}
-            accent={s.accent}
-            icon={s.icon}
-            sublabel={s.sublabel}
-          />
-        ))}
-      </div>
-      <FOSearchToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder={searchPh}
-        filterPills={filters}
-        advancedFilters={panelFilters}
-        hasActiveAdvancedFilters={hasActiveAdvancedFilters}
-        onClearAdvancedFilters={onClearAdvancedFilters}
-        selectionBar={selectionBar}
-      />
-      <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">{children}</div>
-    </div>
+    <ModulePageShell
+      toast={toast}
+      onDismissToast={() => setToast(null)}
+      eyebrow={eyebrow}
+      title={header.title}
+      description={header.desc}
+      primaryAction={
+        header.btn && header.onBtn
+          ? { label: header.btn, onClick: header.onBtn }
+          : undefined
+      }
+      stats={stats}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder={searchPh}
+      filterPills={filters}
+      sort={sort}
+      resultCount={resultCount}
+      hasActiveAdvancedFilters={hasActiveAdvancedFilters}
+      onClearAdvancedFilters={onClearAdvancedFilters}
+      advancedFilters={advancedFilters}
+      selectionBar={selectionBar}
+    >
+      {children}
+    </ModulePageShell>
   );
 }
 
@@ -1190,7 +1160,7 @@ function FormDrawer({ open, onClose, title, onSave, children }: {
 }) {
   return (
     <Drawer open={open} onClose={onClose} title={title} width="md"
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button className="bg-blue-600 hover:bg-blue-700" onClick={onSave}>Save</Button></>}>
+      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button className="bg-emerald-700 hover:bg-emerald-800" onClick={onSave}>Save</Button></>}>
       <div className="space-y-4">{children}</div>
     </Drawer>
   );

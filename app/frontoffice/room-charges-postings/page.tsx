@@ -11,7 +11,7 @@ export default function RoomChargesPostingsPage() {
         <FormField label="Description"><TextInput placeholder="Charge description" /></FormField>
         <FormField label="Amount"><TextInput type="number" placeholder="0.00" /></FormField>
       </FormSection>
-      <Button className="bg-blue-600 hover:bg-blue-700">Post to Folio</Button>
+      <Button className="bg-emerald-700 hover:bg-emerald-800">Post to Folio</Button>
     </div>
   );
 }

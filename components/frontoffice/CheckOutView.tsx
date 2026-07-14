@@ -279,7 +279,7 @@ export function CheckOutView() {
               </Button>
               <Button
                 size="sm"
-                className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+                className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
                 onClick={handleCheckout}
                 disabled={!paymentMode || amountReceived < (totals?.pending ?? 0)}
               >
@@ -304,13 +304,13 @@ export function CheckOutView() {
                     className={cn(
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold",
                       isDone && "bg-emerald-500 text-white",
-                      isActive && !isDone && "bg-blue-600 text-white ring-4 ring-blue-100",
+                      isActive && !isDone && "bg-emerald-700 text-white ring-4 ring-emerald-100",
                       !isActive && !isDone && "bg-slate-100 text-slate-400",
                     )}
                   >
                     {isDone ? <CheckCircle2 className="h-4 w-4" /> : step.num}
                   </div>
-                  <span className={cn("hidden truncate text-sm font-medium sm:block", isActive ? "text-blue-600" : isDone ? "text-emerald-600" : "text-slate-400")}>
+                  <span className={cn("hidden truncate text-sm font-medium sm:block", isActive ? "text-emerald-700" : isDone ? "text-emerald-600" : "text-slate-400")}>
                     {step.label}
                   </span>
                 </div>
@@ -347,7 +347,7 @@ export function CheckOutView() {
           <div className="space-y-5 lg:col-span-2">
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
                   <Search className="h-4 w-4" />
                 </div>
                 <div>
@@ -362,9 +362,9 @@ export function CheckOutView() {
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleLookup()}
                   placeholder="e.g. BK-1040 or James Wilson"
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 text-sm focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
                 />
-                <Button onClick={handleLookup} className="h-11 gap-2 bg-blue-600 hover:bg-blue-700">
+                <Button onClick={handleLookup} className="h-11 gap-2 bg-emerald-700 hover:bg-emerald-800">
                   Lookup Guest
                   <ArrowRight className="h-4 w-4" />
                 </Button>
@@ -396,12 +396,12 @@ export function CheckOutView() {
                       className={cn(
                         "w-full rounded-xl border p-3.5 text-left transition-all",
                         isSelected
-                          ? "border-blue-300 bg-blue-50 ring-2 ring-blue-100"
+                          ? "border-emerald-300 bg-emerald-50 ring-2 ring-emerald-100"
                           : "border-white/80 bg-white hover:border-orange-300 hover:shadow-md",
                       )}
                     >
                       <div className="flex items-start gap-3">
-                        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold", isSelected ? "bg-blue-600 text-white" : "bg-orange-100 text-orange-700")}>
+                        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold", isSelected ? "bg-emerald-700 text-white" : "bg-orange-100 text-orange-700")}>
                           {getInitials(f.guestName)}
                         </div>
                         <div className="min-w-0 flex-1">
@@ -548,7 +548,7 @@ export function CheckOutView() {
                           className={cn(
                             "flex items-center justify-between rounded-xl border px-3 py-2.5",
                             bill.isMain
-                              ? "border-blue-100 bg-blue-50/50"
+                              ? "border-emerald-100 bg-emerald-50/50"
                               : "border-violet-100 bg-violet-50/50",
                           )}
                         >
@@ -564,7 +564,7 @@ export function CheckOutView() {
                             <button
                               type="button"
                               onClick={() => handleGenerateInvoice(bill.id)}
-                              className="text-[11px] font-semibold text-blue-600 hover:text-blue-700"
+                              className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
                             >
                               {invoiceNos[bill.id] ? "View" : "Invoice"}
                             </button>
@@ -600,20 +600,20 @@ export function CheckOutView() {
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white">
+                  <div className="mt-4 rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-900 p-4 text-white">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs font-medium text-blue-100">
+                        <p className="text-xs font-medium text-emerald-100">
                           {splitBilling && separateBillItems.length > 0 ? "Total Amount Due" : "Amount Due"}
                         </p>
                         <p className="text-2xl font-bold">{formatINR(totals.pending)}</p>
                         {splitBilling && separateBillItems.length > 0 && billBreakdown && (
-                          <p className="mt-0.5 text-xs text-blue-200">
+                          <p className="mt-0.5 text-xs text-emerald-200">
                             Across {billBreakdown.bills.length} bill{billBreakdown.bills.length !== 1 ? "s" : ""}
                           </p>
                         )}
                       </div>
-                      <CreditCard className="h-8 w-8 text-blue-200" />
+                      <CreditCard className="h-8 w-8 text-emerald-200" />
                     </div>
                   </div>
                 </div>
@@ -656,7 +656,7 @@ export function CheckOutView() {
                 </div>
 
                 <Button
-                  className="h-12 w-full gap-2 bg-blue-600 hover:bg-blue-700 lg:hidden"
+                  className="h-12 w-full gap-2 bg-emerald-700 hover:bg-emerald-800 lg:hidden"
                   onClick={handleCheckout}
                   disabled={!paymentMode || amountReceived < totals.pending}
                 >
@@ -679,12 +679,12 @@ export function CheckOutView() {
               className={cn(
                 "rounded-xl px-3 py-2 text-left text-xs transition-colors",
                 activeInvoiceBillId === bill.id
-                  ? "bg-blue-600 text-white"
+                  ? "bg-emerald-700 text-white"
                   : "bg-slate-100 text-slate-700 hover:bg-slate-200",
               )}
             >
               <p className="font-semibold">{bill.label}</p>
-              <p className={cn("mt-0.5", activeInvoiceBillId === bill.id ? "text-blue-100" : "text-slate-500")}>
+              <p className={cn("mt-0.5", activeInvoiceBillId === bill.id ? "text-emerald-100" : "text-slate-500")}>
                 {formatINR(bill.due)}
                 {invoiceNos[bill.id] ? ` · ${invoiceNos[bill.id]}` : ""}
               </p>

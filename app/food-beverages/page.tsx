@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
+import { fbDefaultRedirect } from "@/app/data/foodbeverages/modules";
 
 export default function FoodBeveragesPage() {
-  redirect("/food-beverages/pos-billing");
+  redirect(fbDefaultRedirect);
 }

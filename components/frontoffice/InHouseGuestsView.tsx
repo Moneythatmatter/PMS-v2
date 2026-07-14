@@ -139,7 +139,7 @@ export function InHouseGuestsView() {
         description="Monitor current guests, folio balances, and take quick actions."
         badge={
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <Users className="h-4 w-4 text-blue-500" />
+            <Users className="h-4 w-4 text-emerald-600" />
             {stats.total} guests in-house
           </div>
         }
@@ -198,7 +198,7 @@ export function InHouseGuestsView() {
                   tabIndex={0}
                   onClick={() => setSelectedGuest(g)}
                   onKeyDown={(e) => e.key === "Enter" && setSelectedGuest(g)}
-                  className="cursor-pointer rounded-xl border border-slate-100 p-4 transition-colors hover:border-blue-200 hover:bg-blue-50/30"
+                  className="cursor-pointer rounded-xl border border-slate-100 p-4 transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
                 >
                   <div className="flex items-start justify-between">
                     <div>
@@ -242,7 +242,7 @@ export function InHouseGuestsView() {
                       <tr
                         key={row.id}
                         onClick={() => setSelectedGuest(row)}
-                        className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-blue-50/40"
+                        className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-emerald-50/40"
                       >
                         {columns.map((col) => (
                           <td
@@ -288,7 +288,7 @@ export function InHouseGuestsView() {
               Close
             </Button>
             <Button
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-emerald-700 hover:bg-emerald-800"
               onClick={() => {
                 setToast(`Opening folio for ${selectedGuest?.guestName}…`);
                 setSelectedGuest(null);

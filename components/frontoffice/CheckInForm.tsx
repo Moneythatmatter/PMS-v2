@@ -107,7 +107,7 @@ function SectionCard({
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
       <div className="mb-5 flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
           <Icon className="h-5 w-5" />
         </div>
         <div>
@@ -467,7 +467,7 @@ export function CheckInForm() {
                   id: "reserved" as const,
                   label: "Reserved",
                   icon: CalendarCheck,
-                  active: "bg-white text-blue-600 shadow-md shadow-blue-100/60 ring-1 ring-blue-100",
+                  active: "bg-white text-emerald-700 shadow-md shadow-emerald-100/60 ring-1 ring-emerald-100",
                 },
                 {
                   id: "walkin" as const,
@@ -496,7 +496,7 @@ export function CheckInForm() {
           checkInMode === "walkin" && !completed ? (
             <Button
               size="sm"
-              className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+              className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
               onClick={handleWalkInComplete}
               disabled={currentStep !== "assign" || !assignedRoom}
             >
@@ -506,7 +506,7 @@ export function CheckInForm() {
           ) : checkInMode === "reserved" && booking && !completed ? (
             <Button
               size="sm"
-              className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+              className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
               onClick={handleComplete}
               disabled={!idFile || !assignedRoom || !isGuestProfileComplete(guestDetails)}
             >
@@ -535,7 +535,7 @@ export function CheckInForm() {
                     className={cn(
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors",
                       isDone && "bg-emerald-500 text-white",
-                      isActive && !isDone && "bg-blue-600 text-white ring-4 ring-blue-100",
+                      isActive && !isDone && "bg-emerald-700 text-white ring-4 ring-emerald-100",
                       !isActive && !isDone && "bg-slate-100 text-slate-400",
                     )}
                   >
@@ -544,7 +544,7 @@ export function CheckInForm() {
                   <span
                     className={cn(
                       "hidden truncate text-sm font-medium sm:block",
-                      isActive ? "text-blue-600" : isDone ? "text-emerald-600" : "text-slate-400",
+                      isActive ? "text-emerald-700" : isDone ? "text-emerald-600" : "text-slate-400",
                     )}
                   >
                     {step.label}
@@ -705,7 +705,7 @@ export function CheckInForm() {
                 <label
                   className={cn(
                     "flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-8 transition-colors",
-                    idFile ? "border-emerald-300 bg-emerald-50/50" : "border-slate-200 bg-slate-50/50 hover:border-blue-300 hover:bg-blue-50/30",
+                    idFile ? "border-emerald-300 bg-emerald-50/50" : "border-slate-200 bg-slate-50/50 hover:border-emerald-300 hover:bg-emerald-50/30",
                   )}
                 >
                   <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => setIdFile(e.target.files?.[0]?.name ?? "")} />
@@ -823,7 +823,7 @@ export function CheckInForm() {
                 <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
                   <Button
                     onClick={handleWalkInComplete}
-                    className="h-11 w-full gap-2 bg-blue-600 hover:bg-blue-700"
+                    className="h-11 w-full gap-2 bg-emerald-700 hover:bg-emerald-800"
                     disabled={currentStep !== "assign" || !assignedRoom}
                   >
                     <UserCheck className="h-4 w-4" />
@@ -841,7 +841,7 @@ export function CheckInForm() {
           {/* Search */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
                 <Search className="h-4 w-4" />
               </div>
               <div>
@@ -858,12 +858,12 @@ export function CheckInForm() {
                   value={bookingId}
                   onChange={(e) => setBookingId(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleLookup()}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-3 text-sm transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-3 text-sm transition-colors focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
               <Button
                 onClick={handleLookup}
-                className="h-11 w-full gap-2 bg-blue-600 hover:bg-blue-700"
+                className="h-11 w-full gap-2 bg-emerald-700 hover:bg-emerald-800"
               >
                 Lookup Booking
                 <ArrowRight className="h-4 w-4" />
@@ -900,7 +900,7 @@ export function CheckInForm() {
                     className={cn(
                       "group w-full rounded-xl border p-3.5 text-left transition-all duration-200",
                       isSelected
-                        ? "border-blue-300 bg-blue-50 shadow-sm ring-2 ring-blue-100"
+                        ? "border-emerald-300 bg-emerald-50 shadow-sm ring-2 ring-emerald-100"
                         : "border-white/80 bg-white hover:border-emerald-300 hover:shadow-md",
                     )}
                   >
@@ -909,7 +909,7 @@ export function CheckInForm() {
                         className={cn(
                           "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold",
                           isSelected
-                            ? "bg-blue-600 text-white"
+                            ? "bg-emerald-700 text-white"
                             : "bg-emerald-100 text-emerald-700",
                         )}
                       >
@@ -932,7 +932,7 @@ export function CheckInForm() {
                         className={cn(
                           "mt-2 h-4 w-4 shrink-0 transition-transform",
                           isSelected
-                            ? "text-blue-500"
+                            ? "text-emerald-600"
                             : "text-slate-300 group-hover:translate-x-0.5 group-hover:text-emerald-500",
                         )}
                       />
@@ -981,7 +981,7 @@ export function CheckInForm() {
               <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-lg font-bold text-white shadow-md shadow-blue-200/50">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-lg font-bold text-white shadow-md shadow-emerald-200/50">
                       {getInitials(booking.guestName)}
                     </div>
                     <div>
@@ -990,7 +990,7 @@ export function CheckInForm() {
                       </p>
                       <p className="text-sm text-slate-500">{booking.id}</p>
                       <div className="mt-1.5 flex flex-wrap gap-2">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
                           {booking.status}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-600">
@@ -1034,7 +1034,7 @@ export function CheckInForm() {
               {/* Guest profile — collected at check-in */}
               <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
                 <div className="mb-4 flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
                     <User className="h-4 w-4" />
                   </div>
                   <div>
@@ -1164,7 +1164,7 @@ export function CheckInForm() {
                     "flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-8 transition-colors",
                     idFile
                       ? "border-emerald-300 bg-emerald-50/50"
-                      : "border-slate-200 bg-slate-50/50 hover:border-blue-300 hover:bg-blue-50/30",
+                      : "border-slate-200 bg-slate-50/50 hover:border-emerald-300 hover:bg-emerald-50/30",
                   )}
                 >
                   <input
@@ -1252,7 +1252,7 @@ export function CheckInForm() {
 
               {/* Mobile complete button */}
               <Button
-                className="h-12 w-full gap-2 bg-blue-600 hover:bg-blue-700 lg:hidden"
+                className="h-12 w-full gap-2 bg-emerald-700 hover:bg-emerald-800 lg:hidden"
                 onClick={handleComplete}
                 disabled={!idFile || !assignedRoom || !isGuestProfileComplete(guestDetails)}
               >

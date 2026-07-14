@@ -4,7 +4,7 @@ import type {
 } from "../types";
 
 export const reservationSummaryStats: ReservationSummaryStat[] = [
-  { label: "Total", value: 8, icon: "calendar", color: "#3b82f6" },
+  { label: "Total", value: 8, icon: "calendar", color: "#16a34a" },
   { label: "Arriving Today", value: 3, icon: "user-check", color: "#22c55e" },
   { label: "In-House", value: 1, icon: "bed", color: "#a855f7" },
   { label: "Outstanding", value: 6, icon: "wallet", color: "#eab308" },

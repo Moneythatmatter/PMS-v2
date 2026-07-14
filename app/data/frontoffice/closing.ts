@@ -21,6 +21,7 @@ export interface DayClosingChecklistItem {
   label: string;
   status: "done" | "pending" | "warning";
   detail: string;
+  href?: string;
 }
 
 export interface DayClosingSummary {
@@ -28,11 +29,58 @@ export interface DayClosingSummary {
   totalRevenue: number;
   roomRevenue: number;
   fbRevenue: number;
+  otherRevenue: number;
   occupancy: number;
   arrivals: number;
   departures: number;
   inHouse: number;
   pendingCheckouts: number;
+}
+
+export interface PendingDeparture {
+  id: string;
+  guestName: string;
+  roomNo: string;
+  checkOut: string;
+  balance: number;
+  status: "Pending" | "Settled";
+}
+
+export interface RoomChargePosting {
+  id: string;
+  roomNo: string;
+  guestName: string;
+  roomRate: number;
+  extras: number;
+  status: "Posted" | "Pending";
+}
+
+export interface OpenPosTab {
+  id: string;
+  outlet: string;
+  roomNo: string;
+  guestName: string;
+  amount: number;
+  status: "Open" | "Transferred";
+}
+
+export interface DayClosingReport {
+  closedAt: string;
+  previousBusinessDate: string;
+  nextBusinessDate: string;
+  closedBy: string;
+  steps: string[];
+  roomRevenue: number;
+  fbRevenue: number;
+  otherRevenue: number;
+  totalRevenue: number;
+  occupancy: number;
+  arrivals: number;
+  departures: number;
+  inHouse: number;
+  shiftsClosed: number;
+  chargesPosted: number;
+  posTransferred: number;
 }
 
 export const currentShiftSummary: CashierShiftSummary = {
@@ -63,6 +111,16 @@ export const cashierShiftRecords: CashierShiftRecord[] = [
     variance: -50,
     status: "Closed",
   },
+  {
+    id: "CS-03",
+    cashier: "Zain George",
+    shift: "Evening (10 PM – 6 AM)",
+    date: "23 Jun 2026",
+    expected: 26450,
+    actual: 0,
+    variance: 0,
+    status: "Open",
+  },
 ];
 
 export const dayClosingSummary: DayClosingSummary = {
@@ -70,6 +128,7 @@ export const dayClosingSummary: DayClosingSummary = {
   totalRevenue: 87400,
   roomRevenue: 58200,
   fbRevenue: 18600,
+  otherRevenue: 10600,
   occupancy: 67,
   arrivals: 3,
   departures: 2,
@@ -77,10 +136,76 @@ export const dayClosingSummary: DayClosingSummary = {
   pendingCheckouts: 1,
 };
 
+export const pendingDepartures: PendingDeparture[] = [
+  {
+    id: "PD-01",
+    guestName: "Sarah Chen",
+    roomNo: "305",
+    checkOut: "23 Jun 2026",
+    balance: 2400,
+    status: "Pending",
+  },
+];
+
+export const roomChargePostings: RoomChargePosting[] = [
+  {
+    id: "RC-01",
+    roomNo: "112",
+    guestName: "James Wilson",
+    roomRate: 3200,
+    extras: 850,
+    status: "Posted",
+  },
+  {
+    id: "RC-02",
+    roomNo: "204",
+    guestName: "Rahul Sharma",
+    roomRate: 4500,
+    extras: 200,
+    status: "Posted",
+  },
+  {
+    id: "RC-03",
+    roomNo: "501",
+    guestName: "Priya Patel",
+    roomRate: 8500,
+    extras: 680,
+    status: "Posted",
+  },
+  {
+    id: "RC-04",
+    roomNo: "305",
+    guestName: "Michael Brown",
+    roomRate: 5200,
+    extras: 0,
+    status: "Pending",
+  },
+];
+
+export const openPosTabs: OpenPosTab[] = [
+  {
+    id: "POS-18",
+    outlet: "Restaurant #1",
+    roomNo: "112",
+    guestName: "James Wilson",
+    amount: 850,
+    status: "Open",
+  },
+  {
+    id: "POS-19",
+    outlet: "Main Bar",
+    roomNo: "501",
+    guestName: "Priya Patel",
+    amount: 1200,
+    status: "Open",
+  },
+];
+
+/** Legacy static checklist — Day Closing now derives status from live mock state. */
 export const dayClosingChecklist: DayClosingChecklistItem[] = [
-  { id: "1", label: "All cashier shifts closed", status: "warning", detail: "1 shift still open" },
-  { id: "2", label: "Pending check-outs settled", status: "warning", detail: "1 guest pending" },
-  { id: "3", label: "Room charges posted", status: "done", detail: "All in-house rooms posted" },
-  { id: "4", label: "POS bills transferred", status: "done", detail: "No open POS tabs" },
-  { id: "5", label: "Night audit ready", status: "pending", detail: "Run after day closing" },
+  { id: "cashier", label: "All cashier shifts closed", status: "warning", detail: "1 shift still open", href: "/frontoffice/cashiers-closing" },
+  { id: "checkouts", label: "Pending check-outs settled", status: "warning", detail: "1 guest pending", href: "/frontoffice/reservation/check-out" },
+  { id: "charges", label: "Room charges posted", status: "warning", detail: "1 room pending posting" },
+  { id: "pos", label: "POS bills transferred", status: "warning", detail: "2 open POS tabs" },
+  { id: "audit", label: "Night audit ready", status: "pending", detail: "Run after day closing", href: "/frontoffice/reports/night-audit" },
 ];

@@ -185,7 +185,7 @@ export function LuggageManagementView() {
         action={
           <Button
             size="sm"
-            className="bg-blue-600 hover:bg-blue-700"
+            className="bg-emerald-700 hover:bg-emerald-800"
             onClick={openStore}
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -241,12 +241,12 @@ export function LuggageManagementView() {
                 key={r.id}
                 type="button"
                 onClick={() => setPreviewRecord(r)}
-                className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/30"
+                className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold text-slate-900">{r.guest}</p>
-                    <p className="font-mono text-xs text-blue-600">{r.tokenNo}</p>
+                    <p className="font-mono text-xs text-emerald-700">{r.tokenNo}</p>
                   </div>
                   <span
                     className={cn(
@@ -286,7 +286,7 @@ export function LuggageManagementView() {
                   <tr
                     key={r.id}
                     onClick={() => setPreviewRecord(r)}
-                    className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-blue-50/40"
+                    className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-emerald-50/40"
                   >
                     <td className="py-3.5 pr-4">
                       <div>
@@ -296,7 +296,7 @@ export function LuggageManagementView() {
                     </td>
                     <td className="py-3.5 pr-4">{r.bagCount}</td>
                     <td className="py-3.5 pr-4">
-                      <span className="font-mono text-xs font-semibold text-blue-600">
+                      <span className="font-mono text-xs font-semibold text-emerald-700">
                         {r.tokenNo}
                       </span>
                     </td>
@@ -348,7 +348,7 @@ export function LuggageManagementView() {
             <Button variant="outline" onClick={() => setStoreOpen(false)}>
               Cancel
             </Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleStore}>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleStore}>
               <Luggage className="mr-1.5 h-3.5 w-3.5" />
               Issue Token & Store
             </Button>
@@ -377,7 +377,7 @@ export function LuggageManagementView() {
               </Button>
               {previewRecord.status === "Stored" && (
                 <Button
-                  className="bg-blue-600 hover:bg-blue-700"
+                  className="bg-emerald-700 hover:bg-emerald-800"
                   onClick={() => handleReturn(previewRecord.id)}
                 >
                   Return to Guest
@@ -390,11 +390,11 @@ export function LuggageManagementView() {
         {previewRecord && (
           <div className="space-y-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
                 <Luggage className="h-6 w-6" />
               </div>
               <div>
-                <p className="font-mono text-lg font-bold text-blue-600">
+                <p className="font-mono text-lg font-bold text-emerald-700">
                   {previewRecord.tokenNo}
                 </p>
                 <span

@@ -26,7 +26,7 @@ export function RoomInventory({ data }: RoomInventoryProps) {
               cy="18"
               r="15.5"
               fill="none"
-              stroke="#3b82f6"
+              stroke="#16a34a"
               strokeWidth="3"
               strokeDasharray={`${data.percentage} ${100 - data.percentage}`}
               strokeLinecap="round"

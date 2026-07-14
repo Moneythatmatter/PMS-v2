@@ -122,4 +122,5 @@ export type ReservationFilter =
   | "in-house"
   | "reserved"
   | "checked-out"
-  | "cancelled";
+  | "cancelled"
+  | "outstanding";

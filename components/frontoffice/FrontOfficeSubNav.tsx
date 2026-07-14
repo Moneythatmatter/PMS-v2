@@ -54,7 +54,7 @@ export function FrontOfficeSubNav() {
             className={cn(
               "inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4",
               isActive
-                ? "border-blue-600 text-blue-600"
+                ? "border-emerald-700 text-emerald-700"
                 : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700",
             )}
           >

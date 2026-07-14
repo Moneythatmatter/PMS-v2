@@ -1,0 +1,868 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Download, Map, Table2 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Drawer } from "@/components/frontoffice/ui/Drawer";
+import {
+  FormField,
+  SelectInput,
+  TextInput,
+} from "@/components/frontoffice/ui";
+import { cn } from "@/lib/utils";
+import type { ModuleColumn, ModuleListDefinition, ModuleRow } from "./module-types";
+import { ModulePageShell } from "./ModulePageShell";
+import { ModuleDataTable } from "./ModuleDataTable";
+import { downloadAllTableQrs, TableQrCard } from "./TableQrCard";
+import { ModuleRowDetail } from "./ModuleRowDetail";
+
+type ActionKind =
+  | "add"
+  | "merge"
+  | "split"
+  | "map"
+  | "qr"
+  | "close-shift"
+  | "open-shift"
+  | "report"
+  | "generic";
+
+function previewTitle(row: ModuleRow, fallback: string) {
+  return String(
+    row.name ??
+      row.guest ??
+      row.guestName ??
+      row.event ??
+      row.tableNo ??
+      row.bookingNo ??
+      row.billNo ??
+      row.orderNo ??
+      row.item ??
+      row.cashier ??
+      row.recipe ??
+      row.outlet ??
+      fallback,
+  );
+}
+
+function classifyAction(label: string): ActionKind {
+  const l = label.toLowerCase();
+  if (l.includes("merge")) return "merge";
+  if (l.includes("split")) return "split";
+  if (l.includes("map") || l.includes("floor")) return "map";
+  if (l.includes("qr")) return "qr";
+  if (l.includes("close shift") || l === "close shift") return "close-shift";
+  if (l.includes("open shift") || l === "open shift") return "open-shift";
+  if (l.includes("report") || l.includes("cash report")) return "report";
+  if (
+    l.startsWith("add ") ||
+    l.startsWith("new ") ||
+    l.startsWith("create ") ||
+    l.startsWith("log ") ||
+    l.startsWith("start ") ||
+    l.startsWith("post ") ||
+    l.startsWith("run ")
+  ) {
+    return "add";
+  }
+  return "generic";
+}
+
+function editableColumns(columns: ModuleColumn[]) {
+  return columns.filter((c) => c.key !== "id" && c.key !== "outletId");
+}
+
+function blankForm(columns: ModuleColumn[]): Record<string, string> {
+  const form: Record<string, string> = {};
+  for (const col of editableColumns(columns)) {
+    form[col.key] = col.key === "status" ? "Available" : "";
+  }
+  return form;
+}
+
+function downloadCsv(filename: string, columns: ModuleColumn[], rows: ModuleRow[]) {
+  const header = columns.map((c) => c.header).join(",");
+  const body = rows
+    .map((row) =>
+      columns
+        .map((c) => {
+          const raw = row[c.key];
+          const value = raw === undefined ? "" : String(raw);
+          return `"${value.replace(/"/g, '""')}"`;
+        })
+        .join(","),
+    )
+    .join("\n");
+  const blob = new Blob([[header, body].filter(Boolean).join("\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function ModuleListPage({
+  definition,
+  charts,
+  statusMap,
+  onPrimaryAction,
+  showExport = true,
+}: {
+  definition: ModuleListDefinition;
+  charts?: React.ReactNode;
+  statusMap?: Record<string, string>;
+  onPrimaryAction?: () => void;
+  showExport?: boolean;
+}) {
+  const outlets = definition.outlets ?? [];
+  const showOutlet = outlets.length > 0;
+  const [outletId, setOutletId] = useState(outlets[0]?.id ?? "all");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState(definition.sortOptions?.[0]?.value ?? "");
+  const [rows, setRows] = useState<ModuleRow[]>(definition.rows);
+  const [preview, setPreview] = useState<ModuleRow | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [actionLabel, setActionLabel] = useState<string | null>(null);
+  const [form, setForm] = useState<Record<string, string>>(() => blankForm(definition.columns));
+  const [selectA, setSelectA] = useState("");
+  const [selectB, setSelectB] = useState("");
+
+  useEffect(() => {
+    setRows(definition.rows);
+    setForm(blankForm(definition.columns));
+    setOutletId(definition.outlets?.[0]?.id ?? "all");
+    setStatusFilter("all");
+    setSortBy(definition.sortOptions?.[0]?.value ?? "");
+    setActionLabel(null);
+    setPreview(null);
+  }, [definition]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filterKeys = definition.filterKeys ?? [
+      "status",
+      "type",
+      "mode",
+      "group",
+      "band",
+      "shift",
+      "segment",
+    ];
+
+    let list = rows.filter((row) => {
+      if (showOutlet && row.outletId && row.outletId !== outletId) return false;
+      if (statusFilter !== "all") {
+        const matches = filterKeys.some((key) => String(row[key] ?? "") === statusFilter);
+        if (!matches) return false;
+      }
+      if (!q) return true;
+      return Object.values(row).some(
+        (v) => v !== undefined && String(v).toLowerCase().includes(q),
+      );
+    });
+
+    if (sortBy && definition.sortOptions?.length) {
+      list = [...list].sort((a, b) => {
+        if (sortBy.endsWith("-desc")) {
+          const key = sortBy.replace(/-desc$/, "");
+          return Number(b[key] ?? 0) - Number(a[key] ?? 0);
+        }
+        const av = a[sortBy] ?? a.guestName ?? a.name ?? a.tableNo ?? "";
+        const bv = b[sortBy] ?? b.guestName ?? b.name ?? b.tableNo ?? "";
+        return String(av).localeCompare(String(bv), undefined, { numeric: true });
+      });
+    }
+
+    return list;
+  }, [
+    rows,
+    definition.filterKeys,
+    definition.sortOptions,
+    search,
+    statusFilter,
+    showOutlet,
+    outletId,
+    sortBy,
+  ]);
+
+  const selectedOutlet = outlets.find((o) => o.id === outletId);
+  const scopedRows = rows.filter(
+    (r) => !showOutlet || !r.outletId || r.outletId === outletId,
+  );
+  const scopedTotal = scopedRows.length;
+
+  const liveStats = useMemo(() => {
+    // Recompute common status-style stats for the selected outlet scope
+    const byStatus = (status: string) =>
+      scopedRows.filter((r) => String(r.status ?? "") === status).length;
+
+    return definition.stats.map((stat) => {
+      const label = stat.label.toLowerCase();
+      if (label === "tables" || label === "total" || label === "records") {
+        return { ...stat, value: scopedTotal };
+      }
+      if (label === "available") return { ...stat, value: byStatus("Available") };
+      if (label === "occupied") return { ...stat, value: byStatus("Occupied") };
+      if (label === "reserved") return { ...stat, value: byStatus("Reserved") };
+      if (label === "billing") return { ...stat, value: byStatus("Billing") };
+      if (label === "open" || label === "open shifts") return { ...stat, value: byStatus("Open") };
+      if (label === "closed") return { ...stat, value: byStatus("Closed") };
+      if (label === "pending") return { ...stat, value: byStatus("Pending") };
+      if (label === "active") return { ...stat, value: byStatus("Active") };
+      return stat;
+    });
+  }, [definition.stats, scopedRows, scopedTotal]);
+
+  const eyebrow =
+    definition.eyebrow ??
+    (selectedOutlet ? `Food & Beverages · ${selectedOutlet.name}` : undefined);
+
+  const actionKind = actionLabel ? classifyAction(actionLabel) : null;
+
+  const openAction = (label: string) => {
+    setActionLabel(label);
+    setForm(blankForm(definition.columns));
+    setSelectA("");
+    setSelectB("");
+  };
+
+  const handleExport = () => {
+    const slug = definition.title.toLowerCase().replace(/\s+/g, "-");
+    downloadCsv(`${slug}-export.csv`, definition.columns, filtered);
+    setToast(`Exported ${filtered.length} ${definition.title.toLowerCase()} record(s).`);
+  };
+
+  const handlePrimary = () => {
+    if (onPrimaryAction) {
+      onPrimaryAction();
+      return;
+    }
+    if (definition.actionLabel) openAction(definition.actionLabel);
+  };
+
+  const submitAdd = () => {
+    const required = editableColumns(definition.columns).filter((c) => c.key !== "status");
+    const missing = required.find((c) => !String(form[c.key] ?? "").trim());
+    if (missing) {
+      setToast(`Please fill ${missing.header}.`);
+      return;
+    }
+
+    const nextId = `${definition.title.slice(0, 1).toUpperCase()}-${Date.now().toString().slice(-5)}`;
+    const newRow: ModuleRow = {
+      id: nextId,
+      outletId: showOutlet ? outletId : undefined,
+    };
+
+    for (const col of editableColumns(definition.columns)) {
+      const raw = form[col.key]?.trim() ?? "";
+      if (col.format === "currency" || col.key === "capacity" || col.key === "covers") {
+        const num = Number(raw);
+        newRow[col.key] = Number.isFinite(num) && raw !== "" ? num : raw || "—";
+      } else {
+        newRow[col.key] = raw || (col.key === "status" ? "Available" : "—");
+      }
+    }
+
+    setRows((prev) => [newRow, ...prev]);
+    setActionLabel(null);
+    setToast(`${definition.actionLabel ?? "Record"} saved.`);
+  };
+
+  const submitMerge = () => {
+    if (!selectA || !selectB || selectA === selectB) {
+      setToast("Select two different tables to merge.");
+      return;
+    }
+    const a = scopedRows.find((r) => r.id === selectA);
+    const b = scopedRows.find((r) => r.id === selectB);
+    if (!a || !b) return;
+
+    const mergedCapacity = Number(a.capacity ?? 0) + Number(b.capacity ?? 0);
+    const merged: ModuleRow = {
+      ...a,
+      id: `M-${Date.now().toString().slice(-5)}`,
+      tableNo: `${a.tableNo}+${b.tableNo}`,
+      capacity: mergedCapacity || a.capacity,
+      shape: "Merged",
+      status: "Available",
+      section: a.section ?? b.section,
+      qr: "Pending",
+      outletId: a.outletId ?? outletId,
+    };
+
+    setRows((prev) => [
+      merged,
+      ...prev.filter((r) => r.id !== selectA && r.id !== selectB),
+    ]);
+    setActionLabel(null);
+    setToast(`Merged ${a.tableNo} + ${b.tableNo} into ${merged.tableNo}.`);
+  };
+
+  const submitSplit = () => {
+    if (!selectA) {
+      setToast("Select a table to split.");
+      return;
+    }
+    const source = scopedRows.find((r) => r.id === selectA);
+    if (!source) return;
+    const capacity = Number(source.capacity ?? 4);
+    if (capacity < 4) {
+      setToast("Only tables with capacity 4+ can be split in this demo.");
+      return;
+    }
+
+    const half = Math.floor(capacity / 2);
+    const base = String(source.tableNo ?? "T");
+    const left: ModuleRow = {
+      ...source,
+      id: `S-${Date.now().toString().slice(-5)}a`,
+      tableNo: `${base}A`,
+      capacity: half,
+      shape: "Square",
+      status: "Available",
+      qr: "Pending",
+    };
+    const right: ModuleRow = {
+      ...source,
+      id: `S-${Date.now().toString().slice(-5)}b`,
+      tableNo: `${base}B`,
+      capacity: capacity - half,
+      shape: "Square",
+      status: "Available",
+      qr: "Pending",
+    };
+
+    setRows((prev) => [left, right, ...prev.filter((r) => r.id !== selectA)]);
+    setActionLabel(null);
+    setToast(`Split ${source.tableNo} into ${left.tableNo} and ${right.tableNo}.`);
+  };
+
+  const markAllQrLinked = () => {
+    setRows((prev) =>
+      prev.map((row) => {
+        if (showOutlet && row.outletId && row.outletId !== outletId) return row;
+        if (String(row.qr ?? "").toLowerCase() === "pending") {
+          return { ...row, qr: "Linked" };
+        }
+        return row;
+      }),
+    );
+    setToast("Pending QR codes marked as Linked.");
+  };
+
+  const linkOneQr = (id: string) => {
+    setRows((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, qr: "Linked" } : row)),
+    );
+    setToast("QR linked for table.");
+  };
+
+  const closeOpenShifts = () => {
+    const openCount = scopedRows.filter((r) => r.status === "Open").length;
+    setRows((prev) =>
+      prev.map((row) => {
+        if (showOutlet && row.outletId && row.outletId !== outletId) return row;
+        if (row.status === "Open") {
+          return {
+            ...row,
+            status: "Closed",
+            declared: row.sales ?? row.declared ?? "—",
+          };
+        }
+        return row;
+      }),
+    );
+    setActionLabel(null);
+    setToast(
+      openCount
+        ? `Closed ${openCount} open shift(s) for ${selectedOutlet?.name ?? "outlet"}.`
+        : "No open shifts to close.",
+    );
+  };
+
+  const openNewShift = () => {
+    const nextId = `C-${Date.now().toString().slice(-4)}`;
+    const shift: ModuleRow = {
+      id: nextId,
+      cashier: "Front Cashier",
+      shift: "Current",
+      openedAt: new Date().toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      openingFloat: "₹2,000",
+      sales: "₹0",
+      declared: "—",
+      status: "Open",
+      outletId: showOutlet ? outletId : undefined,
+    };
+    setRows((prev) => [shift, ...prev]);
+    setActionLabel(null);
+    setToast("New cashier shift opened.");
+  };
+
+  const tableBlock = (
+    <>
+      <p className="mb-3 text-sm text-slate-500">
+        Showing <span className="font-medium text-slate-700">{filtered.length}</span> of {scopedTotal}{" "}
+        records
+        {selectedOutlet ? ` · ${selectedOutlet.name}` : ""}
+      </p>
+      <ModuleDataTable
+        columns={definition.columns}
+        rows={filtered}
+        onRowClick={setPreview}
+        statusStyle={definition.statusStyle}
+        statusMap={statusMap}
+      />
+    </>
+  );
+
+  return (
+    <>
+      <ModulePageShell
+        toast={toast}
+        onDismissToast={() => setToast(null)}
+        eyebrow={eyebrow ?? "Front Office"}
+        title={definition.title}
+        description={definition.description}
+        primaryAction={
+          definition.actionLabel
+            ? {
+                label: definition.actionLabel,
+                onClick: handlePrimary,
+              }
+            : undefined
+        }
+        secondaryActions={
+          <>
+            {showExport && (
+              <Button type="button" size="sm" variant="outline" onClick={handleExport}>
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </Button>
+            )}
+            {definition.secondaryActions?.map((label) => (
+              <Button
+                key={label}
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => openAction(label)}
+              >
+                {label}
+              </Button>
+            ))}
+          </>
+        }
+        stats={liveStats}
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder={definition.searchPlaceholder}
+        filterPills={
+          definition.filterOptions
+            ? {
+                active: statusFilter,
+                onChange: setStatusFilter,
+                options: definition.filterOptions,
+              }
+            : undefined
+        }
+        sort={
+          definition.sortOptions?.length
+            ? {
+                value: sortBy,
+                onChange: setSortBy,
+                options: definition.sortOptions,
+              }
+            : undefined
+        }
+        resultCount={{ shown: filtered.length, total: scopedTotal }}
+        hasActiveAdvancedFilters={
+          !!definition.sortOptions?.length && sortBy !== definition.sortOptions[0]?.value
+        }
+        onClearAdvancedFilters={() => setSortBy(definition.sortOptions?.[0]?.value ?? "")}
+        beforeFilters={
+          showOutlet ? (
+            <SelectInput
+              value={outletId}
+              onChange={(e) => setOutletId(e.target.value)}
+              className="h-10 w-full min-w-[10.5rem] shrink-0 sm:w-auto sm:max-w-[14rem]"
+              aria-label={definition.outletLabel ?? "Outlet"}
+            >
+              {outlets.map((outlet) => (
+                <option key={outlet.id} value={outlet.id}>
+                  {outlet.name}
+                </option>
+              ))}
+            </SelectInput>
+          ) : undefined
+        }
+        aboveTable={charts}
+      >
+        {tableBlock}
+      </ModulePageShell>
+
+      {/* Row preview */}
+      <Drawer
+        open={!!preview}
+        onClose={() => setPreview(null)}
+        title={preview ? previewTitle(preview, definition.title) : ""}
+        description={selectedOutlet?.name ?? definition.title}
+        width="md"
+      >
+        {preview && (
+          <ModuleRowDetail
+            row={preview}
+            columns={definition.columns}
+            outletName={selectedOutlet?.name ?? definition.title}
+            outletId={String(preview.outletId ?? outletId)}
+            statusStyle={definition.statusStyle}
+            statusMap={statusMap}
+            onQrDownloaded={() =>
+              setToast(`Downloaded QR for ${String(preview.tableNo ?? preview.id)}.`)
+            }
+          />
+        )}
+      </Drawer>
+
+      {/* Header action drawer */}
+      <Drawer
+        open={!!actionLabel}
+        onClose={() => setActionLabel(null)}
+        title={actionLabel ?? ""}
+        description={selectedOutlet?.name ?? definition.title}
+        width="lg"
+        footer={
+          actionKind === "add" || actionKind === "generic" ? (
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setActionLabel(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-emerald-700 hover:bg-emerald-800"
+                onClick={submitAdd}
+              >
+                Save
+              </Button>
+            </div>
+          ) : actionKind === "merge" ? (
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setActionLabel(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-emerald-700 hover:bg-emerald-800"
+                onClick={submitMerge}
+              >
+                Merge
+              </Button>
+            </div>
+          ) : actionKind === "split" ? (
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setActionLabel(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-emerald-700 hover:bg-emerald-800"
+                onClick={submitSplit}
+              >
+                Split table
+              </Button>
+            </div>
+          ) : actionKind === "close-shift" ? (
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setActionLabel(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-emerald-700 hover:bg-emerald-800"
+                onClick={closeOpenShifts}
+              >
+                Close open shifts
+              </Button>
+            </div>
+          ) : actionKind === "open-shift" ? (
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setActionLabel(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-emerald-700 hover:bg-emerald-800"
+                onClick={openNewShift}
+              >
+                Open shift
+              </Button>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" size="sm" onClick={() => setActionLabel(null)}>
+                Close
+              </Button>
+            </div>
+          )
+        }
+      >
+        {actionKind === "add" || actionKind === "generic" ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {editableColumns(definition.columns).map((col) => (
+              <FormField key={col.key} label={col.header}>
+                {col.key === "status" && definition.filterOptions?.length ? (
+                  <SelectInput
+                    value={form[col.key] ?? "Available"}
+                    onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
+                  >
+                    {definition.filterOptions
+                      .filter((o) => o.id !== "all")
+                      .map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                        </option>
+                      ))}
+                  </SelectInput>
+                ) : (
+                  <TextInput
+                    value={form[col.key] ?? ""}
+                    placeholder={col.header}
+                    onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
+                  />
+                )}
+              </FormField>
+            ))}
+          </div>
+        ) : null}
+
+        {actionKind === "merge" ? (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Choose two tables to merge. Capacities combine and the originals are removed from the
+              list.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="Table A">
+                <SelectInput value={selectA} onChange={(e) => setSelectA(e.target.value)}>
+                  <option value="">Select table</option>
+                  {scopedRows.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {String(row.tableNo ?? row.id)} · {row.section ?? "—"} · cap{" "}
+                      {row.capacity ?? "—"}
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
+              <FormField label="Table B">
+                <SelectInput value={selectB} onChange={(e) => setSelectB(e.target.value)}>
+                  <option value="">Select table</option>
+                  {scopedRows.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {String(row.tableNo ?? row.id)} · {row.section ?? "—"} · cap{" "}
+                      {row.capacity ?? "—"}
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
+            </div>
+          </div>
+        ) : null}
+
+        {actionKind === "split" ? (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Split one larger table into two smaller covers (demo rule: capacity 4+).
+            </p>
+            <FormField label="Table to split">
+              <SelectInput value={selectA} onChange={(e) => setSelectA(e.target.value)}>
+                <option value="">Select table</option>
+                {scopedRows
+                  .filter((r) => Number(r.capacity ?? 0) >= 4)
+                  .map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {String(row.tableNo ?? row.id)} · cap {row.capacity}
+                    </option>
+                  ))}
+              </SelectInput>
+            </FormField>
+          </div>
+        ) : null}
+
+        {actionKind === "map" ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              <Map className="h-4 w-4 text-emerald-700" />
+              Live floor map for {selectedOutlet?.name ?? definition.title}
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {scopedRows.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => {
+                    setActionLabel(null);
+                    setPreview(row);
+                  }}
+                  className={cn(
+                    "rounded-xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm",
+                    row.status === "Available" && "border-emerald-200 bg-emerald-50",
+                    row.status === "Occupied" && "border-red-200 bg-red-50",
+                    row.status === "Reserved" && "border-amber-200 bg-amber-50",
+                    row.status === "Billing" && "border-violet-200 bg-violet-50",
+                    !["Available", "Occupied", "Reserved", "Billing"].includes(
+                      String(row.status ?? ""),
+                    ) && "border-slate-200 bg-slate-50",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {String(row.tableNo ?? row.id)}
+                    </p>
+                    <Table2 className="h-3.5 w-3.5 text-slate-400" />
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {row.section ?? "—"} · {row.capacity ?? "—"} seats
+                  </p>
+                  <p className="mt-2 text-xs font-medium text-slate-700">{row.status}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {actionKind === "qr" ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-slate-600">
+                View or download dine-in QR images for each table. Print and place on the table.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={markAllQrLinked}>
+                  Link all pending
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={async () => {
+                    await downloadAllTableQrs(
+                      scopedRows.map((row) => ({
+                        tableNo: String(row.tableNo ?? row.id),
+                        outletId: String(row.outletId ?? outletId ?? "outlet"),
+                      })),
+                    );
+                    setToast(`Downloaded ${scopedRows.length} QR image(s).`);
+                  }}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download all
+                </Button>
+              </div>
+            </div>
+            <ul className="space-y-2">
+              {scopedRows.map((row) => (
+                <TableQrCard
+                  key={row.id}
+                  tableNo={String(row.tableNo ?? row.id)}
+                  section={row.section ? String(row.section) : undefined}
+                  outletId={String(row.outletId ?? outletId ?? "outlet")}
+                  outletName={selectedOutlet?.name ?? definition.title}
+                  linked={String(row.qr ?? "").toLowerCase() === "linked"}
+                  onLink={() => linkOneQr(row.id)}
+                  onDownloaded={() =>
+                    setToast(`Downloaded QR for ${String(row.tableNo ?? row.id)}.`)
+                  }
+                />
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {actionKind === "close-shift" ? (
+          <div className="space-y-3 text-sm text-slate-600">
+            <p>
+              This will close every <strong>Open</strong> cashier shift for{" "}
+              {selectedOutlet?.name ?? "this outlet"} and copy sales into declared amount.
+            </p>
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs">
+              Open now:{" "}
+              <strong>
+                {scopedRows.filter((r) => r.status === "Open").length}
+              </strong>
+            </p>
+          </div>
+        ) : null}
+
+        {actionKind === "open-shift" ? (
+          <div className="space-y-3 text-sm text-slate-600">
+            <p>
+              Open a new cashier shift for {selectedOutlet?.name ?? "this outlet"} with a default
+              float of ₹2,000.
+            </p>
+          </div>
+        ) : null}
+
+        {actionKind === "report" ? (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Shift cash report for {selectedOutlet?.name ?? definition.title} (demo).
+            </p>
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[420px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-2">Cashier</th>
+                    <th className="px-3 py-2">Shift</th>
+                    <th className="px-3 py-2">Sales</th>
+                    <th className="px-3 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {scopedRows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2 font-medium text-slate-900">
+                        {row.cashier ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">{row.shift ?? "—"}</td>
+                      <td className="px-3 py-2 text-slate-700">{row.sales ?? "—"}</td>
+                      <td className="px-3 py-2">{row.status ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                downloadCsv(
+                  `${definition.title.toLowerCase().replace(/\s+/g, "-")}-cash-report.csv`,
+                  definition.columns,
+                  scopedRows,
+                );
+                setToast("Cash report exported.");
+              }}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Download report CSV
+            </Button>
+          </div>
+        ) : null}
+      </Drawer>
+    </>
+  );
+}
