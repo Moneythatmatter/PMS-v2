@@ -22,7 +22,7 @@ const statusConfig: Record<
   { card: string; dot: string; icon?: React.ComponentType<{ className?: string }> }
 > = {
   Vacant: { card: "border-emerald-200 bg-emerald-50/80", dot: "bg-emerald-500" },
-  Occupied: { card: "border-blue-200 bg-blue-50/80", dot: "bg-blue-500" },
+  Occupied: { card: "border-emerald-200 bg-emerald-50/80", dot: "bg-emerald-500" },
   Dirty: { card: "border-amber-200 bg-amber-50/80", dot: "bg-amber-500" },
   Clean: { card: "border-teal-200 bg-teal-50/80", dot: "bg-teal-500" },
   Maintenance: { card: "border-orange-200 bg-orange-50/80", dot: "bg-orange-500", icon: Wrench },
@@ -111,7 +111,7 @@ export function RoomStatusView() {
         description="Real-time room inventory, housekeeping, and maintenance status board."
         badge={
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <BedDouble className="h-4 w-4 text-blue-500" />
+            <BedDouble className="h-4 w-4 text-emerald-600" />
             {stats.occupied}/{stats.total} occupied
           </div>
         }
@@ -119,7 +119,7 @@ export function RoomStatusView() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
         <StatMiniCard label="Total Rooms" value={stats.total} icon={Building2} />
-        <StatMiniCard label="Occupied" value={stats.occupied} accent="#3b82f6" icon={BedDouble} />
+        <StatMiniCard label="Occupied" value={stats.occupied} accent="#16a34a" icon={BedDouble} />
         <StatMiniCard label="Vacant" value={stats.vacant} accent="#22c55e" icon={BedDouble} />
         <StatMiniCard label="Dirty / HK" value={stats.dirty} accent="#f59e0b" icon={Sparkles} />
         <StatMiniCard label="Maintenance" value={stats.maintenance} accent="#f97316" icon={Wrench} />
@@ -244,7 +244,7 @@ export function RoomStatusView() {
             <Button variant="outline" onClick={() => { setSelectedRoom(null); setActionType(null); }}>
               Cancel
             </Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleSave}>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave}>
               Save Changes
             </Button>
           </>

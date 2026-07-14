@@ -22,7 +22,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { formatINR } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_COLORS = ["#2563eb", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#64748b"];
+const DEFAULT_COLORS = ["#15803d", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#64748b"];
 
 const tooltipStyle = {
   borderRadius: "8px",
@@ -114,8 +114,8 @@ function ReportChartCard({ config }: { config: ReportChartConfig }) {
             <AreaChart data={config.data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
               <defs>
                 <linearGradient id={`area-${config.title.replace(/\s/g, "")}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#2563eb" stopOpacity={0.2} />
-                  <stop offset="100%" stopColor="#2563eb" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#15803d" stopOpacity={0.2} />
+                  <stop offset="100%" stopColor="#15803d" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -130,7 +130,7 @@ function ReportChartCard({ config }: { config: ReportChartConfig }) {
               <Area
                 type="monotone"
                 dataKey={dataKey}
-                stroke="#2563eb"
+                stroke="#15803d"
                 strokeWidth={2}
                 fill={`url(#area-${config.title.replace(/\s/g, "")})`}
               />
@@ -141,7 +141,7 @@ function ReportChartCard({ config }: { config: ReportChartConfig }) {
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={axisTick} />
               <YAxis axisLine={false} tickLine={false} tick={axisTick} tickFormatter={(v) => formatChartValue(v, config.valueFormat)} />
               <Tooltip formatter={(value) => [formatTooltip(Number(value)), config.title]} contentStyle={tooltipStyle} />
-              <Line type="monotone" dataKey={dataKey} stroke="#2563eb" strokeWidth={2} dot={{ fill: "#2563eb", r: 3 }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey={dataKey} stroke="#15803d" strokeWidth={2} dot={{ fill: "#15803d", r: 3 }} activeDot={{ r: 5 }} />
             </LineChart>
           ) : (
             <BarChart

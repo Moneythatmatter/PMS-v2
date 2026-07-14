@@ -8,7 +8,7 @@ interface ProgressBarProps {
 export function ProgressBar({
   value,
   max = 10,
-  color = "#3b82f6",
+  color = "#16a34a",
   className,
 }: ProgressBarProps) {
   const percentage = Math.min((value / max) * 100, 100);

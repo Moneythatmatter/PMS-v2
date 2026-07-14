@@ -57,7 +57,7 @@ export function GuestSearchSelect({
         onFocus={() => setIsOpen(true)}
         onBlur={() => setTimeout(() => setIsOpen(false), 150)}
         placeholder={placeholder}
-        className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+        className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
       />
       {showDropdown && (
         <div className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
@@ -71,7 +71,7 @@ export function GuestSearchSelect({
                 onChange(g.guestName);
                 setIsOpen(false);
               }}
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-blue-50"
+              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-emerald-50"
             >
               <span className="font-medium">{g.guestName}</span>
               <span className="text-xs text-slate-500">Room {g.room}</span>

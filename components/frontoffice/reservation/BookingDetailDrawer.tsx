@@ -95,7 +95,7 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
           </Button>
           {booking.status !== "Cancelled" && booking.status !== "Checked Out" && (
             <Link href="/frontoffice/check-in">
-              <Button className="gap-1.5 bg-blue-600 hover:bg-blue-700">
+              <Button className="gap-1.5 bg-emerald-700 hover:bg-emerald-800">
                 <LogIn className="h-3.5 w-3.5" />
                 Check In
               </Button>
@@ -105,8 +105,8 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
       }
     >
       {/* Guest header */}
-      <div className="mb-6 flex items-center gap-4 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/50 p-4">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-lg font-bold text-white shadow-md shadow-blue-200/50">
+      <div className="mb-6 flex items-center gap-4 rounded-2xl bg-gradient-to-br from-slate-50 to-emerald-50/50 p-4">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-lg font-bold text-white shadow-md shadow-emerald-200/50">
           {getInitials(booking.guestName)}
         </div>
         <div className="min-w-0 flex-1">

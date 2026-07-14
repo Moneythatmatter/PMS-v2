@@ -48,7 +48,7 @@ function SectionCard({
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5">
       <div className="mb-4 flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
           <Icon className="h-4 w-4" />
         </div>
         <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
@@ -206,7 +206,7 @@ export function RoomTransferView() {
         action={
           <Button
             size="sm"
-            className="bg-blue-600 hover:bg-blue-700"
+            className="bg-emerald-700 hover:bg-emerald-800"
             onClick={openTransfer}
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -222,7 +222,7 @@ export function RoomTransferView() {
           value={transfers.filter((t) => t.status === "Completed").length}
           icon={ArrowRightLeft}
         />
-        <StatMiniCard label="In-House Guests" value={inHouseGuests.length} accent="#2563eb" icon={Users} />
+        <StatMiniCard label="In-House Guests" value={inHouseGuests.length} accent="#15803d" icon={Users} />
       </div>
 
       <FOSearchToolbar
@@ -262,7 +262,7 @@ export function RoomTransferView() {
                 key={r.id}
                 type="button"
                 onClick={() => setPreviewTransfer(r)}
-                className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/30"
+                className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -299,7 +299,7 @@ export function RoomTransferView() {
                     <tr
                       key={r.id}
                       onClick={() => setPreviewTransfer(r)}
-                      className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-blue-50/40"
+                      className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-emerald-50/40"
                     >
                       <td className="py-3.5 pr-4">
                         <span className="font-mono text-xs">{r.id}</span>
@@ -342,7 +342,7 @@ export function RoomTransferView() {
             <Button variant="outline" onClick={() => setTransferOpen(false)}>
               Cancel
             </Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleTransfer}>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleTransfer}>
               <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
               Confirm Transfer
             </Button>
@@ -373,17 +373,17 @@ export function RoomTransferView() {
       >
         {previewTransfer && (
           <div className="space-y-5">
-            <div className="flex items-center justify-center gap-4 rounded-xl bg-blue-50 p-5">
+            <div className="flex items-center justify-center gap-4 rounded-xl bg-emerald-50 p-5">
               <div className="text-center">
                 <p className="text-xs font-medium uppercase text-slate-500">From</p>
                 <p className="mt-1 text-2xl font-bold text-slate-900">
                   {previewTransfer.fromRoom}
                 </p>
               </div>
-              <ArrowRightLeft className="h-6 w-6 text-blue-500" />
+              <ArrowRightLeft className="h-6 w-6 text-emerald-600" />
               <div className="text-center">
                 <p className="text-xs font-medium uppercase text-slate-500">To</p>
-                <p className="mt-1 text-2xl font-bold text-blue-600">
+                <p className="mt-1 text-2xl font-bold text-emerald-700">
                   {previewTransfer.toRoom}
                 </p>
               </div>
@@ -519,7 +519,7 @@ export function ExtendStayView() {
         title="Extend Stay"
         badge={
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <Users className="h-4 w-4 text-blue-500" />
+            <Users className="h-4 w-4 text-emerald-600" />
             {inHouseGuests.length} in-house
           </div>
         }
@@ -527,7 +527,7 @@ export function ExtendStayView() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatMiniCard label="In-House Guests" value={inHouseGuests.length} icon={Users} />
-        <StatMiniCard label="Extensions Today" value={2} accent="#2563eb" icon={CalendarPlus} />
+        <StatMiniCard label="Extensions Today" value={2} accent="#15803d" icon={CalendarPlus} />
         <StatMiniCard label="Avg. Extra Nights" value="2.5" icon={Moon} sublabel="This week" />
         <StatMiniCard
           label="Extension Revenue"
@@ -541,7 +541,7 @@ export function ExtendStayView() {
         <div className="lg:col-span-3">
           <div className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
             <div className="mb-5 flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
                 <CalendarPlus className="h-4 w-4" />
               </div>
               <h2 className="text-sm font-semibold text-slate-900">Extension Request</h2>
@@ -560,7 +560,7 @@ export function ExtendStayView() {
                   New checkout {formattedNewCheckout} · +{formatINR(extraCharges)}
                 </p>
                 <Button
-                  className="mt-6 bg-blue-600 hover:bg-blue-700"
+                  className="mt-6 bg-emerald-700 hover:bg-emerald-800"
                   onClick={handleClearGuest}
                 >
                   New Request
@@ -586,7 +586,7 @@ export function ExtendStayView() {
                 {guest ? (
                   <>
                     <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/80 p-4">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-800">
                         {getInitials(guest.guestName)}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -684,7 +684,7 @@ export function ExtendStayView() {
                     </FormField>
 
                     <Button
-                      className="w-full bg-blue-600 hover:bg-blue-700"
+                      className="w-full bg-emerald-700 hover:bg-emerald-800"
                       onClick={handleApprove}
                       disabled={!isAvailable}
                     >
@@ -706,15 +706,15 @@ export function ExtendStayView() {
 
         <div className="lg:col-span-2">
           <div className="sticky top-4 space-y-4">
-            <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-5">
+            <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-emerald-50 via-white to-green-50 p-5">
               <div className="mb-4 flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-blue-600" />
+                <Wallet className="h-4 w-4 text-emerald-700" />
                 <h3 className="text-sm font-semibold text-slate-900">Extension Summary</h3>
               </div>
 
               {guest ? (
                 <>
-                  <div className="mb-4 rounded-lg border border-blue-100/80 bg-white/80 p-3">
+                  <div className="mb-4 rounded-lg border border-emerald-100/80 bg-white/80 p-3">
                     <p className="font-semibold text-slate-900">{guest.guestName}</p>
                     <p className="text-xs text-slate-500">
                       Room {guest.room} · {guest.roomType}
@@ -739,9 +739,9 @@ export function ExtendStayView() {
                     />
                   </div>
 
-                  <div className="mt-4 rounded-lg bg-blue-600 px-4 py-3 text-white">
+                  <div className="mt-4 rounded-lg bg-emerald-700 px-4 py-3 text-white">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-blue-100">New total (est.)</span>
+                      <span className="text-sm font-medium text-emerald-100">New total (est.)</span>
                       <span className="text-lg font-bold">
                         {formatINR(guest.balance + extraCharges)}
                       </span>

@@ -77,7 +77,7 @@ export function CompanySearchSelect({
         onBlur={() => setTimeout(() => setIsOpen(false), 150)}
         placeholder={placeholder}
         className={cn(
-          "h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100",
+          "h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100",
           showClear ? "pr-9" : "pr-3",
           inputClassName,
         )}
@@ -104,7 +104,7 @@ export function CompanySearchSelect({
                 onSelect(c);
                 setIsOpen(false);
               }}
-              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-blue-50"
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-emerald-50"
             >
               <span className="min-w-0 truncate font-medium text-slate-900">{c.name}</span>
               <span className="shrink-0 font-mono text-xs text-slate-500">{c.code}</span>

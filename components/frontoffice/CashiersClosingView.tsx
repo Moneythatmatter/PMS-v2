@@ -83,7 +83,7 @@ export function CashiersClosingView() {
         description="End-of-shift cashier closing, cash reconciliation, and settlement."
         badge={
           <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <Wallet className="h-3.5 w-3.5 text-blue-500" />
+            <Wallet className="h-3.5 w-3.5 text-emerald-600" />
             Evening Shift · Open
           </div>
         }
@@ -96,7 +96,7 @@ export function CashiersClosingView() {
         <StatMiniCard
           label="Total Expected"
           value={formatINR(expected.total)}
-          accent="#2563eb"
+          accent="#15803d"
           icon={IndianRupee}
         />
       </div>
@@ -111,7 +111,7 @@ export function CashiersClosingView() {
                 Variance: {formatINR(variance)} · Handover recorded
               </p>
               <Button
-                className="mt-6 bg-blue-600 hover:bg-blue-700"
+                className="mt-6 bg-emerald-700 hover:bg-emerald-800"
                 onClick={() => {
                   setClosed(false);
                   setCashActual("");
@@ -124,7 +124,7 @@ export function CashiersClosingView() {
           ) : (
             <>
               <div className="mb-4 flex items-center gap-2">
-                <IndianRupee className="h-4 w-4 text-blue-500" />
+                <IndianRupee className="h-4 w-4 text-emerald-600" />
                 <h2 className="text-sm font-semibold text-slate-900">Shift Reconciliation</h2>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -181,7 +181,7 @@ export function CashiersClosingView() {
                 </FormField>
               </div>
               <Button
-                className="mt-4 w-full bg-blue-600 hover:bg-blue-700 sm:w-auto"
+                className="mt-4 w-full bg-emerald-700 hover:bg-emerald-800 sm:w-auto"
                 onClick={handleCloseShift}
               >
                 Close Shift

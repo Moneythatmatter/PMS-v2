@@ -66,10 +66,10 @@ export const roomInventory: RoomInventoryData = {
   occupied: 4,
   total: 12,
   statuses: [
-    { label: "Occupied", count: 4, color: "#3b82f6" },
-    { label: "Reserved", count: 2, color: "#a855f7" },
+    { label: "Occupied", count: 4, color: "#166534" },
+    { label: "Reserved", count: 2, color: "#15803d" },
     { label: "Vacant", count: 4, color: "#22c55e" },
-    { label: "Dirty", count: 1, color: "#f97316" },
+    { label: "Dirty", count: 1, color: "#d97706" },
     { label: "Maint.", count: 1, color: "#64748b" },
   ],
 };
@@ -85,9 +85,9 @@ export const weeklyFlow: WeeklyFlowPoint[] = [
 ];
 
 export const bookingSources: BookingSource[] = [
-  { name: "Walk-in", value: 28, color: "#a855f7" },
-  { name: "Booking.com", value: 32, color: "#1e3a5f" },
-  { name: "Corporate", value: 18, color: "#ef4444" },
+  { name: "Walk-in", value: 28, color: "#15803d" },
+  { name: "Booking.com", value: 32, color: "#166534" },
+  { name: "Corporate", value: 18, color: "#16a34a" },
   { name: "Direct", value: 22, color: "#22c55e" },
 ];
 

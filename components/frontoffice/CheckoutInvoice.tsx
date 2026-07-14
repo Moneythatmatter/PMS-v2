@@ -197,7 +197,7 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
             <Download className="h-3.5 w-3.5" />
             Download
           </Button>
-          <Button className="gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={handlePrint}>
+          <Button className="gap-1.5 bg-emerald-700 hover:bg-emerald-800" onClick={handlePrint}>
             <Printer className="h-3.5 w-3.5" />
             Print Invoice
           </Button>
@@ -222,7 +222,7 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
             </p>
           </div>
           <div className="text-right">
-            <p className="text-lg font-bold uppercase tracking-wide text-blue-600">
+            <p className="text-lg font-bold uppercase tracking-wide text-emerald-700">
               {bill ? "Split Bill Invoice" : "Tax Invoice"}
             </p>
             <p className="mt-2 text-sm font-semibold text-slate-900">{invoiceNo}</p>
@@ -319,7 +319,7 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
               </tr>
               <tr className="border-t-2 border-slate-900">
                 <td className="py-3 text-base font-bold text-slate-900">Amount Due</td>
-                <td className="py-3 text-right text-lg font-bold text-blue-600">{formatINR(totals.pending)}</td>
+                <td className="py-3 text-right text-lg font-bold text-emerald-700">{formatINR(totals.pending)}</td>
               </tr>
             </tbody>
           </table>

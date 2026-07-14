@@ -86,7 +86,7 @@ function SectionCard({
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
       <div className="mb-5 flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
           <Icon className="h-5 w-5" />
         </div>
         <div>
@@ -233,8 +233,8 @@ export function NewReservationForm() {
         title="New Reservation"
         description="Capture essential guest contact and booking details. Full guest profile is completed at check-in."
         badge={
-          <div className="flex items-center gap-2 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-2.5">
-            <CalendarDays className="h-4 w-4 text-blue-600" />
+          <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-green-50 px-4 py-2.5">
+            <CalendarDays className="h-4 w-4 text-emerald-700" />
             <div>
               <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Reference</p>
               <p className="text-sm font-bold text-slate-800">{ref}</p>
@@ -248,11 +248,11 @@ export function NewReservationForm() {
         <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between text-xs">
             <span className="font-medium text-slate-500">Form progress</span>
-            <span className="font-semibold text-blue-600">{completion}% complete</span>
+            <span className="font-semibold text-emerald-700">{completion}% complete</span>
           </div>
           <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-slate-100">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-300"
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-700 transition-all duration-300"
               style={{ width: `${completion}%` }}
             />
           </div>
@@ -266,12 +266,12 @@ export function NewReservationForm() {
                     <div className={cn(
                       "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold",
                       isDone && "bg-emerald-500 text-white",
-                      isActive && !isDone && "bg-blue-600 text-white ring-4 ring-blue-100",
+                      isActive && !isDone && "bg-emerald-700 text-white ring-4 ring-emerald-100",
                       !isActive && !isDone && "bg-slate-100 text-slate-400",
                     )}>
                       {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : step.num}
                     </div>
-                    <span className={cn("hidden text-xs font-medium sm:block", isActive ? "text-blue-600" : isDone ? "text-emerald-600" : "text-slate-400")}>
+                    <span className={cn("hidden text-xs font-medium sm:block", isActive ? "text-emerald-700" : isDone ? "text-emerald-600" : "text-slate-400")}>
                       {step.label}
                     </span>
                   </div>
@@ -297,7 +297,7 @@ export function NewReservationForm() {
           <p className="mt-1 text-sm font-semibold text-emerald-700">{formatINR(totalAmount)} total</p>
           <div className="mt-6 flex gap-3">
             <Button variant="outline" onClick={() => window.location.reload()}>New Reservation</Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => window.history.back()}>Back to List</Button>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={() => window.history.back()}>Back to List</Button>
           </div>
         </div>
       ) : (
@@ -478,11 +478,11 @@ export function NewReservationForm() {
                   </div>
                 )}
 
-                <div className="mt-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white">
-                  <p className="text-xs font-medium text-blue-100">Estimated Total</p>
+                <div className="mt-4 rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-900 p-4 text-white">
+                  <p className="text-xs font-medium text-emerald-100">Estimated Total</p>
                   <p className="text-2xl font-bold">{nights > 0 ? formatINR(totalAmount) : "—"}</p>
                   {nights > 0 && form.advancePaid > 0 && (
-                    <p className="mt-0.5 text-xs text-blue-200">Pending: {formatINR(pendingAmount)}</p>
+                    <p className="mt-0.5 text-xs text-emerald-200">Pending: {formatINR(pendingAmount)}</p>
                   )}
                 </div>
               </div>

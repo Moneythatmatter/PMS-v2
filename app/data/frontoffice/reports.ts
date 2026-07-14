@@ -74,7 +74,7 @@ export interface ReportChartConfig {
 }
 
 const statusBadge: Record<string, string> = {
-  Confirmed: "bg-blue-50 text-blue-700",
+  Confirmed: "bg-emerald-50 text-emerald-800",
   Reserved: "bg-violet-50 text-violet-700",
   Pending: "bg-amber-50 text-amber-700",
   "Checked In": "bg-emerald-50 text-emerald-700",
@@ -83,7 +83,7 @@ const statusBadge: Record<string, string> = {
   "Pending Settlement": "bg-amber-50 text-amber-700",
   Open: "bg-amber-50 text-amber-700",
   Balanced: "bg-emerald-50 text-emerald-700",
-  Occupied: "bg-blue-50 text-blue-700",
+  Occupied: "bg-emerald-50 text-emerald-800",
   Vacant: "bg-emerald-50 text-emerald-700",
   Dirty: "bg-orange-50 text-orange-700",
   Clean: "bg-emerald-50 text-emerald-700",
@@ -111,7 +111,7 @@ export const arrivalReport: ReportDefinition = {
     { value: "time", label: "ETA" },
   ],
   stats: [
-    { label: "Arrivals Today", value: 5, accent: "#2563eb", sublabel: "Expected check-ins" },
+    { label: "Arrivals Today", value: 5, accent: "#15803d", sublabel: "Expected check-ins" },
     { label: "Confirmed", value: 3, accent: "#10b981", sublabel: "Ready for check-in" },
     { label: "Rooms Blocked", value: 5, sublabel: "Assigned rooms" },
     { label: "VIP / Suite", value: 1, accent: "#f59e0b", sublabel: "Priority arrivals" },
@@ -139,9 +139,9 @@ export const arrivalReport: ReportDefinition = {
       type: "bar",
       dataKey: "count",
       data: [
-        { name: "12–3 PM", count: 1, color: "#2563eb" },
-        { name: "3–5 PM", count: 2, color: "#3b82f6" },
-        { name: "5–7 PM", count: 2, color: "#60a5fa" },
+        { name: "12–3 PM", count: 1, color: "#15803d" },
+        { name: "3–5 PM", count: 2, color: "#16a34a" },
+        { name: "5–7 PM", count: 2, color: "#4ade80" },
       ],
       valueFormat: "number",
     },
@@ -151,7 +151,7 @@ export const arrivalReport: ReportDefinition = {
       type: "pie",
       dataKey: "value",
       data: [
-        { name: "Direct / Walk-in", value: 2, color: "#2563eb" },
+        { name: "Direct / Walk-in", value: 2, color: "#15803d" },
         { name: "OTA", value: 2, color: "#8b5cf6" },
         { name: "Corporate", value: 1, color: "#f59e0b" },
       ],
@@ -243,7 +243,7 @@ export const occupancyReport: ReportDefinition = {
     { value: "type", label: "Room type" },
   ],
   stats: [
-    { label: "Overall Occupancy", value: "67%", accent: "#2563eb", sublabel: "8 / 12 rooms" },
+    { label: "Overall Occupancy", value: "67%", accent: "#15803d", sublabel: "8 / 12 rooms" },
     { label: "Available Tonight", value: 4, accent: "#10b981", sublabel: "Sellable rooms" },
     { label: "Out of Order", value: 1, sublabel: "Maintenance block" },
     { label: "ADR", value: "₹4,850", sublabel: "Average daily rate" },
@@ -270,9 +270,9 @@ export const occupancyReport: ReportDefinition = {
       type: "bar",
       dataKey: "value",
       data: [
-        { name: "Standard", value: 60, color: "#3b82f6" },
-        { name: "Deluxe", value: 75, color: "#2563eb" },
-        { name: "Suite", value: 100, color: "#1d4ed8" },
+        { name: "Standard", value: 60, color: "#16a34a" },
+        { name: "Deluxe", value: 75, color: "#15803d" },
+        { name: "Suite", value: 100, color: "#166534" },
         { name: "Premium", value: 0, color: "#94a3b8" },
       ],
       valueFormat: "percent",
@@ -312,7 +312,7 @@ export const revenueReport: ReportDefinition = {
     { value: "category", label: "Category A–Z" },
   ],
   stats: [
-    { label: "Total Revenue", value: "₹2,84,500", accent: "#2563eb", sublabel: "Month to date" },
+    { label: "Total Revenue", value: "₹2,84,500", accent: "#15803d", sublabel: "Month to date" },
     { label: "Room Revenue", value: "₹1,98,200", accent: "#10b981", sublabel: "69.7% of total" },
     { label: "F&B Revenue", value: "₹52,400", sublabel: "Restaurant & bar" },
     { label: "Other Charges", value: "₹33,900", sublabel: "Laundry, mini bar, etc." },
@@ -340,7 +340,7 @@ export const revenueReport: ReportDefinition = {
       type: "pie",
       dataKey: "value",
       data: [
-        { name: "Rooms", value: 198200, color: "#2563eb" },
+        { name: "Rooms", value: 198200, color: "#15803d" },
         { name: "F&B", value: 52400, color: "#10b981" },
         { name: "Other", value: 33900, color: "#f59e0b" },
       ],
@@ -353,7 +353,7 @@ export const revenueReport: ReportDefinition = {
       layout: "horizontal",
       dataKey: "amount",
       data: [
-        { name: "Room Charges", amount: 198200, color: "#2563eb" },
+        { name: "Room Charges", amount: 198200, color: "#15803d" },
         { name: "Restaurant", amount: 38400, color: "#10b981" },
         { name: "Bar / POS", amount: 14000, color: "#34d399" },
         { name: "Laundry", amount: 12800, color: "#f59e0b" },
@@ -381,7 +381,7 @@ export const cashierReport: ReportDefinition = {
     { value: "cashier", label: "Cashier A–Z" },
   ],
   stats: [
-    { label: "Total Collected", value: "₹1,42,800", accent: "#2563eb", sublabel: "All shifts today" },
+    { label: "Total Collected", value: "₹1,42,800", accent: "#15803d", sublabel: "All shifts today" },
     { label: "Cash", value: "₹38,500", sublabel: "27% of collections" },
     { label: "UPI / Card", value: "₹96,300", sublabel: "Digital payments" },
     { label: "Refunds", value: "₹2,400", accent: "#ef4444", sublabel: "2 refund transactions" },
@@ -408,7 +408,7 @@ export const cashierReport: ReportDefinition = {
       dataKey: "amount",
       data: [
         { name: "Morning", amount: 48200, color: "#f59e0b" },
-        { name: "Evening", amount: 62800, color: "#2563eb" },
+        { name: "Evening", amount: 62800, color: "#15803d" },
         { name: "Night", amount: 31800, color: "#6366f1" },
       ],
       valueFormat: "currency",
@@ -419,7 +419,7 @@ export const cashierReport: ReportDefinition = {
       type: "pie",
       dataKey: "value",
       data: [
-        { name: "UPI / Card", value: 96300, color: "#2563eb" },
+        { name: "UPI / Card", value: 96300, color: "#15803d" },
         { name: "Cash", value: 38500, color: "#10b981" },
         { name: "Refunds", value: 2400, color: "#ef4444" },
       ],
@@ -445,7 +445,7 @@ export const nightAuditReport: ReportDefinition = {
   ],
   stats: [
     { label: "Audit Date", value: "23 Jun 2026", sublabel: "Business date" },
-    { label: "Room Charges Posted", value: "₹42,600", accent: "#2563eb", sublabel: "8 in-house rooms" },
+    { label: "Room Charges Posted", value: "₹42,600", accent: "#15803d", sublabel: "8 in-house rooms" },
     { label: "Exceptions", value: 2, accent: "#f59e0b", sublabel: "Needs review" },
     { label: "Audit Status", value: "Balanced", accent: "#10b981", sublabel: "Ready to close day" },
   ],
@@ -473,10 +473,10 @@ export const nightAuditReport: ReportDefinition = {
       type: "bar",
       dataKey: "amount",
       data: [
-        { name: "112", amount: 4050, color: "#2563eb" },
-        { name: "204", amount: 4700, color: "#3b82f6" },
-        { name: "305", amount: 5200, color: "#2563eb" },
-        { name: "501", amount: 9180, color: "#1d4ed8" },
+        { name: "112", amount: 4050, color: "#15803d" },
+        { name: "204", amount: 4700, color: "#16a34a" },
+        { name: "305", amount: 5200, color: "#15803d" },
+        { name: "501", amount: 9180, color: "#166534" },
       ],
       valueFormat: "currency",
     },
@@ -512,7 +512,7 @@ export const guestReport: ReportDefinition = {
     { value: "revenue-desc", label: "Revenue high–low" },
   ],
   stats: [
-    { label: "Total Guests (MTD)", value: 186, accent: "#2563eb", sublabel: "Unique guests" },
+    { label: "Total Guests (MTD)", value: 186, accent: "#15803d", sublabel: "Unique guests" },
     { label: "Indian", value: "62%", sublabel: "Domestic travellers" },
     { label: "International", value: "38%", sublabel: "Foreign nationals" },
     { label: "Repeat Guests", value: 44, accent: "#10b981", sublabel: "23.7% return rate" },
@@ -541,7 +541,7 @@ export const guestReport: ReportDefinition = {
       type: "pie",
       dataKey: "value",
       data: [
-        { name: "Indian", value: 3, color: "#2563eb" },
+        { name: "Indian", value: 3, color: "#15803d" },
         { name: "British", value: 1, color: "#8b5cf6" },
         { name: "American", value: 1, color: "#f59e0b" },
         { name: "Chinese", value: 1, color: "#ef4444" },
@@ -554,7 +554,7 @@ export const guestReport: ReportDefinition = {
       type: "bar",
       dataKey: "amount",
       data: [
-        { name: "Corporate", amount: 268400, color: "#2563eb" },
+        { name: "Corporate", amount: 268400, color: "#15803d" },
         { name: "Individual", amount: 177600, color: "#10b981" },
       ],
       valueFormat: "currency",
@@ -580,7 +580,7 @@ export const roomReport: ReportDefinition = {
   ],
   stats: [
     { label: "Total Rooms", value: 12, sublabel: "Inventory count" },
-    { label: "Occupied", value: 8, accent: "#2563eb", sublabel: "67% occupancy" },
+    { label: "Occupied", value: 8, accent: "#15803d", sublabel: "67% occupancy" },
     { label: "Vacant Clean", value: 3, accent: "#10b981", sublabel: "Ready to sell" },
     { label: "Dirty / Maint.", value: 1, accent: "#f59e0b", sublabel: "Not sellable" },
   ],
@@ -610,7 +610,7 @@ export const roomReport: ReportDefinition = {
       type: "pie",
       dataKey: "value",
       data: [
-        { name: "Occupied", value: 4, color: "#2563eb" },
+        { name: "Occupied", value: 4, color: "#15803d" },
         { name: "Vacant", value: 3, color: "#10b981" },
         { name: "Dirty", value: 1, color: "#f59e0b" },
       ],
@@ -622,9 +622,9 @@ export const roomReport: ReportDefinition = {
       type: "bar",
       dataKey: "count",
       data: [
-        { name: "1st Floor", count: 1, color: "#3b82f6" },
-        { name: "2nd Floor", count: 1, color: "#2563eb" },
-        { name: "3rd Floor", count: 1, color: "#1d4ed8" },
+        { name: "1st Floor", count: 1, color: "#16a34a" },
+        { name: "2nd Floor", count: 1, color: "#15803d" },
+        { name: "3rd Floor", count: 1, color: "#166534" },
         { name: "5th Floor", count: 1, color: "#6366f1" },
       ],
       valueFormat: "number",
@@ -648,7 +648,7 @@ export const taxReport: ReportDefinition = {
     { value: "category", label: "Category A–Z" },
   ],
   stats: [
-    { label: "Total GST Collected", value: "₹28,450", accent: "#2563eb", sublabel: "Month to date" },
+    { label: "Total GST Collected", value: "₹28,450", accent: "#15803d", sublabel: "Month to date" },
     { label: "CGST", value: "₹14,225", sublabel: "9% component" },
     { label: "SGST", value: "₹14,225", sublabel: "9% component" },
     { label: "Taxable Turnover", value: "₹2,56,050", sublabel: "Before tax" },
@@ -676,8 +676,8 @@ export const taxReport: ReportDefinition = {
       type: "stacked-bar",
       dataKey: "totalTax",
       stackedSeries: [
-        { key: "cgst", label: "CGST", color: "#2563eb" },
-        { key: "sgst", label: "SGST", color: "#60a5fa" },
+        { key: "cgst", label: "CGST", color: "#15803d" },
+        { key: "sgst", label: "SGST", color: "#4ade80" },
       ],
       data: [
         { name: "Rooms", cgst: 17838, sgst: 17838 },
@@ -694,7 +694,7 @@ export const taxReport: ReportDefinition = {
       type: "pie",
       dataKey: "value",
       data: [
-        { name: "Rooms", value: 35676, color: "#2563eb" },
+        { name: "Rooms", value: 35676, color: "#15803d" },
         { name: "F&B", value: 11448, color: "#10b981" },
         { name: "Services", value: 4086, color: "#f59e0b" },
       ],

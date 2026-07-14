@@ -22,7 +22,7 @@ export function RoomOccupancy({ data }: RoomOccupancyProps) {
         <ProgressBar
           value={data.percentage}
           max={100}
-          color="#3b82f6"
+          color="#16a34a"
           className="mt-3"
         />
       </div>

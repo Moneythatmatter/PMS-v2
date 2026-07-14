@@ -15,7 +15,7 @@ const filterMap: Partial<Record<string, ReservationFilter>> = {
   Total: "all",
   "Arriving Today": "arriving-today",
   "In-House": "in-house",
-  Outstanding: "all",
+  Outstanding: "outstanding",
 };
 
 interface ReservationSummaryCardsProps {
@@ -34,7 +34,7 @@ export function ReservationSummaryCards({
       {stats.map((stat) => {
         const Icon = iconMap[stat.icon];
         const filterId = filterMap[stat.label] ?? "all";
-        const isActive = activeFilter === filterId && stat.label !== "Outstanding";
+        const isActive = activeFilter === filterId;
 
         return (
           <button
@@ -44,7 +44,7 @@ export function ReservationSummaryCards({
             className={cn(
               "group relative overflow-hidden rounded-2xl border bg-white p-4 text-left shadow-sm transition-all duration-200",
               isActive
-                ? "border-blue-300 ring-2 ring-blue-100"
+                ? "border-emerald-300 ring-2 ring-emerald-100"
                 : "border-slate-200/80 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md",
             )}
           >

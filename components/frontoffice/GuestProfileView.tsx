@@ -147,11 +147,11 @@ export function GuestProfileView() {
                 className={cn(
                   "flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors",
                   selected.id === guest.id && drawerOpen
-                    ? "border-blue-200 bg-blue-50/50"
+                    ? "border-emerald-200 bg-emerald-50/50"
                     : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50",
                 )}
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-800">
                   {getInitials(guest.name)}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -199,7 +199,7 @@ export function GuestProfileView() {
               Close
             </Button>
             <Link href="/frontoffice/guest-folio">
-              <Button className="bg-blue-600 hover:bg-blue-700">View Folio</Button>
+              <Button className="bg-emerald-700 hover:bg-emerald-800">View Folio</Button>
             </Link>
           </>
         }
@@ -236,7 +236,7 @@ function ProfilePanel({
     <div>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-base font-bold text-blue-700">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-base font-bold text-emerald-800">
             {getInitials(guest.name)}
           </div>
           <div>
@@ -261,7 +261,7 @@ function ProfilePanel({
             className={cn(
               "shrink-0 border-b-2 px-3 py-2 text-xs font-medium sm:text-sm",
               activeTab === tab
-                ? "border-blue-600 text-blue-600"
+                ? "border-emerald-700 text-emerald-700"
                 : "border-transparent text-slate-500 hover:text-slate-700",
             )}
           >
@@ -300,7 +300,7 @@ function ProfilePanel({
                   {guest.preferences.map((p) => (
                     <span
                       key={p}
-                      className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700"
+                      className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800"
                     >
                       {p}
                     </span>

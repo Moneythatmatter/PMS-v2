@@ -50,8 +50,8 @@ export function TopNav({ items }: TopNavProps) {
             className={cn(
               "inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-3 sm:text-sm",
               isActive
-                ? "bg-white text-slate-900"
-                : "text-slate-300 hover:bg-white/10 hover:text-white",
+                ? "bg-emerald-700 text-white"
+                : "text-neutral-300 hover:bg-white/10 hover:text-white",
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />

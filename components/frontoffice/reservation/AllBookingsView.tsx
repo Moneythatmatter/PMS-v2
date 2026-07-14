@@ -5,31 +5,36 @@ import { useMemo, useState } from "react";
 import {
   BedDouble,
   Calendar,
-  ChevronDown,
   Download,
   LogIn,
   MoreHorizontal,
   Pencil,
   Plus,
   Printer,
-  Search,
   XCircle,
 } from "lucide-react";
-import type { ReservationBooking, ReservationFilter } from "@/app/data/types";
-import { reservationSummaryStats } from "@/app/data";
+import type {
+  ReservationBooking,
+  ReservationFilter,
+  ReservationSummaryStat,
+} from "@/app/data/types";
+import { roomTypes } from "@/app/data/frontoffice/constants";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
   ConfirmModal,
   EmptyState,
   FOPageHeader,
+  FOSearchToolbar,
+  FormField,
+  SelectInput,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 import { BookingDetailDrawer } from "./BookingDetailDrawer";
 import { ReservationStatusBadge } from "./ReservationStatusBadge";
 import { ReservationSummaryCards } from "./ReservationSummaryCards";
 
-const filters: { id: ReservationFilter; label: string }[] = [
+const statusFilters: { id: ReservationFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "arriving-today", label: "Arriving Today" },
   { id: "confirmed", label: "Confirmed" },
@@ -37,6 +42,7 @@ const filters: { id: ReservationFilter; label: string }[] = [
   { id: "reserved", label: "Reserved" },
   { id: "checked-out", label: "Checked Out" },
   { id: "cancelled", label: "Cancelled" },
+  { id: "outstanding", label: "Outstanding" },
 ];
 
 function formatBalance(amount: number) {
@@ -48,7 +54,12 @@ function formatBalance(amount: number) {
 }
 
 function getInitials(name: string) {
-  return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }
 
 function matchesFilter(booking: ReservationBooking, filter: ReservationFilter) {
@@ -67,9 +78,44 @@ function matchesFilter(booking: ReservationBooking, filter: ReservationFilter) {
       return booking.status === "Checked Out";
     case "cancelled":
       return booking.status === "Cancelled";
+    case "outstanding":
+      return booking.balance > 0 && booking.status !== "Cancelled";
     default:
       return true;
   }
+}
+
+function buildSummaryStats(bookings: ReservationBooking[]): ReservationSummaryStat[] {
+  return [
+    {
+      label: "Total",
+      value: bookings.length,
+      icon: "calendar",
+      color: "#16a34a",
+    },
+    {
+      label: "Arriving Today",
+      value: bookings.filter((b) => b.arrivingToday).length,
+      icon: "user-check",
+      color: "#22c55e",
+    },
+    {
+      label: "In-House",
+      value: bookings.filter(
+        (b) => b.status === "Checked In" || b.status === "In-House",
+      ).length,
+      icon: "bed",
+      color: "#15803d",
+    },
+    {
+      label: "Outstanding",
+      value: bookings.filter(
+        (b) => b.balance > 0 && b.status !== "Cancelled",
+      ).length,
+      icon: "wallet",
+      color: "#eab308",
+    },
+  ];
 }
 
 interface AllBookingsViewProps {
@@ -80,34 +126,61 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
   const [bookings, setBookings] = useState(initialBookings);
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ReservationFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [roomTypeFilter, setRoomTypeFilter] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewBooking, setViewBooking] = useState<ReservationBooking | null>(null);
   const [cancelBooking, setCancelBooking] = useState<ReservationBooking | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    return bookings.filter((booking) => {
-      const query = search.toLowerCase();
-      const matchesSearch =
-        booking.guestName.toLowerCase().includes(query) ||
-        booking.id.toLowerCase().includes(query) ||
-        booking.phone.includes(query) ||
-        booking.roomNo.includes(query);
-      return matchesSearch && matchesFilter(booking, activeFilter);
-    });
-  }, [bookings, search, activeFilter]);
+  const summaryStats = useMemo(() => buildSummaryStats(bookings), [bookings]);
+
+  const sourceOptions = useMemo(
+    () => [...new Set(bookings.map((b) => b.source))].sort(),
+    [bookings],
+  );
 
   const filterCounts = useMemo(
     () =>
       Object.fromEntries(
-        filters.map((f) => [
+        statusFilters.map((f) => [
           f.id,
           bookings.filter((b) => matchesFilter(b, f.id)).length,
         ]),
       ) as Record<ReservationFilter, number>,
     [bookings],
   );
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return bookings.filter((booking) => {
+      const matchesSearch =
+        !query ||
+        booking.guestName.toLowerCase().includes(query) ||
+        booking.id.toLowerCase().includes(query) ||
+        booking.phone.toLowerCase().includes(query) ||
+        booking.roomNo.toLowerCase().includes(query) ||
+        booking.roomType.toLowerCase().includes(query) ||
+        booking.source.toLowerCase().includes(query);
+      const matchesSource = sourceFilter === "all" || booking.source === sourceFilter;
+      const matchesRoomType =
+        roomTypeFilter === "all" || booking.roomType === roomTypeFilter;
+      return (
+        matchesSearch &&
+        matchesSource &&
+        matchesRoomType &&
+        matchesFilter(booking, activeFilter)
+      );
+    });
+  }, [bookings, search, activeFilter, sourceFilter, roomTypeFilter]);
+
+  const hasActiveAdvancedFilters = sourceFilter !== "all" || roomTypeFilter !== "all";
+
+  const clearAdvancedFilters = () => {
+    setSourceFilter("all");
+    setRoomTypeFilter("all");
+  };
 
   const allSelected =
     filtered.length > 0 && filtered.every((b) => selected.has(b.id));
@@ -141,7 +214,9 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
       (b) =>
         `${b.id},${b.guestName},${b.roomNo},${b.checkIn},${b.checkOut},${b.status},${b.balance}`,
     );
-    const csv = ["Booking ID,Guest,Room,Check-in,Check-out,Status,Balance", ...rows].join("\n");
+    const csv = ["Booking ID,Guest,Room,Check-in,Check-out,Status,Balance", ...rows].join(
+      "\n",
+    );
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -168,109 +243,143 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
           </span>
         }
         action={
-          <Link href="/frontoffice/reservation/new">
-            <Button size="sm" className="gap-1.5 bg-blue-600 shadow-sm hover:bg-blue-700">
-              <Plus className="h-3.5 w-3.5" />
-              New Reservation
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleExport}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export
             </Button>
-          </Link>
+            <Link href="/frontoffice/reservation/new">
+              <Button size="sm" className="gap-1.5 bg-emerald-700 shadow-sm hover:bg-emerald-800">
+                <Plus className="h-3.5 w-3.5" />
+                New Reservation
+              </Button>
+            </Link>
+          </div>
         }
       />
 
       <ReservationSummaryCards
-        stats={reservationSummaryStats}
+        stats={summaryStats}
         activeFilter={activeFilter}
         onFilterClick={setActiveFilter}
       />
 
-      {/* Toolbar */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search guest, booking ID, phone, or room…"
-                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-10 text-sm transition-colors focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600"
-                  aria-label="Clear search"
+        <FOSearchToolbar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search guest, booking ID, phone, or room…"
+          filterPills={{
+            active: activeFilter,
+            onChange: (id) => setActiveFilter(id as ReservationFilter),
+            options: statusFilters.map((f) => ({
+              id: f.id,
+              label: `${f.label} ${filterCounts[f.id]}`,
+            })),
+          }}
+          hasActiveAdvancedFilters={hasActiveAdvancedFilters}
+          onClearAdvancedFilters={clearAdvancedFilters}
+          advancedFilters={
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <FormField label="Source">
+                <SelectInput
+                  value={sourceFilter}
+                  onChange={(e) => setSourceFilter(e.target.value)}
                 >
-                  <XCircle className="h-4 w-4" />
-                </button>
-              )}
+                  <option value="all">All sources</option>
+                  {sourceOptions.map((source) => (
+                    <option key={source} value={source}>
+                      {source}
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
+              <FormField label="Room Type">
+                <SelectInput
+                  value={roomTypeFilter}
+                  onChange={(e) => setRoomTypeFilter(e.target.value)}
+                >
+                  <option value="all">All room types</option>
+                  {roomTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
+              <FormField label="Showing">
+                <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                  {filtered.length} of {bookings.length} bookings
+                </div>
+              </FormField>
             </div>
-            <div className="flex shrink-0 gap-2">
-              <Button variant="outline" size="sm" className="h-11 gap-1.5 rounded-xl" onClick={handleExport}>
-                <Download className="h-3.5 w-3.5" />
-                Export
-              </Button>
-              <Button variant="outline" size="sm" className="h-11 gap-1.5 rounded-xl">
-                More filters
-                <ChevronDown className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-1.5 rounded-xl bg-slate-100/80 p-1">
-            {filters.map((filter) => (
-              <button
-                key={filter.id}
-                type="button"
-                onClick={() => setActiveFilter(filter.id)}
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-xs font-medium transition-all sm:text-sm",
-                  activeFilter === filter.id
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700",
-                )}
-              >
-                {filter.label}
-                <span className={cn("ml-1", activeFilter === filter.id ? "text-blue-400" : "text-slate-400")}>
-                  {filterCounts[filter.id]}
+          }
+          selectionBar={
+            selected.size > 0 ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50 px-4 py-3">
+                <span className="text-sm font-medium text-emerald-900">
+                  {selected.size} booking{selected.size !== 1 ? "s" : ""} selected
                 </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {selected.size > 0 && (
-          <div className="mt-4 flex items-center justify-between rounded-xl bg-blue-50 px-4 py-2.5">
-            <span className="text-sm font-medium text-blue-800">
-              {selected.size} booking{selected.size !== 1 ? "s" : ""} selected
-            </span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleExport}>Export selected</Button>
-              <button type="button" className="text-xs font-medium text-blue-600 hover:underline" onClick={() => setSelected(new Set())}>
-                Clear
-              </button>
-            </div>
-          </div>
-        )}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 bg-white"
+                    onClick={handleExport}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Export selected
+                  </Button>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-emerald-700 hover:underline"
+                    onClick={() => setSelected(new Set())}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            ) : undefined
+          }
+        />
       </div>
 
-      {/* Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         {filtered.length === 0 ? (
           <EmptyState
             title="No bookings found"
             description="Try adjusting your search or filter criteria."
             action={
-              <Link href="/frontoffice/reservation/new">
-                <Button size="sm" className="bg-blue-600 hover:bg-blue-700">Create Reservation</Button>
-              </Link>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearch("");
+                    setActiveFilter("all");
+                    clearAdvancedFilters();
+                  }}
+                >
+                  Clear filters
+                </Button>
+                <Link href="/frontoffice/reservation/new">
+                  <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800">
+                    Create Reservation
+                  </Button>
+                </Link>
+              </div>
             }
           />
         ) : (
           <>
-            {/* Mobile */}
             <div className="space-y-0 divide-y divide-slate-100 md:hidden">
               {filtered.map((booking) => (
                 <div
@@ -284,17 +393,19 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
                       setViewBooking(booking);
                     }
                   }}
-                  className="cursor-pointer p-4 transition-colors hover:bg-blue-50/40 active:bg-blue-50/60"
+                  className="cursor-pointer p-4 transition-colors hover:bg-emerald-50/40 active:bg-emerald-50/60"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-bold text-white">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-sm font-bold text-white">
                       {getInitials(booking.guestName)}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <p className="font-semibold text-slate-900">{booking.guestName}</p>
-                          <p className="text-xs text-slate-500">{booking.id} · {booking.phone}</p>
+                          <p className="text-xs text-slate-500">
+                            {booking.id} · {booking.phone}
+                          </p>
                         </div>
                         <ReservationStatusBadge status={booking.status} />
                       </div>
@@ -309,9 +420,14 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
                         </span>
                       </div>
                       <div className="mt-3 flex items-center justify-between">
-                        <p className="font-bold text-slate-900">{formatBalance(booking.balance)}</p>
+                        <p className="font-bold text-slate-900">
+                          {formatBalance(booking.balance)}
+                        </p>
                         <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                          <Link href="/frontoffice/check-in" className="rounded-lg p-2 text-blue-600 hover:bg-blue-50">
+                          <Link
+                            href="/frontoffice/check-in"
+                            className="rounded-lg p-2 text-emerald-700 hover:bg-emerald-50"
+                          >
                             <LogIn className="h-4 w-4" />
                           </Link>
                         </div>
@@ -322,19 +438,34 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
               ))}
             </div>
 
-            {/* Desktop */}
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[860px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/80">
                     <th className="w-10 px-4 py-3">
-                      <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded border-slate-300" aria-label="Select all" />
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleAll}
+                        className="rounded border-slate-300"
+                        aria-label="Select all"
+                      />
                     </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Guest</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Stay</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Balance</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                    <th className="w-28 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Guest
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Stay
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Balance
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Status
+                    </th>
+                    <th className="w-28 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -342,7 +473,7 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
                     <tr
                       key={booking.id}
                       onClick={() => setViewBooking(booking)}
-                      className="group cursor-pointer transition-colors hover:bg-blue-50/30"
+                      className="group cursor-pointer transition-colors hover:bg-emerald-50/30"
                     >
                       <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <input
@@ -355,30 +486,35 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-xs font-bold text-white group-hover:from-blue-500 group-hover:to-indigo-600 transition-colors">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-xs font-bold text-white transition-colors group-hover:from-emerald-600 group-hover:to-emerald-800">
                             {getInitials(booking.guestName)}
                           </div>
                           <div className="min-w-0">
                             <p className="font-semibold text-slate-900">{booking.guestName}</p>
-                            <p className="text-xs text-slate-500">{booking.id} · {booking.phone}</p>
+                            <p className="text-xs text-slate-500">
+                              {booking.id} · {booking.phone}
+                            </p>
                             <p className="text-[11px] text-slate-400">{booking.source}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3.5">
                         <p className="font-medium text-slate-800">
-                          <span className="text-slate-500">Room</span> {booking.roomNo}
-                          <span className="mx-1 text-slate-300">·</span>
-                          {booking.roomType}
+                          Room {booking.roomNo} · {booking.roomType}
                         </p>
-                        <p className="mt-0.5 text-xs text-slate-500">
+                        <p className="text-xs text-slate-500">
                           {booking.checkIn} – {booking.checkOut}
                         </p>
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className={cn("font-semibold", booking.balance > 0 ? "text-slate-900" : "text-slate-400")}>
+                        <p
+                          className={cn(
+                            "font-semibold",
+                            booking.balance > 0 ? "text-slate-900" : "text-emerald-700",
+                          )}
+                        >
                           {formatBalance(booking.balance)}
-                        </span>
+                        </p>
                       </td>
                       <td className="px-4 py-3.5">
                         <ReservationStatusBadge status={booking.status} />
@@ -387,36 +523,61 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
                         <div className="flex items-center justify-end gap-1">
                           <Link
                             href="/frontoffice/check-in"
-                            title="Check-in"
-                            className="rounded-lg p-2 text-blue-500 transition-colors hover:bg-blue-50"
+                            className="rounded-lg p-2 text-emerald-700 hover:bg-emerald-50"
+                            title="Check in"
                           >
                             <LogIn className="h-4 w-4" />
                           </Link>
                           <div className="relative">
                             <button
                               type="button"
-                              onClick={() => setOpenMenu(openMenu === booking.id ? null : booking.id)}
-                              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              onClick={() =>
+                                setOpenMenu(openMenu === booking.id ? null : booking.id)
+                              }
+                              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                               aria-label="More actions"
                             >
                               <MoreHorizontal className="h-4 w-4" />
                             </button>
                             {openMenu === booking.id && (
                               <>
-                                <button type="button" className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} aria-label="Close menu" />
+                                <button
+                                  type="button"
+                                  className="fixed inset-0 z-10"
+                                  onClick={() => setOpenMenu(null)}
+                                  aria-label="Close menu"
+                                />
                                 <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
                                   {[
-                                    { icon: Pencil, label: "Edit", onClick: () => setToast(`Edit ${booking.id} coming soon.`) },
-                                    { icon: Printer, label: "Print", onClick: () => window.print() },
-                                    { icon: XCircle, label: "Cancel", onClick: () => setCancelBooking(booking), danger: true },
+                                    {
+                                      icon: Pencil,
+                                      label: "Edit",
+                                      onClick: () => setToast(`Edit ${booking.id} coming soon.`),
+                                    },
+                                    {
+                                      icon: Printer,
+                                      label: "Print",
+                                      onClick: () => window.print(),
+                                    },
+                                    {
+                                      icon: XCircle,
+                                      label: "Cancel",
+                                      onClick: () => setCancelBooking(booking),
+                                      danger: true,
+                                    },
                                   ].map(({ icon: Icon, label, onClick, danger }) => (
                                     <button
                                       key={label}
                                       type="button"
-                                      onClick={() => { onClick(); setOpenMenu(null); }}
+                                      onClick={() => {
+                                        onClick();
+                                        setOpenMenu(null);
+                                      }}
                                       className={cn(
                                         "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50",
-                                        danger ? "text-red-600 hover:bg-red-50" : "text-slate-700",
+                                        danger
+                                          ? "text-red-600 hover:bg-red-50"
+                                          : "text-slate-700",
                                       )}
                                     >
                                       <Icon className="h-3.5 w-3.5" />
@@ -437,8 +598,11 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
 
             <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-2.5 text-center text-[11px] text-slate-400">
               Showing {filtered.length} booking{filtered.length !== 1 ? "s" : ""}
-              {activeFilter !== "all" && ` · filtered by ${filters.find((f) => f.id === activeFilter)?.label}`}
-              {" · "}Click a row to view full details
+              {activeFilter !== "all" &&
+                ` · filtered by ${statusFilters.find((f) => f.id === activeFilter)?.label}`}
+              {hasActiveAdvancedFilters && " · advanced filters on"}
+              {" · "}
+              Click a row to view full details
             </div>
           </>
         )}

@@ -9,6 +9,8 @@ interface FOSearchToolbarProps {
   search: string;
   onSearchChange: (value: string) => void;
   searchPlaceholder?: string;
+  /** Placed between search and the Filters button (e.g. outlet select). */
+  beforeFilters?: React.ReactNode;
   filterPills?: {
     active: string;
     onChange: (id: string) => void;
@@ -24,6 +26,7 @@ export function FOSearchToolbar({
   search,
   onSearchChange,
   searchPlaceholder = "Search…",
+  beforeFilters,
   filterPills,
   advancedFilters,
   hasActiveAdvancedFilters = false,
@@ -35,31 +38,32 @@ export function FOSearchToolbar({
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
-        <div className="relative min-w-0 flex-1">
+      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+        <div className="relative min-w-0 flex-1 basis-full sm:basis-auto">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder}
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
           />
         </div>
+        {beforeFilters}
         {showFiltersButton && (
           <Button
             type="button"
             variant="outline"
             className={cn(
-              "shrink-0 gap-1.5",
-              filtersOpen && "border-blue-300 bg-blue-50 text-blue-700",
+              "h-10 shrink-0 gap-1.5",
+              filtersOpen && "border-emerald-300 bg-emerald-50 text-emerald-800",
             )}
             onClick={() => setFiltersOpen((open) => !open)}
           >
             <SlidersHorizontal className="h-4 w-4" />
             Filters
             {hasActiveAdvancedFilters && (
-              <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-semibold text-white">
+              <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-700 text-[10px] font-semibold text-white">
                 !
               </span>
             )}
@@ -77,7 +81,7 @@ export function FOSearchToolbar({
               className={cn(
                 "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all sm:px-3 sm:text-xs",
                 filterPills.active === opt.id
-                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                  ? "border-emerald-700 bg-emerald-700 text-white shadow-sm"
                   : "border-slate-200 bg-white text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800",
               )}
             >
@@ -97,7 +101,7 @@ export function FOSearchToolbar({
               <button
                 type="button"
                 onClick={onClearAdvancedFilters}
-                className="text-xs font-medium text-blue-600 hover:underline"
+                className="text-xs font-medium text-emerald-700 hover:underline"
               >
                 Clear filters
               </button>

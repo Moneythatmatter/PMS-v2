@@ -35,7 +35,7 @@ type PaymentType = PaymentRecord["type"];
 const typeStyles: Record<PaymentType, string> = {
   Payment: "bg-emerald-50 text-emerald-700",
   Refund: "bg-red-50 text-red-700",
-  Advance: "bg-blue-50 text-blue-700",
+  Advance: "bg-emerald-50 text-emerald-800",
 };
 
 const statusStyles: Record<PaymentRecord["status"], string> = {
@@ -156,7 +156,7 @@ export function PaymentsView() {
               className={cn(
                 "flex-1 rounded-lg py-2 text-xs font-medium transition-colors sm:text-sm",
                 paymentType === t
-                  ? "bg-white text-blue-600 shadow-sm"
+                  ? "bg-white text-emerald-700 shadow-sm"
                   : "text-slate-600 hover:text-slate-900",
               )}
             >
@@ -208,7 +208,7 @@ export function PaymentsView() {
         action={
           <Button
             size="sm"
-            className="bg-blue-600 hover:bg-blue-700"
+            className="bg-emerald-700 hover:bg-emerald-800"
             onClick={openRecord}
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -289,7 +289,7 @@ export function PaymentsView() {
                 key={r.id}
                 type="button"
                 onClick={() => setPreviewPayment(r)}
-                className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/30"
+                className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -352,7 +352,7 @@ export function PaymentsView() {
                     <tr
                       key={r.id}
                       onClick={() => setPreviewPayment(r)}
-                      className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-blue-50/40"
+                      className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-emerald-50/40"
                     >
                       <td className="py-3.5 pr-4">
                         <span className="font-mono text-xs">{r.id}</span>
@@ -423,7 +423,7 @@ export function PaymentsView() {
             <Button variant="outline" onClick={() => setRecordOpen(false)}>
               Cancel
             </Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleSubmit}>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSubmit}>
               {paymentType === "Refund" ? (
                 <>
                   <RefreshCw className="mr-1.5 h-4 w-4" />

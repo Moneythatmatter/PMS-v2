@@ -30,7 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const categoryColors: Record<FolioEntry["category"], string> = {
-  Room: "bg-blue-50 text-blue-700",
+  Room: "bg-emerald-50 text-emerald-800",
   Restaurant: "bg-orange-50 text-orange-700",
   Laundry: "bg-purple-50 text-purple-700",
   Payment: "bg-emerald-50 text-emerald-700",
@@ -200,7 +200,7 @@ export function GuestFolioView() {
         action={
           <Button
             size="sm"
-            className="bg-blue-600 hover:bg-blue-700"
+            className="bg-emerald-700 hover:bg-emerald-800"
             onClick={() => {
               resetChargeForm();
               setChargeOpen(true);
@@ -281,7 +281,7 @@ export function GuestFolioView() {
                       <tr
                         key={row.id}
                         onClick={() => setSelectedEntry(row)}
-                        className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-blue-50/40"
+                        className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-emerald-50/40"
                       >
                         {columns.map((col) => (
                           <td key={col.key} className="py-3.5 pr-4">
@@ -304,7 +304,7 @@ export function GuestFolioView() {
 
         <div className="rounded-xl border border-slate-200 bg-white p-5">
           <div className="mb-4 flex items-center gap-2">
-            <Receipt className="h-4 w-4 text-blue-500" />
+            <Receipt className="h-4 w-4 text-emerald-600" />
             <h2 className="text-sm font-semibold text-slate-900">Folio Summary</h2>
           </div>
           <p className="text-lg font-bold text-slate-900">{guest.guestName}</p>
@@ -320,7 +320,7 @@ export function GuestFolioView() {
           <div className="mt-4 flex flex-col gap-2">
             <Button
               size="sm"
-              className="w-full bg-blue-600 hover:bg-blue-700"
+              className="w-full bg-emerald-700 hover:bg-emerald-800"
               onClick={() => setToast(`Payment collected for ${guest.guestName}.`)}
             >
               Collect Payment
@@ -344,7 +344,7 @@ export function GuestFolioView() {
             <Button variant="outline" onClick={() => setChargeOpen(false)}>
               Cancel
             </Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={handlePostCharge}>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handlePostCharge}>
               Post to Folio
             </Button>
           </>

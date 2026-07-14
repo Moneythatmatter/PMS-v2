@@ -48,7 +48,7 @@ export function WeeklyFlowChart({ data }: WeeklyFlowChartProps) {
               iconSize={8}
               wrapperStyle={{ fontSize: "12px", paddingTop: "8px" }}
             />
-            <Bar dataKey="checkIn" name="Check-in" fill="#1e293b" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="checkIn" name="Check-in" fill="#15803d" radius={[3, 3, 0, 0]} />
             <Bar dataKey="checkOut" name="Check-out" fill="#94a3b8" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>

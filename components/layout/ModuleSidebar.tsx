@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -41,6 +42,15 @@ import {
   BarChart3,
   CalendarClock,
   TrendingUp,
+  UtensilsCrossed,
+  ChefHat,
+  Trees,
+  PlusCircle,
+  ClipboardList,
+  AlertTriangle,
+  Wine,
+  Shield,
+  Percent,
 } from "lucide-react";
 import type { ModuleNavItem } from "@/app/data/types";
 import { cn } from "@/lib/utils";
@@ -80,6 +90,15 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "bar-chart": BarChart3,
   "calendar-clock": CalendarClock,
   "trending-up": TrendingUp,
+  utensils: UtensilsCrossed,
+  "chef-hat": ChefHat,
+  trees: Trees,
+  "plus-circle": PlusCircle,
+  "clipboard-list": ClipboardList,
+  "alert-triangle": AlertTriangle,
+  wine: Wine,
+  shield: Shield,
+  percent: Percent,
 };
 
 interface ModuleSidebarProps {
@@ -101,12 +120,163 @@ function isParentActive(pathname: string, item: ModuleNavItem) {
 }
 
 function NavTooltip({ label, show }: { label: string; show: boolean }) {
+  const probeRef = useRef<HTMLSpanElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!show) {
+      setCoords(null);
+      return;
+    }
+
+    const parent = probeRef.current?.parentElement;
+    if (!parent) return;
+
+    const onEnter = () => {
+      const rect = parent.getBoundingClientRect();
+      setCoords({
+        top: rect.top + rect.height / 2,
+        left: rect.right + 10,
+      });
+    };
+    const onLeave = () => setCoords(null);
+
+    parent.addEventListener("mouseenter", onEnter);
+    parent.addEventListener("mouseleave", onLeave);
+    return () => {
+      parent.removeEventListener("mouseenter", onEnter);
+      parent.removeEventListener("mouseleave", onLeave);
+    };
+  }, [show, label]);
+
   if (!show) return null;
 
   return (
-    <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-y-1/2 whitespace-nowrap rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg ring-1 ring-white/10 transition-opacity group-hover/item:opacity-100 lg:block">
-      {label}
-    </span>
+    <>
+      <span ref={probeRef} className="hidden" aria-hidden />
+      {coords &&
+        createPortal(
+          <span
+            className="pointer-events-none fixed z-[100] -translate-y-1/2 whitespace-nowrap rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg ring-1 ring-white/10"
+            style={{ top: coords.top, left: coords.left }}
+          >
+            {label}
+          </span>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+function CollapsedChildMenu({
+  item,
+  pathname,
+  onNavigate,
+}: {
+  item: ModuleNavItem;
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+
+  const showMenu = () => {
+    clearClose();
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const estimatedHeight = 40 + (item.children?.length ?? 0) * 40;
+    const maxTop = window.innerHeight - estimatedHeight - 8;
+    setCoords({
+      top: Math.max(8, Math.min(rect.top, maxTop)),
+      left: rect.right + 8,
+    });
+    setOpen(true);
+  };
+
+  const hideMenu = () => {
+    clearClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 140);
+  };
+
+  useEffect(() => () => clearClose(), []);
+
+  const Icon = iconMap[item.icon] ?? LayoutGrid;
+  const parentActive = isParentActive(pathname, item);
+
+  return (
+    <li className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        onMouseEnter={showMenu}
+        onMouseLeave={hideMenu}
+        className={cn(
+          "relative flex w-full min-w-0 items-center justify-center rounded-lg px-2 py-2.5 text-sm font-medium transition-colors",
+          parentActive
+            ? "bg-emerald-950/70 text-white"
+            : "text-slate-400 hover:bg-white/5 hover:text-white",
+        )}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={item.label}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+      </button>
+
+      {open &&
+        item.children &&
+        createPortal(
+          <div
+            role="menu"
+            onMouseEnter={showMenu}
+            onMouseLeave={hideMenu}
+            className="fixed z-[100] min-w-[13.5rem] overflow-visible rounded-xl border border-slate-700 bg-black py-1.5 shadow-2xl"
+            style={{ top: coords.top, left: coords.left }}
+          >
+            {/* Hover bridge so the cursor can move from icon → menu without closing */}
+            <div className="absolute -left-2 top-0 h-full w-2" aria-hidden />
+            <p className="border-b border-slate-800 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {item.label}
+            </p>
+            <ul className="p-1">
+              {item.children.map((child) => {
+                const ChildIcon = iconMap[child.icon] ?? LayoutGrid;
+                const childActive = isItemActive(pathname, child.href);
+
+                return (
+                  <li key={child.href}>
+                    <Link
+                      href={child.href}
+                      role="menuitem"
+                      onClick={onNavigate}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
+                        childActive
+                          ? "bg-emerald-700 text-white"
+                          : "text-slate-300 hover:bg-white/5 hover:text-white",
+                      )}
+                    >
+                      <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{child.label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>,
+          document.body,
+        )}
+    </li>
   );
 }
 
@@ -156,7 +326,7 @@ function SidebarNav({
           </div>
         )}
         <div className="flex items-center gap-1">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600/20 text-blue-400">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-700/20 text-emerald-500">
             <ConciergeBell className="h-4 w-4" />
           </div>
           {onClose && (
@@ -181,6 +351,17 @@ function SidebarNav({
             const isGroupExpanded = expandedGroups[item.label] ?? parentActive;
 
             if (hasChildren) {
+              if (showTooltips) {
+                return (
+                  <CollapsedChildMenu
+                    key={item.label}
+                    item={item}
+                    pathname={pathname}
+                    onNavigate={onNavigate}
+                  />
+                );
+              }
+
               return (
                 <li key={item.label}>
                   <button
@@ -189,7 +370,7 @@ function SidebarNav({
                     className={cn(
                       "group/item relative flex w-full min-w-0 items-center rounded-lg py-2.5 text-sm font-medium transition-colors",
                       parentActive
-                        ? "bg-blue-900/40 text-white"
+                        ? "bg-emerald-950/70 text-white"
                         : "text-slate-400 hover:bg-white/5 hover:text-white",
                       isExpanded ? "gap-2.5 px-3" : "justify-center px-2",
                     )}
@@ -206,7 +387,6 @@ function SidebarNav({
                         />
                       </>
                     )}
-                    <NavTooltip label={item.label} show={showTooltips} />
                   </button>
                   {isExpanded && isGroupExpanded && item.children && (
                     <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-slate-700 pl-2">
@@ -222,7 +402,7 @@ function SidebarNav({
                               className={cn(
                                 "flex min-w-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors",
                                 childActive
-                                  ? "bg-blue-600 text-white"
+                                  ? "bg-emerald-700 text-white"
                                   : "text-slate-400 hover:bg-white/5 hover:text-white",
                               )}
                             >
@@ -248,7 +428,7 @@ function SidebarNav({
                   className={cn(
                     "group/item relative flex min-w-0 items-center rounded-lg py-2.5 text-sm font-medium transition-colors",
                     active
-                      ? "bg-blue-600 text-white"
+                      ? "bg-emerald-700 text-white"
                       : "text-slate-400 hover:bg-white/5 hover:text-white",
                     isExpanded ? "gap-2.5 px-3" : "justify-center px-2",
                   )}
@@ -298,14 +478,14 @@ export function ModuleSidebar({ title, subtitle = "Module menu", items }: Module
   const pathname = usePathname();
   const mobileNav = useMobileNav();
   const [collapsed, setCollapsed] = useState(false);
-  const [hovered, setHovered] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     Masters: true,
     Reports: false,
+    Restaurants: true,
   });
 
-  const isExpanded = !collapsed || hovered;
-  const showTooltips = collapsed && !hovered;
+  const isExpanded = !collapsed;
+  const showTooltips = collapsed;
 
   const toggleGroup = (label: string) => {
     setExpandedGroups((prev) => ({ ...prev, [label]: !prev[label] }));
@@ -333,7 +513,7 @@ export function ModuleSidebar({ title, subtitle = "Module menu", items }: Module
             onClick={mobileNav.close}
             aria-label="Close menu overlay"
           />
-          <aside className="sidebar-scroll relative flex h-full w-[min(100vw-3rem,16rem)] max-w-full flex-col overflow-x-hidden bg-[#0f1428] shadow-2xl">
+          <aside className="sidebar-scroll relative flex h-full w-[min(100vw-3rem,16rem)] max-w-full flex-col overflow-x-hidden bg-black shadow-2xl">
             <SidebarNav
               {...navProps}
               isExpanded
@@ -345,35 +525,22 @@ export function ModuleSidebar({ title, subtitle = "Module menu", items }: Module
         </div>
       )}
 
-      {/* Desktop sidebar */}
-      <div
+      {/* Desktop sidebar — collapsed stays icon-only; hover shows side labels */}
+      <aside
         className={cn(
-          "relative hidden h-screen shrink-0 overflow-x-hidden transition-all duration-200 ease-in-out lg:block",
+          "sidebar-scroll relative z-20 hidden h-screen shrink-0 flex-col overflow-x-hidden border-r border-slate-800 bg-black transition-[width] duration-200 ease-in-out lg:flex",
           collapsed ? "w-16" : "w-64",
         )}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
       >
-        <aside
-          className={cn(
-            "sidebar-scroll flex h-screen min-w-0 flex-col overflow-x-hidden border-r border-slate-800 bg-[#0f1428] transition-all duration-200 ease-in-out",
-            collapsed && hovered
-              ? "absolute left-0 top-0 z-50 h-screen w-64 overflow-x-hidden shadow-2xl"
-              : collapsed
-                ? "w-16"
-                : "w-64",
-          )}
-        >
-          <SidebarNav
-            {...navProps}
-            isExpanded={isExpanded}
-            showTooltips={showTooltips}
-            showCollapse
-            collapsed={collapsed}
-            onToggleCollapse={() => setCollapsed((prev) => !prev)}
-          />
-        </aside>
-      </div>
+        <SidebarNav
+          {...navProps}
+          isExpanded={isExpanded}
+          showTooltips={showTooltips}
+          showCollapse
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed((prev) => !prev)}
+        />
+      </aside>
     </>
   );
 }
