@@ -183,6 +183,13 @@ export interface HousekeepingRequest {
   status: "Open" | "In Progress" | "Completed";
   assignedStaff: string;
   createdAt: string;
+  assignmentType?: "Auto" | "Manual";
+  assignmentHistory?: {
+    timestamp: string;
+    action: string;
+    by: string;
+    reason?: string;
+  }[];
 }
 
 export interface MaintenanceRequest {
@@ -191,9 +198,26 @@ export interface MaintenanceRequest {
   problem: string;
   priority: "Low" | "Medium" | "High" | "Critical";
   engineer: string;
-  status: "Open" | "In Progress" | "Completed";
+  status: "Open" | "Assigned" | "In Progress" | "Awaiting Verification" | "Closed" | "Cancelled";
   reportedBy?: string;
   createdAt: string;
+  assignedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletion?: string;
+  actualCompletion?: string;
+  assignmentType?: "Auto" | "Manual";
+  assignmentHistory?: {
+    timestamp: string;
+    action: string;
+    by: string;
+    reason?: string;
+  }[];
+  attachments?: {
+    name: string;
+    type: "image" | "pdf" | "video";
+    url: string;
+  }[];
 }
 
 export interface GuestFeedbackRecord {
@@ -415,10 +439,10 @@ export const housekeepingRequests: HousekeepingRequest[] = [
 ];
 
 export const maintenanceRequests: MaintenanceRequest[] = [
-  { id: "MT-01", room: "104", problem: "AC not cooling", priority: "High", engineer: "Suresh", status: "In Progress", reportedBy: "Housekeeping", createdAt: "23 Jun 07:00 AM" },
-  { id: "MT-02", room: "305", problem: "TV remote not working", priority: "Low", engineer: "Anil", status: "Open", reportedBy: "Guest", createdAt: "23 Jun 10:00 AM" },
-  { id: "MT-03", room: "112", problem: "Bathroom tap leaking", priority: "Medium", engineer: "Suresh", status: "Completed", reportedBy: "Guest", createdAt: "22 Jun 02:00 PM" },
-  { id: "MT-04", room: "501", problem: "Safe lock jammed", priority: "Critical", engineer: "Anil", status: "In Progress", reportedBy: "Front Desk", createdAt: "24 Jun 09:00 AM" },
+  { id: "MT-01", room: "104", problem: "AC not cooling", priority: "High", engineer: "Suresh Gupta", status: "In Progress", reportedBy: "Housekeeping", createdAt: "23 Jun 07:00 AM", assignmentType: "Auto" },
+  { id: "MT-02", room: "305", problem: "TV remote not working", priority: "Low", engineer: "Anil Deshmukh", status: "Open", reportedBy: "Guest", createdAt: "23 Jun 10:00 AM", assignmentType: "Manual" },
+  { id: "MT-03", room: "112", problem: "Bathroom tap leaking", priority: "Medium", engineer: "Suresh Gupta", status: "Closed", reportedBy: "Guest", createdAt: "22 Jun 02:00 PM", assignmentType: "Auto" },
+  { id: "MT-04", room: "501", problem: "Safe lock jammed", priority: "Critical", engineer: "Anil Deshmukh", status: "In Progress", reportedBy: "Front Desk", createdAt: "24 Jun 09:00 AM", assignmentType: "Auto" },
 ];
 
 export const guestFeedbacks: GuestFeedbackRecord[] = [

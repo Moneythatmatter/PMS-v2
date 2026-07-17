@@ -1,5 +1,6 @@
-import { LuggageManagementView } from "@/components/frontoffice/ServiceViews";
+import { LuggageView } from "@/components/housekeeping/LuggageView";
 
 export default function LuggageManagementPage() {
-  return <LuggageManagementView />;
+  return <LuggageView />;
 }
+

@@ -1,5 +1,6 @@
-import { LostFoundView } from "@/components/frontoffice/ExtraServiceViews";
+import { LostFoundView } from "@/components/housekeeping/LostFoundView";
 
 export default function LostFoundPage() {
   return <LostFoundView />;
 }
+

@@ -1,5 +1,6 @@
-import { HousekeepingRequestsView } from "@/components/frontoffice/ExtraServiceViews";
+import { HousekeepingRequestsView } from "@/components/housekeeping/HousekeepingRequestsView";
 
 export default function HousekeepingRequestsPage() {
   return <HousekeepingRequestsView />;
 }
+
