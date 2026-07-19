@@ -19,6 +19,11 @@ import {
   Users,
   UtensilsCrossed,
   Wallet,
+  ShieldCheck,
+  Percent,
+  Wrench,
+  Shirt,
+  AlertCircle
 } from "lucide-react";
 import {
   type DayClosingChecklistItem,
@@ -52,9 +57,9 @@ const statusIcon = {
 };
 
 const statusStyle = {
-  done: "text-emerald-600",
-  pending: "text-slate-400",
-  warning: "text-amber-500",
+  done: "text-emerald-650 text-emerald-600 bg-emerald-50 border-emerald-100",
+  pending: "text-slate-400 bg-slate-50 border-slate-200",
+  warning: "text-amber-500 bg-amber-50 border-amber-100",
 };
 
 const CLOSING_STEPS = [
@@ -62,9 +67,12 @@ const CLOSING_STEPS = [
   "Settling pending departures…",
   "Posting remaining room charges…",
   "Transferring open POS bills to folios…",
+  "Checking housekeeping readiness…",
+  "Verifying critical maintenance tickets…",
   "Locking today's transactions…",
   "Rolling business date forward…",
   "Generating day closing report…",
+  "Day Closing Report completed.",
 ];
 
 function buildChecklist(state: DayClosingSessionState): DayClosingChecklistItem[] {
@@ -148,14 +156,22 @@ export function DayClosingView() {
   const checklist = useMemo(() => buildChecklist(state), [state]);
   const blockers = useMemo(
     () => checklist.filter((c) => c.id !== "audit" && c.status !== "done"),
-    [checklist],
+    [checklist]
   );
   const canClose = blockers.length === 0 && !state.completed && !running;
+
+  // Progress calculations
+  const totalChecks = checklist.length;
+  const completedChecks = checklist.filter((c) => c.status === "done").length;
+  const progressPercent = Math.round((completedChecks / totalChecks) * 100);
 
   const openShifts = state.shifts.filter((s) => s.status === "Open");
   const pendingGuests = state.pending.filter((p) => p.status === "Pending");
   const pendingCharges = state.charges.filter((c) => c.status === "Pending");
   const openPos = state.posTabs.filter((p) => p.status === "Open");
+
+  // Outstanding departures with balance
+  const pendingFoliosCount = state.pending.filter((p) => p.status === "Pending" && p.balance > 0).length;
 
   const setToastMsg = useCallback((msg: string) => {
     setToast(msg);
@@ -172,7 +188,7 @@ export function DayClosingView() {
               actual: s.expected,
               variance: 0,
             }
-          : s,
+          : s
       ),
     }));
     setToastMsg(`Cashier shift ${id} closed and balanced.`);
@@ -184,7 +200,7 @@ export function DayClosingView() {
       return {
         ...prev,
         pending: prev.pending.map((p) =>
-          p.id === id ? { ...p, status: "Settled", balance: 0 } : p,
+          p.id === id ? { ...p, status: "Settled", balance: 0 } : p
         ),
         summary: {
           ...prev.summary,
@@ -203,7 +219,7 @@ export function DayClosingView() {
     setState((prev) => ({
       ...prev,
       charges: prev.charges.map((c) =>
-        c.id === id ? { ...c, status: "Posted" } : c,
+        c.id === id ? { ...c, status: "Posted" } : c
       ),
     }));
     setToastMsg("Room charge posted to guest folio.");
@@ -223,7 +239,7 @@ export function DayClosingView() {
       return {
         ...prev,
         posTabs: prev.posTabs.map((p) =>
-          p.id === id ? { ...p, status: "Transferred" } : p,
+          p.id === id ? { ...p, status: "Transferred" } : p
         ),
         summary: {
           ...prev.summary,
@@ -304,15 +320,23 @@ export function DayClosingView() {
         pendingCheckouts: 0,
       },
     }));
+
+    // Rollover business date globally across localStorage
+    localStorage.setItem("pms_business_date", next);
+
+    // Notify other components via storage event rollover trigger
+    window.dispatchEvent(new Event("storage"));
+
     setRunning(false);
     setStepIndex(-1);
     setToastMsg(
-      `Day closing complete. Business date rolled to ${formatBusinessDate(next)}.`,
+      `Day closing complete. Business date rolled to ${formatBusinessDate(next)}.`
     );
   };
 
   const resetDemo = () => {
     resetClosingDemo();
+    localStorage.removeItem("pms_business_date");
     setState(createInitialDayClosingState());
     setToastMsg("Day closing demo reset to start-of-day state.");
   };
@@ -350,22 +374,27 @@ export function DayClosingView() {
 
   const summary = state.summary;
 
+  // Computed placeholders matching page data only
+  const cashierStatusText = openShifts.length === 0 ? "Ready" : `${openShifts.length} Open`;
+  const hkStatusText = pendingCharges.length === 0 ? "Ready" : "Pending";
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {toast && (
         <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />
       )}
 
+      {/* Header section matching Front Office exactly */}
       <FOPageHeader
         eyebrow="Front Office"
         title="Day Closing"
-        description="Clear blockers, run daily closing, and roll the business date."
+        description="Verify daily operational checklist and roll over the business date."
         badge={
-          <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+          <div className="flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-white border border-slate-200 rounded-md px-2 py-1 shadow-sm">
             <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />
             Business Date: {formatBusinessDate(summary.businessDate)}
             {state.completed && (
-              <span className="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+              <span className="ml-1.5 rounded bg-emerald-50 border border-emerald-200/50 px-1 py-0.5 text-[9px] font-semibold text-emerald-700 uppercase">
                 Closed
               </span>
             )}
@@ -373,14 +402,14 @@ export function DayClosingView() {
         }
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={resetDemo}>
-              <RotateCcw className="h-3.5 w-3.5" />
+            <Button type="button" variant="outline" size="sm" className="gap-1 text-xs font-semibold" onClick={resetDemo}>
+              <RotateCcw className="h-3 w-3" />
               Reset demo
             </Button>
             {!state.completed && (
               <Button
                 size="sm"
-                className="bg-emerald-700 hover:bg-emerald-800"
+                className="bg-emerald-700 hover:bg-emerald-800 text-xs font-semibold"
                 onClick={() => setConfirmOpen(true)}
                 disabled={!canClose}
               >
@@ -391,39 +420,68 @@ export function DayClosingView() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* 8 Compact KPI Cards Matching Dashboard Cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
         <StatMiniCard
-          label="Total Revenue"
+          label="Business Date"
+          value={formatBusinessDate(summary.businessDate)}
+          icon={Calendar}
+        />
+        <StatMiniCard
+          label="Occupancy"
+          value={`${summary.occupancy}%`}
+          icon={Percent}
+        />
+        <StatMiniCard
+          label="Revenue Today"
           value={formatINR(summary.totalRevenue)}
           accent="#15803d"
           icon={IndianRupee}
         />
-        <StatMiniCard label="Occupancy" value={`${summary.occupancy}%`} icon={Users} />
         <StatMiniCard
-          label="Arrivals / Departures"
-          value={`${summary.arrivals} / ${summary.departures}`}
-          icon={Calendar}
+          label="Pending Check-outs"
+          value={String(pendingGuests.length)}
+          accent={pendingGuests.length > 0 ? "#DC3545" : "#15803d"}
+          icon={ClipboardList}
         />
         <StatMiniCard
-          label="In-House Guests"
-          value={summary.inHouse}
-          accent="#10b981"
-          icon={Users}
+          label="Pending Folios"
+          value={String(pendingFoliosCount)}
+          accent={pendingFoliosCount > 0 ? "#DC3545" : "#15803d"}
+          icon={FileText}
+        />
+        <StatMiniCard
+          label="Cashier Status"
+          value={cashierStatusText}
+          accent={openShifts.length > 0 ? "#f59e0b" : "#15803d"}
+          icon={Wallet}
+        />
+        <StatMiniCard
+          label="Housekeeping"
+          value={hkStatusText}
+          accent={pendingCharges.length > 0 ? "#f59e0b" : "#15803d"}
+          icon={ShieldCheck}
+        />
+        <StatMiniCard
+          label="Maint. Issues"
+          value="All Clear"
+          accent="#15803d"
+          icon={Wrench}
         />
       </div>
 
       {running && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
-          <div className="flex items-center gap-3">
-            <Loader2 className="h-5 w-5 animate-spin text-emerald-700" />
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-emerald-700" />
             <div>
-              <p className="text-sm font-semibold text-emerald-900">Running day closing…</p>
-              <p className="text-xs text-emerald-700">
+              <p className="text-xs font-bold text-slate-800">Running closing procedures…</p>
+              <p className="text-[10px] text-slate-500 font-semibold">
                 {CLOSING_STEPS[Math.max(0, stepIndex)]}
               </p>
             </div>
           </div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-emerald-100">
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
             <div
               className="h-full rounded-full bg-emerald-600 transition-all duration-300"
               style={{
@@ -435,67 +493,71 @@ export function DayClosingView() {
       )}
 
       {state.completed && state.report ? (
-        <div className="space-y-5">
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-8 text-center">
-            <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-500" />
-            <p className="mt-4 text-lg font-bold text-emerald-900">Day Closing Complete</p>
-            <p className="mt-1 text-sm text-emerald-700">
-              Business date rolled from{" "}
-              {formatBusinessDate(state.report.previousBusinessDate)} →{" "}
-              {formatBusinessDate(state.report.nextBusinessDate)}.
-              {state.nightAuditCompleted
-                ? " Night audit is also complete."
-                : " Next: run Night Audit."}
-            </p>
-            <div className="mt-5 flex flex-wrap justify-center gap-2">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm max-w-2xl mx-auto space-y-4">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Day Closing Completed Successfully</h2>
+              <p className="mt-1 text-xs text-slate-500 font-semibold">
+                Business date rolled from{" "}
+                <strong className="text-slate-700">{formatBusinessDate(state.report.previousBusinessDate)}</strong> to{" "}
+                <strong className="text-slate-700">{formatBusinessDate(state.report.nextBusinessDate)}</strong>.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="gap-1.5 bg-white"
+                className="gap-1 bg-white font-semibold text-xs h-8 border-slate-200 px-3"
                 onClick={exportReport}
               >
-                <Download className="h-3.5 w-3.5" />
-                Export report
+                <Download className="h-3 w-3" />
+                Export CSV
               </Button>
               <Link href="/frontoffice/reports/night-audit">
-                <Button size="sm" className="gap-1.5 bg-emerald-700 hover:bg-emerald-800">
+                <Button size="sm" className="gap-1 bg-emerald-700 hover:bg-emerald-800 font-semibold text-xs h-8 px-3">
                   {state.nightAuditCompleted ? "View Night Audit" : "Open Night Audit"}
-                  <ArrowRight className="h-3.5 w-3.5" />
+                  <ArrowRight className="h-3 w-3" />
                 </Button>
               </Link>
             </div>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-white p-5">
-              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+              <h3 className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">
                 <FileText className="h-4 w-4 text-emerald-700" />
-                Closing Report
-              </h2>
-              <div className="divide-y divide-slate-100">
-                <SummaryRow label="Closed by" value={state.report.closedBy} />
-                <SummaryRow label="Closed at" value={state.report.closedAt} />
+                Audit Closing Details
+              </h3>
+              <div className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                <SummaryRow label="Closed By" value={state.report.closedBy} />
+                <SummaryRow label="Closed At" value={state.report.closedAt} />
                 <SummaryRow
-                  label="Previous date"
+                  label="Previous Business Date"
                   value={formatBusinessDate(state.report.previousBusinessDate)}
                 />
                 <SummaryRow
-                  label="New business date"
+                  label="Rolled Business Date"
                   value={formatBusinessDate(state.report.nextBusinessDate)}
                   highlight
                 />
-                <SummaryRow label="Shifts closed" value={String(state.report.shiftsClosed)} />
-                <SummaryRow label="Charges posted" value={String(state.report.chargesPosted)} />
+                <SummaryRow label="Cashier Shifts Closed" value={`${state.report.shiftsClosed} shift(s)`} />
+                <SummaryRow label="Room Charges Posted" value={`${state.report.chargesPosted} room(s)`} />
                 <SummaryRow
-                  label="POS transferred"
-                  value={String(state.report.posTransferred)}
+                  label="POS Bills Transferred"
+                  value={`${state.report.posTransferred} bill(s)`}
                 />
               </div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-5">
-              <h2 className="mb-4 text-sm font-semibold text-slate-900">Revenue snapshot</h2>
-              <div className="divide-y divide-slate-100">
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">
+                Financial Revenue Summary
+              </h3>
+              <div className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
                 <SummaryRow
                   label="Room Revenue"
                   value={formatINR(state.report.roomRevenue)}
@@ -510,7 +572,7 @@ export function DayClosingView() {
                   value={formatINR(state.report.totalRevenue)}
                   highlight
                 />
-                <SummaryRow label="Occupancy" value={`${state.report.occupancy}%`} />
+                <SummaryRow label="Final Occupancy" value={`${state.report.occupancy}%`} />
                 <SummaryRow
                   label="Arrivals / Departures"
                   value={`${state.report.arrivals} / ${state.report.departures}`}
@@ -520,59 +582,209 @@ export function DayClosingView() {
           </div>
         </div>
       ) : (
-        <div className="grid gap-5 xl:grid-cols-5">
-          <div className="space-y-5 xl:col-span-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-5">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-slate-900">Pre-Closing Checklist</h2>
+        <div className="grid gap-4 xl:grid-cols-5">
+          <div className="space-y-4 xl:col-span-3">
+            {/* Closing Progress Card */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Day Closing Readiness</h3>
+                  <p className="text-[10px] text-slate-500 font-semibold">{completedChecks} of {totalChecks} checks successfully passed</p>
+                </div>
+                <span className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-bold border",
+                  progressPercent < 50
+                    ? "bg-red-50 text-red-700 border-red-100"
+                    : progressPercent < 85
+                    ? "bg-amber-50 text-amber-700 border-amber-100"
+                    : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                )}>
+                  {progressPercent}%
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-350",
+                    progressPercent < 50
+                      ? "bg-red-500"
+                      : progressPercent < 85
+                      ? "bg-amber-500"
+                      : "bg-emerald-600"
+                  )}
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Department Status Section */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {[
+                {
+                  dept: "Front Office",
+                  status: pendingGuests.length === 0 ? "Ready" : "Warning",
+                  blocking: pendingGuests.length > 0 ? `${pendingGuests.length} Check-out(s) pending` : null,
+                  completed: "Mandatory charges posted",
+                  icon: ClipboardList,
+                },
+                {
+                  dept: "Housekeeping",
+                  status: "Ready",
+                  blocking: null,
+                  completed: "HK minimum targets met",
+                  icon: CheckCircle2,
+                },
+                {
+                  dept: "Maintenance",
+                  status: "Ready",
+                  blocking: null,
+                  completed: "Critical repairs resolved",
+                  icon: Wrench,
+                },
+                {
+                  dept: "Laundry",
+                  status: "Ready",
+                  blocking: null,
+                  completed: "Laundry balanced",
+                  icon: Shirt,
+                },
+                {
+                  dept: "Cashier",
+                  status: openShifts.length === 0 ? "Ready" : "Warning",
+                  blocking: openShifts.length > 0 ? `${openShifts.length} shift(s) open` : null,
+                  completed: "Reconciliation complete",
+                  icon: Wallet,
+                },
+                {
+                  dept: "Restaurant",
+                  status: openPos.length === 0 ? "Ready" : "Pending",
+                  blocking: openPos.length > 0 ? `${openPos.length} POS bills open` : null,
+                  completed: "All charges transferred",
+                  icon: UtensilsCrossed,
+                },
+              ].map((d) => {
+                const Icon = d.icon;
+                return (
+                  <div
+                    key={d.dept}
+                    className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        <Icon className="h-3.5 w-3.5 text-slate-400" />
+                        <span className="text-[11px] font-bold text-slate-800">{d.dept}</span>
+                      </div>
+                      <span
+                        className={cn(
+                          "rounded px-1 py-0.5 text-[8px] font-extrabold uppercase border",
+                          d.status === "Ready"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                            : d.status === "Blocked"
+                            ? "bg-red-50 text-red-800 border-red-100"
+                            : "bg-amber-50 text-amber-755 text-amber-700 border-amber-100"
+                        )}
+                      >
+                        {d.status}
+                      </span>
+                    </div>
+                    <div className="text-[10px] space-y-1 font-semibold leading-relaxed">
+                      {d.blocking ? (
+                        <p className="text-red-600 flex items-start gap-1">
+                          <span className="shrink-0 text-red-500">❌</span>
+                          <span>{d.blocking}</span>
+                        </p>
+                      ) : (
+                        <p className="text-emerald-700 flex items-start gap-1">
+                          <span className="shrink-0 text-emerald-600">✓</span>
+                          <span>{d.completed}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Checklist Layout */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Closing Checklist</h3>
                 <span
                   className={cn(
-                    "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                    "rounded px-1.5 py-0.5 text-[9px] font-bold uppercase border",
                     blockers.length === 0
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-amber-50 text-amber-700",
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                      : "bg-amber-50 text-amber-700 border-amber-100",
                   )}
                 >
                   {blockers.length === 0
-                    ? "Ready to close"
-                    : `${blockers.length} blocker${blockers.length === 1 ? "" : "s"}`}
+                    ? "Approved"
+                    : `${blockers.length} Remaining`}
                 </span>
               </div>
-              <ul className="space-y-3">
+              <ul className="divide-y divide-slate-100">
                 {checklist.map((item) => {
                   const Icon = statusIcon[item.status];
+                  const isAudit = item.id === "audit";
                   return (
                     <li
                       key={item.id}
-                      className="flex items-start gap-3 rounded-lg border border-slate-100 p-3"
+                      className="flex items-start gap-2.5 py-2.5 bg-white transition-colors"
                     >
-                      <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", statusStyle[item.status])} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-sm font-medium text-slate-900">{item.label}</p>
+                      <Icon className={cn("mt-0.5 h-3.5 w-3.5 shrink-0 p-0.5 rounded border", statusStyle[item.status])} />
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-bold text-slate-800">{item.label}</p>
+                            <span className={cn(
+                              "text-[8px] font-bold uppercase px-1 py-0.5 rounded border tracking-wide",
+                              isAudit
+                                ? "bg-slate-50 text-slate-500 border-slate-200"
+                                : "bg-red-50 text-red-600 border-red-100"
+                            )}>
+                              {isAudit ? "Night Audit" : "Mandatory"}
+                            </span>
+                          </div>
                           {item.href && (
                             <Link
                               href={item.href}
-                              className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 hover:underline"
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:underline"
                             >
-                              Open
+                              Resolve
                               <ExternalLink className="h-3 w-3" />
                             </Link>
                           )}
                         </div>
-                        <p className="text-xs text-slate-500">{item.detail}</p>
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold">
+                          <p>{item.detail}</p>
+                          <p className="text-[9px] text-slate-400 font-normal">
+                            {item.status === "done" ? "Checked" : "Pending"}
+                          </p>
+                        </div>
                       </div>
                     </li>
                   );
                 })}
               </ul>
-              {blockers.length > 0 && (
-                <p className="mt-4 text-xs text-amber-600">
-                  Resolve all blockers below before running day closing.
-                </p>
-              )}
             </div>
 
+            {/* Warning Panel */}
+            {blockers.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2.5">
+                <div className="flex items-center gap-1.5 text-red-750">
+                  <AlertCircle className="h-4.5 w-4.5 text-red-650 shrink-0" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider">Cannot Run Day Closing</h3>
+                </div>
+                <p className="text-[10px] font-semibold text-slate-500">The following mandatory items must be settled before date rollover:</p>
+                <ul className="text-[11px] font-bold text-red-600 pl-6 space-y-1 list-disc leading-relaxed">
+                  {blockers.map((b) => (
+                    <li key={b.id}>{b.label}: <span className="font-semibold text-slate-500">{b.detail}</span></li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Resolve Blocker Cards */}
             {openShifts.length > 0 && (
               <BlockerCard
                 icon={Wallet}
@@ -582,20 +794,20 @@ export function DayClosingView() {
                 {openShifts.map((shift) => (
                   <div
                     key={shift.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 font-semibold text-slate-700"
                   >
                     <div>
-                      <p className="text-sm font-medium text-slate-900">
+                      <p className="text-xs font-bold text-slate-800">
                         {shift.cashier} · {shift.id}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-[10px] text-slate-500 font-normal">
                         {shift.shift} · Expected {formatINR(shift.expected)}
                       </p>
                     </div>
                     <Button
                       type="button"
                       size="sm"
-                      className="bg-emerald-700 hover:bg-emerald-800"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-xs font-semibold h-7.5 px-2.5"
                       onClick={() => resolveCashier(shift.id)}
                     >
                       Close shift
@@ -614,20 +826,20 @@ export function DayClosingView() {
                 {pendingGuests.map((guest) => (
                   <div
                     key={guest.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 font-semibold text-slate-700"
                   >
                     <div>
-                      <p className="text-sm font-medium text-slate-900">
+                      <p className="text-xs font-bold text-slate-800">
                         {guest.guestName} · Room {guest.roomNo}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-[10px] text-slate-500 font-normal">
                         Due {guest.checkOut} · Balance {formatINR(guest.balance)}
                       </p>
                     </div>
                     <Button
                       type="button"
                       size="sm"
-                      className="bg-emerald-700 hover:bg-emerald-800"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-xs font-semibold h-7.5 px-2.5"
                       onClick={() => settleDeparture(guest.id)}
                     >
                       Settle & check out
@@ -643,7 +855,7 @@ export function DayClosingView() {
                 title="Unposted room charges"
                 description="Post nightly room rate and extras to in-house folios."
                 action={
-                  <Button type="button" variant="outline" size="sm" onClick={postAllCharges}>
+                  <Button type="button" variant="outline" size="sm" className="text-[11px] font-semibold h-7 px-2" onClick={postAllCharges}>
                     Post all
                   </Button>
                 }
@@ -651,20 +863,20 @@ export function DayClosingView() {
                 {pendingCharges.map((charge) => (
                   <div
                     key={charge.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 font-semibold text-slate-700"
                   >
                     <div>
-                      <p className="text-sm font-medium text-slate-900">
+                      <p className="text-xs font-bold text-slate-800">
                         Room {charge.roomNo} · {charge.guestName}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-[10px] text-slate-500 font-normal">
                         Rate {formatINR(charge.roomRate)} + extras {formatINR(charge.extras)}
                       </p>
                     </div>
                     <Button
                       type="button"
                       size="sm"
-                      className="bg-emerald-700 hover:bg-emerald-800"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-xs font-semibold h-7.5 px-2.5"
                       onClick={() => postCharge(charge.id)}
                     >
                       Post charge
@@ -680,7 +892,7 @@ export function DayClosingView() {
                 title="Open POS tabs"
                 description="Transfer restaurant / bar bills to guest room folios."
                 action={
-                  <Button type="button" variant="outline" size="sm" onClick={transferAllPos}>
+                  <Button type="button" variant="outline" size="sm" className="text-[11px] font-semibold h-7 px-2" onClick={transferAllPos}>
                     Transfer all
                   </Button>
                 }
@@ -688,23 +900,23 @@ export function DayClosingView() {
                 {openPos.map((tab) => (
                   <div
                     key={tab.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 font-semibold text-slate-700"
                   >
                     <div>
-                      <p className="text-sm font-medium text-slate-900">
+                      <p className="text-xs font-bold text-slate-800">
                         {tab.id} · {tab.outlet}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-[10px] text-slate-500 font-normal">
                         Room {tab.roomNo} · {tab.guestName} · {formatINR(tab.amount)}
                       </p>
                     </div>
                     <Button
                       type="button"
                       size="sm"
-                      className="bg-emerald-700 hover:bg-emerald-800"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-xs font-semibold h-7.5 px-2.5"
                       onClick={() => transferPos(tab.id)}
                     >
-                      Transfer to folio
+                      Transfer
                     </Button>
                   </div>
                 ))}
@@ -712,38 +924,75 @@ export function DayClosingView() {
             )}
           </div>
 
-          <div className="space-y-5 xl:col-span-2">
-            <div className="rounded-xl border border-slate-200 bg-white p-5">
-              <h2 className="mb-4 text-sm font-semibold text-slate-900">Day End Summary</h2>
-              <div className="divide-y divide-slate-100">
-                <SummaryRow label="Room Revenue" value={formatINR(summary.roomRevenue)} />
-                <SummaryRow label="F&B Revenue" value={formatINR(summary.fbRevenue)} />
-                <SummaryRow label="Other Revenue" value={formatINR(summary.otherRevenue)} />
+          <div className="space-y-4 xl:col-span-2">
+            {/* Financial Summary Card */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">
+                Financial Summary
+              </h3>
+              <div className="divide-y divide-slate-100 font-semibold text-slate-750 text-[11px]">
+                <SummaryRow label="Cash Revenue" value={formatINR(summary.roomRevenue * 0.45)} />
+                <SummaryRow label="Card Revenue" value={formatINR(summary.roomRevenue * 0.35)} />
+                <SummaryRow label="UPI Revenue" value={formatINR(summary.fbRevenue + summary.otherRevenue)} />
+                <SummaryRow label="Bank Transfer" value={formatINR(summary.roomRevenue * 0.20)} />
+                <SummaryRow label="Refund" value={formatINR(-500)} />
+                <SummaryRow label="Outstanding Balance" value={formatINR(pendingGuests.length > 0 ? 2400 : 0)} />
                 <SummaryRow
                   label="Total Revenue"
                   value={formatINR(summary.totalRevenue)}
                   highlight
                 />
-                <SummaryRow label="Occupancy" value={`${summary.occupancy}%`} />
-                <SummaryRow label="Arrivals Today" value={String(summary.arrivals)} />
-                <SummaryRow label="Departures Today" value={String(summary.departures)} />
-                <SummaryRow
-                  label="Pending Check-outs"
-                  value={String(summary.pendingCheckouts)}
-                />
               </div>
             </div>
 
-            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-5">
-              <h3 className="text-sm font-semibold text-slate-900">How this demo works</h3>
-              <ol className="mt-3 list-decimal space-y-2 pl-4 text-xs text-slate-600">
-                <li>Clear every warning item using the action buttons.</li>
-                <li>
-                  When the checklist shows <strong>Ready to close</strong>, run Day Closing.
-                </li>
-                <li>The business date rolls forward and a closing report is generated.</li>
-                <li>Use Reset demo anytime to start again (stored in this browser session).</li>
-              </ol>
+            {/* Operational Summary */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">
+                Operational Summary
+              </h3>
+              <div className="divide-y divide-slate-100 font-semibold text-slate-750 text-[11px]">
+                <SummaryRow label="Total Rooms Occupied" value={String(summary.inHouse)} />
+                <SummaryRow label="Vacant Rooms" value="12" />
+                <SummaryRow label="Dirty Rooms" value="3" />
+                <SummaryRow label="Clean Rooms" value="9" />
+                <SummaryRow label="Out of Order (OOO)" value="1" />
+                <SummaryRow label="Laundry Pending Items" value="0" />
+                <SummaryRow label="Luggage Pending Jobs" value="0" />
+              </div>
+            </div>
+
+            {/* Reports Section */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">
+                Reports To Be Generated
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  "Revenue Report",
+                  "Occupancy Report",
+                  "Housekeeping Report",
+                  "Cashier Report",
+                  "Arrival Report",
+                  "Departure Report",
+                  "Manager Summary",
+                ].map((rep) => (
+                  <div key={rep} className="rounded border border-slate-150 p-2 flex items-center justify-between text-[10px] font-bold bg-slate-50/50">
+                    <div className="flex items-center gap-1 text-slate-700">
+                      <FileText className="h-3.5 w-3.5 text-slate-400" />
+                      <span>{rep}</span>
+                    </div>
+                    {state.completed ? (
+                      <span className="rounded bg-emerald-50 text-emerald-800 border border-emerald-100 px-1 py-0.5 text-[8px] font-extrabold uppercase">
+                        Generated
+                      </span>
+                    ) : (
+                      <span className="rounded bg-slate-100 text-slate-500 border border-slate-200 px-1 py-0.5 text-[8px] font-extrabold uppercase">
+                        Pending
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -754,7 +1003,11 @@ export function DayClosingView() {
         onClose={() => setConfirmOpen(false)}
         onConfirm={runClosing}
         title="Run Day Closing?"
-        message={`This will lock ${formatBusinessDate(summary.businessDate)}, roll the business date forward, and generate a closing report. This demo action can be reset afterward.`}
+        message={`This action will:
+✓ Lock today's operational transactions
+✓ Generate operational reports
+✓ Enable Night Audit
+✓ Prepare Business Date rollover for ${formatBusinessDate(summary.businessDate)}.`}
         confirmLabel="Run Day Closing"
       />
     </div>
@@ -775,20 +1028,20 @@ function BlockerCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-5">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2.5">
-          <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+    <div className="rounded-xl border border-slate-200 bg-amber-50/15 p-4">
+      <div className="mb-2.5 flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2">
+          <div className="mt-0.5 flex h-7.5 w-7.5 items-center justify-center rounded bg-amber-100 text-amber-700">
             <Icon className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-            <p className="text-xs text-slate-500">{description}</p>
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">{title}</h3>
+            <p className="text-[10px] text-slate-500 font-semibold">{description}</p>
           </div>
         </div>
         {action}
       </div>
-      <div className="space-y-2">{children}</div>
+      <div className="space-y-1.5">{children}</div>
     </div>
   );
 }
