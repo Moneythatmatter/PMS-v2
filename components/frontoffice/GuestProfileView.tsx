@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Award,
@@ -50,23 +50,52 @@ function getInitials(name: string) {
 export function GuestProfileView() {
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("all");
+  const [pmsProfiles, setPmsProfiles] = useState<GuestProfile[]>([]);
   const [selected, setSelected] = useState<GuestProfile>(guestProfiles[0]);
   const [activeTab, setActiveTab] = useState<Tab>("Personal");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  useEffect(() => {
+    const loadProfiles = () => {
+      const stored = localStorage.getItem("pms_guest_profiles");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setPmsProfiles(parsed);
+        if (parsed.length > 0) {
+          setSelected((prev) => {
+            if (prev) {
+              const stillExists = parsed.find((g: any) => g.id === prev.id);
+              if (stillExists) return stillExists as GuestProfile;
+            }
+            return parsed[0] as GuestProfile;
+          });
+        }
+      } else {
+        localStorage.setItem("pms_guest_profiles", JSON.stringify(guestProfiles));
+        setPmsProfiles(guestProfiles);
+        if (guestProfiles.length > 0) {
+          setSelected(guestProfiles[0]);
+        }
+      }
+    };
+    loadProfiles();
+    window.addEventListener("storage", loadProfiles);
+    return () => window.removeEventListener("storage", loadProfiles);
+  }, []);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return guestProfiles.filter(
+    return pmsProfiles.filter(
       (g) =>
         (tierFilter === "all" ||
           (tierFilter === "vip" && g.loyaltyPoints >= 5000) ||
           (tierFilter === "regular" && g.loyaltyPoints < 5000)) &&
-        (g.name.toLowerCase().includes(q) ||
-          g.email.toLowerCase().includes(q) ||
-          g.mobile.includes(q) ||
-          g.id.toLowerCase().includes(q)),
+        ((g.name || "").toLowerCase().includes(q) ||
+          (g.email || "").toLowerCase().includes(q) ||
+          (g.mobile || "").includes(q) ||
+          (g.id || "").toLowerCase().includes(q)),
     );
-  }, [search, tierFilter]);
+  }, [search, tierFilter, pmsProfiles]);
 
   const stays = useMemo(
     () => guestStayHistory.filter((s) => s.guestId === selected.id),
@@ -97,25 +126,25 @@ export function GuestProfileView() {
         description="Search guest records, view stay history, invoices, and loyalty details."
         badge={
           <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            {guestProfiles.length} registered profiles
+            {pmsProfiles.length} registered profiles
           </div>
         }
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatMiniCard label="Total Profiles" value={guestProfiles.length} icon={Users} />
+        <StatMiniCard label="Total Profiles" value={pmsProfiles.length} icon={Users} />
         <StatMiniCard
           label="Avg. Loyalty Points"
-          value={Math.round(
-            guestProfiles.reduce((s, g) => s + g.loyaltyPoints, 0) /
-              guestProfiles.length,
-          )}
+          value={pmsProfiles.length > 0 ? Math.round(
+            pmsProfiles.reduce((s, g) => s + (g.loyaltyPoints || 0), 0) /
+              pmsProfiles.length,
+          ) : 0}
           accent="#f59e0b"
           icon={Star}
         />
         <StatMiniCard
           label="Total Stays"
-          value={guestProfiles.reduce((s, g) => s + g.totalStays, 0)}
+          value={pmsProfiles.reduce((s, g) => s + (g.totalStays || 0), 0)}
           icon={Award}
         />
         <StatMiniCard label="VIP Members" value={2} accent="#8b5cf6" icon={Crown} />

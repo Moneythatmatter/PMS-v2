@@ -1,11 +1,33 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BedDouble, Building2, Sparkles, Wrench } from "lucide-react";
 import type { RoomStatusCard } from "@/app/data/frontoffice/modules";
-import { roomStatusCards as initialCards } from "@/app/data";
 import { floors, roomStatuses } from "@/app/data/frontoffice/constants";
 import { Button } from "@/components/ui/Button";
+import { initialHKRooms } from "@/components/housekeeping/HousekeepingData";
+import type { HKRoom } from "@/components/housekeeping/HousekeepingTypes";
+
+const mapHKRoomToFOCard = (r: HKRoom): RoomStatusCard => {
+  let foStatusStr = "Vacant";
+  if (r.status === "Blocked") foStatusStr = "Blocked";
+  else if (r.status === "Out of Order" || r.status === "Out of Service") foStatusStr = "Maintenance";
+  else if (r.status.includes("Dirty")) foStatusStr = "Dirty";
+  else if (r.status === "Vacant Ready") foStatusStr = "Clean";
+  else if (r.foStatus === "Occupied") foStatusStr = "Occupied";
+  else if (r.foStatus === "Vacant") foStatusStr = "Vacant";
+
+  return {
+    roomNo: r.roomNo,
+    type: r.category,
+    floor: r.floor,
+    status: foStatusStr,
+    guestName: r.guestName,
+    housekeeping: r.hkStatus === "Inspected" ? "Inspected" : r.hkStatus === "Clean" ? "Clean" : r.hkStatus === "Cleaning" ? "In Progress" : r.hkStatus,
+    maintenance: r.status === "Out of Order" ? "In Progress" : "OK",
+    checkoutDate: r.checkoutDate,
+  };
+};
 import {
   AlertBanner,
   FormField,
@@ -32,7 +54,7 @@ const statusConfig: Record<
 const hkStatuses = ["Clean", "Dirty", "Inspected", "In Progress"] as const;
 
 export function RoomStatusView() {
-  const [rooms, setRooms] = useState(initialCards);
+  const [rooms, setRooms] = useState<RoomStatusCard[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [floorFilter, setFloorFilter] = useState("all");
@@ -41,6 +63,22 @@ export function RoomStatusView() {
   const [newStatus, setNewStatus] = useState("");
   const [newHk, setNewHk] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadRooms = () => {
+      const stored = localStorage.getItem("hk_rooms");
+      if (stored) {
+        const hkRooms: HKRoom[] = JSON.parse(stored);
+        setRooms(hkRooms.map(mapHKRoomToFOCard));
+      } else {
+        localStorage.setItem("hk_rooms", JSON.stringify(initialHKRooms));
+        setRooms(initialHKRooms.map(mapHKRoomToFOCard));
+      }
+    };
+    loadRooms();
+    window.addEventListener("storage", loadRooms);
+    return () => window.removeEventListener("storage", loadRooms);
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -76,18 +114,52 @@ export function RoomStatusView() {
 
   const handleSave = () => {
     if (!selectedRoom) return;
-    setRooms((prev) =>
-      prev.map((r) => {
-        if (r.roomNo !== selectedRoom.roomNo) return r;
-        if (actionType === "status" && newStatus) {
-          return { ...r, status: newStatus };
+
+    const stored = localStorage.getItem("hk_rooms");
+    if (!stored) return;
+    const hkRooms: HKRoom[] = JSON.parse(stored);
+
+    const updatedHKRooms = hkRooms.map((r) => {
+      if (r.roomNo !== selectedRoom.roomNo) return r;
+
+      const updated = { ...r };
+
+      if (actionType === "status" && newStatus) {
+        if (newStatus === "Occupied") {
+          updated.foStatus = "Occupied";
+          updated.status = "Occupied";
+        } else if (newStatus === "Vacant") {
+          updated.foStatus = "Vacant";
+          updated.status = updated.hkStatus === "Inspected" ? "Vacant Ready" : "Vacant Dirty";
+        } else if (newStatus === "Blocked") {
+          updated.foStatus = "Blocked";
+          updated.status = "Blocked";
+        } else if (newStatus === "Maintenance") {
+          updated.status = "Out of Order";
+          updated.hkStatus = "OOO";
         }
-        if (actionType === "hk" && newHk) {
-          return { ...r, housekeeping: newHk, status: newHk === "Dirty" ? "Dirty" : r.status };
+      }
+
+      if (actionType === "hk" && newHk) {
+        updated.hkStatus = newHk as any;
+        if (newHk === "Dirty") {
+          updated.status = updated.foStatus === "Occupied" ? "Occupied Dirty" : "Vacant Dirty";
+        } else if (newHk === "Clean") {
+          updated.status = updated.foStatus === "Occupied" ? "Occupied" : "Vacant Ready";
+        } else if (newHk === "Inspected") {
+          updated.status = updated.foStatus === "Occupied" ? "Occupied" : "Vacant Ready";
         }
-        return r;
-      }),
-    );
+      }
+
+      return updated;
+    });
+
+    localStorage.setItem("hk_rooms", JSON.stringify(updatedHKRooms));
+    setRooms(updatedHKRooms.map(mapHKRoomToFOCard));
+
+    // Dispatch standard event so other components reload
+    window.dispatchEvent(new Event("storage"));
+
     setToast(
       actionType === "hk"
         ? `Housekeeping updated for Room ${selectedRoom.roomNo}.`

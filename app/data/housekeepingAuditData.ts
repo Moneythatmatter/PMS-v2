@@ -1,0 +1,182 @@
+export interface HousekeepingAuditEntry {
+  id: string;
+  auditCode: string;
+  timestamp: string;
+  userName: string;
+  userRole: string;
+  userEmail: string;
+  category: "Room Cleaning" | "Inspection" | "Status Override" | "Inventory" | "Maintenance" | "Lost & Found" | "Security";
+  eventCode: string;
+  actionType: "Created" | "Updated" | "Overridden" | "Deactivated" | "Reassigned";
+  severity: "Standard" | "Warning" | "Critical";
+  targetEntity: string;
+  roomNumber?: string;
+  floor?: string;
+  isVip?: boolean;
+  occupancyStatus?: "Occupied" | "Vacant" | "Expected Arrival" | "Checkout Due";
+  assignedHousekeeper?: string;
+  assignedSupervisor?: string;
+  currentRoomStatus?: "Clean" | "Dirty" | "Inspection Pending" | "OOO Hold";
+  oldValue: string;
+  newValue: string;
+  ipAddress: string;
+  terminalId: string;
+  remarks: string;
+}
+
+export const INITIAL_HOUSEKEEPING_AUDIT_LOGS: HousekeepingAuditEntry[] = [
+  {
+    id: "AUD-901",
+    auditCode: "LOG-2026-0901",
+    timestamp: "2026-07-20 10:45 AM",
+    userName: "Ramesh Kumar",
+    userRole: "Housekeeping Supervisor",
+    userEmail: "ramesh.k@grandhotel.com",
+    category: "Status Override",
+    eventCode: "EVT-OVRD-RM305",
+    actionType: "Overridden",
+    severity: "Warning",
+    targetEntity: "Room 305 (Executive Suite)",
+    roomNumber: "305",
+    floor: "Floor 3",
+    isVip: true,
+    occupancyStatus: "Occupied",
+    assignedHousekeeper: "Meena Kumari",
+    assignedSupervisor: "Ramesh Kumar",
+    currentRoomStatus: "Clean",
+    oldValue: "Status: Dirty (Uninspected)",
+    newValue: "Status: Clean & Inspected (Manual Override)",
+    ipAddress: "192.168.1.104",
+    terminalId: "TERM-FLR3-IPAD",
+    remarks: "Manual supervisor override for VIP arrival at 11:00 AM.",
+  },
+  {
+    id: "AUD-902",
+    auditCode: "LOG-2026-0902",
+    timestamp: "2026-07-20 10:30 AM",
+    userName: "Priya Sharma",
+    userRole: "Room Inspector",
+    userEmail: "priya.s@grandhotel.com",
+    category: "Inspection",
+    eventCode: "EVT-INSP-FAIL",
+    actionType: "Updated",
+    severity: "Critical",
+    targetEntity: "Room 412 (Deluxe King)",
+    roomNumber: "412",
+    floor: "Floor 4",
+    isVip: false,
+    occupancyStatus: "Vacant",
+    assignedHousekeeper: "Meena Kumari",
+    assignedSupervisor: "Ramesh Kumar",
+    currentRoomStatus: "Inspection Pending",
+    oldValue: "Inspection Pending",
+    newValue: "Failed (Score: 78% - Failed Toilet Sanitization)",
+    ipAddress: "192.168.1.108",
+    terminalId: "TERM-FLR4-TAB",
+    remarks: "Failed inspection due to water stain on vanity mirror. Sent back for re-cleaning.",
+  },
+  {
+    id: "AUD-903",
+    auditCode: "LOG-2026-0903",
+    timestamp: "2026-07-20 09:50 AM",
+    userName: "Meena Kumari",
+    userRole: "Senior Housekeeper",
+    userEmail: "meena.k@grandhotel.com",
+    category: "Room Cleaning",
+    eventCode: "EVT-CLEAN-COMP",
+    actionType: "Updated",
+    severity: "Standard",
+    targetEntity: "Room 208 (Standard Twin)",
+    roomNumber: "208",
+    floor: "Floor 2",
+    isVip: false,
+    occupancyStatus: "Checkout Due",
+    assignedHousekeeper: "Meena Kumari",
+    assignedSupervisor: "Ramesh Kumar",
+    currentRoomStatus: "Clean",
+    oldValue: "Cleaning Status: In Progress",
+    newValue: "Cleaning Status: Completed (Ready for Inspection)",
+    ipAddress: "192.168.1.112",
+    terminalId: "TERM-MOB-MNA",
+    remarks: "Completed 24-point checkout sanitization checklist.",
+  },
+  {
+    id: "AUD-904",
+    auditCode: "LOG-2026-0904",
+    timestamp: "2026-07-20 09:15 AM",
+    userName: "Admin User",
+    userRole: "Executive Housekeeper",
+    userEmail: "admin.hk@grandhotel.com",
+    category: "Inventory",
+    eventCode: "EVT-INV-ADJ",
+    actionType: "Updated",
+    severity: "Standard",
+    targetEntity: "Taski R2 Disinfectant (SKU-CHM-R2-DIV)",
+    oldValue: "Available Stock: 8 Liters",
+    newValue: "Available Stock: 58 Liters (Restocked +50L)",
+    ipAddress: "192.168.1.10",
+    terminalId: "TERM-[#001]-DESK",
+    remarks: "Restocked 50L canister batch from supplier Diversey Invoice #8810.",
+  },
+  {
+    id: "AUD-905",
+    auditCode: "LOG-2026-0905",
+    timestamp: "2026-07-20 08:30 AM",
+    userName: "Sanjay Patel",
+    userRole: "Public Area Lead",
+    userEmail: "sanjay.p@grandhotel.com",
+    category: "Maintenance",
+    eventCode: "EVT-MAINT-REQ",
+    actionType: "Created",
+    severity: "Warning",
+    targetEntity: "Main Lobby Elevator B",
+    oldValue: "Status: Normal Operation",
+    newValue: "Maintenance Priority: High (Door Sensor Jammed)",
+    ipAddress: "192.168.1.115",
+    terminalId: "TERM-LOBBY-MOB",
+    remarks: "Logged emergency engineering ticket #MT-884 for Otis Elevator AMC.",
+  },
+  {
+    id: "AUD-906",
+    auditCode: "LOG-2026-0906",
+    timestamp: "2026-07-19 04:20 PM",
+    userName: "Ramesh Kumar",
+    userRole: "Housekeeping Supervisor",
+    userEmail: "ramesh.k@grandhotel.com",
+    category: "Lost & Found",
+    eventCode: "EVT-LF-REG",
+    actionType: "Created",
+    severity: "Standard",
+    targetEntity: "Item LF-2026-042 (Gold Watch)",
+    roomNumber: "305",
+    floor: "Floor 3",
+    isVip: true,
+    occupancyStatus: "Occupied",
+    assignedHousekeeper: "Meena Kumari",
+    assignedSupervisor: "Ramesh Kumar",
+    currentRoomStatus: "Clean",
+    oldValue: "Unregistered",
+    newValue: "Registered in Vault Locker A - Shelf 2",
+    ipAddress: "192.168.1.104",
+    terminalId: "TERM-FLR3-IPAD",
+    remarks: "Found Rolex Wristwatch under bedside table. Vault custodian signoff received.",
+  },
+  {
+    id: "AUD-907",
+    auditCode: "LOG-2026-0907",
+    timestamp: "2026-07-19 02:00 PM",
+    userName: "Admin User",
+    userRole: "System Administrator",
+    userEmail: "admin.hk@grandhotel.com",
+    category: "Security",
+    eventCode: "EVT-SEC-MST-UPD",
+    actionType: "Updated",
+    severity: "Critical",
+    targetEntity: "Staff Role Master (ROL-SUP)",
+    oldValue: "Permission: SLA Override = Disabled",
+    newValue: "Permission: SLA Override = Enabled",
+    ipAddress: "192.168.1.10",
+    terminalId: "TERM-[#001]-DESK",
+    remarks: "Granted SLA override privileges to Floor Supervisor security group.",
+  },
+];

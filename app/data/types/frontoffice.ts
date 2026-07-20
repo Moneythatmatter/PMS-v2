@@ -78,6 +78,7 @@ export interface ReservationSummaryStat {
 export interface ReservationBooking {
   id: string;
   guestName: string;
+  guestId?: string;
   phone: string;
   email?: string;
   source: string;

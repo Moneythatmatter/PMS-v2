@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   BedDouble,
   Calendar,
@@ -133,6 +133,21 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
   const [cancelBooking, setCancelBooking] = useState<ReservationBooking | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadBookings = () => {
+      const stored = localStorage.getItem("pms_reservations");
+      if (stored) {
+        setBookings(JSON.parse(stored));
+      } else {
+        localStorage.setItem("pms_reservations", JSON.stringify(initialBookings));
+        setBookings(initialBookings);
+      }
+    };
+    loadBookings();
+    window.addEventListener("storage", loadBookings);
+    return () => window.removeEventListener("storage", loadBookings);
+  }, [initialBookings]);
 
   const summaryStats = useMemo(() => buildSummaryStats(bookings), [bookings]);
 
