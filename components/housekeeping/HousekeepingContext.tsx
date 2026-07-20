@@ -173,7 +173,11 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
       setHistory(getOrInit("hk_history", initialHKHistory));
       setLuggageJobs(getOrInit("hk_luggage", initialHKLuggageJobs));
       setRequests(getOrInit("hk_requests", initialHKRequests));
-      setMaintenance(getOrInit("hk_maintenance", initialMaintenanceRequests));
+      const loadedMaint = getOrInit("hk_maintenance", initialMaintenanceRequests);
+      const uniqueMaint = Array.isArray(loadedMaint)
+        ? loadedMaint.filter((item: any, index: number, self: any[]) => index === self.findIndex((t: any) => t.id === item.id))
+        : loadedMaint;
+      setMaintenance(uniqueMaint);
       setLostFound(getOrInit("hk_lostfound", initialLostFoundItems));
       setStaff(getOrInit("hk_staff", initialHKStaff));
       setChecklists(getOrInit("hk_checklists", initialHKChecklistTemplates));

@@ -78,7 +78,7 @@ export const addMaintenanceRequest = (
   const isAssigned = req.engineer && req.engineer !== "—";
 
   const record: MaintenanceRequest = {
-    id: `MT-${String(maintenanceLength + 1).padStart(2, "0")}`,
+    id: `MT-${String(maintenanceLength + 1).padStart(2, "0")}-${Math.floor(100 + Math.random() * 900)}`,
     room: req.room,
     problem: req.problem,
     priority: req.priority,

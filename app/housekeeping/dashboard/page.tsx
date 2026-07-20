@@ -386,8 +386,8 @@ export default function HousekeepingDashboard() {
                 {activeMaintList.length === 0 ? (
                   <p className="py-4 text-center text-xs text-slate-400">No active maintenance work orders.</p>
                 ) : (
-                  activeMaintList.map((ticket) => (
-                    <div key={ticket.id} className="flex items-start justify-between rounded-xl border border-slate-50 bg-slate-50/40 p-3">
+                  activeMaintList.map((ticket, idx) => (
+                    <div key={`${ticket.id}-${idx}`} className="flex items-start justify-between rounded-xl border border-slate-50 bg-slate-50/40 p-3">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-slate-800 text-xs">Room {ticket.room}</span>

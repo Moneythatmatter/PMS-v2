@@ -27,8 +27,8 @@ import {
   FormField,
   FOPageHeader,
   StatMiniCard,
-  FOSearchToolbar,
 } from "@/components/frontoffice/ui";
+import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 
 export default function RoomCleaningOperations() {
   const {
@@ -46,6 +46,7 @@ export default function RoomCleaningOperations() {
   const [search, setSearch] = useState("");
   const [floorFilter, setFloorFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [selectedRoomNo, setSelectedRoomNo] = useState<string | null>(null);
   const [assignee, setAssignee] = useState("");
   const [checklistId, setChecklistId] = useState("");
@@ -200,40 +201,50 @@ export default function RoomCleaningOperations() {
         <StatMiniCard label="Vacant Ready" value={stats.ready} accent="#10b981" icon={CheckCircle2} />
       </div>
 
-      <FOSearchToolbar
+      {/* Standard Operations Toolbar */}
+      <OperationsToolbar
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search room, category, staff…"
-        filterPills={{
-          active: statusFilter,
-          onChange: setStatusFilter,
-          options: [
-            { id: "all", label: "All" },
-            { id: "dirty", label: "Dirty" },
-            { id: "cleaning", label: "Cleaning" },
-            { id: "inspection", label: "Inspection Pending" },
-            { id: "ready", label: "Vacant Ready" },
-            { id: "blocked", label: "Blocked / OOO" },
-          ],
-        }}
-        hasActiveAdvancedFilters={floorFilter !== "all"}
-        onClearAdvancedFilters={() => setFloorFilter("all")}
-        advancedFilters={
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <FormField label="Floor">
-              <SelectInput
-                value={floorFilter}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFloorFilter(e.target.value)}
-              >
-                <option value="all">All Floors</option>
-                {uniqueFloors.map((fl) => (
-                  <option key={fl} value={fl}>{fl}</option>
-                ))}
-              </SelectInput>
-            </FormField>
-          </div>
-        }
+        activeFilterCount={floorFilter !== "all" ? 1 : 0}
+        onOpenFilters={() => setFilterDrawerOpen(true)}
+        statusTabs={[
+          { id: "all", label: "All" },
+          { id: "dirty", label: "Dirty" },
+          { id: "cleaning", label: "Cleaning" },
+          { id: "inspection", label: "Inspection Pending" },
+          { id: "ready", label: "Vacant Ready" },
+          { id: "blocked", label: "Blocked / OOO" },
+        ]}
+        activeStatusTab={statusFilter}
+        onStatusTabChange={setStatusFilter}
       />
+
+      {/* Slide-over Filter Drawer */}
+      <OperationsFilterDrawer
+        open={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
+        title="Filter Room Cleaning Queue"
+        activeFilterCount={floorFilter !== "all" ? 1 : 0}
+        onReset={() => setFloorFilter("all")}
+      >
+        <div className="space-y-4 select-none">
+          <FormField label="Filter by Floor">
+            <SelectInput
+              value={floorFilter}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFloorFilter(e.target.value)}
+              className="w-full text-xs rounded-xl h-9 bg-white"
+            >
+              <option value="all">All Floors</option>
+              {uniqueFloors.map((fl) => (
+                <option key={fl} value={fl}>
+                  {fl}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+        </div>
+      </OperationsFilterDrawer>
 
       {/* Main Grid View */}
       {viewMode === "grid" ? (

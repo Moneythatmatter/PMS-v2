@@ -1,0 +1,260 @@
+export interface HousekeepingInventoryItem {
+  id: string;
+  sku: string;
+  name: string;
+  category: "Linen" | "Amenity" | "Chemical" | "Equipment" | "Uniform";
+  subCategory: string;
+  unit: string;
+  available: number;
+  inLaundry: number;
+  inTrolleys: number;
+  damaged: number;
+  lost: number;
+  parStock: number;
+  minReorderLevel: number;
+  unitCost: number;
+  storageLocation: string;
+  supplier: string;
+  status: "Stocked" | "Low Stock" | "Critically Low" | "Out of Stock";
+  chemicalInfo?: {
+    dilutionRatio: string;
+    ppeRequired: string[];
+    hazardRating: string;
+    msdsLink: string;
+  };
+  linenInfo?: {
+    washCount: number;
+    maxWashLifespan: number;
+    raggingStatus: string;
+  };
+  lastRestocked: string;
+  lastUpdatedBy: string;
+  remarks?: string;
+}
+
+export const INITIAL_HOUSEKEEPING_INVENTORY: HousekeepingInventoryItem[] = [
+  {
+    id: "INV-101",
+    sku: "SKU-LIN-BED-KNG",
+    name: "King Bed Sheets (Egyptian Cotton 400TC)",
+    category: "Linen",
+    subCategory: "Bedding",
+    unit: "Pcs",
+    available: 120,
+    inLaundry: 45,
+    inTrolleys: 30,
+    damaged: 6,
+    lost: 2,
+    parStock: 150,
+    minReorderLevel: 50,
+    unitCost: 1850,
+    storageLocation: "Main Linen Room - Rack A1",
+    supplier: "Metropolitan Fabrics Corp",
+    status: "Stocked",
+    linenInfo: {
+      washCount: 42,
+      maxWashLifespan: 150,
+      raggingStatus: "Good Condition",
+    },
+    lastRestocked: "2026-07-15",
+    lastUpdatedBy: "Ramesh Kumar",
+    remarks: "Luxury suite king sheets with embroidered hotel emblem.",
+  },
+  {
+    id: "INV-102",
+    sku: "SKU-LIN-PIL-COV",
+    name: "Pillow Covers (Executive Satin Finish)",
+    category: "Linen",
+    subCategory: "Bedding",
+    unit: "Pcs",
+    available: 250,
+    inLaundry: 80,
+    inTrolleys: 60,
+    damaged: 10,
+    lost: 4,
+    parStock: 300,
+    minReorderLevel: 100,
+    unitCost: 450,
+    storageLocation: "Main Linen Room - Rack A2",
+    supplier: "Metropolitan Fabrics Corp",
+    status: "Stocked",
+    linenInfo: {
+      washCount: 38,
+      maxWashLifespan: 120,
+      raggingStatus: "Good Condition",
+    },
+    lastRestocked: "2026-07-16",
+    lastUpdatedBy: "Meena Kumari",
+  },
+  {
+    id: "INV-103",
+    sku: "SKU-LIN-BTH-TWL",
+    name: "Luxury Bath Towels (750 GSM Plush White)",
+    category: "Linen",
+    subCategory: "Bath Linen",
+    unit: "Pcs",
+    available: 176,
+    inLaundry: 60,
+    inTrolleys: 40,
+    damaged: 8,
+    lost: 3,
+    parStock: 200,
+    minReorderLevel: 70,
+    unitCost: 1200,
+    storageLocation: "Main Linen Room - Rack B1",
+    supplier: "Royal Terry Mills",
+    status: "Stocked",
+    linenInfo: {
+      washCount: 55,
+      maxWashLifespan: 150,
+      raggingStatus: "Good Condition",
+    },
+    lastRestocked: "2026-07-18",
+    lastUpdatedBy: "Ramesh Kumar",
+  },
+  {
+    id: "INV-104",
+    sku: "SKU-LIN-HND-TWL",
+    name: "Hand Towels (Soft Plush White)",
+    category: "Linen",
+    subCategory: "Bath Linen",
+    unit: "Pcs",
+    available: 220,
+    inLaundry: 50,
+    inTrolleys: 35,
+    damaged: 5,
+    lost: 1,
+    parStock: 250,
+    minReorderLevel: 80,
+    unitCost: 350,
+    storageLocation: "Main Linen Room - Rack B2",
+    supplier: "Royal Terry Mills",
+    status: "Stocked",
+    linenInfo: {
+      washCount: 29,
+      maxWashLifespan: 150,
+      raggingStatus: "Good Condition",
+    },
+    lastRestocked: "2026-07-12",
+    lastUpdatedBy: "Meena Kumari",
+  },
+  {
+    id: "INV-105",
+    sku: "SKU-AMN-SHM-50",
+    name: "Hermes Vanity Shampoo Bottles (50ml)",
+    category: "Amenity",
+    subCategory: "Guest Toiletries",
+    unit: "Bottles",
+    available: 45,
+    inLaundry: 0,
+    inTrolleys: 120,
+    damaged: 0,
+    lost: 0,
+    parStock: 300,
+    minReorderLevel: 100,
+    unitCost: 180,
+    storageLocation: "Pantry Store Room 3 - Bay 4",
+    supplier: "Hermes Luxury Guest Supplies",
+    status: "Critically Low",
+    lastRestocked: "2026-07-01",
+    lastUpdatedBy: "Priya Sharma",
+    remarks: "Requires urgent store requisition from Central Warehouse.",
+  },
+  {
+    id: "INV-106",
+    sku: "SKU-AMN-DNT-KIT",
+    name: "Eco Dental Kits (Bamboo Toothbrush + Paste)",
+    category: "Amenity",
+    subCategory: "Guest Toiletries",
+    unit: "Kits",
+    available: 110,
+    inLaundry: 0,
+    inTrolleys: 90,
+    damaged: 2,
+    lost: 0,
+    parStock: 250,
+    minReorderLevel: 120,
+    unitCost: 65,
+    storageLocation: "Pantry Store Room 3 - Bay 2",
+    supplier: "EcoCare Amenities Ltd",
+    status: "Low Stock",
+    lastRestocked: "2026-07-08",
+    lastUpdatedBy: "Priya Sharma",
+  },
+  {
+    id: "INV-107",
+    sku: "SKU-CHM-R2-DIV",
+    name: "Taski R2 All-Purpose Surface Disinfectant",
+    category: "Chemical",
+    subCategory: "Hard Surface Cleaners",
+    unit: "Liters",
+    available: 18,
+    inLaundry: 0,
+    inTrolleys: 10,
+    damaged: 0,
+    lost: 0,
+    parStock: 60,
+    minReorderLevel: 25,
+    unitCost: 420,
+    storageLocation: "Chemical Safety Locker - Bay C",
+    supplier: "Diversey Hygiene Systems",
+    status: "Low Stock",
+    chemicalInfo: {
+      dilutionRatio: "20ml per 1 Liter of Water",
+      ppeRequired: ["Nitrile Gloves", "Safety Goggles"],
+      hazardRating: "Class 8 Mild Corrosive",
+      msdsLink: "MSDS-Taski-R2.pdf",
+    },
+    lastRestocked: "2026-07-10",
+    lastUpdatedBy: "Sanjay Patel",
+  },
+  {
+    id: "INV-108",
+    sku: "SKU-CHM-R1-DIV",
+    name: "Taski R1 Bathroom & Sanitizer Concentrate",
+    category: "Chemical",
+    subCategory: "Sanitizers",
+    unit: "Liters",
+    available: 48,
+    inLaundry: 0,
+    inTrolleys: 15,
+    damaged: 0,
+    lost: 0,
+    parStock: 50,
+    minReorderLevel: 20,
+    unitCost: 390,
+    storageLocation: "Chemical Safety Locker - Bay C",
+    supplier: "Diversey Hygiene Systems",
+    status: "Stocked",
+    chemicalInfo: {
+      dilutionRatio: "50ml per 1 Liter of Water",
+      ppeRequired: ["Rubber Gloves"],
+      hazardRating: "Non-Hazardous Diluted",
+      msdsLink: "MSDS-Taski-R1.pdf",
+    },
+    lastRestocked: "2026-07-14",
+    lastUpdatedBy: "Sanjay Patel",
+  },
+  {
+    id: "INV-109",
+    sku: "SKU-EQP-VAC-DYS",
+    name: "Dyson V15 Commercial Heavy-Duty Vacuums",
+    category: "Equipment",
+    subCategory: "Cleaning Machinery",
+    unit: "Units",
+    available: 12,
+    inLaundry: 0,
+    inTrolleys: 12,
+    damaged: 1,
+    lost: 0,
+    parStock: 14,
+    minReorderLevel: 10,
+    unitCost: 45000,
+    storageLocation: "Equipment Bay - Floor 1 West",
+    supplier: "Dyson Commercial India",
+    status: "Stocked",
+    lastRestocked: "2026-05-10",
+    lastUpdatedBy: "Ramesh Kumar",
+    remarks: "1 Unit currently in Maintenance for motor filter replacement.",
+  },
+];

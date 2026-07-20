@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
 import { getSmartEngineerRecommendation } from "@/components/housekeeping/HousekeepingActions";
+import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 
 const MAINTENANCE_CATEGORIES = [
   "Electrical",
@@ -39,6 +40,7 @@ export function MaintenanceRequestsView() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [selectedPill, setSelectedPill] = useState("all");
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [selectedReqId, setSelectedReqId] = useState<string | null>(null);
@@ -304,21 +306,45 @@ export function MaintenanceRequestsView() {
         </Button>
       </div>
 
-      {/* Toolbar */}
-      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative flex-1">
-            <TextInput
-              placeholder="Search room, problem category, or engineer…"
-              value={search}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
-              className="w-full pl-3"
-            />
-          </div>
-          <div className="flex gap-3">
+      {/* Standard Operations Toolbar */}
+      <OperationsToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search room, problem category, or engineer…"
+        activeFilterCount={filterStatus !== "all" ? 1 : 0}
+        onOpenFilters={() => setFilterDrawerOpen(true)}
+        statusTabs={[
+          { id: "all", label: "All" },
+          { id: "Open", label: "Open" },
+          { id: "Assigned", label: "Assigned" },
+          { id: "In Progress", label: "In Progress" },
+          { id: "Awaiting Verification", label: "Awaiting Verification" },
+          { id: "Closed", label: "Closed" },
+          { id: "High", label: "High" },
+          { id: "Critical", label: "Critical" },
+          { id: "Electrical", label: "Electrical" },
+          { id: "Plumbing", label: "Plumbing" },
+          { id: "HVAC", label: "HVAC" },
+          { id: "My Jobs", label: "My Jobs" },
+        ]}
+        activeStatusTab={selectedPill}
+        onStatusTabChange={setSelectedPill}
+      />
+
+      {/* Slide-over Filter Drawer */}
+      <OperationsFilterDrawer
+        open={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
+        title="Filter Maintenance Work Orders"
+        activeFilterCount={filterStatus !== "all" ? 1 : 0}
+        onReset={() => setFilterStatus("all")}
+      >
+        <div className="space-y-4 select-none">
+          <FormField label="Filter by Work Order Status">
             <SelectInput
               value={filterStatus}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterStatus(e.target.value)}
+              className="w-full text-xs rounded-xl h-9 bg-white"
             >
               <option value="all">All Statuses</option>
               <option value="Open">Open</option>
@@ -328,46 +354,9 @@ export function MaintenanceRequestsView() {
               <option value="Closed">Closed</option>
               <option value="Cancelled">Cancelled</option>
             </SelectInput>
-          </div>
+          </FormField>
         </div>
-
-        {/* Pill Filters */}
-        <div className="flex flex-wrap gap-2 pt-1">
-          {[
-            { id: "all", label: "All" },
-            { id: "Open", label: "Open" },
-            { id: "Assigned", label: "Assigned" },
-            { id: "In Progress", label: "In Progress" },
-            { id: "Awaiting Verification", label: "Awaiting Verification" },
-            { id: "Closed", label: "Closed" },
-            { id: "High", label: "High" },
-            { id: "Medium", label: "Medium" },
-            { id: "Low", label: "Low" },
-            { id: "Critical", label: "Critical" },
-            { id: "Electrical", label: "Electrical" },
-            { id: "Plumbing", label: "Plumbing" },
-            { id: "HVAC", label: "HVAC" },
-            { id: "Furniture", label: "Furniture" },
-            { id: "Auto Assigned", label: "Auto Assigned" },
-            { id: "Manual Assigned", label: "Manual Assigned" },
-            { id: "My Jobs", label: "My Jobs" },
-          ].map((pill) => (
-            <button
-              key={pill.id}
-              type="button"
-              onClick={() => setSelectedPill(pill.id)}
-              className={cn(
-                "rounded-full px-3 py-0.5 text-[10px] font-bold uppercase border transition-all cursor-pointer",
-                selectedPill === pill.id
-                  ? "bg-emerald-700 text-white border-emerald-700 shadow-sm"
-                  : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
-              )}
-            >
-              {pill.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      </OperationsFilterDrawer>
 
       {/* Data Table */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -390,7 +379,7 @@ export function MaintenanceRequestsView() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-            {filteredMaint.map((m) => {
+            {filteredMaint.map((m, idx) => {
               const isOpen = m.status === "Open";
               const isAssigned = m.status === "Assigned";
               const isProgress = m.status === "In Progress";
@@ -398,7 +387,7 @@ export function MaintenanceRequestsView() {
               const isClosed = m.status === "Closed";
 
               return (
-                <tr key={m.id} className="hover:bg-slate-50/50">
+                <tr key={`${m.id}-${idx}`} className="hover:bg-slate-50/50">
                   <td className="px-5 py-4 font-semibold text-slate-500">{m.id}</td>
                   <td className="px-5 py-4 font-bold text-slate-800">Room {m.room}</td>
                   <td className="px-5 py-4 text-slate-700 font-medium max-w-xs truncate">{m.problem}</td>

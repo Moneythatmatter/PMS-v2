@@ -52,6 +52,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
+import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 
 const LAUNDRY_STATUS_STEPS = [
   "Collection",
@@ -117,6 +118,7 @@ export default function LaundryOperations() {
   const [activeTab, setActiveTab] = useState<"laundry" | "discard" | "machines" | "reports" | "audit">("laundry");
   const [createOpen, setCreateOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
   // Form: Laundry basic fields
   const [type, setType] = useState<"Guest" | "Hotel" | "Staff">("Guest");
@@ -556,48 +558,47 @@ export default function LaundryOperations() {
   };
 
   const handleToggleLockout = (id: string) => {
-    setMachinesList((prev) =>
-      prev.map((m) => {
-        if (m.id === id) {
-          const nextLock = !m.lockout;
-          
-          if (nextLock) {
-            addMaintenanceRequest({
-              room: `Laundry Room - ${m.name}`,
-              problem: `Attendant initiated preventive lockout hold on laundry equipment ${m.name}. Perform inspection.`,
-              priority: "Medium",
-              engineer: "—",
-              assignmentType: "Auto",
-            });
-          }
+    const targetMachine = machinesList.find((m) => m.id === id);
+    if (!targetMachine) return;
 
-          addAuditLog(
-            "Equipment Status",
-            `Machine ${m.name} maintenance lockout set to ${nextLock ? "ACTIVE" : "INACTIVE"}.`,
-            id
-          );
-          return { ...m, lockout: nextLock, status: nextLock ? "Maintenance" : "Idle" };
-        }
-        return m;
-      })
+    const nextLock = !targetMachine.lockout;
+
+    if (nextLock) {
+      addMaintenanceRequest({
+        room: `Laundry Room - ${targetMachine.name}`,
+        problem: `Attendant initiated preventive lockout hold on laundry equipment ${targetMachine.name}. Perform inspection.`,
+        priority: "Medium",
+        engineer: "—",
+        assignmentType: "Auto",
+      });
+    }
+
+    addAuditLog(
+      "Equipment Status",
+      `Machine ${targetMachine.name} maintenance lockout set to ${nextLock ? "ACTIVE" : "INACTIVE"}.`,
+      id
+    );
+
+    setMachinesList((prev) =>
+      prev.map((m) =>
+        m.id === id ? { ...m, lockout: nextLock, status: nextLock ? "Maintenance" : "Idle" } : m
+      )
     );
     setToast({ message: `Machine ${id} maintenance state updated.`, variant: "info" });
   };
 
   const handleDeductChemical = (id: string, qty: number) => {
+    const target = consumables.find((c) => c.id === id);
+    if (target) {
+      const nextStock = Math.max(0, target.stock - qty);
+      addAuditLog(
+        "Material Usage",
+        `Deducted ${qty} ${target.unit} from ${target.name} stock. Remaining: ${nextStock} ${target.unit}.`,
+        id
+      );
+    }
     setConsumables((prev) =>
-      prev.map((c) => {
-        if (c.id === id) {
-          const nextStock = Math.max(0, c.stock - qty);
-          addAuditLog(
-            "Material Usage",
-            `Deducted ${qty} ${c.unit} from ${c.name} stock. Remaining: ${nextStock} ${c.unit}.`,
-            id
-          );
-          return { ...c, stock: nextStock };
-        }
-        return c;
-      })
+      prev.map((c) => (c.id === id ? { ...c, stock: Math.max(0, c.stock - qty) } : c))
     );
     setToast({ message: `Chemical consumption updated.`, variant: "success" });
   };
@@ -805,100 +806,75 @@ export default function LaundryOperations() {
           <div className="grid gap-6 xl:grid-cols-5">
             {/* Left 4 columns: Active Jobs Table */}
             <div className="xl:col-span-4 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="relative w-full max-w-xs">
-                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                  <TextInput
-                    className="pl-9 text-xs rounded-xl"
-                    placeholder="Search by ID, guest, or room…"
-                    value={search}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
-                  />
-                </div>
+              {/* Standard Operations Toolbar */}
+              <OperationsToolbar
+                search={search}
+                onSearchChange={setSearch}
+                searchPlaceholder="Search by Job ID, guest, or room…"
+                activeFilterCount={activeFiltersCount}
+                onOpenFilters={() => setFilterDrawerOpen(true)}
+                statusTabs={[
+                  { id: "All", label: "All" },
+                  { id: "Collection", label: "Collection" },
+                  { id: "Washing", label: "Washing" },
+                  { id: "Ironing", label: "Ironing" },
+                  { id: "Ready", label: "Ready" },
+                  { id: "Delivered", label: "Delivered" },
+                ]}
+                activeStatusTab={statusFilter}
+                onStatusTabChange={setStatusFilter}
+              />
 
-                <div className="flex items-center gap-2">
-                  <SelectInput
-                    className="w-36 text-xs rounded-xl"
-                    value={statusFilter}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="All">All Pipeline Statuses</option>
-                    <option value="Collection">Collection / Scheduled</option>
-                    <option value="Washing">Washing / Processing</option>
-                    <option value="Ironing">Ironing / Finishing</option>
-                    <option value="Ready">Ready for Delivery</option>
-                    <option value="Delivered">Delivered & Closed</option>
-                  </SelectInput>
-
-                  <div className="relative" ref={popoverRef}>
-                    <Button
-                      variant="outline"
-                      onClick={handleTogglePopover}
-                      className="text-xs font-semibold border-slate-200 rounded-xl h-8 px-3 gap-1.5 flex items-center justify-center bg-white"
+              {/* Slide-over Filter Drawer */}
+              <OperationsFilterDrawer
+                open={filterDrawerOpen}
+                onClose={() => setFilterDrawerOpen(false)}
+                title="Filter Laundry Jobs"
+                activeFilterCount={activeFiltersCount}
+                onReset={() => {
+                  setTypeFilter("All");
+                  setSortBy("ID");
+                  setPriorityFilter("All");
+                }}
+              >
+                <div className="space-y-4 select-none">
+                  <FormField label="Linen / Customer Category">
+                    <SelectInput
+                      value={typeFilter}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTypeFilter(e.target.value)}
+                      className="w-full text-xs rounded-xl h-9 bg-white"
                     >
-                      <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400" />
-                      More Filters
-                      {activeFiltersCount > 0 && (
-                        <span className="rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white leading-none">
-                          {activeFiltersCount}
-                        </span>
-                      )}
-                    </Button>
+                      <option value="All">All Types</option>
+                      <option value="Guest">Guest Laundry</option>
+                      <option value="Hotel">Internal Stock</option>
+                    </SelectInput>
+                  </FormField>
 
-                    {isFilterPopoverOpen && (
-                      <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl space-y-3.5">
-                        <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">Filter Parameters</h4>
-                        
-                        <div className="space-y-3">
-                          <FormField label="Linen Category">
-                            <SelectInput
-                              value={draftTypeFilter}
-                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setDraftTypeFilter(e.target.value)}
-                              className="text-xs"
-                            >
-                              <option value="All">All Types</option>
-                              <option value="Guest">Guest Laundry</option>
-                              <option value="Hotel">Internal Stock</option>
-                            </SelectInput>
-                          </FormField>
+                  <FormField label="Priority / Urgency">
+                    <SelectInput
+                      value={priorityFilter}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPriorityFilter(e.target.value)}
+                      className="w-full text-xs rounded-xl h-9 bg-white"
+                    >
+                      <option value="All">All Priorities</option>
+                      <option value="Express">Express</option>
+                      <option value="Standard">Standard</option>
+                    </SelectInput>
+                  </FormField>
 
-                          <FormField label="Sort Direction">
-                            <SelectInput
-                              value={draftSortBy}
-                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setDraftSortBy(e.target.value)}
-                              className="text-xs"
-                            >
-                              <option value="ID">Job ID (Descending)</option>
-                              <option value="Charges">Charges Amount</option>
-                              <option value="Items">Quantity Count</option>
-                            </SelectInput>
-                          </FormField>
-                        </div>
-
-                        <div className="flex gap-2 pt-2 border-t border-slate-100">
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              setDraftTypeFilter("All");
-                              setDraftSortBy("ID");
-                              setDraftPriorityFilter("All");
-                            }}
-                            className="w-1/2 !bg-slate-100 hover:!bg-slate-200 !text-slate-700 !border-transparent text-xs py-1.5"
-                          >
-                            Reset
-                          </Button>
-                          <Button
-                            onClick={handleApplyFilters}
-                            className="w-1/2 !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white text-xs py-1.5"
-                          >
-                            Apply Filters
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <FormField label="Sort Direction">
+                    <SelectInput
+                      value={sortBy}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSortBy(e.target.value)}
+                      className="w-full text-xs rounded-xl h-9 bg-white"
+                    >
+                      <option value="ID">Job ID (Descending)</option>
+                      <option value="Charges">Charges Amount</option>
+                      <option value="Items">Quantity Count</option>
+                    </SelectInput>
+                  </FormField>
                 </div>
-              </div>
+              </OperationsFilterDrawer>
 
               {/* Table Container */}
               <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm scrollbar-thin">

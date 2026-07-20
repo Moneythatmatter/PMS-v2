@@ -6,8 +6,9 @@ import {
   Sparkles,
   Layers,
   UserCheck,
-  Clock,
-  ArrowRightLeft
+  Bell,
+  Wrench,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,8 +16,9 @@ const housekeepingSubNavItems = [
   { label: "Room Cleaning", href: "/housekeeping/operations/room-cleaning", icon: Sparkles },
   { label: "Public Area", href: "/housekeeping/operations/public-cleaning", icon: Layers },
   { label: "Room Inspection", href: "/housekeeping/operations/inspection", icon: UserCheck },
-  { label: "Deep Cleaning", href: "/housekeeping/operations/deep-cleaning", icon: Clock },
-  { label: "Laundry Flow", href: "/housekeeping/operations/laundry", icon: ArrowRightLeft },
+  { label: "Guest Requests", href: "/housekeeping/housekeeping-requests", icon: Bell },
+  { label: "Maintenance", href: "/housekeeping/maintenance-requests", icon: Wrench },
+  { label: "Damage Reports", href: "/housekeeping/operations/damage-reports", icon: AlertTriangle },
 ] as const;
 
 export function HousekeepingSubNav() {
@@ -25,7 +27,7 @@ export function HousekeepingSubNav() {
   return (
     <nav
       aria-label="Housekeeping quick navigation"
-      className="flex gap-0.5 overflow-x-auto scrollbar-none sm:gap-1"
+      className="flex items-center gap-0.5 border-b border-slate-200 select-none bg-white sm:gap-1"
     >
       {housekeepingSubNavItems.map((item) => {
         const Icon = item.icon;
@@ -36,14 +38,14 @@ export function HousekeepingSubNav() {
             key={item.href}
             href={item.href}
             className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4",
+              "inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-semibold transition-colors sm:px-3.5 -mb-px",
               isActive
-                ? "border-emerald-700 text-emerald-700"
-                : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700",
+                ? "border-emerald-700 text-emerald-750 font-extrabold"
+                : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"
             )}
           >
-            <Icon className="h-4 w-4 shrink-0" />
-            {item.label}
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            <span>{item.label}</span>
           </Link>
         );
       })}

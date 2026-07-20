@@ -50,8 +50,8 @@ import {
   ConfirmModal,
   FOPageHeader,
   StatMiniCard,
-  FOSearchToolbar,
 } from "@/components/frontoffice/ui";
+import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 import { HKPublicArea, HKPublicAreaChecklistItem } from "@/app/data/housekeeping";
 
 
@@ -111,6 +111,7 @@ export default function PublicAreaCleaning() {
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterFloor, setFilterFloor] = useState("all");
   const [filterStaff, setFilterStaff] = useState("all");
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
   // Popover & Draft Filter States
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
@@ -683,87 +684,98 @@ export default function PublicAreaCleaning() {
         <StatMiniCard label="Pending Verify" value={stats.pendingInspection} icon={ClipboardList} accent="#3b82f6" />
       </div>
 
-      {/* Search & Filters Toolbar */}
-      <FOSearchToolbar
+      {/* Standard Operations Toolbar */}
+      <OperationsToolbar
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search public area, location or housekeeper…"
-        filterPills={{
-          active: filterStatus,
-          onChange: setFilterStatus,
-          options: [
-            { id: "all", label: "All" },
-            { id: "clean", label: "Clean & Inspected" },
-            { id: "dirty", label: "Dirty & Assigned" },
-            { id: "cleaning", label: "In Cleaning" },
-            { id: "pending", label: "Pending Inspection" },
-            { id: "blocked", label: "Blocked / Closed" },
-          ],
-        }}
-        hasActiveAdvancedFilters={
-          filterCategory !== "all" ||
-          filterPriority !== "all" ||
-          filterFloor !== "all" ||
-          filterStaff !== "all"
-        }
-        onClearAdvancedFilters={() => {
+        activeFilterCount={activeFiltersCount}
+        onOpenFilters={() => setFilterDrawerOpen(true)}
+        statusTabs={[
+          { id: "all", label: "All" },
+          { id: "clean", label: "Clean & Inspected" },
+          { id: "dirty", label: "Dirty & Assigned" },
+          { id: "cleaning", label: "In Cleaning" },
+          { id: "pending", label: "Pending Inspection" },
+          { id: "blocked", label: "Blocked / Closed" },
+        ]}
+        activeStatusTab={filterStatus}
+        onStatusTabChange={setFilterStatus}
+      />
+
+      {/* Slide-over Filter Drawer */}
+      <OperationsFilterDrawer
+        open={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
+        title="Filter Public Area Operations"
+        activeFilterCount={activeFiltersCount}
+        onReset={() => {
           setFilterCategory("all");
           setFilterPriority("all");
           setFilterFloor("all");
           setFilterStaff("all");
         }}
-        advancedFilters={
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <FormField label="Area Type">
-              <SelectInput
-                value={filterCategory}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterCategory(e.target.value)}
-              >
-                <option value="all">All Types</option>
-                {uniqueCategories.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </SelectInput>
-            </FormField>
+      >
+        <div className="space-y-4 select-none">
+          <FormField label="Area Type">
+            <SelectInput
+              value={filterCategory}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterCategory(e.target.value)}
+              className="w-full text-xs rounded-xl h-9 bg-white"
+            >
+              <option value="all">All Types</option>
+              {uniqueCategories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
 
-            <FormField label="Priority">
-              <SelectInput
-                value={filterPriority}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterPriority(e.target.value)}
-              >
-                <option value="all">All Priorities</option>
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
-              </SelectInput>
-            </FormField>
+          <FormField label="Priority">
+            <SelectInput
+              value={filterPriority}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterPriority(e.target.value)}
+              className="w-full text-xs rounded-xl h-9 bg-white"
+            >
+              <option value="all">All Priorities</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </SelectInput>
+          </FormField>
 
-            <FormField label="Floor">
-              <SelectInput
-                value={filterFloor}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterFloor(e.target.value)}
-              >
-                <option value="all">All Floors</option>
-                {uniqueFloors.map((floor) => (
-                  <option key={floor} value={floor}>{floor}</option>
-                ))}
-              </SelectInput>
-            </FormField>
+          <FormField label="Floor">
+            <SelectInput
+              value={filterFloor}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterFloor(e.target.value)}
+              className="w-full text-xs rounded-xl h-9 bg-white"
+            >
+              <option value="all">All Floors</option>
+              {uniqueFloors.map((floor) => (
+                <option key={floor} value={floor}>
+                  {floor}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
 
-            <FormField label="Staff">
-              <SelectInput
-                value={filterStaff}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterStaff(e.target.value)}
-              >
-                <option value="all">All Staff</option>
-                {uniqueStaff.map((staffMember) => (
-                  <option key={staffMember} value={staffMember}>{staffMember}</option>
-                ))}
-              </SelectInput>
-            </FormField>
-          </div>
-        }
-      />
+          <FormField label="Assigned Staff">
+            <SelectInput
+              value={filterStaff}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterStaff(e.target.value)}
+              className="w-full text-xs rounded-xl h-9 bg-white"
+            >
+              <option value="all">All Staff</option>
+              {uniqueStaff.map((staffMember) => (
+                <option key={staffMember} value={staffMember}>
+                  {staffMember}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+        </div>
+      </OperationsFilterDrawer>
 
       {/* Main Layout Area: Grid + Right Alerts Panel */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">

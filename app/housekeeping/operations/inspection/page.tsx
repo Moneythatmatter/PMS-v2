@@ -26,10 +26,10 @@ import { AlertBanner } from "@/components/frontoffice/ui/AlertBanner";
 import {
   FOPageHeader,
   StatMiniCard,
-  FOSearchToolbar,
   FormField,
   SelectInput,
 } from "@/components/frontoffice/ui";
+import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 
 interface ChecklistItemState {
   task: string;
@@ -60,6 +60,7 @@ export default function RoomInspection() {
   // Simple Toolbar Filters
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
 
 
@@ -664,85 +665,92 @@ export default function RoomInspection() {
         <StatMiniCard label="Avg. Inspection Time" value={stats.avgTime} icon={ClipboardList} accent="#3b82f6" />
       </div>
 
-      {/* Search & Filters Toolbar */}
-      <FOSearchToolbar
+      {/* Standard Operations Toolbar */}
+      <OperationsToolbar
         search={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search Room…"
-        filterPills={{
-          active: statusFilter,
-          onChange: setStatusFilter,
-          options: [
-            { id: "All", label: "All" },
-            { id: "Awaiting Inspection", label: "Awaiting Inspection" },
-            { id: "Passed", label: "Passed" },
-            { id: "Failed", label: "Failed" },
-          ],
-        }}
-        hasActiveAdvancedFilters={
-          floorFilter !== "All" ||
-          wingFilter !== "All" ||
-          roomTypeFilter !== "All" ||
-          priorityFilter !== "All"
-        }
-        onClearAdvancedFilters={() => {
+        searchPlaceholder="Search Room number or category…"
+        activeFilterCount={activeFiltersCount}
+        onOpenFilters={() => setFilterDrawerOpen(true)}
+        statusTabs={[
+          { id: "All", label: "All" },
+          { id: "Awaiting Inspection", label: "Awaiting Inspection" },
+          { id: "Passed", label: "Passed" },
+          { id: "Failed", label: "Failed" },
+        ]}
+        activeStatusTab={statusFilter}
+        onStatusTabChange={setStatusFilter}
+      />
+
+      {/* Slide-over Filter Drawer */}
+      <OperationsFilterDrawer
+        open={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
+        title="Filter Room Inspection Queue"
+        activeFilterCount={activeFiltersCount}
+        onReset={() => {
           setFloorFilter("All");
           setWingFilter("All");
           setRoomTypeFilter("All");
           setPriorityFilter("All");
+          setInspectorFilter("All");
+          setHousekeeperFilter("All");
         }}
-        advancedFilters={
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <FormField label="Floor">
-              <SelectInput
-                value={floorFilter}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFloorFilter(e.target.value)}
-              >
-                <option value="All">All Floors</option>
-                <option value="1st Floor">1st Floor</option>
-                <option value="2nd Floor">2nd Floor</option>
-                <option value="3rd Floor">3rd Floor</option>
-              </SelectInput>
-            </FormField>
+      >
+        <div className="space-y-4 select-none">
+          <FormField label="Floor">
+            <SelectInput
+              value={floorFilter}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFloorFilter(e.target.value)}
+              className="w-full text-xs rounded-xl h-9 bg-white"
+            >
+              <option value="All">All Floors</option>
+              <option value="1st Floor">1st Floor</option>
+              <option value="2nd Floor">2nd Floor</option>
+              <option value="3rd Floor">3rd Floor</option>
+            </SelectInput>
+          </FormField>
 
-            <FormField label="Wing">
-              <SelectInput
-                value={wingFilter}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWingFilter(e.target.value)}
-              >
-                <option value="All">All Wings</option>
-                <option value="East Wing">East Wing</option>
-                <option value="West Wing">West Wing</option>
-              </SelectInput>
-            </FormField>
+          <FormField label="Wing">
+            <SelectInput
+              value={wingFilter}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWingFilter(e.target.value)}
+              className="w-full text-xs rounded-xl h-9 bg-white"
+            >
+              <option value="All">All Wings</option>
+              <option value="East Wing">East Wing</option>
+              <option value="West Wing">West Wing</option>
+            </SelectInput>
+          </FormField>
 
-            <FormField label="Room Type">
-              <SelectInput
-                value={roomTypeFilter}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRoomTypeFilter(e.target.value)}
-              >
-                <option value="All">All Types</option>
-                <option value="Standard">Standard</option>
-                <option value="Deluxe">Deluxe</option>
-                <option value="Executive Suite">Executive Suite</option>
-              </SelectInput>
-            </FormField>
+          <FormField label="Room Type">
+            <SelectInput
+              value={roomTypeFilter}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRoomTypeFilter(e.target.value)}
+              className="w-full text-xs rounded-xl h-9 bg-white"
+            >
+              <option value="All">All Types</option>
+              <option value="Standard">Standard</option>
+              <option value="Deluxe">Deluxe</option>
+              <option value="Executive Suite">Executive Suite</option>
+            </SelectInput>
+          </FormField>
 
-            <FormField label="Priority">
-              <SelectInput
-                value={priorityFilter}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPriorityFilter(e.target.value)}
-              >
-                <option value="All">All Priorities</option>
-                <option value="Critical">Critical</option>
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
-              </SelectInput>
-            </FormField>
-          </div>
-        }
-      />
+          <FormField label="Priority">
+            <SelectInput
+              value={priorityFilter}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPriorityFilter(e.target.value)}
+              className="w-full text-xs rounded-xl h-9 bg-white"
+            >
+              <option value="All">All Priorities</option>
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </SelectInput>
+          </FormField>
+        </div>
+      </OperationsFilterDrawer>
 
       {/* Main Layout Area: Grid + Right Sidebar Panel */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
