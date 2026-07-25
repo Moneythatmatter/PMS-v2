@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { inHouseGuests } from "@/app/data";
 import type { InHouseGuest } from "@/app/data/frontoffice/modules";
+import { reservationService } from "@/services/front-office";
 
 interface GuestSearchSelectProps {
   value: string;
@@ -23,19 +23,35 @@ export function GuestSearchSelect({
   className,
 }: GuestSearchSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [guests, setGuests] = useState<InHouseGuest[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await reservationService.inHouse();
+        if (!cancelled) setGuests(data as InHouseGuest[]);
+      } catch {
+        if (!cancelled) setGuests([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const matches = useMemo(() => {
     const q = value.toLowerCase();
     if (!q) return [];
-    return inHouseGuests.filter(
+    return guests.filter(
       (g) =>
         g.guestName.toLowerCase().includes(q) ||
         g.room.includes(q),
     );
-  }, [value]);
+  }, [value, guests]);
 
   const selectedGuest = selectedGuestId
-    ? inHouseGuests.find((g) => g.id === selectedGuestId)
+    ? guests.find((g) => g.id === selectedGuestId)
     : null;
 
   const showDropdown =

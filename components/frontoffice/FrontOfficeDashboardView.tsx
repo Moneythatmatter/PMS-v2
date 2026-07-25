@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   Bell,
@@ -14,16 +15,6 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import {
-  bookingSources,
-  deskActivity,
-  frontOfficeStats,
-  roomInventory,
-  todaysArrivals,
-  todaysDepartures,
-  wakeUpCalls,
-  weeklyFlow,
-} from "@/app/data";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
 import { StatMiniCard } from "@/components/frontoffice/ui";
@@ -34,6 +25,17 @@ import { DeskActivityFeed } from "@/components/frontoffice/DeskActivityFeed";
 import { StatusBadge } from "@/components/frontoffice/StatusBadge";
 import { getPendingWakeUpCalls } from "@/components/frontoffice/WakeUpCallsAlert";
 import { cn } from "@/lib/utils";
+import { dashboardService, wakeUpCallService } from "@/services/front-office";
+import type {
+  ArrivalGuest,
+  BookingSource,
+  DepartureGuest,
+  DeskActivity,
+  FrontOfficeStat,
+  RoomInventoryData,
+  WeeklyFlowPoint,
+} from "@/app/data/types";
+import type { WakeUpCall } from "@/app/data/frontoffice/modules";
 
 const BUSINESS_DATE = "23 Jun 2026";
 
@@ -88,7 +90,92 @@ const quickLinks = [
   },
 ];
 
+type DashboardData = {
+  stats: FrontOfficeStat[];
+  todaysArrivals: ArrivalGuest[];
+  todaysDepartures: DepartureGuest[];
+  roomInventory: RoomInventoryData;
+  weeklyFlow: WeeklyFlowPoint[];
+  bookingSources: BookingSource[];
+  deskActivity: DeskActivity[];
+};
+
+const emptyInventory: RoomInventoryData = {
+  percentage: 0,
+  occupied: 0,
+  total: 0,
+  statuses: [],
+};
+
 export function FrontOfficeDashboardView() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [wakeUpCalls, setWakeUpCalls] = useState<WakeUpCall[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [dashboard, calls] = await Promise.all([
+          dashboardService.get() as Promise<DashboardData>,
+          wakeUpCallService.list(),
+        ]);
+        if (!cancelled) {
+          setData(dashboard);
+          setWakeUpCalls(calls);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <ModulePageShell
+        eyebrow="Front Office"
+        title="Dashboard"
+        description="Arrivals, departures, occupancy, and desk work for today."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-slate-500">Loading…</p>
+      </ModulePageShell>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <ModulePageShell
+        eyebrow="Front Office"
+        title="Dashboard"
+        description="Arrivals, departures, occupancy, and desk work for today."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-red-600">{error ?? "Failed to load"}</p>
+      </ModulePageShell>
+    );
+  }
+
+  const {
+    stats: frontOfficeStats,
+    todaysArrivals,
+    todaysDepartures,
+    roomInventory = emptyInventory,
+    weeklyFlow,
+    bookingSources,
+    deskActivity,
+  } = data;
+
   const pendingWakeUps = getPendingWakeUpCalls(wakeUpCalls);
   const todayWakeUps = pendingWakeUps.filter((c) => c.date === BUSINESS_DATE);
   const pendingArrivals = todaysArrivals.filter((g) => g.status === "Pending");
@@ -151,7 +238,6 @@ export function FrontOfficeDashboardView() {
       description="Arrivals, departures, occupancy, and desk work for today."
       wrapChildren={false}
     >
-      {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {frontOfficeStats.map((stat, i) => {
           const Icon = statIcons[i] ?? Users;
@@ -168,7 +254,6 @@ export function FrontOfficeDashboardView() {
         })}
       </div>
 
-      {/* Needs attention */}
       {alerts.length > 0 && (
         <section className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -206,7 +291,6 @@ export function FrontOfficeDashboardView() {
         </section>
       )}
 
-      {/* Quick actions — compact strip, not a tall sidebar */}
       <section className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
         <div className="mb-2 flex items-baseline justify-between gap-2">
           <h2 className="text-sm font-semibold text-slate-900">Quick actions</h2>
@@ -235,7 +319,6 @@ export function FrontOfficeDashboardView() {
       </section>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        {/* Arrivals */}
         <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div>
@@ -266,7 +349,6 @@ export function FrontOfficeDashboardView() {
           </ul>
         </section>
 
-        {/* Departures */}
         <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div>
@@ -299,7 +381,6 @@ export function FrontOfficeDashboardView() {
       </div>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
-        {/* Wake-ups */}
         <section className="flex h-full flex-col rounded-xl border border-amber-200/80 bg-amber-50/40 p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div>
@@ -347,7 +428,6 @@ export function FrontOfficeDashboardView() {
           </ul>
         </section>
 
-        {/* Room inventory */}
         <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div>
@@ -400,7 +480,6 @@ export function FrontOfficeDashboardView() {
           </div>
         </section>
 
-        {/* Desk activity */}
         <DeskActivityFeed activities={deskActivity} />
       </div>
 

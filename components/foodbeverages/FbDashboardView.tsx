@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -14,7 +15,14 @@ import {
   Wallet,
   Wine,
 } from "lucide-react";
-import { banquetVenues, restaurantOutlets } from "@/app/data/foodbeverages/modules";
+import { formatINR } from "@/app/data/foodbeverages/ops";
+import {
+  banquetBookingService,
+  fbDashboardService,
+  type FbOrder,
+  type FbOutlet,
+  type LiveTable,
+} from "@/services/food-beverages";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
 import { cn } from "@/lib/utils";
@@ -70,141 +78,105 @@ const quickLinks = [
   },
 ];
 
-const outletMetrics: Record<
-  string,
-  {
-    sales: string;
-    covers: number;
-    openOrders: number;
-    tables: string;
-    occupancy: number;
-    status: "Busy" | "Steady" | "Quiet";
-  }
-> = {
-  "rest-1": {
-    sales: "₹48,200",
-    covers: 42,
-    openOrders: 7,
-    tables: "5 / 16",
-    occupancy: 72,
-    status: "Busy",
-  },
-  "rest-2": {
-    sales: "₹36,400",
-    covers: 28,
-    openOrders: 4,
-    tables: "3 / 14",
-    occupancy: 48,
-    status: "Steady",
-  },
-  "cafe-1": {
-    sales: "₹22,100",
-    covers: 11,
-    openOrders: 2,
-    tables: "2 / 8",
-    occupancy: 35,
-    status: "Quiet",
-  },
-  "cafe-2": {
-    sales: "₹17,800",
-    covers: 5,
-    openOrders: 1,
-    tables: "1 / 6",
-    occupancy: 22,
-    status: "Quiet",
-  },
+type BanquetBooking = {
+  id: string;
+  venue?: string;
+  event?: string;
+  time?: string;
+  pax?: number;
+  status?: string;
+  balance?: string | number;
 };
 
-const alerts = [
-  {
-    id: "a1",
-    tone: "danger" as const,
-    title: "1 table in billing · Restaurant #1",
-    detail: "Guest waiting over 12 min",
-    href: "/food-beverages/restaurants/tables",
-    action: "Open tables",
-  },
-  {
-    id: "a2",
-    tone: "warning" as const,
-    title: "2 kitchen tickets over SLA",
-    detail: "Main Kitchen KDS",
-    href: "/food-beverages/kitchen/kds",
-    action: "Open KDS",
-  },
-  {
-    id: "a3",
-    tone: "warning" as const,
-    title: "Lawn · Product Launch balance ₹52,000",
-    detail: "Pending banquet close",
-    href: "/food-beverages/banquet/bookings",
-    action: "Open banquet",
-  },
-  {
-    id: "a4",
-    tone: "info" as const,
-    title: "Cashier shift open · Amit Kumar",
-    detail: "Restaurant #1 · Lunch",
-    href: "/food-beverages/restaurants/cashier",
-    action: "Cashier",
-  },
-];
+type DashboardStat = {
+  label: string;
+  value: string | number;
+  sublabel?: string;
+  accent?: string;
+};
 
-const banquetToday = [
-  {
-    id: "b1",
-    venue: "Lawn",
-    event: "Product Launch",
-    time: "6:00 PM",
-    pax: 120,
-    status: "Confirmed",
-    balance: "₹52,000",
-  },
-  {
-    id: "b2",
-    venue: "Conference Hall A",
-    event: "Board Meeting",
-    time: "10:00 AM",
-    pax: 28,
-    status: "In Progress",
-    balance: "₹0",
-  },
-];
+type DashboardData = {
+  outlets: FbOutlet[];
+  stats: DashboardStat[];
+  recentOrders: FbOrder[];
+  liveTables: LiveTable[];
+  banquetBookings: BanquetBooking[];
+};
 
-const recentOrders = [
-  {
-    id: "O-1842",
-    outlet: "Restaurant #1",
-    table: "T12",
-    amount: "₹3,240",
-    status: "Serving",
-    ago: "2 min",
-  },
-  {
-    id: "O-1841",
-    outlet: "Lobby Cafe",
-    table: "C3",
-    amount: "₹680",
-    status: "Billing",
-    ago: "5 min",
-  },
-  {
-    id: "O-1840",
-    outlet: "Main Bar",
-    table: "B2",
-    amount: "₹2,150",
-    status: "Preparing",
-    ago: "8 min",
-  },
-  {
-    id: "O-1839",
-    outlet: "Restaurant #2",
-    table: "T4",
-    amount: "₹4,890",
-    status: "Paid",
-    ago: "12 min",
-  },
-];
+type AlertItem = {
+  id: string;
+  tone: "danger" | "warning" | "info";
+  title: string;
+  detail: string;
+  href: string;
+  action: string;
+};
+
+function buildAlerts(data: DashboardData): AlertItem[] {
+  const items: AlertItem[] = [];
+  const billing = data.liveTables.filter((t) => t.status === "Billing");
+  if (billing.length) {
+    items.push({
+      id: "billing",
+      tone: "danger",
+      title: `${billing.length} table${billing.length > 1 ? "s" : ""} in billing`,
+      detail: billing
+        .slice(0, 3)
+        .map((t) => t.tableNo)
+        .join(", "),
+      href: "/food-beverages/restaurants/live-status",
+      action: "Open tables",
+    });
+  }
+
+  const openOrders = data.recentOrders.filter((o) => o.status !== "Settled");
+  if (openOrders.length) {
+    items.push({
+      id: "orders",
+      tone: "warning",
+      title: `${openOrders.length} open order${openOrders.length > 1 ? "s" : ""}`,
+      detail: "In kitchen / service",
+      href: "/food-beverages/restaurants/orders",
+      action: "Open orders",
+    });
+  }
+
+  const pendingBanquet = data.banquetBookings.filter((b) => {
+    const bal = Number(String(b.balance ?? "0").replace(/[^\d.-]/g, ""));
+    return bal > 0;
+  });
+  if (pendingBanquet.length) {
+    const first = pendingBanquet[0];
+    items.push({
+      id: "banquet",
+      tone: "warning",
+      title: `${first.venue ?? "Venue"} · ${first.event ?? "Event"} balance ${
+        typeof first.balance === "number"
+          ? formatINR(first.balance)
+          : String(first.balance)
+      }`,
+      detail: "Pending banquet close",
+      href: "/food-beverages/banquet/bookings",
+      action: "Open banquet",
+    });
+  }
+
+  const occupied = data.liveTables.filter((t) =>
+    ["Occupied", "Reserved"].includes(t.status),
+  ).length;
+  if (occupied) {
+    items.push({
+      id: "floor",
+      tone: "info",
+      title: `${occupied} tables on floor`,
+      detail: "Occupied or reserved right now",
+      href: "/food-beverages/restaurants/live-status",
+      action: "Live status",
+    });
+  }
+
+  return items;
+}
 
 function toneClass(tone: "danger" | "warning" | "info") {
   if (tone === "danger") return "border-red-200 bg-red-50 text-red-800";
@@ -225,48 +197,119 @@ function statusBadge(status: string) {
   if (status === "Billing" || status === "Preparing") {
     return "bg-orange-50 text-orange-700 ring-orange-200";
   }
-  if (status === "Paid" || status === "Steady" || status === "Confirmed") {
+  if (status === "Paid" || status === "Steady" || status === "Confirmed" || status === "Ready" || status === "Served") {
     return "bg-emerald-50 text-emerald-700 ring-emerald-200";
   }
   return "bg-slate-100 text-slate-600 ring-slate-200";
 }
 
+const statIcons = [TrendingUp, ClipboardList, UtensilsCrossed, Building2];
+const statAccents = ["#15803d", "#f59e0b", "#10b981", "#15803d"];
+
+function outletStatus(outlet: FbOutlet, openOrders: number): string {
+  if (outlet.status) return outlet.status;
+  if (openOrders >= 5) return "Busy";
+  if (openOrders >= 2) return "Steady";
+  return "Quiet";
+}
+
 export function FbDashboardView() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [payload, bookings] = await Promise.all([
+          fbDashboardService.get() as Promise<Omit<DashboardData, "banquetBookings">>,
+          banquetBookingService.list().catch(() => [] as BanquetBooking[]),
+        ]);
+        if (!cancelled) {
+          setData({
+            ...payload,
+            banquetBookings: bookings as BanquetBooking[],
+          });
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setData(null);
+          setError(e instanceof Error ? e.message : "Failed");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <ModulePageShell
+        eyebrow="Food & Beverages"
+        title="Dashboard"
+        description="Live outlet performance, open work, and banquet activity."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-slate-500">Loading…</p>
+      </ModulePageShell>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <ModulePageShell
+        eyebrow="Food & Beverages"
+        title="Dashboard"
+        description="Live outlet performance, open work, and banquet activity."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-red-600">{error ?? "Failed to load"}</p>
+      </ModulePageShell>
+    );
+  }
+
+  const restaurantOutlets = data.outlets.filter((o) =>
+    ["restaurant", "cafe"].includes(String(o.type)),
+  );
+  const openByOutlet = data.recentOrders.reduce<Record<string, number>>((acc, o) => {
+    if (o.status !== "Settled") {
+      acc[o.outletId] = (acc[o.outletId] ?? 0) + 1;
+    }
+    return acc;
+  }, {});
+  const tablesByOutlet = data.liveTables.reduce<
+    Record<string, { occupied: number; total: number }>
+  >((acc, t) => {
+    const row = acc[t.outletId] ?? { occupied: 0, total: 0 };
+    row.total += 1;
+    if (["Occupied", "Billing", "Reserved"].includes(t.status)) row.occupied += 1;
+    acc[t.outletId] = row;
+    return acc;
+  }, {});
+
+  const shellStats = (data.stats ?? []).slice(0, 4).map((stat, i) => ({
+    label: stat.label,
+    value: stat.value,
+    accent: stat.accent ?? statAccents[i] ?? "#15803d",
+    icon: statIcons[i],
+    sublabel: stat.sublabel,
+  }));
+  const alerts = buildAlerts(data);
+  const banquetVenues = data.outlets.filter((o) => o.type === "banquet");
+  const banquetToday = data.banquetBookings.slice(0, 6);
+
   return (
     <ModulePageShell
       eyebrow="Food & Beverages"
       title="Dashboard"
       description="Live outlet performance, open work, and banquet activity."
-      stats={[
-        {
-          label: "Today's Sales",
-          value: "₹1.24L",
-          accent: "#15803d",
-          icon: TrendingUp,
-          sublabel: "+12% vs yesterday",
-        },
-        {
-          label: "Open Orders",
-          value: 18,
-          accent: "#f59e0b",
-          icon: ClipboardList,
-          sublabel: "7 dining · 4 kitchen SLA",
-        },
-        {
-          label: "Live Covers",
-          value: 86,
-          accent: "#10b981",
-          icon: UtensilsCrossed,
-          sublabel: "Across 4 outlets",
-        },
-        {
-          label: "Events Today",
-          value: 2,
-          accent: "#15803d",
-          icon: Building2,
-          sublabel: "1 in progress",
-        },
-      ]}
+      stats={shellStats}
       wrapChildren={false}
     >
       {/* Needs attention */}
@@ -286,30 +329,36 @@ export function FbDashboardView() {
             View all operations
           </Link>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          {alerts.map((alert) => (
-            <Link
-              key={alert.id}
-              href={alert.href}
-              className={cn(
-                "rounded-xl border p-3 transition hover:-translate-y-0.5 hover:shadow-sm",
-                toneClass(alert.tone),
-              )}
-            >
-              <div className="flex items-start gap-2">
-                <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", toneDot(alert.tone))} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold leading-snug">{alert.title}</p>
-                  <p className="mt-0.5 text-xs opacity-80">{alert.detail}</p>
-                  <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold">
-                    {alert.action}
-                    <ArrowRight className="h-3 w-3" />
-                  </span>
+        {alerts.length === 0 ? (
+          <p className="text-sm text-slate-500">No open alerts from live F&B data.</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {alerts.map((alert) => (
+              <Link
+                key={alert.id}
+                href={alert.href}
+                className={cn(
+                  "rounded-xl border p-3 transition hover:-translate-y-0.5 hover:shadow-sm",
+                  toneClass(alert.tone),
+                )}
+              >
+                <div className="flex items-start gap-2">
+                  <span
+                    className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", toneDot(alert.tone))}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold leading-snug">{alert.title}</p>
+                    <p className="mt-0.5 text-xs opacity-80">{alert.detail}</p>
+                    <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold">
+                      {alert.action}
+                      <ArrowRight className="h-3 w-3" />
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-5">
@@ -342,7 +391,18 @@ export function FbDashboardView() {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {restaurantOutlets.map((outlet) => {
-                  const m = outletMetrics[outlet.id];
+                  const openOrders = openByOutlet[outlet.id] ?? 0;
+                  const floor = tablesByOutlet[outlet.id];
+                  const occupied = floor?.occupied ?? 0;
+                  const total = floor?.total ?? outlet.tables ?? 0;
+                  const occupancy = total > 0 ? Math.round((occupied / total) * 100) : 0;
+                  const status = outletStatus(outlet, openOrders);
+                  const sales =
+                    typeof outlet.sales === "string"
+                      ? outlet.sales
+                      : outlet.sales != null
+                        ? formatINR(Number(outlet.sales))
+                        : "—";
                   return (
                     <tr key={outlet.id} className="group hover:bg-emerald-50/30">
                       <td className="py-3 pr-3">
@@ -356,16 +416,18 @@ export function FbDashboardView() {
                           <p className="text-[11px] capitalize text-slate-500">{outlet.type}</p>
                         </Link>
                       </td>
-                      <td className="py-3 pr-3 font-medium text-slate-800">{m.sales}</td>
-                      <td className="py-3 pr-3 text-slate-700">{m.covers}</td>
-                      <td className="py-3 pr-3 text-slate-700">{m.openOrders}</td>
+                      <td className="py-3 pr-3 font-medium text-slate-800">{sales}</td>
+                      <td className="py-3 pr-3 text-slate-700">{outlet.covers ?? "—"}</td>
+                      <td className="py-3 pr-3 text-slate-700">{openOrders}</td>
                       <td className="py-3 pr-3">
                         <div className="space-y-1">
-                          <p className="text-xs text-slate-600">{m.tables} occupied</p>
+                          <p className="text-xs text-slate-600">
+                            {total > 0 ? `${occupied} / ${total}` : "—"} occupied
+                          </p>
                           <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
                             <div
                               className="h-full rounded-full bg-emerald-600"
-                              style={{ width: `${m.occupancy}%` }}
+                              style={{ width: `${occupancy}%` }}
                             />
                           </div>
                         </div>
@@ -374,15 +436,22 @@ export function FbDashboardView() {
                         <span
                           className={cn(
                             "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
-                            statusBadge(m.status),
+                            statusBadge(status),
                           )}
                         >
-                          {m.status}
+                          {status}
                         </span>
                       </td>
                     </tr>
                   );
                 })}
+                {restaurantOutlets.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
+                      No outlets available
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -430,38 +499,53 @@ export function FbDashboardView() {
             </Link>
           </div>
           <ul className="space-y-2">
-            {banquetToday.map((event) => (
-              <li
-                key={event.id}
-                className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{event.event}</p>
-                    <p className="text-xs text-slate-500">
-                      {event.venue} · {event.time} · {event.pax} pax
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
-                      statusBadge(event.status),
-                    )}
-                  >
-                    {event.status}
-                  </span>
-                </div>
-                <div className="mt-2 flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Balance {event.balance}</span>
-                  <Link
-                    href="/food-beverages/banquet/bookings"
-                    className="font-medium text-emerald-700 hover:underline"
-                  >
-                    Open
-                  </Link>
-                </div>
+            {banquetToday.length === 0 ? (
+              <li className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-sm text-slate-400">
+                No banquet bookings from API
               </li>
-            ))}
+            ) : (
+              banquetToday.map((event) => (
+                <li
+                  key={event.id}
+                  className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {event.event ?? "Event"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {event.venue ?? "Venue"}
+                        {event.time ? ` · ${event.time}` : ""}
+                        {event.pax != null ? ` · ${event.pax} pax` : ""}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
+                        statusBadge(String(event.status ?? "")),
+                      )}
+                    >
+                      {event.status ?? "—"}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-xs">
+                    <span className="text-slate-500">
+                      Balance{" "}
+                      {typeof event.balance === "number"
+                        ? formatINR(event.balance)
+                        : String(event.balance ?? "—")}
+                    </span>
+                    <Link
+                      href="/food-beverages/banquet/bookings"
+                      className="font-medium text-emerald-700 hover:underline"
+                    >
+                      Open
+                    </Link>
+                  </div>
+                </li>
+              ))
+            )}
           </ul>
         </section>
 
@@ -492,25 +576,38 @@ export function FbDashboardView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {recentOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-emerald-50/30">
-                    <td className="py-2.5 pr-3 font-medium text-slate-900">{order.id}</td>
-                    <td className="py-2.5 pr-3 text-slate-700">{order.outlet}</td>
-                    <td className="py-2.5 pr-3 text-slate-700">{order.table}</td>
-                    <td className="py-2.5 pr-3 font-medium text-slate-900">{order.amount}</td>
-                    <td className="py-2.5 pr-3">
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
-                          statusBadge(order.status),
-                        )}
-                      >
-                        {order.status}
-                      </span>
+                {data.recentOrders.map((order) => {
+                  const outletName =
+                    data.outlets.find((o) => o.id === order.outletId)?.name ?? order.outletId;
+                  return (
+                    <tr key={order.id} className="hover:bg-emerald-50/30">
+                      <td className="py-2.5 pr-3 font-medium text-slate-900">{order.orderNo}</td>
+                      <td className="py-2.5 pr-3 text-slate-700">{outletName}</td>
+                      <td className="py-2.5 pr-3 text-slate-700">{order.ref}</td>
+                      <td className="py-2.5 pr-3 font-medium text-slate-900">
+                        {formatINR(order.amount)}
+                      </td>
+                      <td className="py-2.5 pr-3">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
+                            statusBadge(order.status),
+                          )}
+                        >
+                          {order.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-xs text-slate-500">{order.placedAt}</td>
+                    </tr>
+                  );
+                })}
+                {data.recentOrders.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
+                      No recent orders
                     </td>
-                    <td className="py-2.5 text-xs text-slate-500">{order.ago}</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

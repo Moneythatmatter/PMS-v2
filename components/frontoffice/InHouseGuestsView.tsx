@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Calendar, Crown, IndianRupee, Users } from "lucide-react";
 import type { InHouseGuest } from "@/app/data/frontoffice/modules";
-import { inHouseGuests as initialGuests } from "@/app/data";
+import { reservationService } from "@/services/front-office";
 import { ReservationStatusBadge } from "@/components/frontoffice/reservation/ReservationStatusBadge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -22,12 +22,35 @@ import {
 } from "@/components/frontoffice/ui";
 
 export function InHouseGuestsView() {
-  const [guests, setGuests] = useState(initialGuests);
+  const [guests, setGuests] = useState<InHouseGuest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
   const [selectedGuest, setSelectedGuest] = useState<InHouseGuest | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await reservationService.inHouse();
+        if (!cancelled) {
+          setGuests(data as InHouseGuest[]);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     let rows = guests.filter((g) => {
@@ -53,12 +76,17 @@ export function InHouseGuestsView() {
       total: guests.length,
       vip: guests.filter((g) => g.isVip).length,
       totalBalance: guests.reduce((sum, g) => sum + g.balance, 0),
-      avgNights: Math.round(
-        guests.reduce((sum, g) => sum + g.nights, 0) / guests.length,
-      ),
+      avgNights:
+        guests.length > 0
+          ? Math.round(guests.reduce((sum, g) => sum + g.nights, 0) / guests.length)
+          : 0,
     }),
     [guests],
   );
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
+
 
   const columns = [
     {

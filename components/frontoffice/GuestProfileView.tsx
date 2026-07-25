@@ -13,13 +13,18 @@ import {
   User,
   Users,
 } from "lucide-react";
+import type {
+  GuestFeedbackRecord,
+  GuestProfile,
+  GuestStayHistory,
+  InvoiceRecord,
+} from "@/app/data/frontoffice/modules";
 import {
-  guestFeedbacks,
-  guestProfiles,
-  guestStayHistory,
-  invoiceRecords,
-} from "@/app/data";
-import type { GuestProfile } from "@/app/data/frontoffice/modules";
+  feedbackService,
+  guestService,
+  guestStayHistoryService,
+  invoiceService,
+} from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
   DataTable,
@@ -51,36 +56,41 @@ export function GuestProfileView() {
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("all");
   const [pmsProfiles, setPmsProfiles] = useState<GuestProfile[]>([]);
-  const [selected, setSelected] = useState<GuestProfile>(guestProfiles[0]);
+  const [selected, setSelected] = useState<GuestProfile | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("Personal");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [allStays, setAllStays] = useState<GuestStayHistory[]>([]);
+  const [allInvoices, setAllInvoices] = useState<InvoiceRecord[]>([]);
+  const [allFeedbacks, setAllFeedbacks] = useState<GuestFeedbackRecord[]>([]);
 
   useEffect(() => {
-    const loadProfiles = () => {
-      const stored = localStorage.getItem("pms_guest_profiles");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setPmsProfiles(parsed);
-        if (parsed.length > 0) {
-          setSelected((prev) => {
-            if (prev) {
-              const stillExists = parsed.find((g: any) => g.id === prev.id);
-              if (stillExists) return stillExists as GuestProfile;
-            }
-            return parsed[0] as GuestProfile;
-          });
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [profiles, stayHist, inv, fb] = await Promise.all([
+          guestService.list(),
+          guestStayHistoryService.list(),
+          invoiceService.list(),
+          feedbackService.list(),
+        ]);
+        if (!cancelled) {
+          setPmsProfiles(profiles);
+          setAllStays(stayHist);
+          setAllInvoices(inv);
+          setAllFeedbacks(fb);
+          if (profiles.length > 0) setSelected(profiles[0]);
+          setError(null);
         }
-      } else {
-        localStorage.setItem("pms_guest_profiles", JSON.stringify(guestProfiles));
-        setPmsProfiles(guestProfiles);
-        if (guestProfiles.length > 0) {
-          setSelected(guestProfiles[0]);
-        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    };
-    loadProfiles();
-    window.addEventListener("storage", loadProfiles);
-    return () => window.removeEventListener("storage", loadProfiles);
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const filtered = useMemo(() => {
@@ -98,18 +108,18 @@ export function GuestProfileView() {
   }, [search, tierFilter, pmsProfiles]);
 
   const stays = useMemo(
-    () => guestStayHistory.filter((s) => s.guestId === selected.id),
-    [selected.id],
+    () => (selected ? allStays.filter((s) => s.guestId === selected.id) : []),
+    [selected, allStays],
   );
 
   const invoices = useMemo(
-    () => invoiceRecords.filter((i) => i.guest === selected.name),
-    [selected.name],
+    () => (selected ? allInvoices.filter((i) => i.guest === selected.name) : []),
+    [selected, allInvoices],
   );
 
   const feedback = useMemo(
-    () => guestFeedbacks.filter((f) => f.guest === selected.name),
-    [selected.name],
+    () => (selected ? allFeedbacks.filter((f) => f.guest === selected.name) : []),
+    [selected, allFeedbacks],
   );
 
   const selectGuest = (guest: GuestProfile) => {
@@ -117,6 +127,10 @@ export function GuestProfileView() {
     setActiveTab("Personal");
     setDrawerOpen(true);
   };
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (!selected) return <p className="text-sm text-slate-500">No guest profiles.</p>;
 
   return (
     <div className="space-y-5">
@@ -257,9 +271,9 @@ function ProfilePanel({
   guest: GuestProfile;
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
-  stays: (typeof guestStayHistory)[number][];
-  invoices: (typeof invoiceRecords)[number][];
-  feedback: (typeof guestFeedbacks)[number][];
+  stays: GuestStayHistory[];
+  invoices: InvoiceRecord[];
+  feedback: GuestFeedbackRecord[];
 }) {
   return (
     <div>

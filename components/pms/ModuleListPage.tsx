@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, Map, Table2 } from "lucide-react";
+import { Download, Map, Pencil, Table2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import {
+  ConfirmModal,
   FormField,
   SelectInput,
   TextInput,
@@ -104,6 +105,17 @@ function downloadCsv(filename: string, columns: ModuleColumn[], rows: ModuleRow[
   URL.revokeObjectURL(url);
 }
 
+function pickDefaultOutlet(
+  outlets: { id: string; name: string }[],
+  rows: ModuleRow[],
+): string {
+  if (!outlets.length) return "all";
+  const withRows = outlets.find((o) =>
+    rows.some((r) => r.outletId === o.id),
+  );
+  return withRows?.id ?? outlets[0].id;
+}
+
 export function ModuleListPage({
   definition,
   charts,
@@ -119,7 +131,9 @@ export function ModuleListPage({
 }) {
   const outlets = definition.outlets ?? [];
   const showOutlet = outlets.length > 0;
-  const [outletId, setOutletId] = useState(outlets[0]?.id ?? "all");
+  const [outletId, setOutletId] = useState(() =>
+    pickDefaultOutlet(outlets, definition.rows),
+  );
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState(definition.sortOptions?.[0]?.value ?? "");
@@ -127,6 +141,9 @@ export function ModuleListPage({
   const [preview, setPreview] = useState<ModuleRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [actionLabel, setActionLabel] = useState<string | null>(null);
+  const [editingRow, setEditingRow] = useState<ModuleRow | null>(null);
+  const [deleteRow, setDeleteRow] = useState<ModuleRow | null>(null);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, string>>(() => blankForm(definition.columns));
   const [selectA, setSelectA] = useState("");
   const [selectB, setSelectB] = useState("");
@@ -134,10 +151,12 @@ export function ModuleListPage({
   useEffect(() => {
     setRows(definition.rows);
     setForm(blankForm(definition.columns));
-    setOutletId(definition.outlets?.[0]?.id ?? "all");
+    setOutletId(pickDefaultOutlet(definition.outlets ?? [], definition.rows));
     setStatusFilter("all");
     setSortBy(definition.sortOptions?.[0]?.value ?? "");
     setActionLabel(null);
+    setEditingRow(null);
+    setDeleteRow(null);
     setPreview(null);
   }, [definition]);
 
@@ -224,10 +243,16 @@ export function ModuleListPage({
   const actionKind = actionLabel ? classifyAction(actionLabel) : null;
 
   const openAction = (label: string) => {
+    setEditingRow(null);
     setActionLabel(label);
     setForm(blankForm(definition.columns));
     setSelectA("");
     setSelectB("");
+  };
+
+  const closeFormDrawer = () => {
+    setActionLabel(null);
+    setEditingRow(null);
   };
 
   const handleExport = () => {
@@ -244,18 +269,13 @@ export function ModuleListPage({
     if (definition.actionLabel) openAction(definition.actionLabel);
   };
 
-  const submitAdd = () => {
-    const required = editableColumns(definition.columns).filter((c) => c.key !== "status");
-    const missing = required.find((c) => !String(form[c.key] ?? "").trim());
-    if (missing) {
-      setToast(`Please fill ${missing.header}.`);
-      return;
-    }
-
-    const nextId = `${definition.title.slice(0, 1).toUpperCase()}-${Date.now().toString().slice(-5)}`;
+  const buildRowFromForm = (base?: ModuleRow): ModuleRow => {
+    const nextId =
+      base?.id ??
+      `${definition.title.slice(0, 1).toUpperCase()}-${Date.now().toString().slice(-5)}`;
     const newRow: ModuleRow = {
       id: nextId,
-      outletId: showOutlet ? outletId : undefined,
+      outletId: base?.outletId ?? (showOutlet ? outletId : undefined),
     };
 
     for (const col of editableColumns(definition.columns)) {
@@ -267,10 +287,73 @@ export function ModuleListPage({
         newRow[col.key] = raw || (col.key === "status" ? "Available" : "—");
       }
     }
+    return newRow;
+  };
 
-    setRows((prev) => [newRow, ...prev]);
-    setActionLabel(null);
-    setToast(`${definition.actionLabel ?? "Record"} saved.`);
+  const openEdit = (row: ModuleRow) => {
+    const nextForm = blankForm(definition.columns);
+    for (const col of editableColumns(definition.columns)) {
+      nextForm[col.key] = row[col.key] === undefined ? "" : String(row[col.key]);
+    }
+    setForm(nextForm);
+    setEditingRow(row);
+    setPreview(null);
+    setActionLabel(`Edit ${definition.title.replace(/s$/, "")}`);
+  };
+
+  const submitAdd = async () => {
+    const required = editableColumns(definition.columns).filter((c) => c.key !== "status");
+    const missing = required.find((c) => !String(form[c.key] ?? "").trim());
+    if (missing) {
+      setToast(`Please fill ${missing.header}.`);
+      return;
+    }
+
+    const payload = buildRowFromForm(editingRow ?? undefined);
+    setSaving(true);
+    try {
+      if (editingRow && definition.crud?.update) {
+        const saved = await definition.crud.update(editingRow.id, payload);
+        setRows((prev) => prev.map((r) => (r.id === editingRow.id ? { ...r, ...saved } : r)));
+        setToast("Record updated.");
+      } else if (editingRow) {
+        setRows((prev) =>
+          prev.map((r) => (r.id === editingRow.id ? { ...r, ...payload, id: editingRow.id } : r)),
+        );
+        setToast("Record updated.");
+      } else if (definition.crud?.create) {
+        const saved = await definition.crud.create(payload);
+        setRows((prev) => [saved, ...prev]);
+        setToast(`${definition.actionLabel ?? "Record"} saved.`);
+      } else {
+        setRows((prev) => [payload, ...prev]);
+        setToast(`${definition.actionLabel ?? "Record"} saved.`);
+      }
+      setActionLabel(null);
+      setEditingRow(null);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteRow) return;
+    setSaving(true);
+    try {
+      if (definition.crud?.remove) {
+        await definition.crud.remove(deleteRow.id);
+      }
+      setRows((prev) => prev.filter((r) => r.id !== deleteRow.id));
+      setToast("Record deleted.");
+      setDeleteRow(null);
+      setPreview(null);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const submitMerge = () => {
@@ -419,6 +502,34 @@ export function ModuleListPage({
         onRowClick={setPreview}
         statusStyle={definition.statusStyle}
         statusMap={statusMap}
+        actionColumn={(row) => (
+          <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openEdit(row);
+              }}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
+              aria-label="Edit"
+              title="Edit"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDeleteRow(row);
+              }}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+              aria-label="Delete"
+              title="Delete"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       />
     </>
   );
@@ -515,6 +626,31 @@ export function ModuleListPage({
         title={preview ? previewTitle(preview, definition.title) : ""}
         description={selectedOutlet?.name ?? definition.title}
         width="md"
+        footer={
+          preview ? (
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-red-600 hover:bg-red-50"
+                onClick={() => setDeleteRow(preview)}
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Delete
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-emerald-700 hover:bg-emerald-800"
+                onClick={() => openEdit(preview)}
+              >
+                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                Edit
+              </Button>
+            </div>
+          ) : undefined
+        }
       >
         {preview && (
           <ModuleRowDetail
@@ -531,17 +667,32 @@ export function ModuleListPage({
         )}
       </Drawer>
 
+      <ConfirmModal
+        open={!!deleteRow}
+        onClose={() => setDeleteRow(null)}
+        title="Delete record?"
+        message={
+          deleteRow
+            ? `Delete “${previewTitle(deleteRow, "this record")}”? This cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        loading={saving}
+        onConfirm={confirmDelete}
+      />
+
       {/* Header action drawer */}
       <Drawer
         open={!!actionLabel}
-        onClose={() => setActionLabel(null)}
+        onClose={closeFormDrawer}
         title={actionLabel ?? ""}
         description={selectedOutlet?.name ?? definition.title}
         width="lg"
         footer={
           actionKind === "add" || actionKind === "generic" ? (
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setActionLabel(null)}>
+              <Button type="button" variant="outline" size="sm" onClick={closeFormDrawer}>
                 Cancel
               </Button>
               <Button
@@ -549,13 +700,14 @@ export function ModuleListPage({
                 size="sm"
                 className="bg-emerald-700 hover:bg-emerald-800"
                 onClick={submitAdd}
+                disabled={saving}
               >
-                Save
+                {saving ? "Saving…" : editingRow ? "Update" : "Save"}
               </Button>
             </div>
           ) : actionKind === "merge" ? (
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setActionLabel(null)}>
+              <Button type="button" variant="outline" size="sm" onClick={closeFormDrawer}>
                 Cancel
               </Button>
               <Button
@@ -569,7 +721,7 @@ export function ModuleListPage({
             </div>
           ) : actionKind === "split" ? (
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setActionLabel(null)}>
+              <Button type="button" variant="outline" size="sm" onClick={closeFormDrawer}>
                 Cancel
               </Button>
               <Button
@@ -583,7 +735,7 @@ export function ModuleListPage({
             </div>
           ) : actionKind === "close-shift" ? (
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setActionLabel(null)}>
+              <Button type="button" variant="outline" size="sm" onClick={closeFormDrawer}>
                 Cancel
               </Button>
               <Button
@@ -597,7 +749,7 @@ export function ModuleListPage({
             </div>
           ) : actionKind === "open-shift" ? (
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setActionLabel(null)}>
+              <Button type="button" variant="outline" size="sm" onClick={closeFormDrawer}>
                 Cancel
               </Button>
               <Button

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BedDouble,
   Building2,
@@ -14,19 +14,19 @@ import {
   Tag,
   Users,
 } from "lucide-react";
-import {
-  companyMasters,
-  marketSegmentMasters,
-  ratePlanMasters,
-  roomTypeMasters,
-} from "@/app/data";
 import type {
   CompanyMaster,
   MarketSegmentMaster,
   RatePlanMaster,
   RoomTypeMaster,
 } from "@/app/data/frontoffice/masters";
-import { mealPlans } from "@/app/data/frontoffice/constants";
+import { mealPlans, roomTypes } from "@/app/data/frontoffice/constants";
+import {
+  companyService,
+  marketSegmentService,
+  ratePlanService,
+  roomTypeService,
+} from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
 import {
@@ -118,7 +118,9 @@ function MasterTable({
 }
 
 export function RoomTypesView() {
-  const [items, setItems] = useState(roomTypeMasters);
+  const [items, setItems] = useState<RoomTypeMaster[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
@@ -131,6 +133,27 @@ export function RoomTypesView() {
   const [baseRate, setBaseRate] = useState("");
   const [totalRooms, setTotalRooms] = useState("1");
   const [maxOccupancy, setMaxOccupancy] = useState("2");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await roomTypeService.list();
+        if (!cancelled) {
+          setItems(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -169,30 +192,36 @@ export function RoomTypesView() {
     setMaxOccupancy("2");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!code.trim() || !name.trim() || !baseRate) {
       setToast("Please fill code, name, and base rate.");
       return;
     }
-    const record: RoomTypeMaster = {
-      id: `RT-${String(items.length + 1).padStart(2, "0")}`,
-      code: code.toUpperCase(),
-      name,
-      description: description || `${name} room category`,
-      baseRate: parseFloat(baseRate),
-      maxOccupancy: parseInt(maxOccupancy, 10) || 2,
-      maxAdults: parseInt(maxOccupancy, 10) || 2,
-      maxChildren: 1,
-      totalRooms: parseInt(totalRooms, 10) || 1,
-      sizeSqFt: 250,
-      amenities: ["Wi-Fi", "AC", "TV"],
-      status: "Active",
-    };
-    setItems((prev) => [record, ...prev]);
-    setFormOpen(false);
-    resetForm();
-    setToast(`Room type "${name}" added successfully.`);
+    try {
+      const record = await roomTypeService.create({
+        code: code.toUpperCase(),
+        name,
+        description: description || `${name} room category`,
+        baseRate: parseFloat(baseRate),
+        maxOccupancy: parseInt(maxOccupancy, 10) || 2,
+        maxAdults: parseInt(maxOccupancy, 10) || 2,
+        maxChildren: 1,
+        totalRooms: parseInt(totalRooms, 10) || 1,
+        sizeSqFt: 250,
+        amenities: ["Wi-Fi", "AC", "TV"],
+        status: "Active",
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      resetForm();
+      setToast(`Room type "${name}" added successfully.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
   };
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   return (
     <>
@@ -364,7 +393,9 @@ export function RoomTypesView() {
 }
 
 export function RatePlansView() {
-  const [items, setItems] = useState(ratePlanMasters);
+  const [items, setItems] = useState<RatePlanMaster[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
@@ -377,6 +408,27 @@ export function RatePlansView() {
   const [baseRate, setBaseRate] = useState("");
   const [mealPlan, setMealPlan] = useState("EP");
   const [minNights, setMinNights] = useState("1");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await ratePlanService.list();
+        if (!cancelled) {
+          setItems(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -398,7 +450,10 @@ export function RatePlansView() {
     () => ({
       total: items.length,
       active: items.filter((r) => r.status === "Active").length,
-      avgRate: Math.round(items.reduce((s, r) => s + r.baseRate, 0) / items.length),
+      avgRate:
+        items.length > 0
+          ? Math.round(items.reduce((s, r) => s + r.baseRate, 0) / items.length)
+          : 0,
     }),
     [items],
   );
@@ -412,31 +467,37 @@ export function RatePlansView() {
     setMinNights("1");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!code.trim() || !name.trim() || !baseRate) {
       setToast("Please fill code, name, and base rate.");
       return;
     }
-    const rate = parseFloat(baseRate);
-    const record: RatePlanMaster = {
-      id: `RP-${String(items.length + 1).padStart(2, "0")}`,
-      code: code.toUpperCase(),
-      name,
-      roomType,
-      baseRate: rate,
-      weekendRate: Math.round(rate * 1.2),
-      mealPlan,
-      cancellationPolicy: "Standard cancellation policy applies",
-      minNights: parseInt(minNights, 10) || 1,
-      validFrom: "2026-01-01",
-      validTo: "2026-12-31",
-      status: "Active",
-    };
-    setItems((prev) => [record, ...prev]);
-    setFormOpen(false);
-    resetForm();
-    setToast(`Rate plan "${name}" added successfully.`);
+    try {
+      const rate = parseFloat(baseRate);
+      const record = await ratePlanService.create({
+        code: code.toUpperCase(),
+        name,
+        roomType,
+        baseRate: rate,
+        weekendRate: Math.round(rate * 1.2),
+        mealPlan,
+        cancellationPolicy: "Standard cancellation policy applies",
+        minNights: parseInt(minNights, 10) || 1,
+        validFrom: "2026-01-01",
+        validTo: "2026-12-31",
+        status: "Active",
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      resetForm();
+      setToast(`Rate plan "${name}" added successfully.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
   };
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   return (
     <div className="space-y-5">
@@ -545,8 +606,8 @@ export function RatePlansView() {
           <FormField label="Room Types">
             <SelectInput value={roomType} onChange={(e) => setRoomType(e.target.value)}>
               <option>All Types</option>
-              {roomTypeMasters.map((rt) => (
-                <option key={rt.id}>{rt.name}</option>
+              {roomTypes.map((rt) => (
+                <option key={rt}>{rt}</option>
               ))}
             </SelectInput>
           </FormField>
@@ -615,7 +676,9 @@ export function RatePlansView() {
 }
 
 export function MarketSegmentsView() {
-  const [items, setItems] = useState(marketSegmentMasters);
+  const [items, setItems] = useState<MarketSegmentMaster[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
@@ -627,6 +690,27 @@ export function MarketSegmentsView() {
   const [category, setCategory] = useState<MarketSegmentMaster["category"]>("Corporate");
   const [discount, setDiscount] = useState("0");
   const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await marketSegmentService.list();
+        if (!cancelled) {
+          setItems(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -666,25 +750,31 @@ export function MarketSegmentsView() {
     setDescription("");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!code.trim() || !name.trim()) {
       setToast("Please fill code and name.");
       return;
     }
-    const record: MarketSegmentMaster = {
-      id: `MS-${String(items.length + 1).padStart(2, "0")}`,
-      code: code.toUpperCase(),
-      name,
-      category,
-      discountPercent: parseFloat(discount) || 0,
-      description: description || `${name} market segment`,
-      status: "Active",
-    };
-    setItems((prev) => [record, ...prev]);
-    setFormOpen(false);
-    resetForm();
-    setToast(`Market segment "${name}" added successfully.`);
+    try {
+      const record = await marketSegmentService.create({
+        code: code.toUpperCase(),
+        name,
+        category,
+        discountPercent: parseFloat(discount) || 0,
+        description: description || `${name} market segment`,
+        status: "Active",
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      resetForm();
+      setToast(`Market segment "${name}" added successfully.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
   };
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   return (
     <div className="space-y-5">
@@ -876,7 +966,9 @@ export function MarketSegmentsView() {
 }
 
 export function CompaniesView() {
-  const [items, setItems] = useState(companyMasters);
+  const [items, setItems] = useState<CompanyMaster[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -895,6 +987,27 @@ export function CompaniesView() {
   const [city, setCity] = useState("");
   const [corporateDiscount, setCorporateDiscount] = useState("0");
   const [creditLimit, setCreditLimit] = useState("0");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await companyService.list();
+        if (!cancelled) {
+          setItems(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -916,9 +1029,10 @@ export function CompaniesView() {
       total: items.length,
       active: items.filter((r) => r.status === "Active").length,
       corporate: items.filter((r) => r.type === "Corporate").length,
-      avgDiscount: Math.round(
-        items.reduce((s, r) => s + r.corporateDiscount, 0) / items.length,
-      ),
+      avgDiscount:
+        items.length > 0
+          ? Math.round(items.reduce((s, r) => s + r.corporateDiscount, 0) / items.length)
+          : 0,
     }),
     [items],
   );
@@ -944,31 +1058,37 @@ export function CompaniesView() {
     setCreditLimit("0");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!code.trim() || !name.trim() || !contactPerson.trim() || !email.trim() || !phone.trim()) {
       setToast("Please fill all required fields.");
       return;
     }
-    const record: CompanyMaster = {
-      id: `CO-${String(items.length + 1).padStart(2, "0")}`,
-      code: code.toUpperCase(),
-      name,
-      type,
-      contactPerson,
-      email,
-      phone,
-      gstNumber: gstNumber || undefined,
-      address: address || "—",
-      city: city || "—",
-      corporateDiscount: parseFloat(corporateDiscount) || 0,
-      creditLimit: parseFloat(creditLimit) || 0,
-      status: "Active",
-    };
-    setItems((prev) => [record, ...prev]);
-    setFormOpen(false);
-    resetForm();
-    setToast(`Company "${name}" added successfully.`);
+    try {
+      const record = await companyService.create({
+        code: code.toUpperCase(),
+        name,
+        type,
+        contactPerson,
+        email,
+        phone,
+        gstNumber: gstNumber || undefined,
+        address: address || "—",
+        city: city || "—",
+        corporateDiscount: parseFloat(corporateDiscount) || 0,
+        creditLimit: parseFloat(creditLimit) || 0,
+        status: "Active",
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      resetForm();
+      setToast(`Company "${name}" added successfully.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
   };
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   return (
     <div className="space-y-5">

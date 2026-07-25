@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, CreditCard, IndianRupee, Smartphone, Wallet } from "lucide-react";
 import {
-  cashierShiftRecords,
   currentShiftSummary,
+  type CashierShiftRecord,
 } from "@/app/data/frontoffice/closing";
 import { currentUser } from "@/app/data";
+import { cashierShiftService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -21,13 +22,34 @@ import {
 import { cn } from "@/lib/utils";
 
 export function CashiersClosingView() {
-  const [records, setRecords] = useState(cashierShiftRecords);
+  const [records, setRecords] = useState<CashierShiftRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [cashActual, setCashActual] = useState("");
   const [cardActual, setCardActual] = useState(String(currentShiftSummary.cardExpected));
   const [upiActual, setUpiActual] = useState(String(currentShiftSummary.upiExpected));
   const [notes, setNotes] = useState("");
   const [closed, setClosed] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await cashierShiftService.list();
+        if (!cancelled) {
+          setRecords(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const expected = useMemo(() => {
     const total =
@@ -47,29 +69,35 @@ export function CashiersClosingView() {
 
   const variance = actualTotal - expected.total;
 
-  const handleCloseShift = () => {
+  const handleCloseShift = async () => {
     if (!cashActual) {
       setToast("Please enter actual cash count.");
       return;
     }
-    const record = {
-      id: `CS-${String(records.length + 1).padStart(2, "0")}`,
-      cashier: currentUser.name,
-      shift: "Evening (10 PM – 6 AM)",
-      date: new Date().toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }),
-      expected: expected.total,
-      actual: actualTotal,
-      variance,
-      status: "Closed" as const,
-    };
-    setRecords((prev) => [record, ...prev]);
-    setClosed(true);
-    setToast(`Shift closed by ${currentUser.name}. Variance: ${formatINR(variance)}`);
+    try {
+      const record = await cashierShiftService.create({
+        cashier: currentUser.name,
+        shift: "Evening (10 PM – 6 AM)",
+        date: new Date().toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }),
+        expected: expected.total,
+        actual: actualTotal,
+        variance,
+        status: "Closed",
+      });
+      setRecords((prev) => [record, ...prev]);
+      setClosed(true);
+      setToast(`Shift closed by ${currentUser.name}. Variance: ${formatINR(variance)}`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to close shift");
+    }
   };
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   return (
     <div className="space-y-5">

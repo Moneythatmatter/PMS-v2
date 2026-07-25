@@ -1,12 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Clock, LogOut, Luggage, MapPin, Plus, User } from "lucide-react";
-import {
-  inHouseGuests,
-  luggageRecords,
-} from "@/app/data";
-import type { LuggageRecord } from "@/app/data/frontoffice/modules";
+import type { InHouseGuest, LuggageRecord } from "@/app/data/frontoffice/modules";
+import { luggageService, reservationService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
   ActionButtons,
@@ -38,7 +35,10 @@ export {
 } from "@/components/frontoffice/ExtraServiceViews";
 
 export function LuggageManagementView() {
-  const [records, setRecords] = useState(luggageRecords);
+  const [records, setRecords] = useState<LuggageRecord[]>([]);
+  const [guests, setGuests] = useState<InHouseGuest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
@@ -46,9 +46,33 @@ export function LuggageManagementView() {
   const [storeOpen, setStoreOpen] = useState(false);
   const [previewRecord, setPreviewRecord] = useState<LuggageRecord | null>(null);
 
-  const [guestName, setGuestName] = useState(inHouseGuests[0].guestName);
+  const [guestName, setGuestName] = useState("");
   const [bagCount, setBagCount] = useState("1");
   const [location, setLocation] = useState("Locker A-12");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [bags, inHouse] = await Promise.all([
+          luggageService.list(),
+          reservationService.inHouse(),
+        ]);
+        if (!cancelled) {
+          setRecords(bags);
+          setGuests(inHouse as InHouseGuest[]);
+          if (inHouse[0]) setGuestName(inHouse[0].guestName);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -78,10 +102,10 @@ export function LuggageManagementView() {
     [records],
   );
 
-  const guestRoom = inHouseGuests.find((g) => g.guestName === guestName)?.room ?? "—";
+  const guestRoom = guests.find((g) => g.guestName === guestName)?.room ?? "—";
 
   const resetForm = () => {
-    setGuestName(inHouseGuests[0].guestName);
+    setGuestName(guests[0]?.guestName ?? "");
     setBagCount("1");
     setLocation("Locker A-12");
   };
@@ -91,7 +115,7 @@ export function LuggageManagementView() {
     setStoreOpen(true);
   };
 
-  const handleStore = () => {
+  const handleStore = async () => {
     const bags = parseInt(bagCount, 10) || 1;
     const token = `LG-${100 + records.length + 1}`;
     const now = new Date().toLocaleString("en-IN", {
@@ -101,9 +125,8 @@ export function LuggageManagementView() {
       minute: "2-digit",
       hour12: true,
     });
-    setRecords((prev) => [
-      {
-        id: `L-${String(prev.length + 1).padStart(2, "0")}`,
+    try {
+      const record = await luggageService.create({
         guest: guestName,
         room: guestRoom,
         bagCount: bags,
@@ -111,15 +134,17 @@ export function LuggageManagementView() {
         stored: now,
         location,
         status: "Stored",
-      },
-      ...prev,
-    ]);
-    setStoreOpen(false);
-    resetForm();
-    setToast(`${bags} bag(s) stored for ${guestName}. Token: ${token}`);
+      });
+      setRecords((prev) => [record, ...prev]);
+      setStoreOpen(false);
+      resetForm();
+      setToast(`${bags} bag(s) stored for ${guestName}. Token: ${token}`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to store luggage");
+    }
   };
 
-  const handleReturn = (id: string) => {
+  const handleReturn = async (id: string) => {
     const now = new Date().toLocaleString("en-IN", {
       day: "numeric",
       month: "short",
@@ -127,26 +152,34 @@ export function LuggageManagementView() {
       minute: "2-digit",
       hour12: true,
     });
-    setRecords((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, returned: now, status: "Returned" as const }
-          : r,
-      ),
-    );
-    setPreviewRecord((prev) =>
-      prev?.id === id
-        ? { ...prev, returned: now, status: "Returned" }
-        : prev,
-    );
-    setToast("Luggage returned to guest.");
+    try {
+      await luggageService.update(id, { returned: now, status: "Returned" });
+      setRecords((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? { ...r, returned: now, status: "Returned" as const }
+            : r,
+        ),
+      );
+      setPreviewRecord((prev) =>
+        prev?.id === id
+          ? { ...prev, returned: now, status: "Returned" }
+          : prev,
+      );
+      setToast("Luggage returned to guest.");
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to return luggage");
+    }
   };
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   const storeForm = (
     <div className="space-y-4">
       <FormField label="Guest" required>
         <SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>
-          {inHouseGuests.map((g) => (
+          {guests.map((g) => (
             <option key={g.id} value={g.guestName}>
               {g.guestName} — Room {g.room}
             </option>

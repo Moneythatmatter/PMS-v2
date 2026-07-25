@@ -1,16 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Users } from "lucide-react";
 import {
   formatDuration,
   formatINR,
-  getRestaurantOutletOptions,
-  liveTablesSeed,
   tableStatusStyles,
-  type LiveTable,
   type LiveTableStatus,
 } from "@/app/data/foodbeverages/ops";
+import {
+  liveTableService,
+  type LiveTable,
+} from "@/services/food-beverages";
+import { useFbOutlets } from "@/services/food-beverages/useFbOutlets";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
@@ -28,15 +30,49 @@ const statusFilters: { id: string; label: string }[] = [
 ];
 
 export function FbLiveTablesView() {
-  const outlets = getRestaurantOutletOptions();
-  const [outletId, setOutletId] = useState(outlets[0]?.id ?? "rest-1");
-  const [tables, setTables] = useState(liveTablesSeed);
+  const { outlets } = useFbOutlets([
+    "restaurant",
+    "cafe",
+  ]);
+  const [outletId, setOutletId] = useState("");
+  const [tables, setTables] = useState<LiveTable[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<LiveTable | null>(null);
   const [covers, setCovers] = useState("2");
   const [guest, setGuest] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!outletId && outlets[0]?.id) setOutletId(outlets[0].id);
+  }, [outlets, outletId]);
+
+  useEffect(() => {
+    if (!outletId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await liveTableService.list(outletId);
+        if (!cancelled) {
+          setTables(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setTables([]);
+          setError(e instanceof Error ? e.message : "Failed");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [outletId]);
 
   const outletTables = useMemo(
     () => tables.filter((t) => t.outletId === outletId),
@@ -79,8 +115,8 @@ export function FbLiveTablesView() {
     return c;
   }, [outletTables]);
 
-  const updateTable = (id: string, patch: Partial<LiveTable>, message: string) => {
-    setTables((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  const applyTable = (updated: LiveTable, message: string) => {
+    setTables((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
     setToast(message);
     setSelected(null);
   };
@@ -90,6 +126,76 @@ export function FbLiveTablesView() {
     setCovers(String(table.covers || Math.min(2, table.capacity)));
     setGuest(table.guest === "—" ? "" : table.guest);
   };
+
+  const seatTable = async () => {
+    if (!selected) return;
+    try {
+      const updated = await liveTableService.seat(selected.id, {
+        guest: guest.trim() || "Walk-in",
+        covers: Math.min(selected.capacity, Math.max(1, Number(covers) || 1)),
+        server: "Floor",
+      });
+      applyTable(updated, `${selected.tableNo} seated`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to seat");
+    }
+  };
+
+  const requestBill = async () => {
+    if (!selected) return;
+    try {
+      const updated = await liveTableService.update(selected.id, { status: "Billing" });
+      applyTable(updated, `${selected.tableNo} moved to billing`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to update");
+    }
+  };
+
+  const settleTable = async () => {
+    if (!selected) return;
+    try {
+      const updated = await liveTableService.settle(selected.id);
+      applyTable(updated, `${selected.tableNo} settled — marked dirty`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to settle");
+    }
+  };
+
+  const cleanTable = async () => {
+    if (!selected) return;
+    try {
+      const updated = await liveTableService.clean(selected.id);
+      applyTable(updated, `${selected.tableNo} ready to seat`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to clean");
+    }
+  };
+
+  if (loading) {
+    return (
+      <ModulePageShell
+        eyebrow="Restaurants"
+        title="Live Table Status"
+        description="Floor view — seat guests, open checks, and move tables through service."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-slate-500">Loading…</p>
+      </ModulePageShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <ModulePageShell
+        eyebrow="Restaurants"
+        title="Live Table Status"
+        description="Floor view — seat guests, open checks, and move tables through service."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-red-600">{error}</p>
+      </ModulePageShell>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -126,7 +232,7 @@ export function FbLiveTablesView() {
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
               {sectionTables.map((table) => {
-                const style = tableStatusStyles[table.status];
+                const style = tableStatusStyles[table.status as LiveTableStatus] ?? tableStatusStyles.Available;
                 return (
                   <button
                     key={table.id}
@@ -223,20 +329,7 @@ export function FbLiveTablesView() {
                 <Button
                   type="button"
                   className="w-full bg-emerald-700 hover:bg-emerald-800"
-                  onClick={() =>
-                    updateTable(
-                      selected.id,
-                      {
-                        status: "Occupied",
-                        guest: guest.trim() || "Walk-in",
-                        covers: Math.min(selected.capacity, Math.max(1, Number(covers) || 1)),
-                        server: "Floor",
-                        durationMin: 1,
-                        checkAmount: 0,
-                      },
-                      `${selected.tableNo} seated`,
-                    )
-                  }
+                  onClick={seatTable}
                 >
                   Seat table
                 </Button>
@@ -248,13 +341,7 @@ export function FbLiveTablesView() {
                 <Button
                   type="button"
                   className="w-full bg-emerald-700 hover:bg-emerald-800"
-                  onClick={() =>
-                    updateTable(
-                      selected.id,
-                      { status: "Billing" },
-                      `${selected.tableNo} moved to billing`,
-                    )
-                  }
+                  onClick={requestBill}
                 >
                   Request bill
                 </Button>
@@ -265,20 +352,7 @@ export function FbLiveTablesView() {
               <Button
                 type="button"
                 className="w-full bg-emerald-700 hover:bg-emerald-800"
-                onClick={() =>
-                  updateTable(
-                    selected.id,
-                    {
-                      status: "Dirty",
-                      guest: "—",
-                      server: "—",
-                      covers: 0,
-                      durationMin: 0,
-                      checkAmount: 0,
-                    },
-                    `${selected.tableNo} settled — marked dirty`,
-                  )
-                }
+                onClick={settleTable}
               >
                 Settle & clear
               </Button>
@@ -288,13 +362,7 @@ export function FbLiveTablesView() {
               <Button
                 type="button"
                 className="w-full bg-emerald-700 hover:bg-emerald-800"
-                onClick={() =>
-                  updateTable(
-                    selected.id,
-                    { status: "Available" as LiveTableStatus },
-                    `${selected.tableNo} ready to seat`,
-                  )
-                }
+                onClick={cleanTable}
               >
                 Mark cleaned
               </Button>

@@ -11,5 +11,5 @@ export function FbCatchAllClient({ path }: { path: string }) {
     notFound();
   }
 
-  return <FbModuleView definition={definition} />;
+  return <FbModuleView definition={definition} path={path} />;
 }

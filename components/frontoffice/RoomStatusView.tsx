@@ -4,30 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { BedDouble, Building2, Sparkles, Wrench } from "lucide-react";
 import type { RoomStatusCard } from "@/app/data/frontoffice/modules";
 import { floors, roomStatuses } from "@/app/data/frontoffice/constants";
+import { roomService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
-import { initialHKRooms } from "@/components/housekeeping/HousekeepingData";
-import type { HKRoom } from "@/components/housekeeping/HousekeepingTypes";
-
-const mapHKRoomToFOCard = (r: HKRoom): RoomStatusCard => {
-  let foStatusStr = "Vacant";
-  if (r.status === "Blocked") foStatusStr = "Blocked";
-  else if (r.status === "Out of Order" || r.status === "Out of Service") foStatusStr = "Maintenance";
-  else if (r.status.includes("Dirty")) foStatusStr = "Dirty";
-  else if (r.status === "Vacant Ready") foStatusStr = "Clean";
-  else if (r.foStatus === "Occupied") foStatusStr = "Occupied";
-  else if (r.foStatus === "Vacant") foStatusStr = "Vacant";
-
-  return {
-    roomNo: r.roomNo,
-    type: r.category,
-    floor: r.floor,
-    status: foStatusStr,
-    guestName: r.guestName,
-    housekeeping: r.hkStatus === "Inspected" ? "Inspected" : r.hkStatus === "Clean" ? "Clean" : r.hkStatus === "Cleaning" ? "In Progress" : r.hkStatus,
-    maintenance: r.status === "Out of Order" ? "In Progress" : "OK",
-    checkoutDate: r.checkoutDate,
-  };
-};
 import {
   AlertBanner,
   FormField,
@@ -64,20 +42,28 @@ export function RoomStatusView() {
   const [newHk, setNewHk] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    const loadRooms = () => {
-      const stored = localStorage.getItem("hk_rooms");
-      if (stored) {
-        const hkRooms: HKRoom[] = JSON.parse(stored);
-        setRooms(hkRooms.map(mapHKRoomToFOCard));
-      } else {
-        localStorage.setItem("hk_rooms", JSON.stringify(initialHKRooms));
-        setRooms(initialHKRooms.map(mapHKRoomToFOCard));
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await roomService.status();
+        if (!cancelled) {
+          setRooms(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    loadRooms();
-    window.addEventListener("storage", loadRooms);
-    return () => window.removeEventListener("storage", loadRooms);
   }, []);
 
   const filtered = useMemo(() => {
@@ -112,64 +98,42 @@ export function RoomStatusView() {
     setNewHk(room.housekeeping);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedRoom) return;
-
-    const stored = localStorage.getItem("hk_rooms");
-    if (!stored) return;
-    const hkRooms: HKRoom[] = JSON.parse(stored);
-
-    const updatedHKRooms = hkRooms.map((r) => {
-      if (r.roomNo !== selectedRoom.roomNo) return r;
-
-      const updated = { ...r };
-
-      if (actionType === "status" && newStatus) {
-        if (newStatus === "Occupied") {
-          updated.foStatus = "Occupied";
-          updated.status = "Occupied";
-        } else if (newStatus === "Vacant") {
-          updated.foStatus = "Vacant";
-          updated.status = updated.hkStatus === "Inspected" ? "Vacant Ready" : "Vacant Dirty";
-        } else if (newStatus === "Blocked") {
-          updated.foStatus = "Blocked";
-          updated.status = "Blocked";
-        } else if (newStatus === "Maintenance") {
-          updated.status = "Out of Order";
-          updated.hkStatus = "OOO";
-        }
-      }
-
-      if (actionType === "hk" && newHk) {
-        updated.hkStatus = newHk as any;
-        if (newHk === "Dirty") {
-          updated.status = updated.foStatus === "Occupied" ? "Occupied Dirty" : "Vacant Dirty";
-        } else if (newHk === "Clean") {
-          updated.status = updated.foStatus === "Occupied" ? "Occupied" : "Vacant Ready";
-        } else if (newHk === "Inspected") {
-          updated.status = updated.foStatus === "Occupied" ? "Occupied" : "Vacant Ready";
-        }
-      }
-
-      return updated;
-    });
-
-    localStorage.setItem("hk_rooms", JSON.stringify(updatedHKRooms));
-    setRooms(updatedHKRooms.map(mapHKRoomToFOCard));
-
-    // Dispatch standard event so other components reload
-    window.dispatchEvent(new Event("storage"));
-
-    setToast(
-      actionType === "hk"
-        ? `Housekeeping updated for Room ${selectedRoom.roomNo}.`
-        : actionType === "status"
-          ? `Room ${selectedRoom.roomNo} status changed to ${newStatus}.`
-          : `Room ${selectedRoom.roomNo} assigned successfully.`,
-    );
+    try {
+      const body: Partial<{ status: string; housekeeping: string; maintenance: string }> = {};
+      if (actionType === "status" && newStatus) body.status = newStatus;
+      if (actionType === "hk" && newHk) body.housekeeping = newHk;
+      const updated = await roomService.update(selectedRoom.roomNo, body);
+      setRooms((prev) =>
+        prev.map((r) =>
+          r.roomNo === selectedRoom.roomNo
+            ? {
+                ...r,
+                status: updated.status ?? body.status ?? r.status,
+                housekeeping: updated.housekeeping ?? body.housekeeping ?? r.housekeeping,
+                maintenance: updated.maintenance ?? r.maintenance,
+                guestName: updated.guestName ?? r.guestName,
+              }
+            : r,
+        ),
+      );
+      setToast(
+        actionType === "hk"
+          ? `Housekeeping updated for Room ${selectedRoom.roomNo}.`
+          : actionType === "status"
+            ? `Room ${selectedRoom.roomNo} status changed to ${newStatus}.`
+            : `Room ${selectedRoom.roomNo} assigned successfully.`,
+      );
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to update room");
+    }
     setSelectedRoom(null);
     setActionType(null);
   };
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   return (
     <div className="space-y-5">

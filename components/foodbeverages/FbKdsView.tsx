@@ -1,13 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, ChefHat, Flame, Play } from "lucide-react";
-import {
-  getKitchenOutletOptions,
-  kdsTicketsSeed,
-  type KdsStatus,
-  type KdsTicket,
-} from "@/app/data/foodbeverages/ops";
+import { type KdsStatus } from "@/app/data/foodbeverages/ops";
+import { kdsService, type KdsTicket } from "@/services/food-beverages";
+import { useFbOutlets } from "@/services/food-beverages/useFbOutlets";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
 import { FbOutletSelect } from "@/components/foodbeverages/FbOutletSelect";
@@ -22,12 +19,43 @@ const nextBump: Partial<Record<KdsStatus, KdsStatus>> = {
 };
 
 export function FbKdsView() {
-  const outlets = getKitchenOutletOptions();
-  const [outletId, setOutletId] = useState(outlets[0]?.id ?? "main-kitchen");
-  const [tickets, setTickets] = useState(kdsTicketsSeed);
+  const { outlets } = useFbOutlets(["kitchen"]);
+  const [outletId, setOutletId] = useState("");
+  const [tickets, setTickets] = useState<KdsTicket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [station, setStation] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!outletId && outlets[0]?.id) setOutletId(outlets[0].id);
+  }, [outlets, outletId]);
+
+  useEffect(() => {
+    if (!outletId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await kdsService.list(outletId);
+        if (!cancelled) {
+          setTickets(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setTickets([]);
+          setError(e instanceof Error ? e.message : "Failed");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [outletId]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -47,18 +75,48 @@ export function FbKdsView() {
 
   const overSla = visible.filter((t) => t.elapsedMin > t.slaMin).length;
 
-  const bump = (ticket: KdsTicket) => {
-    const next = nextBump[ticket.status];
-    if (!next) return;
-    setTickets((prev) =>
-      prev.map((t) => (t.id === ticket.id ? { ...t, status: next } : t)),
-    );
-    setToast(
-      next === "Bumped"
-        ? `${ticket.ticket} cleared from board`
-        : `${ticket.ticket} → ${next}`,
-    );
+  const bump = async (ticket: KdsTicket) => {
+    if (!nextBump[ticket.status as KdsStatus]) return;
+    try {
+      const updated = await kdsService.advance(ticket.id);
+      setTickets((prev) =>
+        prev.map((t) => (t.id === ticket.id ? updated : t)),
+      );
+      setToast(
+        updated.status === "Bumped"
+          ? `${ticket.ticket} cleared from board`
+          : `${ticket.ticket} → ${updated.status}`,
+      );
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to advance");
+    }
   };
+
+  if (loading) {
+    return (
+      <ModulePageShell
+        eyebrow="Kitchen"
+        title="KDS"
+        description="Live kitchen tickets — start prep, mark ready, and bump."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-slate-500">Loading…</p>
+      </ModulePageShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <ModulePageShell
+        eyebrow="Kitchen"
+        title="KDS"
+        description="Live kitchen tickets — start prep, mark ready, and bump."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-red-600">{error}</p>
+      </ModulePageShell>
+    );
+  }
 
   return (
     <ModulePageShell

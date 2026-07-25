@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   BedDouble,
@@ -17,9 +17,10 @@ import {
   Users,
   SplitSquareHorizontal,
 } from "lucide-react";
-import { checkoutFolios, computeCheckoutTotals, computeCheckoutBills } from "@/app/data";
+import { computeCheckoutTotals, computeCheckoutBills } from "@/app/data";
 import type { CheckoutFolio, SplittableChargeKey } from "@/app/data/frontoffice/checkout";
 import { paymentModes } from "@/app/data/frontoffice/constants";
+import { reservationService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -53,12 +54,60 @@ const BILL_LINES: { key: BillLineKey; label: string; splittable: boolean }[] = [
   { key: "gst", label: "Tax (GST)", splittable: false },
 ];
 
+
+function mapInHouseToFolio(g: {
+  id: string;
+  guestName: string;
+  email?: string;
+  room: string;
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  nights: number;
+  adults: number;
+  children: number;
+  balance: number;
+  restaurantBill?: number;
+  laundry?: number;
+  isVip?: boolean;
+}): CheckoutFolio {
+  const restaurant = g.restaurantBill || 0;
+  const laundry = g.laundry || 0;
+  return {
+    id: g.id,
+    bookingId: g.id,
+    guestName: g.guestName,
+    phone: "",
+    email: g.email,
+    room: g.room,
+    roomType: g.roomType,
+    checkIn: g.checkIn,
+    checkOut: g.checkOut,
+    nights: g.nights,
+    adults: g.adults,
+    children: g.children,
+    roomCharges: Math.max(0, g.balance - restaurant - laundry),
+    restaurantCharges: restaurant,
+    laundry,
+    miniBar: 0,
+    extraBed: 0,
+    otherCharges: 0,
+    gst: 0,
+    discount: 0,
+    advancePaid: 0,
+    isVip: g.isVip,
+    departingToday: true,
+  };
+}
+
 function getInitials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
 export function CheckOutView() {
-  const [folios, setFolios] = useState(checkoutFolios);
+  const [folios, setFolios] = useState<CheckoutFolio[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [lookupError, setLookupError] = useState("");
   const [selected, setSelected] = useState<CheckoutFolio | null>(null);
@@ -72,6 +121,25 @@ export function CheckOutView() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const inHouse = await reservationService.inHouse();
+        if (!cancelled) {
+          setFolios(inHouse.map(mapInHouseToFolio));
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const departingToday = useMemo(
     () => folios.filter((f) => f.departingToday),
@@ -196,21 +264,29 @@ export function CheckOutView() {
       }
     : null;
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (!selected || !totals) return;
     if (amountReceived < totals.pending) {
       setLookupError(`Amount received (${formatINR(amountReceived)}) is less than pending balance (${formatINR(totals.pending)}).`);
       return;
     }
-    setFolios((prev) => prev.filter((f) => f.id !== selected.id));
-    setCompleted(true);
-    const billNote =
-      splitBilling && billBreakdown && billBreakdown.bills.length > 1
-        ? ` across ${billBreakdown.bills.length} bills`
-        : "";
-    setToast(
-      `${selected.guestName} checked out from Room ${selected.room}. ${formatINR(totals.pending)} collected via ${paymentMode}${billNote}.`,
-    );
+    try {
+      await reservationService.checkOut(selected.id, {
+        paymentMode,
+        amountReceived,
+      });
+      setFolios((prev) => prev.filter((f) => f.id !== selected.id));
+      setCompleted(true);
+      const billNote =
+        splitBilling && billBreakdown && billBreakdown.bills.length > 1
+          ? ` across ${billBreakdown.bills.length} bills`
+          : "";
+      setToast(
+        `${selected.guestName} checked out from Room ${selected.room}. ${formatINR(totals.pending)} collected via ${paymentMode}${billNote}.`,
+      );
+    } catch (e) {
+      setLookupError(e instanceof Error ? e.message : "Check-out failed");
+    }
   };
 
   const reset = () => {
@@ -225,6 +301,9 @@ export function CheckOutView() {
   };
 
   const hasAnyInvoice = Object.keys(invoiceNos).length > 0;
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   return (
     <div className="space-y-6">

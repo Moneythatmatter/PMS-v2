@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   BedDouble,
   Building2,
@@ -19,7 +20,9 @@ import {
   roomNumbers,
   roomTypes,
 } from "@/app/data/frontoffice/constants";
-import { guestProfiles, reservationBookings, currentUser } from "@/app/data";
+import { currentUser } from "@/app/data";
+import type { GuestProfile } from "@/app/data/frontoffice/modules";
+import { guestService, reservationService } from "@/services/front-office";
 import { CompanySearchSelect } from "@/components/frontoffice/CompanySearchSelect";
 import { SearchSelect } from "@/components/frontoffice/SearchSelect";
 import { Button } from "@/components/ui/Button";
@@ -108,6 +111,7 @@ const bookingTypeOptions = [
 ] as const;
 
 export function NewReservationForm() {
+  const searchParams = useSearchParams();
   const [ref] = useState(generateRef);
   const [form, setForm] = useState({
     firstName: "",
@@ -117,12 +121,12 @@ export function NewReservationForm() {
     bookingType: "" as "" | "Individual" | "Company",
     companyName: "",
     companyId: "",
-    checkIn: "",
-    checkOut: "",
+    checkIn: searchParams.get("checkIn") ?? "",
+    checkOut: searchParams.get("checkOut") ?? "",
     adults: 1,
     children: 0,
-    roomType: "",
-    roomNumber: "",
+    roomType: searchParams.get("roomType") ?? "",
+    roomNumber: searchParams.get("room") ?? "",
     ratePlan: "",
     mealPlan: "",
     source: "",
@@ -146,95 +150,97 @@ export function NewReservationForm() {
     totalStays: 0,
   });
 
+  // Prefill from Room Availability (or deep links) when query params change
+  useEffect(() => {
+    const room = searchParams.get("room");
+    const roomType = searchParams.get("roomType");
+    const checkIn = searchParams.get("checkIn");
+    const checkOut = searchParams.get("checkOut");
+    if (!room && !roomType && !checkIn && !checkOut) return;
+    setForm((prev) => ({
+      ...prev,
+      ...(room ? { roomNumber: room } : {}),
+      ...(roomType ? { roomType } : {}),
+      ...(checkIn ? { checkIn } : {}),
+      ...(checkOut ? { checkOut } : {}),
+    }));
+  }, [searchParams]);
+
   // Automated Existing Guest Detection and Auto-Fill
   useEffect(() => {
     if (!form.mobile && !form.email && (!form.firstName || !form.lastName)) {
       return;
     }
 
-    let profilesList: any[] = [];
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("pms_guest_profiles");
-      if (stored) {
-        profilesList = JSON.parse(stored);
-      } else {
-        profilesList = guestProfiles;
-        localStorage.setItem("pms_guest_profiles", JSON.stringify(guestProfiles));
+    let cancelled = false;
+    (async () => {
+      let profilesList: GuestProfile[] = [];
+      try {
+        profilesList = await guestService.list();
+      } catch {
+        return;
       }
-    }
+      if (cancelled) return;
 
-    const searchMobile = form.mobile.trim().replace(/[\s\-\+]/g, "");
-    const searchEmail = form.email.trim().toLowerCase();
-    const searchName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim().toLowerCase();
+      const searchMobile = form.mobile.trim().replace(/[\s\-\+]/g, "");
+      const searchEmail = form.email.trim().toLowerCase();
+      const searchName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim().toLowerCase();
 
-    let matchedGuest: any = null;
+      let matchedGuest: GuestProfile | undefined;
 
-    // Search Priority 1: Mobile Number
-    if (searchMobile.length >= 10) {
-      matchedGuest = profilesList.find((g) => {
-        const gm = (g.mobile || "").replace(/[\s\-\+]/g, "");
-        return gm.endsWith(searchMobile) || searchMobile.endsWith(gm);
-      });
-    }
+      if (searchMobile.length >= 10) {
+        matchedGuest = profilesList.find((g) => {
+          const gm = (g.mobile || "").replace(/[\s\-\+]/g, "");
+          return gm.endsWith(searchMobile) || searchMobile.endsWith(gm);
+        });
+      }
 
-    // Search Priority 2: Email
-    if (!matchedGuest && searchEmail) {
-      matchedGuest = profilesList.find((g) => (g.email || "").trim().toLowerCase() === searchEmail);
-    }
+      if (!matchedGuest && searchEmail) {
+        matchedGuest = profilesList.find((g) => (g.email || "").trim().toLowerCase() === searchEmail);
+      }
 
-    // Search Priority 3: Government ID / Passport
-    if (!matchedGuest && form.idNumber) {
-      const searchId = form.idNumber.trim().toLowerCase();
-      matchedGuest = profilesList.find((g) => (g.idNumber || "").trim().toLowerCase() === searchId);
-    }
+      if (!matchedGuest && form.idNumber) {
+        const searchId = form.idNumber.trim().toLowerCase();
+        matchedGuest = profilesList.find((g) => (g.idNumber || "").trim().toLowerCase() === searchId);
+      }
 
-    // Search Priority 4: Guest Name (last priority)
-    if (!matchedGuest && form.firstName.trim().length >= 2 && form.lastName.trim().length >= 2) {
-      matchedGuest = profilesList.find((g) => (g.name || "").trim().toLowerCase() === searchName);
-    }
+      if (!matchedGuest && form.firstName.trim().length >= 2 && form.lastName.trim().length >= 2) {
+        matchedGuest = profilesList.find((g) => (g.name || "").trim().toLowerCase() === searchName);
+      }
 
-    if (matchedGuest) {
-      const nameParts = (matchedGuest.name || "").split(" ");
-      const matchFirstName = nameParts[0] || "";
-      const matchLastName = nameParts.slice(1).join(" ") || "";
+      if (matchedGuest) {
+        const nameParts = (matchedGuest.name || "").split(" ");
+        const matchFirstName = nameParts[0] || "";
+        const matchLastName = nameParts.slice(1).join(" ") || "";
 
-      setForm((prev) => {
-        // Avoid recursive update loop
-        if (
-          prev.guestId === matchedGuest.id &&
-          prev.firstName === matchFirstName &&
-          prev.lastName === matchLastName &&
-          prev.mobile === matchedGuest.mobile &&
-          prev.email === matchedGuest.email
-        ) {
-          return prev;
-        }
+        setForm((prev) => {
+          if (
+            prev.guestId === matchedGuest!.id &&
+            prev.firstName === matchFirstName &&
+            prev.lastName === matchLastName &&
+            prev.mobile === matchedGuest!.mobile &&
+            prev.email === matchedGuest!.email
+          ) {
+            return prev;
+          }
 
-        return {
-          ...prev,
-          guestId: matchedGuest.id,
-          firstName: matchFirstName,
-          lastName: matchLastName,
-          mobile: matchedGuest.mobile,
-          email: matchedGuest.email,
-          nationality: matchedGuest.nationality || prev.nationality || "",
-          idProofType: matchedGuest.idType || prev.idProofType || "",
-          idNumber: matchedGuest.idNumber || prev.idNumber || "",
-          address: matchedGuest.address || prev.address || "",
-          gender: matchedGuest.gender || prev.gender || "",
-          dob: matchedGuest.dob || prev.dob || "",
-          city: matchedGuest.city || prev.city || "",
-          state: matchedGuest.state || prev.state || "",
-          country: matchedGuest.country || prev.country || "",
-          pincode: matchedGuest.pincode || prev.pincode || "",
-          preferences: matchedGuest.preferences || prev.preferences || [],
-          notes: matchedGuest.notes || prev.notes || "",
-          loyaltyPoints: matchedGuest.loyaltyPoints || 0,
-          totalStays: matchedGuest.totalStays || 0,
-        };
-      });
-    } else {
-      if (form.guestId) {
+          return {
+            ...prev,
+            guestId: matchedGuest!.id,
+            firstName: matchFirstName,
+            lastName: matchLastName,
+            mobile: matchedGuest!.mobile,
+            email: matchedGuest!.email,
+            nationality: matchedGuest!.nationality || prev.nationality || "",
+            idProofType: matchedGuest!.idType || prev.idProofType || "",
+            idNumber: matchedGuest!.idNumber || prev.idNumber || "",
+            address: matchedGuest!.address || prev.address || "",
+            preferences: matchedGuest!.preferences || prev.preferences || [],
+            loyaltyPoints: matchedGuest!.loyaltyPoints || 0,
+            totalStays: matchedGuest!.totalStays || 0,
+          };
+        });
+      } else if (form.guestId) {
         setForm((prev) => ({
           ...prev,
           guestId: "",
@@ -242,8 +248,12 @@ export function NewReservationForm() {
           totalStays: 0,
         }));
       }
-    }
-  }, [form.mobile, form.email, form.firstName, form.lastName, form.idNumber]);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.mobile, form.email, form.firstName, form.lastName, form.idNumber, form.guestId]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
@@ -323,130 +333,88 @@ export function NewReservationForm() {
     return Object.keys(next).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) {
       setToastVariant("error");
       setToast("Please fill in all required fields marked with *.");
       return;
     }
 
-    // Load/Initialize Guest Profiles and Reservations
-    let profilesList: any[] = [];
-    let bookingsList: any[] = [];
-    if (typeof window !== "undefined") {
-      const storedProfiles = localStorage.getItem("pms_guest_profiles");
-      if (storedProfiles) {
-        profilesList = JSON.parse(storedProfiles);
+    try {
+      let finalGuestId = form.guestId;
+      const guestNameStr = `${form.firstName} ${form.lastName}`;
+
+      if (finalGuestId) {
+        await guestService.update(finalGuestId, {
+          name: guestNameStr,
+          mobile: form.mobile,
+          email: form.email,
+          nationality: form.nationality || "Indian",
+          address: form.address || "",
+          idType: form.idProofType || "Aadhaar",
+          idNumber: form.idNumber || "",
+          preferences: form.preferences?.length ? form.preferences : [],
+        });
       } else {
-        profilesList = guestProfiles;
+        const created = await guestService.create({
+          name: guestNameStr,
+          mobile: form.mobile,
+          email: form.email,
+          nationality: form.nationality || "Indian",
+          totalStays: 1,
+          loyaltyPoints: 100,
+          idType: form.idProofType || "Aadhaar",
+          idNumber: form.idNumber || "",
+          address: form.address || "",
+          memberSince: new Date().toLocaleString("en-IN", { month: "short", year: "numeric" }),
+          preferences: form.preferences || [],
+        });
+        finalGuestId = created.id;
       }
 
-      const storedReservations = localStorage.getItem("pms_reservations");
-      if (storedReservations) {
-        bookingsList = JSON.parse(storedReservations);
-      } else {
-        bookingsList = reservationBookings;
-      }
-    }
-
-    let finalGuestId = form.guestId;
-    const guestNameStr = `${form.firstName} ${form.lastName}`;
-
-    if (finalGuestId) {
-      // Existing Guest: Link and update stays/loyalty
-      profilesList = profilesList.map((g) => {
-        if (g.id === finalGuestId) {
-          return {
-            ...g,
-            name: guestNameStr,
-            mobile: form.mobile,
-            email: form.email,
-            nationality: form.nationality || g.nationality || "Indian",
-            totalStays: (g.totalStays || 0) + 1,
-            loyaltyPoints: (g.loyaltyPoints || 0) + 100,
-            address: form.address || g.address || "",
-            idType: form.idProofType || g.idType || "Aadhaar",
-            idNumber: form.idNumber || g.idNumber || "",
-            preferences: form.preferences?.length ? form.preferences : (g.preferences || []),
-            notes: form.notes || g.notes || "",
-          };
-        }
-        return g;
-      });
-    } else {
-      // New Guest: Create a new Guest Profile
-      finalGuestId = `G-${100 + profilesList.length + Math.floor(Math.random() * 100)}`;
-      const newProfile = {
-        id: finalGuestId,
-        name: guestNameStr,
-        mobile: form.mobile,
+      const booking = await reservationService.create({
+        guestId: finalGuestId,
+        guestName: guestNameStr,
+        phone: form.mobile,
         email: form.email,
         nationality: form.nationality || "Indian",
-        totalStays: 1,
-        loyaltyPoints: 100,
-        idType: form.idProofType || "Aadhaar",
+        idProofType: form.idProofType || "Aadhaar",
         idNumber: form.idNumber || "",
+        source: form.source || "Direct",
+        roomNo: form.roomNumber || "TBA",
+        roomType: form.roomType,
+        checkIn: form.checkIn,
+        checkOut: form.checkOut,
+        nights,
+        adults: form.adults,
+        children: form.children,
+        ratePlan: form.ratePlan || "BAR",
+        mealPlan: form.mealPlan || "EP",
+        roomRate,
+        totalAmount,
+        advancePaid: form.advancePaid,
+        paymentMode: form.paymentMode || "Cash",
+        balance: pendingAmount,
+        status: "Reserved",
+        bookedBy: currentUser.name,
+        gender: form.gender || "",
+        dob: form.dob || "",
         address: form.address || "",
-        memberSince: new Date().toLocaleString("en-IN", { month: "short", year: "numeric" }),
-        preferences: form.preferences || [],
-        notes: form.notes || "",
-      };
-      profilesList.push(newProfile);
+        city: form.city || "",
+        state: form.state || "",
+        country: form.country || "",
+        pincode: form.pincode || "",
+      });
+
+      setSavedStatus("Reserved");
+      setToastVariant("success");
+      setToast(
+        `Reservation ${booking.id} saved as Reserved for ${form.firstName} ${form.lastName}. Total: ${formatINR(totalAmount)}`,
+      );
+    } catch (e) {
+      setToastVariant("error");
+      setToast(e instanceof Error ? e.message : "Failed to save reservation");
     }
-
-    // Create new booking record referencing the guest profile
-    const newBooking = {
-      id: ref,
-      guestId: finalGuestId,
-      guestName: guestNameStr,
-      phone: form.mobile,
-      email: form.email,
-      nationality: form.nationality || "Indian",
-      idProofType: form.idProofType || "Aadhaar",
-      idNumber: form.idNumber || "",
-      source: form.source || "Direct",
-      roomNo: form.roomNumber || "TBA",
-      roomType: form.roomType,
-      checkIn: form.checkIn,
-      checkOut: form.checkOut,
-      nights: nights,
-      adults: form.adults,
-      children: form.children,
-      ratePlan: form.ratePlan || "BAR",
-      mealPlan: form.mealPlan || "EP",
-      roomRate: roomRate,
-      totalAmount: totalAmount,
-      advancePaid: form.advancePaid,
-      paymentMode: form.paymentMode || "Cash",
-      balance: pendingAmount,
-      status: "Reserved" as const,
-      createdAt: new Date().toLocaleString("en-IN"),
-      bookedBy: currentUser.name,
-      // Extra details for Check-in page autofill compatibility
-      gender: form.gender || "",
-      dob: form.dob || "",
-      address: form.address || "",
-      city: form.city || "",
-      state: form.state || "",
-      country: form.country || "",
-      pincode: form.pincode || "",
-    };
-
-    bookingsList.unshift(newBooking);
-
-    // Save updated arrays back to localStorage
-    if (typeof window !== "undefined") {
-      localStorage.setItem("pms_guest_profiles", JSON.stringify(profilesList));
-      localStorage.setItem("pms_reservations", JSON.stringify(bookingsList));
-      // Dispatch storage event to sync views
-      window.dispatchEvent(new Event("storage"));
-    }
-
-    setSavedStatus("Reserved");
-    setToastVariant("success");
-    setToast(
-      `Reservation ${ref} saved as Reserved for ${form.firstName} ${form.lastName}. Total: ${formatINR(totalAmount)}`,
-    );
   };
 
   const guestName = [form.firstName, form.lastName].filter(Boolean).join(" ") || "Guest";

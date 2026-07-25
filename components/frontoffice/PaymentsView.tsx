@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -13,9 +13,9 @@ import {
   RefreshCw,
   User,
 } from "lucide-react";
-import { inHouseGuests, paymentRecords as initialPayments } from "@/app/data";
-import type { PaymentRecord } from "@/app/data/frontoffice/modules";
+import type { InHouseGuest, PaymentRecord } from "@/app/data/frontoffice/modules";
 import { paymentModes } from "@/app/data/frontoffice/constants";
+import { paymentService, reservationService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -45,7 +45,10 @@ const statusStyles: Record<PaymentRecord["status"], string> = {
 };
 
 export function PaymentsView() {
-  const [payments, setPayments] = useState(initialPayments);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [guests, setGuests] = useState<InHouseGuest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
@@ -54,11 +57,35 @@ export function PaymentsView() {
   const [recordOpen, setRecordOpen] = useState(false);
   const [previewPayment, setPreviewPayment] = useState<PaymentRecord | null>(null);
 
-  const [guestName, setGuestName] = useState(inHouseGuests[0].guestName);
+  const [guestName, setGuestName] = useState("");
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState("UPI");
   const [paymentType, setPaymentType] = useState<PaymentType>("Payment");
   const [txnRef, setTxnRef] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [pay, inHouse] = await Promise.all([
+          paymentService.list(),
+          reservationService.inHouse(),
+        ]);
+        if (!cancelled) {
+          setPayments(pay);
+          setGuests(inHouse as InHouseGuest[]);
+          if (inHouse.length > 0) setGuestName(inHouse[0].guestName);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -89,7 +116,7 @@ export function PaymentsView() {
   }, [payments]);
 
   const resetForm = () => {
-    setGuestName(inHouseGuests[0].guestName);
+    setGuestName(guests[0]?.guestName ?? "");
     setAmount("");
     setMode("UPI");
     setPaymentType("Payment");
@@ -101,34 +128,37 @@ export function PaymentsView() {
     setRecordOpen(true);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const parsed = parseFloat(amount);
     if (!parsed || parsed <= 0) {
       setToast("Please enter a valid amount.");
       return;
     }
-    const guest = inHouseGuests.find((g) => g.guestName === guestName);
-    const newPayment: PaymentRecord = {
-      id: `P-${String(payments.length + 1).padStart(3, "0")}`,
-      guestName,
-      room: guest?.room,
-      amount: parsed,
-      mode,
-      type: paymentType,
-      transactionNo: txnRef || `TXN${Date.now().toString().slice(-6)}`,
-      date: new Date().toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }),
-      status: paymentType === "Refund" ? "Refunded" : "Completed",
-    };
-    setPayments((prev) => [newPayment, ...prev]);
-    setRecordOpen(false);
-    resetForm();
-    setToast(
-      `${paymentType} of ${formatINR(parsed)} recorded for ${guestName}.`,
-    );
+    const guest = guests.find((g) => g.guestName === guestName);
+    try {
+      const newPayment = await paymentService.create({
+        guestName,
+        room: guest?.room,
+        amount: parsed,
+        mode,
+        type: paymentType,
+        transactionNo: txnRef || `TXN${Date.now().toString().slice(-6)}`,
+        date: new Date().toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }),
+        status: paymentType === "Refund" ? "Refunded" : "Completed",
+      });
+      setPayments((prev) => [newPayment, ...prev]);
+      setRecordOpen(false);
+      resetForm();
+      setToast(
+        `${paymentType} of ${formatINR(parsed)} recorded for ${guestName}.`,
+      );
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to record payment");
+    }
   };
 
   const recordForm = (
@@ -138,7 +168,7 @@ export function PaymentsView() {
           value={guestName}
           onChange={(e) => setGuestName(e.target.value)}
         >
-          {inHouseGuests.map((g) => (
+          {guests.map((g) => (
             <option key={g.id} value={g.guestName}>
               {g.guestName} — Room {g.room}
             </option>
@@ -194,6 +224,9 @@ export function PaymentsView() {
       </FormField>
     </div>
   );
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   return (
     <div className="space-y-5">

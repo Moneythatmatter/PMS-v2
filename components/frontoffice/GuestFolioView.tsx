@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -10,8 +10,8 @@ import {
   Receipt,
   Wallet,
 } from "lucide-react";
-import { folioEntries as initialFolioEntries, inHouseGuests } from "@/app/data";
 import type { FolioEntry, InHouseGuest } from "@/app/data/frontoffice/modules";
+import { folioService, reservationService } from "@/services/front-office";
 import { GuestSearchSelect } from "@/components/frontoffice/GuestSearchSelect";
 import { Button } from "@/components/ui/Button";
 import {
@@ -47,9 +47,12 @@ const chargeCategories: FolioEntry["category"][] = [
 ];
 
 export function GuestFolioView() {
-  const [guest, setGuest] = useState<InHouseGuest>(inHouseGuests[0]);
-  const [guestSearch, setGuestSearch] = useState(inHouseGuests[0].guestName);
-  const [allEntries, setAllEntries] = useState(initialFolioEntries);
+  const [guests, setGuests] = useState<InHouseGuest[]>([]);
+  const [guest, setGuest] = useState<InHouseGuest | null>(null);
+  const [guestSearch, setGuestSearch] = useState("");
+  const [allEntries, setAllEntries] = useState<FolioEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [selectedEntry, setSelectedEntry] = useState<FolioEntry | null>(null);
@@ -59,7 +62,36 @@ export function GuestFolioView() {
   const [chargeAmount, setChargeAmount] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [inHouse, folio] = await Promise.all([
+          reservationService.inHouse(),
+          folioService.list(),
+        ]);
+        if (!cancelled) {
+          const mapped = inHouse as InHouseGuest[];
+          setGuests(mapped);
+          setAllEntries(folio);
+          if (mapped.length > 0) {
+            setGuest(mapped[0]);
+            setGuestSearch(mapped[0].guestName);
+          }
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const entries = useMemo(() => {
+    if (!guest) return [];
     return allEntries
       .filter((e) => e.guestName === guest.guestName)
       .filter((e) => {
@@ -70,16 +102,17 @@ export function GuestFolioView() {
           e.date.toLowerCase().includes(q)
         );
       });
-  }, [allEntries, guest.guestName, categoryFilter, search]);
+  }, [allEntries, guest, categoryFilter, search]);
 
   const summary = useMemo(() => {
+    if (!guest) return { debits: 0, credits: 0, balance: 0, count: 0 };
     const guestEntries = allEntries.filter((e) => e.guestName === guest.guestName);
     const debits = guestEntries.reduce((s, e) => s + e.debit, 0);
     const credits = guestEntries.reduce((s, e) => s + e.credit, 0);
     const balance =
       guestEntries.length > 0 ? guestEntries[guestEntries.length - 1].balance : 0;
     return { debits, credits, balance, count: guestEntries.length };
-  }, [allEntries, guest.guestName]);
+  }, [allEntries, guest]);
 
   const handleSelectGuest = (g: InHouseGuest) => {
     setGuest(g);
@@ -94,7 +127,8 @@ export function GuestFolioView() {
     setChargeAmount("");
   };
 
-  const handlePostCharge = () => {
+  const handlePostCharge = async () => {
+    if (!guest) return;
     const amount = parseFloat(chargeAmount);
     if (!chargeDescription.trim()) {
       setToast("Please enter a charge description.");
@@ -104,31 +138,31 @@ export function GuestFolioView() {
       setToast("Please enter a valid amount.");
       return;
     }
-
     const guestEntries = allEntries.filter((e) => e.guestName === guest.guestName);
-    const lastBalance =
-      guestEntries.length > 0 ? guestEntries[guestEntries.length - 1].balance : 0;
+    const lastBalance = guestEntries.length > 0 ? guestEntries[guestEntries.length - 1].balance : 0;
     const today = new Date().toLocaleDateString("en-IN", {
       day: "numeric",
       month: "short",
+      year: "numeric",
     });
-
-    const newEntry: FolioEntry = {
-      id: `F-${Date.now()}`,
-      guestName: guest.guestName,
-      room: guest.room,
-      date: today,
-      description: chargeDescription.trim(),
-      category: chargeCategory,
-      debit: amount,
-      credit: 0,
-      balance: lastBalance + amount,
-    };
-
-    setAllEntries((prev) => [...prev, newEntry]);
-    setChargeOpen(false);
-    resetChargeForm();
-    setToast(`${formatINR(amount)} posted to ${guest.guestName}'s folio.`);
+    try {
+      const newEntry = await folioService.create({
+        guestName: guest.guestName,
+        room: guest.room,
+        date: today,
+        description: chargeDescription.trim(),
+        category: chargeCategory,
+        debit: amount,
+        credit: 0,
+        balance: lastBalance + amount,
+      });
+      setAllEntries((prev) => [...prev, newEntry]);
+      setChargeOpen(false);
+      resetChargeForm();
+      setToast(`Charge of ${formatINR(amount)} posted to ${guest.guestName}'s folio.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to post charge");
+    }
   };
 
   const columns = [
@@ -182,6 +216,10 @@ export function GuestFolioView() {
       ),
     },
   ];
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (!guest) return <p className="text-sm text-slate-500">No in-house guests.</p>;
 
   return (
     <div className="space-y-5">

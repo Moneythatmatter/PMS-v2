@@ -1,7 +1,7 @@
 "use client";
 
 import { SelectInput } from "@/components/frontoffice/ui";
-import type { FbOutlet } from "@/app/data/foodbeverages/modules";
+import type { FbOutlet } from "@/services/food-beverages";
 
 interface FbOutletSelectProps {
   outlets: FbOutlet[];

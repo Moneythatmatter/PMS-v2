@@ -1,14 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Clock, Columns3, List, UtensilsCrossed } from "lucide-react";
 import {
-  fbOrdersSeed,
   formatINR,
-  getRestaurantOutletOptions,
-  type FbOrder,
   type FbOrderStatus,
 } from "@/app/data/foodbeverages/ops";
+import { fbOrderService, type FbOrder } from "@/services/food-beverages";
+import { useFbOutlets } from "@/services/food-beverages/useFbOutlets";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
@@ -48,14 +47,45 @@ const typeFilters = [
 type ViewMode = "board" | "list";
 
 export function FbOrdersView() {
-  const outlets = getRestaurantOutletOptions();
-  const [outletId, setOutletId] = useState(outlets[0]?.id ?? "rest-1");
-  const [orders, setOrders] = useState(fbOrdersSeed);
+  const { outlets } = useFbOutlets(["restaurant", "cafe"]);
+  const [outletId, setOutletId] = useState("");
+  const [orders, setOrders] = useState<FbOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!outletId && outlets[0]?.id) setOutletId(outlets[0].id);
+  }, [outlets, outletId]);
+
+  useEffect(() => {
+    if (!outletId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await fbOrderService.list(outletId);
+        if (!cancelled) {
+          setOrders(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setOrders([]);
+          setError(e instanceof Error ? e.message : "Failed");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [outletId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -90,19 +120,50 @@ export function FbOrdersView() {
     [orders, selectedId],
   );
 
-  const advance = (order: FbOrder) => {
-    const next = nextStatus[order.status];
-    if (!next) return;
-    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: next } : o)));
-    if (next === "Settled") {
-      setSelectedId(null);
-      setToast(`${order.orderNo} settled`);
-    } else {
-      setToast(`${order.orderNo} → ${next}`);
+  const advance = async (order: FbOrder) => {
+    const preview = nextStatus[order.status as FbOrderStatus];
+    if (!preview) return;
+    try {
+      const updated = await fbOrderService.advance(order.id);
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? updated : o)));
+      if (updated.status === "Settled") {
+        setSelectedId(null);
+        setToast(`${order.orderNo} settled`);
+      } else {
+        setToast(`${order.orderNo} → ${updated.status}`);
+      }
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to advance");
     }
   };
 
   const outletName = outlets.find((o) => o.id === outletId)?.name ?? "Outlet";
+
+  if (loading) {
+    return (
+      <ModulePageShell
+        eyebrow="Restaurants"
+        title="Orders"
+        description="Open checks across dine-in, takeaway, room service, and online."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-slate-500">Loading…</p>
+      </ModulePageShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <ModulePageShell
+        eyebrow="Restaurants"
+        title="Orders"
+        description="Open checks across dine-in, takeaway, room service, and online."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-red-600">{error}</p>
+      </ModulePageShell>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -236,7 +297,7 @@ export function FbOrdersView() {
                       <span
                         className={cn(
                           "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                          statusBadge[order.status],
+                          statusBadge[order.status as FbOrderStatus] ?? statusBadge.Pending,
                         )}
                       >
                         {order.status}
@@ -247,7 +308,7 @@ export function FbOrdersView() {
                       {formatINR(order.amount)}
                     </td>
                     <td className="px-3 py-2.5 text-right">
-                      {nextStatus[order.status] && (
+                      {nextStatus[order.status as FbOrderStatus] && (
                         <Button
                           type="button"
                           size="sm"
@@ -258,7 +319,7 @@ export function FbOrdersView() {
                             advance(order);
                           }}
                         >
-                          {nextStatus[order.status]}
+                          {nextStatus[order.status as FbOrderStatus]}
                           <ArrowRight className="h-3 w-3" />
                         </Button>
                       )}
@@ -285,13 +346,13 @@ export function FbOrdersView() {
         description={selected ? `${selected.type} · ${selected.ref}` : undefined}
         width="md"
         footer={
-          selected && nextStatus[selected.status] ? (
+          selected && nextStatus[selected.status as FbOrderStatus] ? (
             <Button
               type="button"
               className="w-full bg-emerald-700 hover:bg-emerald-800"
               onClick={() => advance(selected)}
             >
-              Move to {nextStatus[selected.status]}
+              Move to {nextStatus[selected.status as FbOrderStatus]}
               <ArrowRight className="ml-1.5 h-4 w-4" />
             </Button>
           ) : undefined
@@ -303,7 +364,7 @@ export function FbOrdersView() {
               <span
                 className={cn(
                   "rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-                  statusBadge[selected.status],
+                  statusBadge[selected.status as FbOrderStatus] ?? statusBadge.Pending,
                 )}
               >
                 {selected.status}
@@ -409,7 +470,7 @@ function OrderCard({
           <Clock className="h-3 w-3" />
           {order.placedAt}
         </span>
-        {nextStatus[order.status] && (
+        {nextStatus[order.status as FbOrderStatus] && (
           <Button
             type="button"
             size="sm"
@@ -420,7 +481,7 @@ function OrderCard({
               onAdvance();
             }}
           >
-            {nextStatus[order.status]}
+            {nextStatus[order.status as FbOrderStatus]}
             <ArrowRight className="h-3 w-3" />
           </Button>
         )}

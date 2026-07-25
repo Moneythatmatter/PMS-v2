@@ -22,8 +22,9 @@ import {
 } from "lucide-react";
 import { CompanySearchSelect } from "@/components/frontoffice/CompanySearchSelect";
 import { SearchSelect } from "@/components/frontoffice/SearchSelect";
-import { reservationBookings, guestProfiles } from "@/app/data";
+import type { GuestProfile } from "@/app/data/frontoffice/modules";
 import type { ReservationBooking } from "@/app/data/types/frontoffice";
+import { guestService, reservationService } from "@/services/front-office";
 import {
   countries,
   genders,
@@ -168,18 +169,16 @@ export function CheckInForm() {
   const [pmsBookings, setPmsBookings] = useState<any[]>([]);
 
   useEffect(() => {
-    const loadBookings = () => {
-      const stored = localStorage.getItem("pms_reservations");
-      if (stored) {
-        setPmsBookings(JSON.parse(stored));
-      } else {
-        localStorage.setItem("pms_reservations", JSON.stringify(reservationBookings));
-        setPmsBookings(reservationBookings);
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await reservationService.list();
+        if (!cancelled) setPmsBookings(data);
+      } catch {
+        if (!cancelled) setPmsBookings([]);
       }
-    };
-    loadBookings();
-    window.addEventListener("storage", loadBookings);
-    return () => window.removeEventListener("storage", loadBookings);
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const arrivalsToday = useMemo(
@@ -333,148 +332,101 @@ export function CheckInForm() {
       return;
     }
 
-    // Load Guest Profiles and Reservations
-    let profilesList: any[] = [];
-    let bookingsList: any[] = [];
-    if (typeof window !== "undefined") {
-      const storedProfiles = localStorage.getItem("pms_guest_profiles");
-      if (storedProfiles) {
-        profilesList = JSON.parse(storedProfiles);
-      } else {
-        profilesList = guestProfiles;
-      }
+    void (async () => {
+      try {
+        const profilesList = await guestService.list();
+        const searchMobile = walkIn.mobile.trim().replace(/[\s\-\+]/g, "");
+        const searchEmail = walkIn.email.trim().toLowerCase();
+        const searchId = guestDetails.idNumber.trim().toLowerCase();
+        const searchName = walkInGuestName.toLowerCase();
 
-      const storedReservations = localStorage.getItem("pms_reservations");
-      if (storedReservations) {
-        bookingsList = JSON.parse(storedReservations);
-      } else {
-        bookingsList = reservationBookings;
-      }
-    }
+        let matchedGuest: GuestProfile | undefined;
+        if (searchMobile.length >= 10) {
+          matchedGuest = profilesList.find((g) => {
+            const gm = (g.mobile || "").replace(/[\s\-\+]/g, "");
+            return gm.endsWith(searchMobile) || searchMobile.endsWith(gm);
+          });
+        }
+        if (!matchedGuest && searchEmail) {
+          matchedGuest = profilesList.find((g) => (g.email || "").trim().toLowerCase() === searchEmail);
+        }
+        if (!matchedGuest && searchId) {
+          matchedGuest = profilesList.find((g) => (g.idNumber || "").trim().toLowerCase() === searchId);
+        }
+        if (!matchedGuest) {
+          matchedGuest = profilesList.find((g) => (g.name || "").trim().toLowerCase() === searchName);
+        }
 
-    const searchMobile = walkIn.mobile.trim().replace(/[\s\-\+]/g, "");
-    const searchEmail = walkIn.email.trim().toLowerCase();
-    const searchId = guestDetails.idNumber.trim().toLowerCase();
-    const searchName = walkInGuestName.toLowerCase();
-
-    let matchedGuest: any = null;
-
-    // Priority 1: Mobile
-    if (searchMobile.length >= 10) {
-      matchedGuest = profilesList.find((g) => {
-        const gm = (g.mobile || "").replace(/[\s\-\+]/g, "");
-        return gm.endsWith(searchMobile) || searchMobile.endsWith(gm);
-      });
-    }
-    // Priority 2: Email
-    if (!matchedGuest && searchEmail) {
-      matchedGuest = profilesList.find((g) => (g.email || "").trim().toLowerCase() === searchEmail);
-    }
-    // Priority 3: Government ID / Passport
-    if (!matchedGuest && searchId) {
-      matchedGuest = profilesList.find((g) => (g.idNumber || "").trim().toLowerCase() === searchId);
-    }
-    // Priority 4: Guest Name
-    if (!matchedGuest) {
-      matchedGuest = profilesList.find((g) => (g.name || "").trim().toLowerCase() === searchName);
-    }
-
-    let finalGuestId = "";
-    if (matchedGuest) {
-      finalGuestId = matchedGuest.id;
-      profilesList = profilesList.map((g) => {
-        if (g.id === finalGuestId) {
-          return {
-            ...g,
+        let finalGuestId = matchedGuest?.id ?? "";
+        if (matchedGuest) {
+          await guestService.update(matchedGuest.id, {
             name: walkInGuestName,
             mobile: walkIn.mobile.trim(),
-            email: walkIn.email.trim() || g.email,
-            nationality: guestDetails.nationality || g.nationality || "Indian",
-            totalStays: (g.totalStays || 0) + 1,
-            loyaltyPoints: (g.loyaltyPoints || 0) + 100,
-            address: guestDetails.address || g.address || "",
-            idType: guestDetails.idProofType || g.idType || "Aadhaar",
-            idNumber: guestDetails.idNumber || g.idNumber || "",
-          };
+            email: walkIn.email.trim() || matchedGuest.email,
+            nationality: guestDetails.nationality || matchedGuest.nationality || "Indian",
+            address: guestDetails.address || matchedGuest.address || "",
+            idType: guestDetails.idProofType || matchedGuest.idType || "Aadhaar",
+            idNumber: guestDetails.idNumber || matchedGuest.idNumber || "",
+          });
+        } else {
+          const created = await guestService.create({
+            name: walkInGuestName,
+            mobile: walkIn.mobile.trim(),
+            email: walkIn.email.trim(),
+            nationality: guestDetails.nationality || "Indian",
+            totalStays: 1,
+            loyaltyPoints: 100,
+            idType: guestDetails.idProofType || "Aadhaar",
+            idNumber: guestDetails.idNumber,
+            address: guestDetails.address,
+            memberSince: new Date().toLocaleString("en-IN", { month: "short", year: "numeric" }),
+            preferences: [],
+          });
+          finalGuestId = created.id;
         }
-        return g;
-      });
-    } else {
-      finalGuestId = `G-${100 + profilesList.length + Math.floor(Math.random() * 100)}`;
-      const newProfile = {
-        id: finalGuestId,
-        name: walkInGuestName,
-        mobile: walkIn.mobile.trim(),
-        email: walkIn.email.trim(),
-        nationality: guestDetails.nationality || "Indian",
-        totalStays: 1,
-        loyaltyPoints: 100,
-        idType: guestDetails.idProofType || "Aadhaar",
-        idNumber: guestDetails.idNumber,
-        address: guestDetails.address,
-        memberSince: new Date().toLocaleString("en-IN", { month: "short", year: "numeric" }),
-        preferences: [],
-        notes: "",
-      };
-      profilesList.push(newProfile);
-    }
 
-    const record: ReservationBooking = {
-      id: walkInRef,
-      guestId: finalGuestId,
-      guestName: walkInGuestName,
-      phone: walkIn.mobile.trim(),
-      email: walkIn.email.trim() || undefined,
-      source: "Walk-in",
-      roomNo: room,
-      roomType: walkIn.roomType,
-      checkIn: walkInCheckIn,
-      checkOut: walkInCheckOut,
-      balance: walkInTotal,
-      status: "Checked In",
-      adults: walkIn.adults,
-      nights: walkIn.nights,
-      roomRate: walkInRate,
-      totalAmount: walkInTotal,
-      paymentMode: walkIn.paymentMode,
-      bookingType: walkIn.bookingType || undefined,
-      companyName: walkIn.companyName || undefined,
-      gender: guestDetails.gender,
-      dob: guestDetails.dob,
-      nationality: guestDetails.nationality,
-      address: guestDetails.address,
-      city: guestDetails.city,
-      state: guestDetails.state,
-      country: guestDetails.country,
-      pincode: guestDetails.pincode,
-      idProofType: guestDetails.idProofType,
-      idNumber: guestDetails.idNumber,
-    };
+        const record = await reservationService.create({
+          guestId: finalGuestId,
+          guestName: walkInGuestName,
+          phone: walkIn.mobile.trim(),
+          email: walkIn.email.trim() || undefined,
+          source: "Walk-in",
+          roomNo: room,
+          roomType: walkIn.roomType,
+          checkIn: walkInCheckIn,
+          checkOut: walkInCheckOut,
+          balance: walkInTotal,
+          status: "Checked In",
+          adults: walkIn.adults,
+          nights: walkIn.nights,
+          roomRate: walkInRate,
+          totalAmount: walkInTotal,
+          paymentMode: walkIn.paymentMode,
+          bookingType: walkIn.bookingType || undefined,
+          companyName: walkIn.companyName || undefined,
+          gender: guestDetails.gender,
+          dob: guestDetails.dob,
+          nationality: guestDetails.nationality,
+          address: guestDetails.address,
+          city: guestDetails.city,
+          state: guestDetails.state,
+          country: guestDetails.country,
+          pincode: guestDetails.pincode,
+          idProofType: guestDetails.idProofType,
+          idNumber: guestDetails.idNumber,
+        });
 
-    bookingsList.unshift(record);
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("pms_guest_profiles", JSON.stringify(profilesList));
-      localStorage.setItem("pms_reservations", JSON.stringify(bookingsList));
-
-      // Update room status to occupied in hk_rooms
-      const storedRooms = localStorage.getItem("hk_rooms");
-      if (storedRooms) {
-        const rooms = JSON.parse(storedRooms);
-        const updatedRooms = rooms.map((r: any) =>
-          r.roomNo === room ? { ...r, status: "Occupied", guestName: walkInGuestName } : r
+        setPmsBookings((prev) => [record, ...prev]);
+        setBooking(record);
+        setAssignedRoom(room);
+        setCompleted(true);
+        setToast(
+          `Walk-in guest ${record.guestName} checked in to Room ${room}. ${formatINR(walkInTotal)} collected via ${walkIn.paymentMode}.`,
         );
-        localStorage.setItem("hk_rooms", JSON.stringify(updatedRooms));
+      } catch (e) {
+        setLookupError(e instanceof Error ? e.message : "Walk-in check-in failed");
       }
-      window.dispatchEvent(new Event("storage"));
-    }
-
-    setBooking(record);
-    setAssignedRoom(room);
-    setCompleted(true);
-    setToast(
-      `Walk-in guest ${record.guestName} checked in to Room ${room}. ${formatINR(walkInTotal)} collected via ${walkIn.paymentMode}.`,
-    );
+    })();
   };
 
   const handleComplete = () => {
@@ -492,31 +444,9 @@ export function CheckInForm() {
       return;
     }
 
-    // Load Guest Profiles and Reservations
-    let profilesList: any[] = [];
-    let bookingsList: any[] = [];
-    if (typeof window !== "undefined") {
-      const storedProfiles = localStorage.getItem("pms_guest_profiles");
-      if (storedProfiles) {
-        profilesList = JSON.parse(storedProfiles);
-      } else {
-        profilesList = guestProfiles;
-      }
-
-      const storedReservations = localStorage.getItem("pms_reservations");
-      if (storedReservations) {
-        bookingsList = JSON.parse(storedReservations);
-      } else {
-        bookingsList = reservationBookings;
-      }
-    }
-
-    // Find and update booking record
-    bookingsList = bookingsList.map((b) => {
-      if (b.id === booking.id) {
-        return {
-          ...b,
-          status: "Checked In",
+    void (async () => {
+      try {
+        const updated = await reservationService.checkIn(booking.id, {
           roomNo: assignedRoom,
           gender: guestDetails.gender,
           dob: guestDetails.dob,
@@ -528,95 +458,19 @@ export function CheckInForm() {
           pincode: guestDetails.pincode,
           idProofType: guestDetails.idProofType,
           idNumber: guestDetails.idNumber,
-        };
-      }
-      return b;
-    });
-
-    // Check if guest profile exists or create it
-    const searchMobile = (booking.phone || "").trim().replace(/[\s\-\+]/g, "");
-    const searchEmail = (booking.email || "").trim().toLowerCase();
-    const searchId = guestDetails.idNumber.trim().toLowerCase();
-    const searchName = booking.guestName.toLowerCase();
-
-    let matchedGuest = profilesList.find((g) => g.id === booking.guestId);
-    if (!matchedGuest && searchMobile.length >= 10) {
-      matchedGuest = profilesList.find((g) => {
-        const gm = (g.mobile || "").replace(/[\s\-\+]/g, "");
-        return gm.endsWith(searchMobile) || searchMobile.endsWith(gm);
-      });
-    }
-    if (!matchedGuest && searchEmail) {
-      matchedGuest = profilesList.find((g) => (g.email || "").trim().toLowerCase() === searchEmail);
-    }
-    if (!matchedGuest && searchId) {
-      matchedGuest = profilesList.find((g) => (g.idNumber || "").trim().toLowerCase() === searchId);
-    }
-    if (!matchedGuest) {
-      matchedGuest = profilesList.find((g) => (g.name || "").trim().toLowerCase() === searchName);
-    }
-
-    if (matchedGuest) {
-      profilesList = profilesList.map((g) => {
-        if (g.id === matchedGuest.id) {
-          return {
-            ...g,
-            name: booking.guestName,
-            mobile: booking.phone,
-            email: booking.email || g.email,
-            nationality: guestDetails.nationality || g.nationality || "Indian",
-            totalStays: (g.totalStays || 0) + 1,
-            loyaltyPoints: (g.loyaltyPoints || 0) + 100,
-            address: guestDetails.address || g.address || "",
-            idType: guestDetails.idProofType || g.idType || "Aadhaar",
-            idNumber: guestDetails.idNumber || g.idNumber || "",
-          };
-        }
-        return g;
-      });
-    } else {
-      const finalGuestId = booking.guestId || `G-${100 + profilesList.length + Math.floor(Math.random() * 100)}`;
-      const newProfile = {
-        id: finalGuestId,
-        name: booking.guestName,
-        mobile: booking.phone,
-        email: booking.email || "",
-        nationality: guestDetails.nationality || "Indian",
-        totalStays: 1,
-        loyaltyPoints: 100,
-        idType: guestDetails.idProofType || "Aadhaar",
-        idNumber: guestDetails.idNumber,
-        address: guestDetails.address,
-        memberSince: new Date().toLocaleString("en-IN", { month: "short", year: "numeric" }),
-        preferences: [],
-        notes: "",
-      };
-      profilesList.push(newProfile);
-    }
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("pms_guest_profiles", JSON.stringify(profilesList));
-      localStorage.setItem("pms_reservations", JSON.stringify(bookingsList));
-
-      // Update room status to occupied in hk_rooms
-      const storedRooms = localStorage.getItem("hk_rooms");
-      if (storedRooms) {
-        const rooms = JSON.parse(storedRooms);
-        const updatedRooms = rooms.map((r: any) =>
-          r.roomNo === assignedRoom ? { ...r, status: "Occupied", guestName: booking.guestName } : r
+        });
+        setPmsBookings((prev) =>
+          prev.map((b) => (b.id === updated.id ? updated : b)),
         );
-        localStorage.setItem("hk_rooms", JSON.stringify(updatedRooms));
+        setBooking(updated);
+        setCompleted(true);
+        setToast(
+          `${updated.guestName} checked in to Room ${assignedRoom}.`,
+        );
+      } catch (e) {
+        setLookupError(e instanceof Error ? e.message : "Check-in failed");
       }
-      window.dispatchEvent(new Event("storage"));
-    }
-
-    setCompleted(true);
-    const isWalkIn = booking.source === "Walk-in";
-    setToast(
-      isWalkIn
-        ? `Walk-in guest ${booking.guestName} checked in to Room ${assignedRoom}. ${formatINR(booking.balance)} collected via ${booking.paymentMode ?? walkIn.paymentMode}.`
-        : `${booking.guestName} checked in to Room ${assignedRoom}. Key card: ${keyCard || "Pending"}. Deposit: ${formatINR(deposit)}.`,
-    );
+    })();
   };
 
   const updateGuestDetail = (field: keyof typeof guestDetails, value: string) => {

@@ -12,6 +12,24 @@ function formatCell(value: string | number | undefined, format?: "currency" | "p
   return String(value);
 }
 
+function rowKey(row: ModuleRow, index: number): string {
+  const candidates = [
+    row.id,
+    row.bookingId,
+    row.invoiceNo,
+    row.room,
+    row.roomNo,
+    row.metric,
+    row.guest,
+  ];
+  for (const value of candidates) {
+    if (value !== undefined && value !== null && String(value).length > 0) {
+      return `${String(value)}-${index}`;
+    }
+  }
+  return `row-${index}`;
+}
+
 export function ModuleDataTable({
   columns,
   rows,
@@ -38,12 +56,23 @@ export function ModuleDataTable({
   return (
     <>
       <div className="space-y-3 md:hidden">
-        {rows.map((row) => (
-          <button
-            key={row.id}
-            type="button"
+        {rows.map((row, index) => (
+          <div
+            key={rowKey(row, index)}
+            role={onRowClick ? "button" : undefined}
+            tabIndex={onRowClick ? 0 : undefined}
             onClick={() => onRowClick?.(row)}
-            className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-slate-200 hover:bg-slate-50/50"
+            onKeyDown={(e) => {
+              if (!onRowClick) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onRowClick(row);
+              }
+            }}
+            className={cn(
+              "w-full rounded-xl border border-slate-100 p-4 text-left transition-colors",
+              onRowClick && "cursor-pointer hover:border-slate-200 hover:bg-slate-50/50",
+            )}
           >
             <div className="flex items-start justify-between gap-2">
               <span className="font-medium text-slate-900">
@@ -61,8 +90,12 @@ export function ModuleDataTable({
                 </div>
               ))}
             </div>
-            {actionColumn && <div className="mt-3">{actionColumn(row)}</div>}
-          </button>
+            {actionColumn && (
+              <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                {actionColumn(row)}
+              </div>
+            )}
+          </div>
         ))}
       </div>
 
@@ -79,9 +112,9 @@ export function ModuleDataTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {rows.map((row, index) => (
               <tr
-                key={row.id}
+                key={rowKey(row, index)}
                 onClick={() => onRowClick?.(row)}
                 className={cn(
                   "border-b border-slate-50 transition-colors last:border-0",

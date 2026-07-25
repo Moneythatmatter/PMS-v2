@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRightLeft,
   BedDouble,
@@ -16,8 +16,8 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { inHouseGuests, roomTransferRecords, roomStatusCards } from "@/app/data";
-import type { InHouseGuest, RoomTransferRecord } from "@/app/data/frontoffice/modules";
+import type { InHouseGuest, RoomStatusCard, RoomTransferRecord } from "@/app/data/frontoffice/modules";
+import { reservationService, roomService, transferService } from "@/services/front-office";
 import { GuestSearchSelect } from "@/components/frontoffice/GuestSearchSelect";
 import { Button } from "@/components/ui/Button";
 import {
@@ -63,16 +63,47 @@ export function RoomTransferView() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [guestSearch, setGuestSearch] = useState("");
-  const [guest, setGuest] = useState(inHouseGuests[0]);
+  const [guests, setGuests] = useState<InHouseGuest[]>([]);
+  const [guest, setGuest] = useState<InHouseGuest | null>(null);
+  const [roomCards, setRoomCards] = useState<RoomStatusCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [newRoom, setNewRoom] = useState("");
   const [transferDate, setTransferDate] = useState(
     new Date().toISOString().split("T")[0],
   );
   const [reason, setReason] = useState("");
-  const [transfers, setTransfers] = useState(roomTransferRecords);
+  const [transfers, setTransfers] = useState<RoomTransferRecord[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
   const [previewTransfer, setPreviewTransfer] = useState<RoomTransferRecord | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [xfer, inHouse, rooms] = await Promise.all([
+          transferService.list(),
+          reservationService.inHouse(),
+          roomService.status(),
+        ]);
+        if (!cancelled) {
+          setTransfers(xfer);
+          const mapped = inHouse as InHouseGuest[];
+          setGuests(mapped);
+          if (mapped[0]) setGuest(mapped[0]);
+          setRoomCards(rooms);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -91,17 +122,19 @@ export function RoomTransferView() {
 
   const availableRooms = useMemo(
     () =>
-      roomStatusCards.filter(
-        (r) =>
-          r.status === "Vacant" &&
-          r.roomNo !== guest.room &&
-          r.type === guest.roomType,
-      ),
-    [guest.room, guest.roomType],
+      guest
+        ? roomCards.filter(
+            (r) =>
+              r.status === "Vacant" &&
+              r.roomNo !== guest.room &&
+              r.type === guest.roomType,
+          )
+        : [],
+    [guest, roomCards],
   );
 
   const resetForm = () => {
-    setGuest(inHouseGuests[0]);
+    setGuest(guests[0] ?? null);
     setGuestSearch("");
     setNewRoom("");
     setTransferDate(new Date().toISOString().split("T")[0]);
@@ -113,29 +146,37 @@ export function RoomTransferView() {
     setTransferOpen(true);
   };
 
-  const handleTransfer = () => {
+  const handleTransfer = async () => {
+    if (!guest) return;
     if (!newRoom) {
       setToast("Please select a new room.");
       return;
     }
-    const record: RoomTransferRecord = {
-      id: `RT-${String(transfers.length + 1).padStart(2, "0")}`,
-      guestName: guest.guestName,
-      fromRoom: guest.room,
-      toRoom: newRoom.split(" ")[0],
-      date: new Date(transferDate).toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }),
-      reason: reason || "Guest request",
-      status: "Completed",
-    };
-    setTransfers((prev) => [record, ...prev]);
-    setTransferOpen(false);
-    resetForm();
-    setToast(`${guest.guestName} transferred from Room ${guest.room} to ${record.toRoom}.`);
+    try {
+      const record = await transferService.create({
+        guestName: guest.guestName,
+        fromRoom: guest.room,
+        toRoom: newRoom.split(" ")[0],
+        date: new Date(transferDate).toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }),
+        reason: reason || "Guest request",
+        status: "Completed",
+      });
+      setTransfers((prev) => [record, ...prev]);
+      setTransferOpen(false);
+      resetForm();
+      setToast(`${guest.guestName} transferred from Room ${guest.room} to ${record.toRoom}.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to transfer");
+    }
   };
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (!guest) return <p className="text-sm text-slate-500">No in-house guests.</p>;
 
   const transferForm = (
     <div className="space-y-4">
@@ -222,7 +263,7 @@ export function RoomTransferView() {
           value={transfers.filter((t) => t.status === "Completed").length}
           icon={ArrowRightLeft}
         />
-        <StatMiniCard label="In-House Guests" value={inHouseGuests.length} accent="#15803d" icon={Users} />
+        <StatMiniCard label="In-House Guests" value={guests.length} accent="#15803d" icon={Users} />
       </div>
 
       <FOSearchToolbar
@@ -444,12 +485,36 @@ function getInitials(name: string) {
 }
 
 export function ExtendStayView() {
+  const [guests, setGuests] = useState<InHouseGuest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [guest, setGuest] = useState<InHouseGuest | null>(null);
   const [search, setSearch] = useState("");
   const [newCheckout, setNewCheckout] = useState("");
   const [reason, setReason] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [approved, setApproved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await reservationService.inHouse();
+        if (!cancelled) {
+          setGuests(data as InHouseGuest[]);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const nightlyRate = useMemo(() => {
     if (!guest) return 0;
@@ -485,7 +550,7 @@ export function ExtendStayView() {
     setApproved(false);
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!guest) {
       setToast("Please select a guest first.");
       return;
@@ -494,10 +559,25 @@ export function ExtendStayView() {
       setToast("Room not available for the selected dates.");
       return;
     }
-    setApproved(true);
-    setToast(
-      `Stay extended for ${guest.guestName} — ${extraNights} extra night(s), ${formatINR(extraCharges)} added.`,
-    );
+    try {
+      const formatted = new Date(newCheckout).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+      await reservationService.extendStay(guest.id, {
+        checkOut: formatted,
+        nights: guest.nights + extraNights,
+        totalAmount: guest.balance + extraCharges,
+        balance: guest.balance + extraCharges,
+      });
+      setApproved(true);
+      setToast(
+        `Stay extended for ${guest.guestName} — ${extraNights} extra night(s), ${formatINR(extraCharges)} added.`,
+      );
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to extend stay");
+    }
   };
 
   const formattedNewCheckout = newCheckout
@@ -507,6 +587,9 @@ export function ExtendStayView() {
         year: "numeric",
       })
     : "—";
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   return (
     <div className="space-y-5">
@@ -520,13 +603,13 @@ export function ExtendStayView() {
         badge={
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
             <Users className="h-4 w-4 text-emerald-600" />
-            {inHouseGuests.length} in-house
+            {guests.length} in-house
           </div>
         }
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatMiniCard label="In-House Guests" value={inHouseGuests.length} icon={Users} />
+        <StatMiniCard label="In-House Guests" value={guests.length} icon={Users} />
         <StatMiniCard label="Extensions Today" value={2} accent="#15803d" icon={CalendarPlus} />
         <StatMiniCard label="Avg. Extra Nights" value="2.5" icon={Moon} sublabel="This week" />
         <StatMiniCard

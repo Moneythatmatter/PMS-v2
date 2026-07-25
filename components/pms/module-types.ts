@@ -55,6 +55,14 @@ export interface ModuleListDefinition {
   outlets?: ModuleOutletOption[];
   /** Keys used for filter matching beyond status */
   filterKeys?: string[];
+  /** Optional API-backed CRUD. When set, Add/Edit/Delete persist via these handlers. */
+  crud?: ModuleCrudHandlers;
+}
+
+export interface ModuleCrudHandlers {
+  create?: (row: ModuleRow) => Promise<ModuleRow>;
+  update?: (id: string, row: Partial<ModuleRow>) => Promise<ModuleRow>;
+  remove?: (id: string) => Promise<void>;
 }
 
 export const DEFAULT_STATUS_CLASSES: Record<string, string> = {

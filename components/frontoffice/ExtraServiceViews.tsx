@@ -18,20 +18,10 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import {
-  guestFeedbacks,
-  housekeepingRequests,
-  inHouseGuests,
-  invoiceRecords,
-  lostFoundItems,
-  maintenanceRequests,
-  messageRecords,
-  taxiBookings,
-  wakeUpCalls,
-} from "@/app/data";
 import type {
   GuestFeedbackRecord,
   HousekeepingRequest,
+  InHouseGuest,
   InvoiceRecord,
   LostFoundItem,
   MaintenanceRequest,
@@ -39,6 +29,17 @@ import type {
   TaxiBooking,
   WakeUpCall,
 } from "@/app/data/frontoffice/modules";
+import {
+  feedbackService,
+  housekeepingRequestService,
+  invoiceService,
+  lostFoundService,
+  maintenanceRequestService,
+  messageService,
+  reservationService,
+  taxiBookingService,
+  wakeUpCallService,
+} from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import { CheckoutInvoiceDrawer, type InvoiceData } from "@/components/frontoffice/CheckoutInvoice";
 import {
@@ -157,36 +158,78 @@ const priorityColors: Record<string, string> = {
 };
 
 function useModulePage<T extends { id: string }>(
-  initial: T[],
+  loader: () => Promise<T[]>,
   searchFn: (item: T, q: string) => boolean,
 ) {
-  const [items, setItems] = useState(initial);
+  const [items, setItems] = useState<T[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [preview, setPreview] = useState<T | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await loader();
+        if (!cancelled) {
+          setItems(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return items.filter((item) => searchFn(item, q));
   }, [items, search, searchFn]);
 
-  return { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered };
+  return { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered, loading, error };
+}
+
+function useInHouseGuests() {
+  const [guests, setGuests] = useState<InHouseGuest[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await reservationService.inHouse();
+        if (!cancelled) setGuests(data as InHouseGuest[]);
+      } catch {
+        if (!cancelled) setGuests([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  return guests;
 }
 
 export function WakeUpCallsView() {
-  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered } =
-    useModulePage(wakeUpCalls, (r, q) =>
+  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered, loading, error } =
+    useModulePage(() => wakeUpCallService.list(), (r, q) =>
       r.guest.toLowerCase().includes(q) || r.room.includes(q) || r.date.toLowerCase().includes(q));
+  const guests = useInHouseGuests();
 
-  const [guestName, setGuestName] = useState(inHouseGuests[0].guestName);
+  const [guestName, setGuestName] = useState("");
+  useEffect(() => {
+    if (!guestName && guests[0]) setGuestName(guests[0].guestName);
+  }, [guests, guestName]);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [time, setTime] = useState("06:00");
   const [notes, setNotes] = useState("");
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
 
-  const guest = inHouseGuests.find((g) => g.guestName === guestName);
   const list = useMemo(() => {
     let rows = filtered.filter((r) =>
       filter === "all" || (filter === "pending" && !r.completed) || (filter === "done" && r.completed));
@@ -195,26 +238,40 @@ export function WakeUpCallsView() {
     return rows;
   }, [filtered, filter, sortBy]);
 
-  const handleSave = () => {
-    const record: WakeUpCall = {
-      id: `W-${String(items.length + 1).padStart(2, "0")}`,
-      guest: guestName,
-      room: guest?.room ?? "—",
-      date: new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
-      time: new Date(`2000-01-01T${time}`).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
-      notes: notes || undefined,
-      completed: false,
-    };
-    setItems((prev) => [record, ...prev]);
-    setFormOpen(false);
-    setToast(`Wake-up call scheduled for ${guestName} at ${record.time}.`);
-    setNotes("");
+  useEffect(() => {
+    if (!guestName && guests[0]) setGuestName(guests[0].guestName);
+  }, [guests, guestName]);
+
+  const guest = guests.find((g) => g.guestName === guestName);
+
+  const handleSave = async () => {
+    try {
+      const record = await wakeUpCallService.create({
+        guest: guestName,
+        room: guest?.room ?? "—",
+        date: new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+        time: new Date(`2000-01-01T${time}`).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
+        notes: notes || undefined,
+        completed: false,
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      setToast(`Wake-up call scheduled for ${guestName} at ${record.time}.`);
+      setNotes("");
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
   };
 
-  const markDone = (id: string) => {
-    setItems((prev) => prev.map((r) => (r.id === id ? { ...r, completed: true } : r)));
-    setPreview((p) => (p?.id === id ? { ...p, completed: true } : p));
-    setToast("Wake-up call marked as completed.");
+  const markDone = async (id: string) => {
+    try {
+      await wakeUpCallService.update(id, { completed: true });
+      setItems((prev) => prev.map((r) => (r.id === id ? { ...r, completed: true } : r)));
+      setPreview((p) => (p?.id === id ? { ...p, completed: true } : p));
+      setToast("Wake-up call marked as completed.");
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to update");
+    }
   };
 
   return (
@@ -242,7 +299,7 @@ export function WakeUpCallsView() {
         ]}
       />
       <FormDrawer open={formOpen} onClose={() => setFormOpen(false)} title="Schedule Wake-up Call" onSave={handleSave}>
-        <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{inHouseGuests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName} — Room {g.room}</option>)}</SelectInput></FormField>
+        <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{guests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName} — Room {g.room}</option>)}</SelectInput></FormField>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Date"><TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} /></FormField>
           <FormField label="Time"><TextInput type="time" value={time} onChange={(e) => setTime(e.target.value)} /></FormField>
@@ -258,15 +315,20 @@ export function WakeUpCallsView() {
 }
 
 export function HousekeepingRequestsView() {
-  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered } =
-    useModulePage(housekeepingRequests, (r, q) => r.guest.toLowerCase().includes(q) || r.room.includes(q) || r.issue.toLowerCase().includes(q));
+  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered, loading, error } =
+    useModulePage(() => housekeepingRequestService.list(), (r, q) => r.guest.toLowerCase().includes(q) || r.room.includes(q) || r.issue.toLowerCase().includes(q));
 
-  const [guestName, setGuestName] = useState(inHouseGuests[0].guestName);
+  const guests = useInHouseGuests();
+
+  const [guestName, setGuestName] = useState("");
+  useEffect(() => {
+    if (!guestName && guests[0]) setGuestName(guests[0].guestName);
+  }, [guests, guestName]);
   const [issue, setIssue] = useState("");
   const [priority, setPriority] = useState<HousekeepingRequest["priority"]>("Medium");
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
-  const guest = inHouseGuests.find((g) => g.guestName === guestName);
+  const guest = guests.find((g) => g.guestName === guestName);
   const list = useMemo(() => {
     let rows = filtered.filter((r) => filter === "all" || r.status === filter);
     if (sortBy === "priority") rows = [...rows].sort((a, b) => b.priority.localeCompare(a.priority));
@@ -274,24 +336,32 @@ export function HousekeepingRequestsView() {
     return rows;
   }, [filtered, filter, sortBy]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!issue.trim()) { setToast("Please describe the issue."); return; }
-    const record: HousekeepingRequest = {
-      id: `HK-${String(items.length + 1).padStart(2, "0")}`,
-      guest: guestName, room: guest?.room ?? "—", issue, priority,
-      status: "Open", assignedStaff: "—",
-      createdAt: new Date().toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true }),
-    };
-    setItems((prev) => [record, ...prev]);
-    setFormOpen(false);
-    setIssue("");
-    setToast(`Housekeeping request logged for Room ${record.room}.`);
+    try {
+      const record = await housekeepingRequestService.create({
+        guest: guestName, room: guest?.room ?? "—", issue, priority,
+        status: "Open", assignedStaff: "—",
+        createdAt: new Date().toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true }),
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      setIssue("");
+      setToast(`Housekeeping request logged for Room ${record.room}.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
   };
 
-  const assign = (id: string) => {
-    setItems((prev) => prev.map((r) => r.id === id ? { ...r, status: "In Progress" as const, assignedStaff: "Meena" } : r));
-    setPreview((p) => p?.id === id ? { ...p, status: "In Progress", assignedStaff: "Meena" } : p);
-    setToast("Request assigned to Meena.");
+  const assign = async (id: string) => {
+    try {
+      await housekeepingRequestService.update(id, { status: "In Progress", assignedStaff: "Meena" });
+      setItems((prev) => prev.map((r) => r.id === id ? { ...r, status: "In Progress" as const, assignedStaff: "Meena" } : r));
+      setPreview((p) => p?.id === id ? { ...p, status: "In Progress", assignedStaff: "Meena" } : p);
+      setToast("Request assigned to Meena.");
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to update");
+    }
   };
 
   return (
@@ -320,7 +390,7 @@ export function HousekeepingRequestsView() {
         ]}
       />
       <FormDrawer open={formOpen} onClose={() => setFormOpen(false)} title="New HK Request" onSave={handleSave}>
-        <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{inHouseGuests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName} — Room {g.room}</option>)}</SelectInput></FormField>
+        <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{guests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName} — Room {g.room}</option>)}</SelectInput></FormField>
         <FormField label="Priority"><SelectInput value={priority} onChange={(e) => setPriority(e.target.value as HousekeepingRequest["priority"])}><option>Low</option><option>Medium</option><option>High</option></SelectInput></FormField>
         <FormField label="Issue" required><TextAreaInput value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="Describe the request…" /></FormField>
       </FormDrawer>
@@ -332,8 +402,10 @@ export function HousekeepingRequestsView() {
 }
 
 export function MaintenanceRequestsView() {
-  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered } =
-    useModulePage(maintenanceRequests, (r, q) => r.room.includes(q) || r.problem.toLowerCase().includes(q));
+  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered, loading, error } =
+    useModulePage(() => maintenanceRequestService.list(), (r, q) => r.room.includes(q) || r.problem.toLowerCase().includes(q));
+
+  const guests = useInHouseGuests();
 
   const [room, setRoom] = useState("104");
   const [problem, setProblem] = useState("");
@@ -347,17 +419,20 @@ export function MaintenanceRequestsView() {
     return rows;
   }, [filtered, filter, sortBy]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!problem.trim()) { setToast("Please describe the problem."); return; }
-    const record: MaintenanceRequest = {
-      id: `MT-${String(items.length + 1).padStart(2, "0")}`,
-      room, problem, priority, engineer: "—", status: "Open", reportedBy: "Front Desk",
-      createdAt: new Date().toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true }),
-    };
-    setItems((prev) => [record, ...prev]);
-    setFormOpen(false);
-    setProblem("");
-    setToast(`Maintenance request logged for Room ${room}.`);
+    try {
+      const record = await maintenanceRequestService.create({
+        room, problem, priority, engineer: "—", status: "Open", reportedBy: "Front Desk",
+        createdAt: new Date().toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true }),
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      setProblem("");
+      setToast(`Maintenance request logged for Room ${room}.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
   };
 
   return (
@@ -397,8 +472,10 @@ export function MaintenanceRequestsView() {
 }
 
 export function LostFoundView() {
-  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered } =
-    useModulePage(lostFoundItems, (r, q) => r.item.toLowerCase().includes(q) || r.guest.toLowerCase().includes(q) || r.room.includes(q));
+  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered, loading, error } =
+    useModulePage(() => lostFoundService.list(), (r, q) => r.item.toLowerCase().includes(q) || r.guest.toLowerCase().includes(q) || r.room.includes(q));
+
+  const guests = useInHouseGuests();
 
   const [item, setItem] = useState("");
   const [guest, setGuest] = useState("");
@@ -414,18 +491,21 @@ export function LostFoundView() {
     return rows;
   }, [filtered, filter, sortBy]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!item.trim()) { setToast("Please enter item name."); return; }
-    const record: LostFoundItem = {
-      id: `LF-${String(items.length + 1).padStart(2, "0")}`,
-      item, guest: guest || "Unknown", foundBy, room: room || "Lobby",
-      foundDate: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
-      description: description || undefined, status: "Stored",
-    };
-    setItems((prev) => [record, ...prev]);
-    setFormOpen(false);
-    setItem(""); setGuest(""); setRoom(""); setDescription("");
-    setToast(`"${item}" logged in lost & found.`);
+    try {
+      const record = await lostFoundService.create({
+        item, guest: guest || "Unknown", foundBy, room: room || "Lobby",
+        foundDate: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+        description: description || undefined, status: "Stored",
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      setItem(""); setGuest(""); setRoom(""); setDescription("");
+      setToast(`"${item}" logged in lost & found.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
   };
 
   const markReturned = (id: string) => {
@@ -478,10 +558,15 @@ export function LostFoundView() {
 }
 
 export function GuestFeedbackView() {
-  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered } =
-    useModulePage(guestFeedbacks, (r, q) => r.guest.toLowerCase().includes(q) || r.comments.toLowerCase().includes(q));
+  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered, loading, error } =
+    useModulePage(() => feedbackService.list(), (r, q) => r.guest.toLowerCase().includes(q) || r.comments.toLowerCase().includes(q));
 
-  const [guestName, setGuestName] = useState(inHouseGuests[0].guestName);
+  const guests = useInHouseGuests();
+
+  const [guestName, setGuestName] = useState("");
+  useEffect(() => {
+    if (!guestName && guests[0]) setGuestName(guests[0].guestName);
+  }, [guests, guestName]);
   const [rating, setRating] = useState("8");
   const [cleanliness, setCleanliness] = useState("8");
   const [food, setFood] = useState("8");
@@ -489,7 +574,7 @@ export function GuestFeedbackView() {
   const [comments, setComments] = useState("");
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
-  const guest = inHouseGuests.find((g) => g.guestName === guestName);
+  const guest = guests.find((g) => g.guestName === guestName);
   const list = useMemo(() => {
     let rows = filtered.filter((r) =>
       filter === "all" || (filter === "excellent" && r.rating >= 9) || (filter === "low" && r.rating < 7));
@@ -498,19 +583,22 @@ export function GuestFeedbackView() {
     return rows;
   }, [filtered, filter, sortBy]);
 
-  const handleSave = () => {
-    const record: GuestFeedbackRecord = {
-      id: `FB-${String(items.length + 1).padStart(2, "0")}`,
-      guest: guestName, room: guest?.room ?? "—",
-      date: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
-      rating: parseInt(rating, 10), cleanliness: parseInt(cleanliness, 10),
-      food: parseInt(food, 10), service: parseInt(service, 10),
-      comments: comments || "No additional comments.",
-    };
-    setItems((prev) => [record, ...prev]);
-    setFormOpen(false);
-    setComments("");
-    setToast(`Feedback recorded for ${guestName}.`);
+  const handleSave = async () => {
+    try {
+      const record = await feedbackService.create({
+        guest: guestName, room: guest?.room ?? "—",
+        date: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+        rating: parseInt(rating, 10), cleanliness: parseInt(cleanliness, 10),
+        food: parseInt(food, 10), service: parseInt(service, 10),
+        comments: comments || "No additional comments.",
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      setComments("");
+      setToast(`Feedback recorded for ${guestName}.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
   };
 
   const avgRating = items.length ? (items.reduce((s, r) => s + r.rating, 0) / items.length).toFixed(1) : "0";
@@ -539,7 +627,7 @@ export function GuestFeedbackView() {
         ]}
       />
       <FormDrawer open={formOpen} onClose={() => setFormOpen(false)} title="Record Feedback" onSave={handleSave}>
-        <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{inHouseGuests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName}</option>)}</SelectInput></FormField>
+        <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{guests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName}</option>)}</SelectInput></FormField>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[["Overall", rating, setRating], ["Clean", cleanliness, setCleanliness], ["Food", food, setFood], ["Service", service, setService]].map(([label, val, set]) => (
             <FormField key={label as string} label={label as string}><TextInput type="number" min="1" max="10" value={val as string} onChange={(e) => (set as (v: string) => void)(e.target.value)} /></FormField>
@@ -565,17 +653,22 @@ export function GuestFeedbackView() {
 }
 
 export function TaxiBookingView() {
-  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered } =
-    useModulePage(taxiBookings, (r, q) => r.guest.toLowerCase().includes(q) || r.drop.toLowerCase().includes(q));
+  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered, loading, error } =
+    useModulePage(() => taxiBookingService.list(), (r, q) => r.guest.toLowerCase().includes(q) || r.drop.toLowerCase().includes(q));
 
-  const [guestName, setGuestName] = useState(inHouseGuests[0].guestName);
+  const guests = useInHouseGuests();
+
+  const [guestName, setGuestName] = useState("");
+  useEffect(() => {
+    if (!guestName && guests[0]) setGuestName(guests[0].guestName);
+  }, [guests, guestName]);
   const [drop, setDrop] = useState("Airport T1");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [time, setTime] = useState("08:00");
   const [fare, setFare] = useState("850");
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
-  const guest = inHouseGuests.find((g) => g.guestName === guestName);
+  const guest = guests.find((g) => g.guestName === guestName);
   const list = useMemo(() => {
     let rows = filtered.filter((r) => filter === "all" || r.status === filter);
     if (sortBy === "fare-desc") rows = [...rows].sort((a, b) => b.fare - a.fare);
@@ -583,16 +676,19 @@ export function TaxiBookingView() {
     return rows;
   }, [filtered, filter, sortBy]);
 
-  const handleSave = () => {
-    const record: TaxiBooking = {
-      id: `T-${String(items.length + 1).padStart(2, "0")}`,
-      guest: guestName, room: guest?.room ?? "—", pickup: "Hotel Lobby", drop, date,
-      time: new Date(`2000-01-01T${time}`).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
-      driver: "Unassigned", vehicle: "—", fare: parseFloat(fare) || 850, status: "Scheduled",
-    };
-    setItems((prev) => [record, ...prev]);
-    setFormOpen(false);
-    setToast(`Taxi booked for ${guestName} to ${drop}.`);
+  const handleSave = async () => {
+    try {
+      const record = await taxiBookingService.create({
+        guest: guestName, room: guest?.room ?? "—", pickup: "Hotel Lobby", drop, date,
+        time: new Date(`2000-01-01T${time}`).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
+        driver: "Unassigned", vehicle: "—", fare: parseFloat(fare) || 850, status: "Scheduled",
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      setToast(`Taxi booked for ${guestName} to ${drop}.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
   };
 
   return (
@@ -620,7 +716,7 @@ export function TaxiBookingView() {
         ]}
       />
       <FormDrawer open={formOpen} onClose={() => setFormOpen(false)} title="Book Taxi" onSave={handleSave}>
-        <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{inHouseGuests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName} — Room {g.room}</option>)}</SelectInput></FormField>
+        <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{guests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName} — Room {g.room}</option>)}</SelectInput></FormField>
         <FormField label="Destination"><TextInput value={drop} onChange={(e) => setDrop(e.target.value)} /></FormField>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Date"><TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} /></FormField>
@@ -636,13 +732,18 @@ export function TaxiBookingView() {
 }
 
 export function MessagesView() {
-  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered } =
-    useModulePage(messageRecords, (r, q) => r.subject.toLowerCase().includes(q) || r.guest.toLowerCase().includes(q));
+  const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered, loading, error } =
+    useModulePage(() => messageService.list(), (r, q) => r.subject.toLowerCase().includes(q) || r.guest.toLowerCase().includes(q));
+
+  const guests = useInHouseGuests();
 
   const [type, setType] = useState<MessageRecord["type"]>("Internal");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [guestName, setGuestName] = useState(inHouseGuests[0].guestName);
+  const [guestName, setGuestName] = useState("");
+  useEffect(() => {
+    if (!guestName && guests[0]) setGuestName(guests[0].guestName);
+  }, [guests, guestName]);
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const list = useMemo(() => {
@@ -652,24 +753,32 @@ export function MessagesView() {
     return rows;
   }, [filtered, filter, sortBy]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!subject.trim()) { setToast("Please enter a subject."); return; }
-    const guest = inHouseGuests.find((g) => g.guestName === guestName);
-    const record: MessageRecord = {
-      id: `M-${String(items.length + 1).padStart(2, "0")}`,
-      type, subject, body: body || subject, guest: guestName,
-      room: guest?.room, date: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
-      read: false, priority: type === "Internal" ? "High" : "Normal",
-    };
-    setItems((prev) => [record, ...prev]);
-    setFormOpen(false);
-    setSubject(""); setBody("");
-    setToast("Message created.");
+    const guest = guests.find((g) => g.guestName === guestName);
+    try {
+      const record = await messageService.create({
+        type, subject, body: body || subject, guest: guestName,
+        room: guest?.room, date: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+        read: false, priority: type === "Internal" ? "High" : "Normal",
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      setSubject(""); setBody("");
+      setToast("Message created.");
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
   };
 
-  const markRead = (id: string) => {
-    setItems((prev) => prev.map((r) => r.id === id ? { ...r, read: true } : r));
-    setPreview((p) => p?.id === id ? { ...p, read: true } : p);
+  const markRead = async (id: string) => {
+    try {
+      await messageService.update(id, { read: true });
+      setItems((prev) => prev.map((r) => r.id === id ? { ...r, read: true } : r));
+      setPreview((p) => p?.id === id ? { ...p, read: true } : p);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to update");
+    }
   };
 
   return (
@@ -697,7 +806,7 @@ export function MessagesView() {
       />
       <FormDrawer open={formOpen} onClose={() => setFormOpen(false)} title="New Message" onSave={handleSave}>
         <FormField label="Type"><SelectInput value={type} onChange={(e) => setType(e.target.value as MessageRecord["type"])}><option>Internal</option><option>Guest</option><option>System</option></SelectInput></FormField>
-        <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{inHouseGuests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName}</option>)}</SelectInput></FormField>
+        <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{guests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName}</option>)}</SelectInput></FormField>
         <FormField label="Subject" required><TextInput value={subject} onChange={(e) => setSubject(e.target.value)} /></FormField>
         <FormField label="Message"><TextAreaInput value={body} onChange={(e) => setBody(e.target.value)} /></FormField>
       </FormDrawer>
@@ -709,8 +818,8 @@ export function MessagesView() {
 }
 
 export function InvoiceHistoryView() {
-  const { items, search, setSearch, toast, setToast, preview, setPreview, filtered } =
-    useModulePage(invoiceRecords, (r, q) =>
+  const { items, search, setSearch, toast, setToast, preview, setPreview, filtered, loading, error } =
+    useModulePage(() => invoiceService.list(), (r, q) =>
       r.invoiceNo.toLowerCase().includes(q) ||
       r.guest.toLowerCase().includes(q) ||
       r.room.includes(q) ||

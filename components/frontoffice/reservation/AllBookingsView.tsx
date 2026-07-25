@@ -19,6 +19,7 @@ import type {
   ReservationSummaryStat,
 } from "@/app/data/types";
 import { roomTypes } from "@/app/data/frontoffice/constants";
+import { reservationService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -85,45 +86,11 @@ function matchesFilter(booking: ReservationBooking, filter: ReservationFilter) {
   }
 }
 
-function buildSummaryStats(bookings: ReservationBooking[]): ReservationSummaryStat[] {
-  return [
-    {
-      label: "Total",
-      value: bookings.length,
-      icon: "calendar",
-      color: "#16a34a",
-    },
-    {
-      label: "Arriving Today",
-      value: bookings.filter((b) => b.arrivingToday).length,
-      icon: "user-check",
-      color: "#22c55e",
-    },
-    {
-      label: "In-House",
-      value: bookings.filter(
-        (b) => b.status === "Checked In" || b.status === "In-House",
-      ).length,
-      icon: "bed",
-      color: "#15803d",
-    },
-    {
-      label: "Outstanding",
-      value: bookings.filter(
-        (b) => b.balance > 0 && b.status !== "Cancelled",
-      ).length,
-      icon: "wallet",
-      color: "#eab308",
-    },
-  ];
-}
-
-interface AllBookingsViewProps {
-  bookings: ReservationBooking[];
-}
-
-export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewProps) {
-  const [bookings, setBookings] = useState(initialBookings);
+export function AllBookingsView() {
+  const [bookings, setBookings] = useState<ReservationBooking[]>([]);
+  const [summaryStats, setSummaryStats] = useState<ReservationSummaryStat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ReservationFilter>("all");
   const [sourceFilter, setSourceFilter] = useState("all");
@@ -135,21 +102,31 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadBookings = () => {
-      const stored = localStorage.getItem("pms_reservations");
-      if (stored) {
-        setBookings(JSON.parse(stored));
-      } else {
-        localStorage.setItem("pms_reservations", JSON.stringify(initialBookings));
-        setBookings(initialBookings);
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [list, summary] = await Promise.all([
+          reservationService.list(),
+          reservationService.summary(),
+        ]);
+        if (!cancelled) {
+          setBookings(list);
+          setSummaryStats(summary);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    loadBookings();
-    window.addEventListener("storage", loadBookings);
-    return () => window.removeEventListener("storage", loadBookings);
-  }, [initialBookings]);
-
-  const summaryStats = useMemo(() => buildSummaryStats(bookings), [bookings]);
+  }, []);
 
   const sourceOptions = useMemo(
     () => [...new Set(bookings.map((b) => b.source))].sort(),
@@ -213,14 +190,21 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
     });
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     if (!cancelBooking) return;
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === cancelBooking.id ? { ...b, status: "Cancelled" as const } : b,
-      ),
-    );
-    setToast(`Booking ${cancelBooking.id} has been cancelled.`);
+    try {
+      await reservationService.update(cancelBooking.id, { status: "Cancelled" });
+      setBookings((prev) =>
+        prev.map((b) =>
+          b.id === cancelBooking.id ? { ...b, status: "Cancelled" as const } : b,
+        ),
+      );
+      const summary = await reservationService.summary();
+      setSummaryStats(summary);
+      setToast(`Booking ${cancelBooking.id} has been cancelled.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to cancel booking");
+    }
     setCancelBooking(null);
   };
 
@@ -241,6 +225,14 @@ export function AllBookingsView({ bookings: initialBookings }: AllBookingsViewPr
     URL.revokeObjectURL(url);
     setToast("Reservation list exported as CSV.");
   };
+
+  if (loading) {
+    return <p className="text-sm text-slate-500">Loading…</p>;
+  }
+
+  if (error) {
+    return <p className="text-sm text-red-600">{error}</p>;
+  }
 
   return (
     <div className="space-y-5">

@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CreditCard, IndianRupee, Smartphone, Wallet } from "lucide-react";
+import { formatINR } from "@/app/data/foodbeverages/ops";
 import {
-  fbCashierShiftsSeed,
-  formatINR,
-  getRestaurantOutletOptions,
+  fbCashierService,
   type FbCashierShift,
-} from "@/app/data/foodbeverages/ops";
+} from "@/services/food-beverages";
+import { useFbOutlets } from "@/services/food-beverages/useFbOutlets";
 import { currentUser } from "@/app/data";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
@@ -16,13 +16,44 @@ import { FbOutletSelect } from "@/components/foodbeverages/FbOutletSelect";
 import { cn } from "@/lib/utils";
 
 export function FbCashierView() {
-  const outlets = getRestaurantOutletOptions();
-  const [outletId, setOutletId] = useState(outlets[0]?.id ?? "rest-1");
-  const [shifts, setShifts] = useState(fbCashierShiftsSeed);
+  const { outlets } = useFbOutlets(["restaurant", "cafe"]);
+  const [outletId, setOutletId] = useState("");
+  const [shifts, setShifts] = useState<FbCashierShift[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [cashActual, setCashActual] = useState("");
   const [notes, setNotes] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!outletId && outlets[0]?.id) setOutletId(outlets[0].id);
+  }, [outlets, outletId]);
+
+  useEffect(() => {
+    if (!outletId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await fbCashierService.list(outletId);
+        if (!cancelled) {
+          setShifts(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setShifts([]);
+          setError(e instanceof Error ? e.message : "Failed");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [outletId]);
 
   const outletShifts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -59,53 +90,81 @@ export function FbCashierView() {
   const actualCash = parseFloat(cashActual) || 0;
   const cashVariance = openShift ? actualCash - expectedCash : 0;
 
-  const openNewShift = () => {
+  const openNewShift = async () => {
     if (openShift) {
       setToast("Close the current shift before opening a new one.");
       return;
     }
-    const shift: FbCashierShift = {
-      id: `C-${Date.now()}`,
-      cashier: currentUser.name,
-      shift: "Current",
-      openedAt: new Date().toLocaleTimeString("en-IN", {
-        hour: "numeric",
-        minute: "2-digit",
-      }),
-      openingFloat: 2000,
-      cashSales: 0,
-      cardSales: 0,
-      upiSales: 0,
-      refunds: 0,
-      declaredCash: null,
-      status: "Open",
-      outletId,
-    };
-    setShifts((prev) => [shift, ...prev]);
-    setCashActual("");
-    setNotes("");
-    setToast(`Shift opened by ${currentUser.name}`);
+    try {
+      const shift = await fbCashierService.open({
+        cashier: currentUser.name,
+        shift: "Current",
+        openedAt: new Date().toLocaleTimeString("en-IN", {
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+        openingFloat: 2000,
+        cashSales: 0,
+        cardSales: 0,
+        upiSales: 0,
+        refunds: 0,
+        declaredCash: null,
+        status: "Open",
+        outletId,
+      });
+      setShifts((prev) => [shift, ...prev]);
+      setCashActual("");
+      setNotes("");
+      setToast(`Shift opened by ${currentUser.name}`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to open shift");
+    }
   };
 
-  const closeShift = () => {
+  const closeShift = async () => {
     if (!openShift) return;
     if (!cashActual) {
       setToast("Enter counted cash to close the shift.");
       return;
     }
-    setShifts((prev) =>
-      prev.map((s) =>
-        s.id === openShift.id
-          ? { ...s, status: "Closed" as const, declaredCash: actualCash }
-          : s,
-      ),
-    );
-    setToast(
-      `Shift closed. Cash variance ${cashVariance >= 0 ? "+" : ""}${formatINR(cashVariance)}`,
-    );
-    setCashActual("");
-    setNotes("");
+    try {
+      const updated = await fbCashierService.close(openShift.id, actualCash);
+      setShifts((prev) => prev.map((s) => (s.id === openShift.id ? updated : s)));
+      setToast(
+        `Shift closed. Cash variance ${cashVariance >= 0 ? "+" : ""}${formatINR(cashVariance)}`,
+      );
+      setCashActual("");
+      setNotes("");
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to close shift");
+    }
   };
+
+  if (loading) {
+    return (
+      <ModulePageShell
+        eyebrow="Restaurants"
+        title="Cashier"
+        description="Open and close outlet shifts, count cash, and review collections."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-slate-500">Loading…</p>
+      </ModulePageShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <ModulePageShell
+        eyebrow="Restaurants"
+        title="Cashier"
+        description="Open and close outlet shifts, count cash, and review collections."
+        wrapChildren={false}
+      >
+        <p className="text-sm text-red-600">{error}</p>
+      </ModulePageShell>
+    );
+  }
 
   return (
     <ModulePageShell
