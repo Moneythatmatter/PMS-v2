@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { AppProviders } from "@/components/auth/AppProviders";
 
 export const metadata: Metadata = {
   title: "Hotel PMS",
@@ -18,12 +19,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className="h-full antialiased"
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+      <body className="flex min-h-full flex-col" suppressHydrationWarning>
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }
-

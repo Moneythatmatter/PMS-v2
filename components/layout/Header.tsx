@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bell, Menu, MessageSquare, Search, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bell, LogOut, Menu, MessageSquare, Search, X } from "lucide-react";
 import type { UserProfile } from "@/app/data/types";
 import { Avatar } from "@/components/ui/Avatar";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { cn } from "@/lib/utils";
 import { useMobileNav } from "./MobileNavContext";
 
@@ -11,8 +13,18 @@ interface HeaderProps {
   user: UserProfile;
 }
 
-export function Header({ user }: HeaderProps) {
+export function Header({ user: fallbackUser }: HeaderProps) {
   const mobileNav = useMobileNav();
+  const { user: authUser, logout } = useAuth();
+  const router = useRouter();
+  const user = authUser
+    ? {
+        name: authUser.name,
+        role: authUser.role,
+        initials: authUser.initials,
+      }
+    : fallbackUser;
+
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -21,6 +33,11 @@ export function Header({ user }: HeaderProps) {
       searchInputRef.current?.focus();
     }
   }, [searchOpen]);
+
+  function handleLogout() {
+    logout();
+    router.replace("/login");
+  }
 
   return (
     <header className="border-b border-neutral-800 bg-black px-3 py-3 sm:px-4 lg:px-6">
@@ -79,6 +96,15 @@ export function Header({ user }: HeaderProps) {
               <p className="truncate text-sm font-medium text-white">{user.name}</p>
               <p className="truncate text-xs text-neutral-400">{user.role}</p>
             </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+              aria-label="Log out"
+              title="Log out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>
