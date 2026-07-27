@@ -19,6 +19,10 @@ export interface ModuleColumn {
   key: string;
   header: string;
   format?: "currency" | "percent";
+  render?: (row: any) => React.ReactNode;
+  align?: "left" | "center" | "right";
+  sortable?: boolean;
+  className?: string;
 }
 
 export interface ModuleRow {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, Map, Pencil, Table2, Trash2 } from "lucide-react";
+import { Download, Map, Table2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import {
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import type { ModuleColumn, ModuleListDefinition, ModuleRow } from "./module-types";
 import { ModulePageShell } from "./ModulePageShell";
 import { ModuleDataTable } from "./ModuleDataTable";
+import { ModuleSelectionBar } from "./ModuleSelectionBar";
 import { downloadAllTableQrs, TableQrCard } from "./TableQrCard";
 import { ModuleRowDetail } from "./ModuleRowDetail";
 
@@ -143,6 +144,7 @@ export function ModuleListPage({
   const [actionLabel, setActionLabel] = useState<string | null>(null);
   const [editingRow, setEditingRow] = useState<ModuleRow | null>(null);
   const [deleteRow, setDeleteRow] = useState<ModuleRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, string>>(() => blankForm(definition.columns));
   const [selectA, setSelectA] = useState("");
@@ -489,6 +491,8 @@ export function ModuleListPage({
     setToast("New cashier shift opened.");
   };
 
+  const firstSelected = filtered.find((row) => selectedIds.has(String(row.id)));
+
   const tableBlock = (
     <>
       <p className="mb-3 text-sm text-slate-500">
@@ -502,34 +506,8 @@ export function ModuleListPage({
         onRowClick={setPreview}
         statusStyle={definition.statusStyle}
         statusMap={statusMap}
-        actionColumn={(row) => (
-          <div className="flex items-center justify-end gap-1">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                openEdit(row);
-              }}
-              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
-              aria-label="Edit"
-              title="Edit"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setDeleteRow(row);
-              }}
-              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
-              aria-label="Delete"
-              title="Delete"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
       />
     </>
   );
@@ -615,6 +593,34 @@ export function ModuleListPage({
           ) : undefined
         }
         aboveTable={charts}
+        selectionBar={
+          <ModuleSelectionBar
+            count={selectedIds.size}
+            noun="record"
+            onClear={() => setSelectedIds(new Set())}
+            actions={[
+              {
+                label: "View",
+                onClick: () => {
+                  if (firstSelected) setPreview(firstSelected);
+                },
+              },
+              {
+                label: "Edit",
+                onClick: () => {
+                  if (firstSelected) openEdit(firstSelected);
+                },
+              },
+              {
+                label: "Delete",
+                variant: "danger",
+                onClick: () => {
+                  if (firstSelected) setDeleteRow(firstSelected);
+                },
+              },
+            ]}
+          />
+        }
       >
         {tableBlock}
       </ModulePageShell>

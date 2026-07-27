@@ -43,7 +43,6 @@ import {
 import { Button } from "@/components/ui/Button";
 import { CheckoutInvoiceDrawer, type InvoiceData } from "@/components/frontoffice/CheckoutInvoice";
 import {
-  ActionButtons,
   AlertBanner,
   Drawer,
   FOSearchToolbar,
@@ -57,19 +56,39 @@ import {
 } from "@/components/frontoffice/ui";
 import type { LucideIcon } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
+import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import { cn } from "@/lib/utils";
 
 function ClickableTable<T extends { id: string }>({
   rows,
   columns,
   onRowClick,
-  actionColumn,
+  selectedIds,
+  onSelectionChange,
 }: {
   rows: T[];
   columns: { key: string; header: string; render: (row: T) => React.ReactNode }[];
   onRowClick: (row: T) => void;
-  actionColumn?: (row: T) => React.ReactNode;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
 }) {
+  const selectable = Boolean(selectedIds && onSelectionChange);
+  const selected = selectedIds ?? new Set<string>();
+  const allSelected = selectable && rows.length > 0 && rows.every((r) => selected.has(r.id));
+
+  const toggleAll = () => {
+    if (!onSelectionChange) return;
+    onSelectionChange(allSelected ? new Set() : new Set(rows.map((r) => r.id)));
+  };
+
+  const toggleOne = (id: string) => {
+    if (!onSelectionChange) return;
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectionChange(next);
+  };
+
   return (
     <>
       <div className="space-y-3 md:hidden">
@@ -87,6 +106,16 @@ function ClickableTable<T extends { id: string }>({
             }}
             className="w-full cursor-pointer rounded-xl border border-slate-100 p-4 text-left hover:border-emerald-200 hover:bg-emerald-50/30"
           >
+            {selectable && (
+              <div className="mb-2" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={selected.has(row.id)}
+                  onChange={() => toggleOne(row.id)}
+                  className="h-4 w-4 rounded border-slate-300 text-emerald-700"
+                />
+              </div>
+            )}
             {columns.slice(0, 3).map((col) => (
               <div key={col.key} className="text-sm">{col.render(row)}</div>
             ))}
@@ -97,10 +126,20 @@ function ClickableTable<T extends { id: string }>({
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-500">
+              {selectable && (
+                <th className="w-10 pb-3 pr-2">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    className="h-4 w-4 rounded border-slate-300 text-emerald-700"
+                    aria-label="Select all"
+                  />
+                </th>
+              )}
               {columns.map((col) => (
                 <th key={col.key} className="pb-3 pr-4">{col.header}</th>
               ))}
-              {actionColumn && <th className="pb-3 pr-4">Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -110,14 +149,19 @@ function ClickableTable<T extends { id: string }>({
                 onClick={() => onRowClick(row)}
                 className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-emerald-50/40"
               >
+                {selectable && (
+                  <td className="py-3.5 pr-2" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(row.id)}
+                      onChange={() => toggleOne(row.id)}
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-700"
+                    />
+                  </td>
+                )}
                 {columns.map((col) => (
                   <td key={col.key} className="py-3.5 pr-4">{col.render(row)}</td>
                 ))}
-                {actionColumn && (
-                  <td className="py-3.5 pr-4" onClick={(e) => e.stopPropagation()}>
-                    {actionColumn(row)}
-                  </td>
-                )}
               </tr>
             ))}
           </tbody>
@@ -229,6 +273,7 @@ export function WakeUpCallsView() {
   const [notes, setNotes] = useState("");
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const list = useMemo(() => {
     let rows = filtered.filter((r) =>
@@ -243,6 +288,7 @@ export function WakeUpCallsView() {
   }, [guests, guestName]);
 
   const guest = guests.find((g) => g.guestName === guestName);
+  const firstSelected = list.find((r) => selectedIds.has(r.id));
 
   const handleSave = async () => {
     try {
@@ -288,9 +334,35 @@ export function WakeUpCallsView() {
       resultCount={{ shown: list.length, total: items.length }}
       hasActiveAdvancedFilters={sortBy !== "newest"}
       onClearAdvancedFilters={() => setSortBy("newest")}
+      selectionBar={
+        <ModuleSelectionBar
+          count={selectedIds.size}
+          noun="call"
+          onClear={() => setSelectedIds(new Set())}
+          actions={[
+            {
+              label: "View",
+              onClick: () => {
+                if (firstSelected) setPreview(firstSelected);
+              },
+            },
+            ...(firstSelected && !firstSelected.completed
+              ? [
+                  {
+                    label: "Mark Done",
+                    onClick: () => markDone(firstSelected.id),
+                  },
+                ]
+              : []),
+          ]}
+        />
+      }
     >
-      <ClickableTable rows={list} onRowClick={setPreview}
-        actionColumn={(r) => !r.completed ? <ActionButtons actions={[{ label: "Mark Done", onClick: () => markDone(r.id) }]} /> : "—"}
+      <ClickableTable
+        rows={list}
+        onRowClick={setPreview}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
         columns={[
           { key: "guest", header: "Guest", render: (r) => <><p className="font-medium">{r.guest}</p><p className="text-xs text-slate-400">Room {r.room}</p></> },
           { key: "date", header: "Date", render: (r) => r.date },
@@ -328,6 +400,7 @@ export function HousekeepingRequestsView() {
   const [priority, setPriority] = useState<HousekeepingRequest["priority"]>("Medium");
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const guest = guests.find((g) => g.guestName === guestName);
   const list = useMemo(() => {
     let rows = filtered.filter((r) => filter === "all" || r.status === filter);
@@ -335,6 +408,7 @@ export function HousekeepingRequestsView() {
     if (sortBy === "guest") rows = [...rows].sort((a, b) => a.guest.localeCompare(b.guest));
     return rows;
   }, [filtered, filter, sortBy]);
+  const firstSelected = list.find((r) => selectedIds.has(r.id));
 
   const handleSave = async () => {
     if (!issue.trim()) { setToast("Please describe the issue."); return; }
@@ -378,9 +452,30 @@ export function HousekeepingRequestsView() {
       resultCount={{ shown: list.length, total: items.length }}
       hasActiveAdvancedFilters={sortBy !== "newest"}
       onClearAdvancedFilters={() => setSortBy("newest")}
+      selectionBar={
+        <ModuleSelectionBar
+          count={selectedIds.size}
+          noun="request"
+          onClear={() => setSelectedIds(new Set())}
+          actions={[
+            {
+              label: "View",
+              onClick: () => {
+                if (firstSelected) setPreview(firstSelected);
+              },
+            },
+            ...(firstSelected && firstSelected.status === "Open"
+              ? [{ label: "Assign", onClick: () => assign(firstSelected.id) }]
+              : []),
+          ]}
+        />
+      }
     >
-      <ClickableTable rows={list} onRowClick={setPreview}
-        actionColumn={(r) => r.status === "Open" ? <ActionButtons actions={[{ label: "Assign", onClick: () => assign(r.id) }]} /> : "—"}
+      <ClickableTable
+        rows={list}
+        onRowClick={setPreview}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
         columns={[
           { key: "guest", header: "Guest / Room", render: (r) => <><p className="font-medium">{r.guest}</p><p className="text-xs text-slate-400">Room {r.room}</p></> },
           { key: "issue", header: "Issue", render: (r) => r.issue },
@@ -484,12 +579,14 @@ export function LostFoundView() {
   const [description, setDescription] = useState("");
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const list = useMemo(() => {
     let rows = filtered.filter((r) => filter === "all" || r.status === filter);
     if (sortBy === "item") rows = [...rows].sort((a, b) => a.item.localeCompare(b.item));
     if (sortBy === "guest") rows = [...rows].sort((a, b) => a.guest.localeCompare(b.guest));
     return rows;
   }, [filtered, filter, sortBy]);
+  const firstSelected = list.find((r) => selectedIds.has(r.id));
 
   const handleSave = async () => {
     if (!item.trim()) { setToast("Please enter item name."); return; }
@@ -529,9 +626,30 @@ export function LostFoundView() {
       resultCount={{ shown: list.length, total: items.length }}
       hasActiveAdvancedFilters={sortBy !== "newest"}
       onClearAdvancedFilters={() => setSortBy("newest")}
+      selectionBar={
+        <ModuleSelectionBar
+          count={selectedIds.size}
+          noun="item"
+          onClear={() => setSelectedIds(new Set())}
+          actions={[
+            {
+              label: "View",
+              onClick: () => {
+                if (firstSelected) setPreview(firstSelected);
+              },
+            },
+            ...(firstSelected && firstSelected.status === "Stored"
+              ? [{ label: "Return", onClick: () => markReturned(firstSelected.id) }]
+              : []),
+          ]}
+        />
+      }
     >
-      <ClickableTable rows={list} onRowClick={setPreview}
-        actionColumn={(r) => r.status === "Stored" ? <ActionButtons actions={[{ label: "Return", onClick: () => markReturned(r.id) }]} /> : "—"}
+      <ClickableTable
+        rows={list}
+        onRowClick={setPreview}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
         columns={[
           { key: "item", header: "Item", render: (r) => <p className="font-medium">{r.item}</p> },
           { key: "guest", header: "Guest", render: (r) => r.guest },

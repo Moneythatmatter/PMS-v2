@@ -1,86 +1,99 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
-import {
-  Sparkles,
-  Wrench,
-  Clock,
-  CheckCircle2,
-  AlertTriangle,
-  FolderOpen,
-  Bed,
-  Layers,
-  ArrowRightLeft,
-  ChevronRight,
-  TrendingUp,
-} from "lucide-react";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
+import { useMemo } from "react";
 import Link from "next/link";
+import {
+  AlertTriangle,
+  ArrowRight,
+  ArrowRightLeft,
+  Bell,
+  CheckCircle2,
+  ClipboardCheck,
+  Clock,
+  Layers,
+  Sparkles,
+  Trees,
+  Users,
+  Wrench,
+} from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { ModulePageShell } from "@/components/pms";
+import { StatMiniCard } from "@/components/frontoffice/ui";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
 import { cn } from "@/lib/utils";
 
-// Custom Card component
-function DashboardStatCard({
-  title,
-  value,
-  subtitle,
-  icon: Icon,
-  colorClass,
-  borderColor,
-}: {
-  title: string;
-  value: number | string;
-  subtitle: string;
-  icon: React.ComponentType<{ className?: string }>;
-  colorClass: string;
-  borderColor: string;
-}) {
+const quickLinks = [
+  {
+    label: "Room Cleaning",
+    href: "/housekeeping/operations/room-cleaning",
+    icon: Sparkles,
+    hint: "Dirty & in progress",
+  },
+  {
+    label: "Inspection",
+    href: "/housekeeping/operations/inspection",
+    icon: ClipboardCheck,
+    hint: "Supervisor sign-off",
+  },
+  {
+    label: "Guest Requests",
+    href: "/housekeeping/housekeeping-requests",
+    icon: Bell,
+    hint: "Service queue",
+  },
+  {
+    label: "Maintenance",
+    href: "/housekeeping/maintenance-requests",
+    icon: Wrench,
+    hint: "Work orders",
+  },
+  {
+    label: "Public Area",
+    href: "/housekeeping/operations/public-cleaning",
+    icon: Trees,
+    hint: "Lobby & corridors",
+  },
+  {
+    label: "Laundry",
+    href: "/housekeeping/operations/laundry",
+    icon: ArrowRightLeft,
+    hint: "Linen flow",
+  },
+  {
+    label: "Inventory",
+    href: "/housekeeping/inventory",
+    icon: Layers,
+    hint: "Par & stock",
+  },
+  {
+    label: "Staff",
+    href: "/housekeeping/masters/staff",
+    icon: Users,
+    hint: "Shifts & roster",
+  },
+];
+
+function Pill({ status }: { status: string }) {
+  const tone =
+    status === "Vacant Ready" || status === "Completed" || status === "Ready" || status === "Delivered"
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+      : status === "Cleaning" || status === "Inspection Pending" || status === "Pending" || status === "Open"
+        ? "bg-amber-50 text-amber-700 ring-amber-200"
+        : status.includes("Dirty") || status === "Critical" || status === "High"
+          ? "bg-red-50 text-red-700 ring-red-200"
+          : "bg-slate-100 text-slate-600 ring-slate-200";
+
   return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-2xl border bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
-        borderColor
-      )}
-    >
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{title}</p>
-          <h3 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-800">{value}</h3>
-          <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
-        </div>
-        <div className={cn("rounded-xl p-2.5 shadow-sm", colorClass)}>
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </div>
+    <span className={cn("inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset", tone)}>
+      {status}
+    </span>
   );
 }
 
 export default function HousekeepingDashboard() {
-  const {
-    rooms,
-    requests,
-    maintenance,
-    inventory,
-    laundryJobs,
-    publicAreas,
-    currentUserRole,
-    currentUsername,
-  } = useHousekeeping();
+  const { rooms, requests, maintenance, inventory, laundryJobs, publicAreas } = useHousekeeping();
 
-  // Compute metrics
   const stats = useMemo(() => {
     const dirty = rooms.filter((r) => r.status.includes("Dirty")).length;
     const cleaning = rooms.filter((r) => r.status === "Cleaning").length;
@@ -88,13 +101,13 @@ export default function HousekeepingDashboard() {
     const ready = rooms.filter((r) => r.status === "Vacant Ready").length;
     const occupied = rooms.filter((r) => r.status.startsWith("Occupied")).length;
     const blocked = rooms.filter(
-      (r) => r.status === "Blocked" || r.status === "Out of Order" || r.status === "Out of Service"
+      (r) => r.status === "Blocked" || r.status === "Out of Order" || r.status === "Out of Service",
     ).length;
-
     const openRequests = requests.filter((r) => r.status !== "Completed").length;
     const openMaint = maintenance.filter((m) => m.status !== "Closed").length;
     const pendingLaundry = laundryJobs.filter((l) => l.status !== "Delivered").length;
     const dirtyPublicAreas = publicAreas.filter((p) => p.status === "Dirty").length;
+    const lowStock = inventory.filter((item) => item.available < item.parStock * 0.6);
 
     return {
       dirty,
@@ -107,426 +120,389 @@ export default function HousekeepingDashboard() {
       openMaint,
       pendingLaundry,
       dirtyPublicAreas,
+      lowStock,
+      total: rooms.length,
     };
-  }, [rooms, requests, maintenance, laundryJobs, publicAreas]);
+  }, [rooms, requests, maintenance, laundryJobs, publicAreas, inventory]);
 
-  // Chart 1: Room Status Pie Chart
-  const roomStatusData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    rooms.forEach((r) => {
-      counts[r.status] = (counts[r.status] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [rooms]);
+  const inspectionPendingRooms = useMemo(
+    () => rooms.filter((r) => r.status === "Inspection Pending").slice(0, 6),
+    [rooms],
+  );
+  const dirtyRooms = useMemo(
+    () => rooms.filter((r) => r.status.includes("Dirty")).slice(0, 6),
+    [rooms],
+  );
+  const activeRequests = useMemo(
+    () => requests.filter((r) => r.status !== "Completed").slice(0, 5),
+    [requests],
+  );
+  const activeMaint = useMemo(
+    () => maintenance.filter((m) => m.status !== "Closed").slice(0, 5),
+    [maintenance],
+  );
+  const laundryPreview = useMemo(() => laundryJobs.slice(0, 4), [laundryJobs]);
 
-  const PIE_COLORS = ["#ef4444", "#f59e0b", "#3b82f6", "#10b981", "#8b5cf6", "#64748b", "#ec4899"];
+  const roomBreakdown = [
+    { label: "Dirty", count: stats.dirty, color: "#ef4444" },
+    { label: "Cleaning", count: stats.cleaning, color: "#f59e0b" },
+    { label: "Inspection", count: stats.pendingInspection, color: "#3b82f6" },
+    { label: "Vacant Ready", count: stats.ready, color: "#15803d" },
+    { label: "Occupied", count: stats.occupied, color: "#8b5cf6" },
+    { label: "Blocked / OOO", count: stats.blocked, color: "#64748b" },
+  ];
 
-  // Chart 2: Inventory low stock
-  const linenStockData = useMemo(() => {
-    return inventory
-      .filter((item) => item.category === "Linen")
-      .map((item) => ({
-        name: item.name.replace("Bed Sheets", "Sheets").replace("Towels", "Tow").replace("Covers", "Cov"),
-        Available: item.available,
-        Par: item.parStock,
-      }));
-  }, [inventory]);
+  const readyPct =
+    stats.total > 0 ? Math.round(((stats.ready + stats.occupied) / stats.total) * 100) : 0;
 
-  // Table Data: Awaiting Inspection
-  const inspectionPendingRooms = useMemo(() => {
-    return rooms.filter((r) => r.status === "Inspection Pending");
-  }, [rooms]);
-
-  // Table Data: VIP Rooms Checked-In/Arriving
-  const vipRooms = useMemo(() => {
-    return rooms.filter((r) => r.remarks.toLowerCase().includes("vip") || r.category.includes("Suite"));
-  }, [rooms]);
-
-  // Table Data: Active Requests
-  const activeRequestsList = useMemo(() => {
-    return requests.filter((r) => r.status !== "Completed").slice(0, 5);
-  }, [requests]);
-
-  // Table Data: Maintenance Requests
-  const activeMaintList = useMemo(() => {
-    return maintenance.filter((m) => m.status !== "Closed").slice(0, 5);
-  }, [maintenance]);
-
-  // Inventory Low Stock Warnings
-  const lowStockItems = useMemo(() => {
-    return inventory.filter((item) => item.available < item.parStock * 0.6);
-  }, [inventory]);
+  const alerts = [
+    stats.dirty > 0 && {
+      id: "dirty",
+      tone: "danger" as const,
+      title: `${stats.dirty} dirty room${stats.dirty === 1 ? "" : "s"} need cleaning`,
+      detail: dirtyRooms.map((r) => r.roomNo).join(", ") || "Open room cleaning",
+      href: "/housekeeping/operations/room-cleaning",
+    },
+    stats.pendingInspection > 0 && {
+      id: "inspect",
+      tone: "warning" as const,
+      title: `${stats.pendingInspection} room${stats.pendingInspection === 1 ? "" : "s"} awaiting inspection`,
+      detail: inspectionPendingRooms.map((r) => r.roomNo).join(", ") || "Supervisor queue",
+      href: "/housekeeping/operations/inspection",
+    },
+    stats.openRequests > 0 && {
+      id: "requests",
+      tone: "warning" as const,
+      title: `${stats.openRequests} open guest request${stats.openRequests === 1 ? "" : "s"}`,
+      detail: activeRequests[0]?.issue ?? "Service queue",
+      href: "/housekeeping/housekeeping-requests",
+    },
+    (stats.dirtyPublicAreas > 0 || stats.lowStock.length > 0) && {
+      id: "supply",
+      tone: "info" as const,
+      title: `${stats.dirtyPublicAreas} dirty public · ${stats.lowStock.length} low stock`,
+      detail: stats.lowStock[0]
+        ? `${stats.lowStock[0].name} below par`
+        : "Public areas / inventory follow-up",
+      href: stats.lowStock.length > 0 ? "/housekeeping/inventory" : "/housekeeping/operations/public-cleaning",
+    },
+  ].filter(Boolean) as {
+    id: string;
+    tone: "danger" | "warning" | "info";
+    title: string;
+    detail: string;
+    href: string;
+  }[];
 
   return (
-    <div className="space-y-6">
-      {/* Eyebrow and Title */}
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-        <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">PMS Housekeeping</span>
-          <h1 className="mt-1 text-2xl font-bold text-slate-800 sm:text-3xl">Housekeeping Operations</h1>
-          <p className="text-sm text-slate-500">
-            Real-time occupancy status, staff assignments, and room cleaning checklist tracking.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-600 shadow-sm">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          Active Profile: <strong className="text-slate-800">{currentUsername}</strong> ({currentUserRole})
-        </div>
-      </div>
-
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-        <DashboardStatCard
-          title="Dirty Rooms"
+    <ModulePageShell
+      eyebrow="Housekeeping"
+      title="Dashboard"
+      description="Room status, guest requests, inspections, and linen work for today."
+      wrapChildren={false}
+    >
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatMiniCard
+          label="Dirty Rooms"
           value={stats.dirty}
-          subtitle="Needs cleaning"
+          accent="#dc2626"
           icon={AlertTriangle}
-          colorClass="bg-red-50 text-red-600"
-          borderColor="border-red-100 hover:border-red-200"
+          sublabel="Needs cleaning"
         />
-        <DashboardStatCard
-          title="In Progress"
+        <StatMiniCard
+          label="In Progress"
           value={stats.cleaning}
-          subtitle="Cleaning active"
+          accent="#d97706"
           icon={Clock}
-          colorClass="bg-amber-50 text-amber-600"
-          borderColor="border-amber-100 hover:border-amber-200"
+          sublabel="Cleaning active"
         />
-        <DashboardStatCard
-          title="Pending Verify"
+        <StatMiniCard
+          label="Pending Verify"
           value={stats.pendingInspection}
-          subtitle="Awaiting inspection"
-          icon={Layers}
-          colorClass="bg-blue-50 text-blue-600"
-          borderColor="border-blue-100 hover:border-blue-200"
+          accent="#2563eb"
+          icon={ClipboardCheck}
+          sublabel="Awaiting inspection"
         />
-        <DashboardStatCard
-          title="Vacant Ready"
+        <StatMiniCard
+          label="Vacant Ready"
           value={stats.ready}
-          subtitle="Available for sale"
+          accent="#15803d"
           icon={CheckCircle2}
-          colorClass="bg-emerald-50 text-emerald-600"
-          borderColor="border-emerald-100 hover:border-emerald-200"
-        />
-        <DashboardStatCard
-          title="Occupied"
-          value={stats.occupied}
-          subtitle="Guest in house"
-          icon={Bed}
-          colorClass="bg-violet-50 text-violet-600"
-          borderColor="border-violet-100 hover:border-violet-200"
-        />
-        <DashboardStatCard
-          title="Blocked / OOO"
-          value={stats.blocked}
-          subtitle="Out of order/Blocked"
-          icon={FolderOpen}
-          colorClass="bg-slate-50 text-slate-600"
-          borderColor="border-slate-100 hover:border-slate-200"
+          sublabel="Available for sale"
         />
       </div>
 
-      {/* Main Grid: Charts & Operations summaries */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-        {/* Left Side: Charts & Verification tables (8 cols) */}
-        <div className="space-y-6 xl:col-span-8">
-          
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            
-            {/* Status Pie Chart */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-800">Room Status Distribution</h2>
-              <p className="mb-4 text-xs text-slate-400">Total room allocation breakdown</p>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={roomStatusData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                    >
-                      {roomStatusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
+      {alerts.length > 0 && (
+        <section className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Bell className="h-3.5 w-3.5 text-amber-600" />
+              <h2 className="text-sm font-semibold text-slate-900">Needs attention</h2>
+              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                {alerts.length}
+              </span>
             </div>
-
-            {/* Linen Stock Chart */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-800">Linen Stock Levels</h2>
-              <p className="mb-4 text-xs text-slate-400">Current available stock vs par values</p>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={linenStockData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} tickLine={false} />
-                    <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} />
-                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="Available" fill="#10b981" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Par" fill="#e2e8f0" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
+            <Link
+              href="/housekeeping/operations/room-cleaning"
+              className="text-xs font-medium text-emerald-700 hover:underline"
+            >
+              Room cleaning
+            </Link>
           </div>
-
-          {/* Table: Rooms Awaiting Verification */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-800">Rooms Awaiting Verification</h2>
-                <p className="text-xs text-slate-400">Completed cleanings ready for supervisor sign-off</p>
-              </div>
+          <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
+            {alerts.map((alert) => (
               <Link
-                href="/housekeeping/operations/inspection"
-                className="flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
+                key={alert.id}
+                href={alert.href}
+                className={cn(
+                  "rounded-lg border px-2.5 py-2 transition hover:shadow-sm",
+                  alert.tone === "danger" && "border-red-200 bg-red-50 text-red-900",
+                  alert.tone === "warning" && "border-amber-200 bg-amber-50 text-amber-950",
+                  alert.tone === "info" && "border-emerald-200 bg-emerald-50 text-emerald-950",
+                )}
               >
-                Go to Inspection <ChevronRight className="h-3 w-3" />
+                <p className="text-xs font-semibold leading-snug">{alert.title}</p>
+                <p className="mt-0.5 truncate text-[11px] opacity-80">{alert.detail}</p>
               </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+        <div className="mb-2 flex items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold text-slate-900">Quick actions</h2>
+          <p className="text-[11px] text-slate-500">Housekeeping shortcuts</p>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 xl:grid-cols-8">
+          {quickLinks.map((link) => {
+            const Icon = link.icon;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-2.5 py-2 transition hover:border-emerald-300 hover:bg-emerald-50/60"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-emerald-700 ring-1 ring-slate-200">
+                  <Icon className="h-3.5 w-3.5" />
+                </span>
+                <span className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-slate-900">{link.label}</p>
+                  <p className="truncate text-[10px] text-slate-500">{link.hint}</p>
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Dirty rooms</h2>
+              <p className="text-[11px] text-slate-500">{stats.dirty} need cleaning</p>
             </div>
-            
-            {inspectionPendingRooms.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-100 rounded-xl">
-                No rooms currently awaiting inspection. All clean rooms are active or sold!
-              </div>
+            <Link href="/housekeeping/operations/room-cleaning">
+              <Button type="button" size="sm" variant="outline">
+                Clean
+              </Button>
+            </Link>
+          </div>
+          <ul className="flex flex-1 flex-col divide-y divide-slate-100">
+            {dirtyRooms.length === 0 ? (
+              <li className="py-6 text-center text-sm text-slate-500">No dirty rooms</li>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-100">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-100">
-                    <tr>
-                      <th className="px-4 py-2.5">Room</th>
-                      <th className="px-4 py-2.5">Category</th>
-                      <th className="px-4 py-2.5">Floor</th>
-                      <th className="px-4 py-2.5">Cleaned By</th>
-                      <th className="px-4 py-2.5 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {inspectionPendingRooms.map((room) => (
-                      <tr key={room.roomNo} className="hover:bg-slate-50/50">
-                        <td className="px-4 py-3 font-semibold text-slate-800">Room {room.roomNo}</td>
-                        <td className="px-4 py-3 text-slate-500">{room.category}</td>
-                        <td className="px-4 py-3 text-slate-500">{room.floor}</td>
-                        <td className="px-4 py-3 text-slate-600 font-medium">{room.assignedStaff || "Staff"}</td>
-                        <td className="px-4 py-3 text-right">
-                          <Link
-                            href={`/housekeeping/operations/inspection?room=${room.roomNo}`}
-                            className="inline-flex items-center rounded-lg bg-emerald-700 px-2.5 py-1 font-semibold text-white hover:bg-emerald-800"
-                          >
-                            Inspect
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              dirtyRooms.map((room) => (
+                <li
+                  key={room.roomNo}
+                  className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">Room {room.roomNo}</p>
+                    <p className="truncate text-[11px] text-slate-500">
+                      {room.category} · Floor {room.floor}
+                      {room.assignedStaff ? ` · ${room.assignedStaff}` : ""}
+                    </p>
+                  </div>
+                  <Pill status={room.status} />
+                </li>
+              ))
             )}
-          </div>
+          </ul>
+        </section>
 
-          {/* Pending Guest & Maintenance Requests */}
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            
-            {/* Guest Requests list */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-800">Guest Services Queue</h3>
-                <Link href="/housekeeping/housekeeping-requests" className="text-xs font-medium text-emerald-700 hover:underline">
-                  View All
-                </Link>
-              </div>
-              <div className="space-y-3">
-                {activeRequestsList.length === 0 ? (
-                  <p className="py-4 text-center text-xs text-slate-400">No active guest requests.</p>
-                ) : (
-                  activeRequestsList.map((req) => (
-                    <div key={req.id} className="flex items-start justify-between rounded-xl border border-slate-50 bg-slate-50/40 p-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-800 text-xs">Room {req.room}</span>
-                          <span
-                            className={cn(
-                              "rounded-full px-1.5 py-0.5 text-[9px] font-medium",
-                              req.priority === "High" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"
-                            )}
-                          >
-                            {req.priority}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-600 font-medium">{req.issue}</p>
-                      </div>
-                      <span className="text-[10px] text-slate-400">{req.createdAt}</span>
-                    </div>
-                  ))
-                )}
-              </div>
+        <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Awaiting inspection</h2>
+              <p className="text-[11px] text-slate-500">{stats.pendingInspection} ready for sign-off</p>
             </div>
-
-            {/* Maintenance tickets */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-800">Engineering Work Orders</h3>
-                <Link href="/housekeeping/maintenance-requests" className="text-xs font-medium text-emerald-700 hover:underline">
-                  View All
-                </Link>
-              </div>
-              <div className="space-y-3">
-                {activeMaintList.length === 0 ? (
-                  <p className="py-4 text-center text-xs text-slate-400">No active maintenance work orders.</p>
-                ) : (
-                  activeMaintList.map((ticket, idx) => (
-                    <div key={`${ticket.id}-${idx}`} className="flex items-start justify-between rounded-xl border border-slate-50 bg-slate-50/40 p-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-800 text-xs">Room {ticket.room}</span>
-                          <span
-                            className={cn(
-                              "rounded-full px-1.5 py-0.5 text-[9px] font-medium",
-                              ticket.priority === "Critical" || ticket.priority === "High"
-                                ? "bg-red-50 text-red-700"
-                                : "bg-slate-100 text-slate-700"
-                            )}
-                          >
-                            {ticket.priority}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-600 font-medium">{ticket.problem}</p>
-                      </div>
-                      <span className="text-[10px] text-slate-400">{ticket.status}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
+            <Link href="/housekeeping/operations/inspection">
+              <Button type="button" size="sm" variant="outline">
+                Inspect
+              </Button>
+            </Link>
           </div>
-
-        </div>
-
-        {/* Right Side: Alerts, VIP, Public Areas (4 cols) */}
-        <div className="space-y-6 xl:col-span-4">
-          
-          {/* Alerts panel */}
-          <div className="rounded-2xl border border-red-100 bg-red-50/20 p-5 shadow-sm">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-red-800">
-              <AlertTriangle className="h-4 w-4 text-red-600" />
-              Critical Alerts
-            </h3>
-            <div className="mt-4 space-y-3">
-              {/* Public area dirty */}
-              {stats.dirtyPublicAreas > 0 && (
-                <div className="rounded-xl bg-white p-3 shadow-sm border border-red-50 flex items-start gap-2.5">
-                  <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-600"></span>
-                  <p className="text-xs text-slate-600">
-                    <strong>{stats.dirtyPublicAreas} Public Areas</strong> are marked Dirty and need clean up.
-                  </p>
-                </div>
-              )}
-              {/* Low stock alerts */}
-              {lowStockItems.slice(0, 3).map((item) => (
-                <div key={item.id} className="rounded-xl bg-white p-3 shadow-sm border border-red-50 flex items-start gap-2.5">
-                  <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"></span>
-                  <p className="text-xs text-slate-600">
-                    Low inventory stock: <strong>{item.name}</strong> has only {item.available} {item.unit} left (Par: {item.parStock}).
-                  </p>
-                </div>
-              ))}
-              {/* OOO rooms */}
-              {rooms.some((r) => r.status === "Out of Order") && (
-                <div className="rounded-xl bg-white p-3 shadow-sm border border-red-50 flex items-start gap-2.5">
-                  <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-600"></span>
-                  <p className="text-xs text-slate-600">
-                    Rooms marked <strong>Out of Order</strong> are removed from sellable availability. Verify repair quickly!
-                  </p>
-                </div>
-              )}
-              {stats.dirtyPublicAreas === 0 && lowStockItems.length === 0 && (
-                <p className="text-xs text-slate-500 py-2">No critical supply warnings or operational holds.</p>
-              )}
-            </div>
-          </div>
-
-          {/* VIP arrivals checklist */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <Sparkles className="h-4 w-4 text-emerald-600" />
-              VIP Check-In Prep
-            </h3>
-            <p className="mb-4 text-xs text-slate-400">High priority arrivals needing ready rooms</p>
-            <div className="space-y-3">
-              {vipRooms.map((room) => (
-                <div key={room.roomNo} className="rounded-xl border border-slate-100 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-800 text-xs">Room {room.roomNo}</span>
-                    <span
-                      className={cn(
-                        "rounded-full px-2 py-0.5 text-[9px] font-semibold",
-                        room.status === "Vacant Ready"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : room.status === "Cleaning" || room.status === "Inspection Pending"
-                          ? "bg-amber-50 text-amber-700"
-                          : "bg-red-50 text-red-700"
-                      )}
-                    >
-                      {room.status}
-                    </span>
+          <ul className="flex flex-1 flex-col divide-y divide-slate-100">
+            {inspectionPendingRooms.length === 0 ? (
+              <li className="py-6 text-center text-sm text-slate-500">Inspection queue clear</li>
+            ) : (
+              inspectionPendingRooms.map((room) => (
+                <li
+                  key={room.roomNo}
+                  className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">Room {room.roomNo}</p>
+                    <p className="truncate text-[11px] text-slate-500">
+                      {room.category} · {room.assignedStaff || "Staff"}
+                    </p>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
-                    <span>{room.category}</span>
-                    <span className="italic text-emerald-700">{room.remarks || "VIP Prep"}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Active Laundry work */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <ArrowRightLeft className="h-4 w-4 text-slate-600" />
-                Laundry Operations
-              </h3>
-              <Link href="/housekeeping/operations/laundry" className="text-xs font-medium text-emerald-700 hover:underline">
-                Manage
-              </Link>
-            </div>
-            <div className="space-y-3">
-              {laundryJobs.slice(0, 3).map((job) => (
-                <div key={job.id} className="flex items-center justify-between text-xs border-b border-slate-50 pb-2 last:border-0 last:pb-0">
-                  <div>
-                    <p className="font-medium text-slate-700">{job.item}</p>
-                    <p className="text-[10px] text-slate-400">Qty: {job.quantity} · {job.type} Laundry</p>
-                  </div>
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[9px] font-semibold",
-                      job.status === "Delivered" || job.status === "Ready"
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-amber-50 text-amber-700"
-                    )}
-                  >
-                    {job.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </div>
+                  <Pill status={room.status} />
+                </li>
+              ))
+            )}
+          </ul>
+        </section>
       </div>
-    </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-3">
+        <section className="flex h-full flex-col rounded-xl border border-amber-200/80 bg-amber-50/40 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Guest requests</h2>
+              <p className="text-[11px] text-slate-500">
+                {stats.openRequests > 0 ? `${stats.openRequests} open` : "All clear"}
+              </p>
+            </div>
+            <Link
+              href="/housekeeping/housekeeping-requests"
+              className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 hover:underline"
+            >
+              Manage
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <ul className="flex flex-1 flex-col space-y-1.5">
+            {activeRequests.length === 0 ? (
+              <li className="py-3 text-center text-sm text-slate-500">No open requests</li>
+            ) : (
+              activeRequests.map((req) => (
+                <li
+                  key={req.id}
+                  className="rounded-lg border border-amber-100 bg-white px-2.5 py-1.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900">
+                        Room {req.room}
+                        <span className="font-normal text-slate-500"> · {req.issue}</span>
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">{req.createdAt}</p>
+                    </div>
+                    <Pill status={req.priority} />
+                  </div>
+                </li>
+              ))
+            )}
+          </ul>
+        </section>
+
+        <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">House status</h2>
+              <p className="text-[11px] text-slate-500">Live room mix</p>
+            </div>
+            <Link
+              href="/housekeeping/operations/room-cleaning"
+              className="text-xs font-medium text-emerald-700 hover:underline"
+            >
+              Details
+            </Link>
+          </div>
+          <div className="mb-3 flex items-center gap-3">
+            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
+              <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" strokeWidth="3" />
+                <circle
+                  cx="18"
+                  cy="18"
+                  r="15.5"
+                  fill="none"
+                  stroke="#15803d"
+                  strokeWidth="3"
+                  strokeDasharray={`${readyPct} ${100 - readyPct}`}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="absolute text-xs font-bold text-slate-900">{readyPct}%</span>
+            </div>
+            <div>
+              <p className="text-base font-bold text-slate-900">
+                {stats.ready + stats.occupied} / {stats.total}
+              </p>
+              <p className="text-[11px] text-slate-500">ready or occupied</p>
+            </div>
+          </div>
+          <div className="mt-auto space-y-1.5">
+            {roomBreakdown.map((status) => (
+              <div key={status.label}>
+                <div className="mb-0.5 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-600">{status.label}</span>
+                  <span className="font-medium text-slate-900">{status.count}</span>
+                </div>
+                <ProgressBar value={status.count} max={Math.max(stats.total, 1)} color={status.color} />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Maintenance & laundry</h2>
+              <p className="text-[11px] text-slate-500">
+                {stats.openMaint} work orders · {stats.pendingLaundry} laundry
+              </p>
+            </div>
+            <Link
+              href="/housekeeping/maintenance-requests"
+              className="text-xs font-medium text-emerald-700 hover:underline"
+            >
+              View all
+            </Link>
+          </div>
+          <ul className="flex flex-1 flex-col divide-y divide-slate-100">
+            {activeMaint.slice(0, 2).map((ticket) => (
+              <li key={ticket.id} className="flex items-center justify-between gap-2 py-2 first:pt-0">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">
+                    Room {ticket.room}
+                  </p>
+                  <p className="truncate text-[11px] text-slate-500">{ticket.problem}</p>
+                </div>
+                <Pill status={ticket.priority} />
+              </li>
+            ))}
+            {laundryPreview.map((job) => (
+              <li key={job.id} className="flex items-center justify-between gap-2 py-2 last:pb-0">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">{job.item}</p>
+                  <p className="truncate text-[11px] text-slate-500">
+                    Qty {job.quantity} · {job.type}
+                  </p>
+                </div>
+                <Pill status={job.status} />
+              </li>
+            ))}
+            {activeMaint.length === 0 && laundryPreview.length === 0 && (
+              <li className="py-6 text-center text-sm text-slate-500">Nothing pending</li>
+            )}
+          </ul>
+        </section>
+      </div>
+    </ModulePageShell>
   );
 }

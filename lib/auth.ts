@@ -1,3 +1,5 @@
+import { api } from "@/services/api";
+
 export type AuthUser = {
   id: string;
   name: string;
@@ -6,54 +8,13 @@ export type AuthUser = {
   initials: string;
 };
 
-type StoredUser = AuthUser & {
-  password: string;
+export type LoginResult = {
+  user: AuthUser;
+  token: string;
 };
 
-const USERS_KEY = "pms_users";
 const SESSION_KEY = "pms_session";
-
-const DEFAULT_ADMIN: StoredUser = {
-  id: "U-ADMIN",
-  name: "Admin",
-  email: "admin@gmail.com",
-  password: "123456",
-  role: "Admin",
-  initials: "AD",
-};
-
-function readUsers(): StoredUser[] {
-  if (typeof window === "undefined") return [DEFAULT_ADMIN];
-  try {
-    const raw = localStorage.getItem(USERS_KEY);
-    if (!raw) {
-      localStorage.setItem(USERS_KEY, JSON.stringify([DEFAULT_ADMIN]));
-      return [DEFAULT_ADMIN];
-    }
-    const parsed = JSON.parse(raw) as StoredUser[];
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(USERS_KEY, JSON.stringify([DEFAULT_ADMIN]));
-      return [DEFAULT_ADMIN];
-    }
-    const hasAdmin = parsed.some(
-      (u) => u.email.toLowerCase() === DEFAULT_ADMIN.email,
-    );
-    if (!hasAdmin) {
-      const next = [DEFAULT_ADMIN, ...parsed];
-      localStorage.setItem(USERS_KEY, JSON.stringify(next));
-      return next;
-    }
-    return parsed;
-  } catch {
-    localStorage.setItem(USERS_KEY, JSON.stringify([DEFAULT_ADMIN]));
-    return [DEFAULT_ADMIN];
-  }
-}
-
-function toPublic(user: StoredUser): AuthUser {
-  const { password: _password, ...rest } = user;
-  return rest;
-}
+const TOKEN_KEY = "pms_token";
 
 export function getSessionUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
@@ -66,28 +27,46 @@ export function getSessionUser(): AuthUser | null {
   }
 }
 
-export function setSessionUser(user: AuthUser | null) {
-  if (user) localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-  else localStorage.removeItem(SESSION_KEY);
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(TOKEN_KEY);
 }
 
-export function loginWithEmailPassword(
+export function setSession(user: AuthUser | null, token?: string | null) {
+  if (user && token) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    localStorage.setItem(TOKEN_KEY, token);
+  } else {
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+  }
+}
+
+export async function loginWithEmailPassword(
   email: string,
   password: string,
-): AuthUser {
-  const normalized = email.trim().toLowerCase();
-  const users = readUsers();
-  const match = users.find((u) => u.email.toLowerCase() === normalized);
-  if (!match || match.password !== password) {
-    throw new Error("Invalid email or password");
+): Promise<AuthUser> {
+  const result = await api.post<LoginResult>("/api/auth/login", {
+    email,
+    password,
+  });
+  setSession(result.user, result.token);
+  return result.user;
+}
+
+export async function fetchCurrentUser(): Promise<AuthUser | null> {
+  const token = getAuthToken();
+  if (!token) return null;
+  try {
+    const user = await api.get<AuthUser>("/api/auth/me");
+    setSession(user, token);
+    return user;
+  } catch {
+    setSession(null);
+    return null;
   }
-  const publicUser = toPublic(match);
-  setSessionUser(publicUser);
-  return publicUser;
 }
 
 export function logoutSession() {
-  setSessionUser(null);
+  setSession(null);
 }
-
-export { DEFAULT_ADMIN };

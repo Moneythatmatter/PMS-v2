@@ -18,4 +18,6 @@ export {
 export { ModuleStatusPill } from "./ModuleStatusPill";
 export { ModulePageShell } from "./ModulePageShell";
 export { ModuleDataTable } from "./ModuleDataTable";
+export { ModuleSelectionBar } from "./ModuleSelectionBar";
+export type { ModuleSelectionAction } from "./ModuleSelectionBar";
 export { ModuleListPage } from "./ModuleListPage";

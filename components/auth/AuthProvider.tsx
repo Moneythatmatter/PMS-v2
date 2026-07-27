@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { AuthUser } from "@/lib/auth";
 import {
+  fetchCurrentUser,
   getSessionUser,
   loginWithEmailPassword,
   logoutSession,
@@ -29,12 +30,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setUser(getSessionUser());
-    setLoading(false);
+    let cancelled = false;
+    (async () => {
+      const cached = getSessionUser();
+      if (cached) setUser(cached);
+      const fresh = await fetchCurrentUser();
+      if (!cancelled) {
+        setUser(fresh);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const next = loginWithEmailPassword(email, password);
+    const next = await loginWithEmailPassword(email, password);
     setUser(next);
     return next;
   }, []);

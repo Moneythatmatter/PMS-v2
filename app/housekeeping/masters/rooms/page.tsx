@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
+import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 
 const ROOM_CATEGORIES = ["Standard", "Deluxe", "Executive Suite", "Presidential Suite"];
 const BED_TYPES = ["King", "Queen", "Twin", "Single"];
@@ -21,6 +22,7 @@ export default function RoomMasterConfig() {
 
   const [activeTab, setActiveTab] = useState<"floorplan" | "list">("floorplan");
   const [selectedRoomNo, setSelectedRoomNo] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
 
   // Form Fields: New Room
@@ -224,10 +226,39 @@ export default function RoomMasterConfig() {
         </div>
       ) : (
         /* Standard Database Table directory list */
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="space-y-2">
+          <ModuleSelectionBar
+            count={selectedIds.size}
+            noun="room"
+            onClear={() => setSelectedIds(new Set())}
+            actions={[
+              {
+                label: "Configure",
+                icon: <Eye className="h-3.5 w-3.5" />,
+                onClick: () => {
+                  const firstId = Array.from(selectedIds)[0];
+                  if (firstId) setSelectedRoomNo(firstId);
+                },
+              },
+            ]}
+          />
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
               <tr>
+                <th className="w-10 px-5 py-3">
+                  <input
+                    type="checkbox"
+                    checked={rooms.length > 0 && rooms.every((room) => selectedIds.has(room.roomNo))}
+                    onChange={() => {
+                      const allIds = rooms.map((room) => room.roomNo);
+                      const allSelected = allIds.every((id) => selectedIds.has(id));
+                      setSelectedIds(allSelected ? new Set() : new Set(allIds));
+                    }}
+                    className="rounded border-slate-300"
+                    aria-label="Select all"
+                  />
+                </th>
                 <th className="px-5 py-3">Room</th>
                 <th className="px-5 py-3">Category</th>
                 <th className="px-5 py-3">Bed Type</th>
@@ -235,7 +266,6 @@ export default function RoomMasterConfig() {
                 <th className="px-5 py-3">Max Occ</th>
                 <th className="px-5 py-3">Facilities</th>
                 <th className="px-5 py-3">PMS Status</th>
-                <th className="px-5 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -243,8 +273,25 @@ export default function RoomMasterConfig() {
                 <tr
                   key={room.roomNo}
                   onClick={() => setSelectedRoomNo(room.roomNo)}
-                  className="hover:bg-slate-50/50 cursor-pointer"
+                  className={cn(
+                    "hover:bg-slate-50/50 cursor-pointer",
+                    selectedIds.has(room.roomNo) && "bg-emerald-50/40",
+                  )}
                 >
+                  <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(room.roomNo)}
+                      onChange={() => {
+                        const next = new Set(selectedIds);
+                        if (next.has(room.roomNo)) next.delete(room.roomNo);
+                        else next.add(room.roomNo);
+                        setSelectedIds(next);
+                      }}
+                      className="rounded border-slate-300"
+                      aria-label={`Select room ${room.roomNo}`}
+                    />
+                  </td>
                   <td className="px-5 py-4 font-bold text-slate-800">Room {room.roomNo}</td>
                   <td className="px-5 py-4 text-slate-500 font-medium">{room.category}</td>
                   <td className="px-5 py-4 text-slate-500">{room.bedType}</td>
@@ -265,15 +312,11 @@ export default function RoomMasterConfig() {
                       {room.status}
                     </span>
                   </td>
-                  <td className="px-5 py-4 text-right">
-                    <button className="text-emerald-700 font-semibold hover:underline">
-                      Configure
-                    </button>
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

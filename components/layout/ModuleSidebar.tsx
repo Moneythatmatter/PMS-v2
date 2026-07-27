@@ -51,6 +51,25 @@ import {
   Wine,
   Shield,
   Percent,
+  Boxes,
+  Layers,
+  ShoppingBag,
+  PackageCheck,
+  ClipboardCheck,
+  ShieldCheck,
+  RotateCcw,
+  ArrowUpRight,
+  Trash2,
+  SlidersHorizontal,
+  Truck,
+  CheckSquare,
+  Database,
+  Ruler,
+  Package,
+  ShoppingCart,
+  Award,
+  FileSpreadsheet,
+  CheckCircle2,
 } from "lucide-react";
 import type { ModuleNavItem } from "@/app/data/types";
 import { cn } from "@/lib/utils";
@@ -99,6 +118,25 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   wine: Wine,
   shield: Shield,
   percent: Percent,
+  boxes: Boxes,
+  layers: Layers,
+  "shopping-bag": ShoppingBag,
+  "package-check": PackageCheck,
+  "clipboard-check": ClipboardCheck,
+  "shield-check": ShieldCheck,
+  "rotate-ccw": RotateCcw,
+  "arrow-up-right": ArrowUpRight,
+  "trash-2": Trash2,
+  sliders: SlidersHorizontal,
+  truck: Truck,
+  "check-square": CheckSquare,
+  database: Database,
+  ruler: Ruler,
+  package: Package,
+  "shopping-cart": ShoppingCart,
+  award: Award,
+  "file-spreadsheet": FileSpreadsheet,
+  "check-circle": CheckCircle2,
 };
 
 interface ModuleSidebarProps {
@@ -266,8 +304,8 @@ function CollapsedChildMenu({
                           : "text-slate-300 hover:bg-white/5 hover:text-white",
                       )}
                     >
-                      <ChildIcon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{child.label}</span>
+                      <ChildIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      <span className="min-w-0 flex-1 leading-snug">{child.label}</span>
                     </Link>
                   </li>
                 );
@@ -389,7 +427,7 @@ function SidebarNav({
                     )}
                   </button>
                   {isExpanded && isGroupExpanded && item.children && (
-                    <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-slate-700 pl-2">
+                    <ul className="ml-3 mt-1 space-y-1 border-l border-slate-700 pl-2">
                       {item.children.map((child) => {
                         const ChildIcon = iconMap[child.icon] ?? LayoutGrid;
                         const childActive = isItemActive(pathname, child.href);
@@ -400,14 +438,14 @@ function SidebarNav({
                               href={child.href}
                               onClick={onNavigate}
                               className={cn(
-                                "flex min-w-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors",
+                                "flex min-w-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
                                 childActive
                                   ? "bg-emerald-700 text-white"
                                   : "text-slate-400 hover:bg-white/5 hover:text-white",
                               )}
                             >
                               <ChildIcon className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate" title={child.label}>{child.label}</span>
+                              <span className="min-w-0 flex-1 leading-snug">{child.label}</span>
                             </Link>
                           </li>
                         );
@@ -529,7 +567,7 @@ export function ModuleSidebar({ title, subtitle = "Module menu", items }: Module
       <aside
         className={cn(
           "sidebar-scroll relative z-20 hidden h-screen shrink-0 flex-col overflow-x-hidden border-r border-slate-800 bg-black transition-[width] duration-200 ease-in-out lg:flex",
-          collapsed ? "w-16" : "w-64",
+          collapsed ? "w-16" : "w-72",
         )}
       >
         <SidebarNav

@@ -12,24 +12,6 @@ function formatCell(value: string | number | undefined, format?: "currency" | "p
   return String(value);
 }
 
-function rowKey(row: ModuleRow, index: number): string {
-  const candidates = [
-    row.id,
-    row.bookingId,
-    row.invoiceNo,
-    row.room,
-    row.roomNo,
-    row.metric,
-    row.guest,
-  ];
-  for (const value of candidates) {
-    if (value !== undefined && value !== null && String(value).length > 0) {
-      return `${String(value)}-${index}`;
-    }
-  }
-  return `row-${index}`;
-}
-
 export function ModuleDataTable({
   columns,
   rows,
@@ -38,15 +20,42 @@ export function ModuleDataTable({
   statusMap,
   emptyMessage = "No records match your search or filters.",
   actionColumn,
+  renderMobileCard,
+  selectedIds,
+  onSelectionChange,
+  getRowId = (row: any) => String(row.id),
 }: {
   columns: ModuleColumn[];
-  rows: ModuleRow[];
-  onRowClick?: (row: ModuleRow) => void;
+  rows: ModuleRow[] | any[];
+  onRowClick?: (row: any) => void;
   statusStyle?: ModuleStatusStyle;
   statusMap?: Record<string, string>;
   emptyMessage?: string;
-  actionColumn?: (row: ModuleRow) => React.ReactNode;
+  /** @deprecated Prefer selection + ModuleSelectionBar */
+  actionColumn?: (row: any) => React.ReactNode;
+  renderMobileCard?: (row: any) => React.ReactNode;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
+  getRowId?: (row: any) => string;
 }) {
+  const selectable = Boolean(selectedIds && onSelectionChange);
+  const selected = selectedIds ?? new Set<string>();
+  const rowIds = rows.map(getRowId);
+  const allSelected = selectable && rows.length > 0 && rowIds.every((id) => selected.has(id));
+
+  const toggleAll = () => {
+    if (!onSelectionChange) return;
+    onSelectionChange(allSelected ? new Set() : new Set(rowIds));
+  };
+
+  const toggleOne = (id: string) => {
+    if (!onSelectionChange) return;
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectionChange(next);
+  };
+
   if (rows.length === 0) {
     return <p className="py-8 text-center text-sm text-slate-500">{emptyMessage}</p>;
   }
@@ -56,93 +65,147 @@ export function ModuleDataTable({
   return (
     <>
       <div className="space-y-3 md:hidden">
-        {rows.map((row, index) => (
-          <div
-            key={rowKey(row, index)}
-            role={onRowClick ? "button" : undefined}
-            tabIndex={onRowClick ? 0 : undefined}
-            onClick={() => onRowClick?.(row)}
-            onKeyDown={(e) => {
-              if (!onRowClick) return;
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onRowClick(row);
-              }
-            }}
-            className={cn(
-              "w-full rounded-xl border border-slate-100 p-4 text-left transition-colors",
-              onRowClick && "cursor-pointer hover:border-slate-200 hover:bg-slate-50/50",
-            )}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <span className="font-medium text-slate-900">
-                {formatCell(row[primaryKey], columns[0]?.format)}
-              </span>
-              {row.status && (
-                <ModuleStatusPill status={String(row.status)} style={statusStyle} statusMap={statusMap} />
-              )}
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-1 text-xs text-slate-500">
-              {columns.slice(1, 4).map((col) => (
-                <div key={col.key}>
-                  <span className="text-slate-400">{col.header}: </span>
-                  {formatCell(row[col.key], col.format)}
+        {rows.map((row) => {
+          const id = getRowId(row);
+          return (
+            <div
+              key={id}
+              onClick={() => onRowClick?.(row)}
+              className="w-full cursor-pointer rounded-xl border border-slate-200 bg-white p-4 text-left shadow-2xs transition-colors hover:border-slate-300"
+            >
+              {selectable && (
+                <div className="mb-2" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(id)}
+                    onChange={() => toggleOne(id)}
+                    className="rounded border-slate-300"
+                    aria-label={`Select ${id}`}
+                  />
                 </div>
-              ))}
-            </div>
-            {actionColumn && (
-              <div className="mt-3" onClick={(e) => e.stopPropagation()}>
-                {actionColumn(row)}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[680px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-500">
-              {columns.map((col) => (
-                <th key={col.key} className="pb-3 pr-4 last:pr-0">
-                  {col.header}
-                </th>
-              ))}
-              {actionColumn && <th className="pb-3 pr-0">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => (
-              <tr
-                key={rowKey(row, index)}
-                onClick={() => onRowClick?.(row)}
-                className={cn(
-                  "border-b border-slate-50 transition-colors last:border-0",
-                  onRowClick && "cursor-pointer hover:bg-slate-50/80",
-                )}
-              >
-                {columns.map((col, idx) => (
-                  <td key={col.key} className="py-3.5 pr-4 last:pr-0">
-                    {col.key === "status" && row.status ? (
+              )}
+              {renderMobileCard ? (
+                renderMobileCard(row)
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-medium text-slate-900">
+                      {columns[0]?.render
+                        ? columns[0].render(row)
+                        : formatCell(row[primaryKey], columns[0]?.format)}
+                    </span>
+                    {row.status && (
                       <ModuleStatusPill
                         status={String(row.status)}
                         style={statusStyle}
                         statusMap={statusMap}
                       />
-                    ) : (
-                      <span className={cn(idx === 0 && "font-medium text-slate-900")}>
-                        {formatCell(row[col.key], col.format)}
-                      </span>
                     )}
-                  </td>
-                ))}
-                {actionColumn && (
-                  <td className="py-3.5" onClick={(e) => e.stopPropagation()}>
-                    {actionColumn(row)}
-                  </td>
-                )}
-              </tr>
-            ))}
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-1 text-xs text-slate-500">
+                    {columns.slice(1, 4).map((col) => (
+                      <div key={col.key}>
+                        <span className="text-slate-400">{col.header}: </span>
+                        {col.render ? col.render(row) : formatCell(row[col.key], col.format)}
+                      </div>
+                    ))}
+                  </div>
+                  {actionColumn && <div className="mt-3">{actionColumn(row)}</div>}
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-xs md:block">
+        <table className="w-full min-w-[680px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50/70 text-xs font-bold uppercase tracking-wider text-slate-500">
+              {selectable && (
+                <th className="w-10 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    className="rounded border-slate-300"
+                    aria-label="Select all"
+                  />
+                </th>
+              )}
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  className={cn(
+                    "px-4 py-3",
+                    col.align === "right" && "text-right",
+                    col.align === "center" && "text-center",
+                    col.className,
+                  )}
+                >
+                  {col.header}
+                </th>
+              ))}
+              {actionColumn && <th className="px-4 py-3 text-right">Actions</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+            {rows.map((row) => {
+              const id = getRowId(row);
+              return (
+                <tr
+                  key={id}
+                  onClick={() => onRowClick?.(row)}
+                  className={cn(
+                    "transition-colors",
+                    onRowClick && "cursor-pointer hover:bg-slate-50/80",
+                    selected.has(id) && "bg-emerald-50/40",
+                  )}
+                >
+                  {selectable && (
+                    <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(id)}
+                        onChange={() => toggleOne(id)}
+                        className="rounded border-slate-300"
+                        aria-label={`Select ${id}`}
+                      />
+                    </td>
+                  )}
+                  {columns.map((col, idx) => (
+                    <td
+                      key={col.key}
+                      className={cn(
+                        "px-4 py-3.5",
+                        col.align === "right" && "text-right",
+                        col.align === "center" && "text-center",
+                        col.className,
+                      )}
+                    >
+                      {col.render ? (
+                        col.render(row)
+                      ) : col.key === "status" && row.status ? (
+                        <ModuleStatusPill
+                          status={String(row.status)}
+                          style={statusStyle}
+                          statusMap={statusMap}
+                        />
+                      ) : (
+                        <span className={cn(idx === 0 && "font-medium text-slate-900")}>
+                          {formatCell(row[col.key], col.format)}
+                        </span>
+                      )}
+                    </td>
+                  ))}
+                  {actionColumn && (
+                    <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                      {actionColumn(row)}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

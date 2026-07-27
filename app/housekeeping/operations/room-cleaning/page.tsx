@@ -29,6 +29,7 @@ import {
   StatMiniCard,
 } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
+import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 
 export default function RoomCleaningOperations() {
   const {
@@ -54,6 +55,7 @@ export default function RoomCleaningOperations() {
   const [priority, setPriority] = useState<"Low" | "Medium" | "High">("Medium");
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Selected room details
   const selectedRoom = useMemo(() => {
@@ -218,6 +220,25 @@ export default function RoomCleaningOperations() {
         ]}
         activeStatusTab={statusFilter}
         onStatusTabChange={setStatusFilter}
+        selectionBar={
+          viewMode === "list" ? (
+            <ModuleSelectionBar
+              count={selectedIds.size}
+              noun="room"
+              onClear={() => setSelectedIds(new Set())}
+              actions={[
+                {
+                  label: "Open Controls",
+                  icon: <Eye className="h-3.5 w-3.5" />,
+                  onClick: () => {
+                    const firstId = Array.from(selectedIds)[0];
+                    if (firstId) handleRoomClick(firstId);
+                  },
+                },
+              ]}
+            />
+          ) : null
+        }
       />
 
       {/* Slide-over Filter Drawer */}
@@ -337,13 +358,28 @@ export default function RoomCleaningOperations() {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
               <tr>
+                <th className="w-10 px-5 py-3">
+                  <input
+                    type="checkbox"
+                    checked={
+                      filteredRooms.length > 0 &&
+                      filteredRooms.every((room) => selectedIds.has(room.roomNo))
+                    }
+                    onChange={() => {
+                      const allIds = filteredRooms.map((room) => room.roomNo);
+                      const allSelected = allIds.every((id) => selectedIds.has(id));
+                      setSelectedIds(allSelected ? new Set() : new Set(allIds));
+                    }}
+                    className="rounded border-slate-300"
+                    aria-label="Select all"
+                  />
+                </th>
                 <th className="px-5 py-3">Room</th>
                 <th className="px-5 py-3">Category</th>
                 <th className="px-5 py-3">Floor</th>
                 <th className="px-5 py-3">Housekeeper</th>
                 <th className="px-5 py-3">PMS Status</th>
                 <th className="px-5 py-3">Active timer</th>
-                <th className="px-5 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -351,8 +387,25 @@ export default function RoomCleaningOperations() {
                 <tr
                   key={room.roomNo}
                   onClick={() => handleRoomClick(room.roomNo)}
-                  className="hover:bg-slate-50/50 cursor-pointer"
+                  className={cn(
+                    "hover:bg-slate-50/50 cursor-pointer",
+                    selectedIds.has(room.roomNo) && "bg-emerald-50/40",
+                  )}
                 >
+                  <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(room.roomNo)}
+                      onChange={() => {
+                        const next = new Set(selectedIds);
+                        if (next.has(room.roomNo)) next.delete(room.roomNo);
+                        else next.add(room.roomNo);
+                        setSelectedIds(next);
+                      }}
+                      className="rounded border-slate-300"
+                      aria-label={`Select room ${room.roomNo}`}
+                    />
+                  </td>
                   <td className="px-5 py-3.5 font-bold text-slate-800">Room {room.roomNo}</td>
                   <td className="px-5 py-3.5 text-slate-500">{room.category}</td>
                   <td className="px-5 py-3.5 text-slate-500">{room.floor}</td>
@@ -381,11 +434,6 @@ export default function RoomCleaningOperations() {
                     ) : (
                       "—"
                     )}
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    <button className="text-emerald-700 font-semibold hover:text-emerald-800">
-                      Open Controls
-                    </button>
                   </td>
                 </tr>
               ))}

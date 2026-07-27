@@ -34,6 +34,7 @@ import {
   StatMiniCard,
 } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
+import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import {
   INITIAL_STAFF_RECORDS,
   INITIAL_SHIFT_RECORDS,
@@ -71,6 +72,11 @@ export default function StaffWorkforceMastersPage() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [shiftFilter, setShiftFilter] = useState("all");
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [activeTab]);
 
   // Drawer View State
   const [selectedStaffItem, setSelectedStaffItem] = useState<StaffMasterRecord | null>(null);
@@ -375,6 +381,106 @@ export default function StaffWorkforceMastersPage() {
 
   if (!isMounted) return null;
 
+  const firstSelectedStaff = filteredStaff.find((s) => selectedIds.has(s.id));
+  const firstSelectedShift = filteredShifts.find((sh) => selectedIds.has(sh.id));
+
+  const selectionBarActions = (() => {
+    switch (activeTab) {
+      case "staff":
+        return [
+          {
+            label: "View",
+            icon: <Eye className="h-3.5 w-3.5" />,
+            onClick: () => {
+              if (firstSelectedStaff) setSelectedStaffItem(firstSelectedStaff);
+            },
+          },
+          {
+            label: "Edit",
+            icon: <Edit2 className="h-3.5 w-3.5" />,
+            onClick: () => {
+              if (firstSelectedStaff) setEditStaffItem(firstSelectedStaff);
+            },
+          },
+          {
+            label: firstSelectedStaff?.status === "Active" ? "Deactivate" : "Activate",
+            onClick: () => {
+              if (firstSelectedStaff) handleToggleStatus(firstSelectedStaff.id, "staff");
+            },
+          },
+        ];
+      case "shifts":
+        return [
+          {
+            label: "View",
+            icon: <Eye className="h-3.5 w-3.5" />,
+            onClick: () => {
+              if (firstSelectedShift) setSelectedShiftItem(firstSelectedShift);
+            },
+          },
+          {
+            label: "Edit",
+            icon: <Edit2 className="h-3.5 w-3.5" />,
+            onClick: () => {
+              if (firstSelectedShift) setEditShiftItem(firstSelectedShift);
+            },
+          },
+          {
+            label: "Deactivate",
+            onClick: () => {
+              if (firstSelectedShift) handleToggleStatus(firstSelectedShift.id, "shifts");
+            },
+          },
+        ];
+      case "roles":
+        return [
+          {
+            label: "View",
+            icon: <Eye className="h-3.5 w-3.5" />,
+            onClick: () => {
+              const first = filteredRoles.find((r) => selectedIds.has(r.id));
+              if (first) setSelectedRoleItem(first);
+            },
+          },
+        ];
+      case "teams":
+        return [
+          {
+            label: "View",
+            icon: <Eye className="h-3.5 w-3.5" />,
+            onClick: () => {
+              const first = filteredTeams.find((t) => selectedIds.has(t.id));
+              if (first) setSelectedTeamItem(first);
+            },
+          },
+        ];
+      case "rules":
+        return [
+          {
+            label: "View",
+            icon: <Eye className="h-3.5 w-3.5" />,
+            onClick: () => {
+              const first = filteredRules.find((rl) => selectedIds.has(rl.id));
+              if (first) setSelectedRuleItem(first);
+            },
+          },
+        ];
+      default:
+        return [];
+    }
+  })();
+
+  const selectionNoun =
+    activeTab === "staff"
+      ? "staff member"
+      : activeTab === "shifts"
+      ? "shift"
+      : activeTab === "roles"
+      ? "role"
+      : activeTab === "teams"
+      ? "team"
+      : "rule";
+
   return (
     <div className="space-y-5 select-none">
       {/* Toast Notification */}
@@ -474,6 +580,14 @@ export default function StaffWorkforceMastersPage() {
         ]}
         activeStatusTab={statusFilter}
         onStatusTabChange={setStatusFilter}
+        selectionBar={
+          <ModuleSelectionBar
+            count={selectedIds.size}
+            noun={selectionNoun}
+            onClear={() => setSelectedIds(new Set())}
+            actions={selectionBarActions}
+          />
+        }
       />
 
       {/* Slide-over Filter Drawer */}
@@ -546,6 +660,19 @@ export default function StaffWorkforceMastersPage() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 z-10">
+                  <th className="w-10 px-3.5 py-3">
+                    <input
+                      type="checkbox"
+                      checked={filteredStaff.length > 0 && filteredStaff.every((s) => selectedIds.has(s.id))}
+                      onChange={() => {
+                        const allIds = filteredStaff.map((s) => s.id);
+                        const allSelected = allIds.every((id) => selectedIds.has(id));
+                        setSelectedIds(allSelected ? new Set() : new Set(allIds));
+                      }}
+                      className="rounded border-slate-300"
+                      aria-label="Select all"
+                    />
+                  </th>
                   <th className="px-3.5 py-3">Employee ID</th>
                   <th className="px-3.5 py-3">Employee Name</th>
                   <th className="px-3.5 py-3">Role</th>
@@ -553,13 +680,32 @@ export default function StaffWorkforceMastersPage() {
                   <th className="px-3.5 py-3">Assigned Shift</th>
                   <th className="px-3.5 py-3">Contact Phone</th>
                   <th className="px-3.5 py-3">Status</th>
-                  <th className="px-3.5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                 {filteredStaff.length > 0 ? (
                   filteredStaff.map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-50/60 transition-colors">
+                    <tr
+                      key={s.id}
+                      className={cn(
+                        "hover:bg-slate-50/60 transition-colors",
+                        selectedIds.has(s.id) && "bg-emerald-50/40",
+                      )}
+                    >
+                      <td className="px-3.5 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(s.id)}
+                          onChange={() => {
+                            const next = new Set(selectedIds);
+                            if (next.has(s.id)) next.delete(s.id);
+                            else next.add(s.id);
+                            setSelectedIds(next);
+                          }}
+                          className="rounded border-slate-300"
+                          aria-label={`Select ${s.employeeName}`}
+                        />
+                      </td>
                       <td className="px-3.5 py-3 font-mono font-bold text-slate-600">{s.employeeId}</td>
                       <td className="px-3.5 py-3">
                         <p className="font-extrabold text-slate-900 leading-tight">{s.employeeName}</p>
@@ -570,34 +716,6 @@ export default function StaffWorkforceMastersPage() {
                       <td className="px-3.5 py-3 text-slate-600 font-normal">{s.assignedShift}</td>
                       <td className="px-3.5 py-3 text-slate-600 font-mono">{s.phone}</td>
                       <td className="px-3.5 py-3">{renderStatusBadge(s.status)}</td>
-                      <td className="px-3.5 py-3 text-right space-x-1.5 whitespace-nowrap">
-                        <Button
-                          variant="outline"
-                          onClick={() => setSelectedStaffItem(s)}
-                          className="py-1 px-2 text-[10px] font-bold text-slate-700 border-slate-200 rounded-lg inline-flex items-center gap-1 hover:bg-slate-100"
-                        >
-                          <Eye className="h-3 w-3 text-slate-500" /> View
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => setEditStaffItem(s)}
-                          className="py-1 px-2 text-[10px] font-bold text-blue-700 border-blue-200 hover:bg-blue-50 rounded-lg inline-flex items-center gap-1"
-                        >
-                          <Edit2 className="h-3 w-3 text-blue-600" /> Edit
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleToggleStatus(s.id, "staff")}
-                          className={cn(
-                            "py-1 px-2 text-[10px] font-bold rounded-lg inline-flex transition-all",
-                            s.status === "Active"
-                              ? "text-slate-600 hover:bg-slate-100 border-slate-200"
-                              : "text-emerald-700 hover:bg-emerald-50 border-emerald-300"
-                          )}
-                        >
-                          {s.status === "Active" ? "Deactivate" : "Activate"}
-                        </Button>
-                      </td>
                     </tr>
                   ))
                 ) : (
@@ -623,6 +741,19 @@ export default function StaffWorkforceMastersPage() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 z-10">
+                  <th className="w-10 px-3.5 py-3">
+                    <input
+                      type="checkbox"
+                      checked={filteredShifts.length > 0 && filteredShifts.every((sh) => selectedIds.has(sh.id))}
+                      onChange={() => {
+                        const allIds = filteredShifts.map((sh) => sh.id);
+                        const allSelected = allIds.every((id) => selectedIds.has(id));
+                        setSelectedIds(allSelected ? new Set() : new Set(allIds));
+                      }}
+                      className="rounded border-slate-300"
+                      aria-label="Select all"
+                    />
+                  </th>
                   <th className="px-3.5 py-3">Shift Code</th>
                   <th className="px-3.5 py-3">Shift Name</th>
                   <th className="px-3.5 py-3">Start Time</th>
@@ -630,13 +761,32 @@ export default function StaffWorkforceMastersPage() {
                   <th className="px-3.5 py-3">Duration</th>
                   <th className="px-3.5 py-3">Break Allowance</th>
                   <th className="px-3.5 py-3">Status</th>
-                  <th className="px-3.5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                 {filteredShifts.length > 0 ? (
                   filteredShifts.map((sh) => (
-                    <tr key={sh.id} className="hover:bg-slate-50/60 transition-colors">
+                    <tr
+                      key={sh.id}
+                      className={cn(
+                        "hover:bg-slate-50/60 transition-colors",
+                        selectedIds.has(sh.id) && "bg-emerald-50/40",
+                      )}
+                    >
+                      <td className="px-3.5 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(sh.id)}
+                          onChange={() => {
+                            const next = new Set(selectedIds);
+                            if (next.has(sh.id)) next.delete(sh.id);
+                            else next.add(sh.id);
+                            setSelectedIds(next);
+                          }}
+                          className="rounded border-slate-300"
+                          aria-label={`Select ${sh.shiftName}`}
+                        />
+                      </td>
                       <td className="px-3.5 py-3 font-mono font-bold text-slate-600">{sh.shiftCode}</td>
                       <td className="px-3.5 py-3">
                         <p className="font-extrabold text-slate-900 leading-tight">{sh.shiftName}</p>
@@ -647,29 +797,6 @@ export default function StaffWorkforceMastersPage() {
                       <td className="px-3.5 py-3 text-slate-600 font-normal">{sh.duration}</td>
                       <td className="px-3.5 py-3 text-slate-600 font-normal">{sh.breakDuration}</td>
                       <td className="px-3.5 py-3">{renderStatusBadge(sh.status)}</td>
-                      <td className="px-3.5 py-3 text-right space-x-1.5 whitespace-nowrap">
-                        <Button
-                          variant="outline"
-                          onClick={() => setSelectedShiftItem(sh)}
-                          className="py-1 px-2 text-[10px] font-bold text-slate-700 border-slate-200 rounded-lg inline-flex items-center gap-1 hover:bg-slate-100"
-                        >
-                          <Eye className="h-3 w-3 text-slate-500" /> View
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => setEditShiftItem(sh)}
-                          className="py-1 px-2 text-[10px] font-bold text-blue-700 border-blue-200 hover:bg-blue-50 rounded-lg inline-flex items-center gap-1"
-                        >
-                          <Edit2 className="h-3 w-3 text-blue-600" /> Edit
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleToggleStatus(sh.id, "shifts")}
-                          className="py-1 px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-100 border-slate-200 rounded-lg inline-flex"
-                        >
-                          Deactivate
-                        </Button>
-                      </td>
                     </tr>
                   ))
                 ) : (
@@ -695,18 +822,50 @@ export default function StaffWorkforceMastersPage() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 z-10">
+                  <th className="w-10 px-3.5 py-3">
+                    <input
+                      type="checkbox"
+                      checked={filteredRoles.length > 0 && filteredRoles.every((r) => selectedIds.has(r.id))}
+                      onChange={() => {
+                        const allIds = filteredRoles.map((r) => r.id);
+                        const allSelected = allIds.every((id) => selectedIds.has(id));
+                        setSelectedIds(allSelected ? new Set() : new Set(allIds));
+                      }}
+                      className="rounded border-slate-300"
+                      aria-label="Select all"
+                    />
+                  </th>
                   <th className="px-3.5 py-3">Role Code</th>
                   <th className="px-3.5 py-3">Role Name</th>
                   <th className="px-3.5 py-3">Department</th>
                   <th className="px-3.5 py-3">Configured Permissions</th>
                   <th className="px-3.5 py-3">Access Tier</th>
                   <th className="px-3.5 py-3">Status</th>
-                  <th className="px-3.5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                 {filteredRoles.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr
+                    key={r.id}
+                    className={cn(
+                      "hover:bg-slate-50/60 transition-colors",
+                      selectedIds.has(r.id) && "bg-emerald-50/40",
+                    )}
+                  >
+                    <td className="px-3.5 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(r.id)}
+                        onChange={() => {
+                          const next = new Set(selectedIds);
+                          if (next.has(r.id)) next.delete(r.id);
+                          else next.add(r.id);
+                          setSelectedIds(next);
+                        }}
+                        className="rounded border-slate-300"
+                        aria-label={`Select ${r.roleName}`}
+                      />
+                    </td>
                     <td className="px-3.5 py-3 font-mono font-bold text-slate-600">{r.roleCode}</td>
                     <td className="px-3.5 py-3 font-extrabold text-slate-900">{r.roleName}</td>
                     <td className="px-3.5 py-3 text-slate-600 font-medium">{r.department}</td>
@@ -721,15 +880,6 @@ export default function StaffWorkforceMastersPage() {
                     </td>
                     <td className="px-3.5 py-3 font-bold text-emerald-700">{r.accessLevel}</td>
                     <td className="px-3.5 py-3">{renderStatusBadge(r.status)}</td>
-                    <td className="px-3.5 py-3 text-right space-x-1.5 whitespace-nowrap">
-                      <Button
-                        variant="outline"
-                        onClick={() => setSelectedRoleItem(r)}
-                        className="py-1 px-2 text-[10px] font-bold text-slate-700 border-slate-200 rounded-lg inline-flex items-center gap-1 hover:bg-slate-100"
-                      >
-                        <Eye className="h-3 w-3 text-slate-500" /> View
-                      </Button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -748,33 +898,56 @@ export default function StaffWorkforceMastersPage() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 z-10">
+                  <th className="w-10 px-3.5 py-3">
+                    <input
+                      type="checkbox"
+                      checked={filteredTeams.length > 0 && filteredTeams.every((t) => selectedIds.has(t.id))}
+                      onChange={() => {
+                        const allIds = filteredTeams.map((t) => t.id);
+                        const allSelected = allIds.every((id) => selectedIds.has(id));
+                        setSelectedIds(allSelected ? new Set() : new Set(allIds));
+                      }}
+                      className="rounded border-slate-300"
+                      aria-label="Select all"
+                    />
+                  </th>
                   <th className="px-3.5 py-3">Team Code</th>
                   <th className="px-3.5 py-3">Team Squad Name</th>
                   <th className="px-3.5 py-3">Supervisor Lead</th>
                   <th className="px-3.5 py-3">Members Count</th>
                   <th className="px-3.5 py-3">Assigned Floors</th>
                   <th className="px-3.5 py-3">Status</th>
-                  <th className="px-3.5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                 {filteredTeams.map((tm) => (
-                  <tr key={tm.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr
+                    key={tm.id}
+                    className={cn(
+                      "hover:bg-slate-50/60 transition-colors",
+                      selectedIds.has(tm.id) && "bg-emerald-50/40",
+                    )}
+                  >
+                    <td className="px-3.5 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(tm.id)}
+                        onChange={() => {
+                          const next = new Set(selectedIds);
+                          if (next.has(tm.id)) next.delete(tm.id);
+                          else next.add(tm.id);
+                          setSelectedIds(next);
+                        }}
+                        className="rounded border-slate-300"
+                        aria-label={`Select ${tm.teamName}`}
+                      />
+                    </td>
                     <td className="px-3.5 py-3 font-mono font-bold text-slate-600">{tm.teamCode}</td>
                     <td className="px-3.5 py-3 font-extrabold text-slate-900">{tm.teamName}</td>
                     <td className="px-3.5 py-3 text-slate-800 font-bold">{tm.supervisor}</td>
                     <td className="px-3.5 py-3 text-emerald-700 font-bold">{tm.membersCount} Staff Members</td>
                     <td className="px-3.5 py-3 text-slate-600 font-normal">{tm.assignedFloors}</td>
                     <td className="px-3.5 py-3">{renderStatusBadge(tm.status)}</td>
-                    <td className="px-3.5 py-3 text-right space-x-1.5 whitespace-nowrap">
-                      <Button
-                        variant="outline"
-                        onClick={() => setSelectedTeamItem(tm)}
-                        className="py-1 px-2 text-[10px] font-bold text-slate-700 border-slate-200 rounded-lg inline-flex items-center gap-1 hover:bg-slate-100"
-                      >
-                        <Eye className="h-3 w-3 text-slate-500" /> View
-                      </Button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -793,6 +966,19 @@ export default function StaffWorkforceMastersPage() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 z-10">
+                  <th className="w-10 px-3.5 py-3">
+                    <input
+                      type="checkbox"
+                      checked={filteredRules.length > 0 && filteredRules.every((rl) => selectedIds.has(rl.id))}
+                      onChange={() => {
+                        const allIds = filteredRules.map((rl) => rl.id);
+                        const allSelected = allIds.every((id) => selectedIds.has(id));
+                        setSelectedIds(allSelected ? new Set() : new Set(allIds));
+                      }}
+                      className="rounded border-slate-300"
+                      aria-label="Select all"
+                    />
+                  </th>
                   <th className="px-3.5 py-3">Rule Code</th>
                   <th className="px-3.5 py-3">Rule Name</th>
                   <th className="px-3.5 py-3">Applicable Shift</th>
@@ -800,12 +986,31 @@ export default function StaffWorkforceMastersPage() {
                   <th className="px-3.5 py-3">Priority</th>
                   <th className="px-3.5 py-3">Max Credit Cap</th>
                   <th className="px-3.5 py-3">Status</th>
-                  <th className="px-3.5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                 {filteredRules.map((rl) => (
-                  <tr key={rl.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr
+                    key={rl.id}
+                    className={cn(
+                      "hover:bg-slate-50/60 transition-colors",
+                      selectedIds.has(rl.id) && "bg-emerald-50/40",
+                    )}
+                  >
+                    <td className="px-3.5 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(rl.id)}
+                        onChange={() => {
+                          const next = new Set(selectedIds);
+                          if (next.has(rl.id)) next.delete(rl.id);
+                          else next.add(rl.id);
+                          setSelectedIds(next);
+                        }}
+                        className="rounded border-slate-300"
+                        aria-label={`Select ${rl.ruleName}`}
+                      />
+                    </td>
                     <td className="px-3.5 py-3 font-mono font-bold text-slate-600">{rl.ruleCode}</td>
                     <td className="px-3.5 py-3 font-extrabold text-slate-900">{rl.ruleName}</td>
                     <td className="px-3.5 py-3 text-slate-600 font-medium">{rl.applicableShift}</td>
@@ -817,15 +1022,6 @@ export default function StaffWorkforceMastersPage() {
                     </td>
                     <td className="px-3.5 py-3 text-emerald-700 font-bold">{rl.maxRoomsPerStaff} Credits / Shift</td>
                     <td className="px-3.5 py-3">{renderStatusBadge(rl.status)}</td>
-                    <td className="px-3.5 py-3 text-right space-x-1.5 whitespace-nowrap">
-                      <Button
-                        variant="outline"
-                        onClick={() => setSelectedRuleItem(rl)}
-                        className="py-1 px-2 text-[10px] font-bold text-slate-700 border-slate-200 rounded-lg inline-flex items-center gap-1 hover:bg-slate-100"
-                      >
-                        <Eye className="h-3 w-3 text-slate-500" /> View
-                      </Button>
-                    </td>
                   </tr>
                 ))}
               </tbody>

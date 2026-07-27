@@ -34,6 +34,7 @@ import {
   StatMiniCard,
 } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
+import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import {
   INITIAL_HOUSEKEEPING_AUDIT_LOGS,
   HousekeepingAuditEntry,
@@ -57,6 +58,7 @@ export default function HistoryAuditLogsPage() {
   const [severityFilter, setSeverityFilter] = useState("all");
   const [actionTypeFilter, setActionTypeFilter] = useState("all");
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Selected Log Drawer State
   const [selectedLog, setSelectedLog] = useState<HousekeepingAuditEntry | null>(null);
@@ -212,6 +214,23 @@ export default function HistoryAuditLogsPage() {
         ]}
         activeStatusTab={activeCategoryTab}
         onStatusTabChange={setActiveCategoryTab}
+        selectionBar={
+          <ModuleSelectionBar
+            count={selectedIds.size}
+            noun="log"
+            onClear={() => setSelectedIds(new Set())}
+            actions={[
+              {
+                label: "Full Log",
+                icon: <Eye className="h-3.5 w-3.5" />,
+                onClick: () => {
+                  const first = filteredLogs.find((log) => selectedIds.has(log.id));
+                  if (first) setSelectedLog(first);
+                },
+              },
+            ]}
+          />
+        }
       />
 
       {/* Slide-over Filter Drawer */}
@@ -262,6 +281,19 @@ export default function HistoryAuditLogsPage() {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 z-10">
+                <th className="w-10 px-3.5 py-3">
+                  <input
+                    type="checkbox"
+                    checked={filteredLogs.length > 0 && filteredLogs.every((log) => selectedIds.has(log.id))}
+                    onChange={() => {
+                      const allIds = filteredLogs.map((log) => log.id);
+                      const allSelected = allIds.every((id) => selectedIds.has(id));
+                      setSelectedIds(allSelected ? new Set() : new Set(allIds));
+                    }}
+                    className="rounded border-slate-300"
+                    aria-label="Select all"
+                  />
+                </th>
                 <th className="px-3.5 py-3">Audit Code / Timestamp</th>
                 <th className="px-3.5 py-3">Actor / User</th>
                 <th className="px-3.5 py-3">Category</th>
@@ -269,13 +301,32 @@ export default function HistoryAuditLogsPage() {
                 <th className="px-3.5 py-3">Target Entity</th>
                 <th className="px-3.5 py-3">State Change (Old ➔ New)</th>
                 <th className="px-3.5 py-3">Severity</th>
-                <th className="px-3.5 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
               {filteredLogs.length > 0 ? (
                 filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr
+                    key={log.id}
+                    className={cn(
+                      "hover:bg-slate-50/60 transition-colors",
+                      selectedIds.has(log.id) && "bg-emerald-50/40",
+                    )}
+                  >
+                    <td className="px-3.5 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(log.id)}
+                        onChange={() => {
+                          const next = new Set(selectedIds);
+                          if (next.has(log.id)) next.delete(log.id);
+                          else next.add(log.id);
+                          setSelectedIds(next);
+                        }}
+                        className="rounded border-slate-300"
+                        aria-label={`Select ${log.auditCode}`}
+                      />
+                    </td>
                     <td className="px-3.5 py-3">
                       <p className="font-mono font-bold text-slate-700">{log.auditCode}</p>
                       <p className="text-[10px] text-slate-400 font-normal">{log.timestamp}</p>
@@ -296,15 +347,6 @@ export default function HistoryAuditLogsPage() {
                       <span className="font-bold text-slate-800 ml-1">{log.newValue}</span>
                     </td>
                     <td className="px-3.5 py-3">{renderSeverityBadge(log.severity)}</td>
-                    <td className="px-3.5 py-3 text-right whitespace-nowrap">
-                      <Button
-                        variant="outline"
-                        onClick={() => setSelectedLog(log)}
-                        className="py-1 px-2 text-[10px] font-bold text-slate-700 border-slate-200 rounded-lg inline-flex items-center gap-1 hover:bg-slate-100"
-                      >
-                        <Eye className="h-3 w-3 text-slate-500" /> Full Log
-                      </Button>
-                    </td>
                   </tr>
                 ))
               ) : (

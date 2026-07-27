@@ -42,6 +42,7 @@ import {
   StatMiniCard,
 } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
+import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import {
   MASTER_CATEGORIES_DATA,
   INITIAL_MASTER_RECORDS,
@@ -71,6 +72,7 @@ export default function HousekeepingMastersPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Drawers
   const [selectedRecord, setSelectedRecord] = useState<MasterRecord | null>(null);
@@ -453,6 +455,33 @@ export default function HousekeepingMastersPage() {
               ]}
               activeStatusTab={statusFilter}
               onStatusTabChange={setStatusFilter}
+              selectionBar={
+                <ModuleSelectionBar
+                  count={selectedIds.size}
+                  noun="record"
+                  onClear={() => setSelectedIds(new Set())}
+                  actions={[
+                    {
+                      label: "Details",
+                      icon: <Eye className="h-3.5 w-3.5" />,
+                      onClick: () => {
+                        const first = filteredRecords.find((rec) => selectedIds.has(rec.id));
+                        if (first) setSelectedRecord(first);
+                      },
+                    },
+                    {
+                      label: (() => {
+                        const first = filteredRecords.find((rec) => selectedIds.has(rec.id));
+                        return first?.status === "Active" ? "Deactivate" : "Activate";
+                      })(),
+                      onClick: () => {
+                        const first = filteredRecords.find((rec) => selectedIds.has(rec.id));
+                        if (first) handleToggleRecordStatus(first.id);
+                      },
+                    },
+                  ]}
+                />
+              }
             />
 
             {/* Slide-over Filter Drawer */}
@@ -508,13 +537,25 @@ export default function HousekeepingMastersPage() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 z-10">
+                    <th className="w-10 px-3.5 py-3">
+                      <input
+                        type="checkbox"
+                        checked={filteredRecords.length > 0 && filteredRecords.every((rec) => selectedIds.has(rec.id))}
+                        onChange={() => {
+                          const allIds = filteredRecords.map((rec) => rec.id);
+                          const allSelected = allIds.every((id) => selectedIds.has(id));
+                          setSelectedIds(allSelected ? new Set() : new Set(allIds));
+                        }}
+                        className="rounded border-slate-300"
+                        aria-label="Select all"
+                      />
+                    </th>
                     <th className="px-3.5 py-3">Code</th>
                     <th className="px-3.5 py-3">Master Name / Subcategory</th>
                     <th className="px-3.5 py-3">Category Group</th>
                     <th className="px-3.5 py-3">Status</th>
                     <th className="px-3.5 py-3">Last Updated</th>
                     <th className="px-3.5 py-3">Updated By</th>
-                    <th className="px-3.5 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
@@ -525,7 +566,27 @@ export default function HousekeepingMastersPage() {
                       const isInactive = rec.status === "Inactive";
 
                       return (
-                        <tr key={rec.id} className="hover:bg-slate-50/60 transition-colors">
+                        <tr
+                          key={rec.id}
+                          className={cn(
+                            "hover:bg-slate-50/60 transition-colors",
+                            selectedIds.has(rec.id) && "bg-emerald-50/40",
+                          )}
+                        >
+                          <td className="px-3.5 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(rec.id)}
+                              onChange={() => {
+                                const next = new Set(selectedIds);
+                                if (next.has(rec.id)) next.delete(rec.id);
+                                else next.add(rec.id);
+                                setSelectedIds(next);
+                              }}
+                              className="rounded border-slate-300"
+                              aria-label={`Select ${rec.code}`}
+                            />
+                          </td>
                           <td className="px-3.5 py-3 font-mono font-bold text-slate-600">{rec.code}</td>
                           <td className="px-3.5 py-3">
                             <p className="font-extrabold text-slate-900 leading-tight">{rec.name}</p>
@@ -550,34 +611,12 @@ export default function HousekeepingMastersPage() {
                           </td>
                           <td className="px-3.5 py-3 text-slate-500 font-normal">{rec.lastUpdated}</td>
                           <td className="px-3.5 py-3 text-slate-600 font-medium">{rec.updatedBy}</td>
-                          <td className="px-3.5 py-3 text-right space-x-1.5 whitespace-nowrap">
-                            <Button
-                              variant="outline"
-                              onClick={() => setSelectedRecord(rec)}
-                              className="py-1 px-2 text-[10px] font-bold text-slate-700 border-slate-200 rounded-lg flex items-center gap-1 inline-flex hover:bg-slate-100"
-                            >
-                              <Eye className="h-3 w-3 text-slate-500" /> Details
-                            </Button>
-
-                            <Button
-                              variant="outline"
-                              onClick={() => handleToggleRecordStatus(rec.id)}
-                              className={cn(
-                                "py-1 px-2 text-[10px] font-bold rounded-lg inline-flex transition-all",
-                                isActive
-                                  ? "text-slate-600 hover:bg-slate-100 border-slate-200"
-                                  : "text-emerald-700 hover:bg-emerald-50 border-emerald-300"
-                              )}
-                            >
-                              {isActive ? "Deactivate" : "Activate"}
-                            </Button>
-                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-slate-400 font-medium">
+                      <td colSpan={8} className="px-4 py-8 text-center text-slate-400 font-medium">
                         No master records match your search criteria.
                       </td>
                     </tr>
