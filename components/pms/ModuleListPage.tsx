@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, Map, Table2, Trash2 } from "lucide-react";
+import { Download, Map, Pencil, Table2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import {

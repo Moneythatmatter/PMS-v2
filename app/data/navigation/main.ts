@@ -7,7 +7,7 @@ export const navItems: NavItem[] = [
   { label: "Housekeeping", href: "/housekeeping", icon: "sparkles" },
   { label: "Purchase & Stores", href: "/purchase-stores", icon: "package" },
   { label: "Human Resource", href: "#", icon: "users" },
-  { label: "Accounts", href: "#", icon: "calculator" },
+  { label: "Accounts", href: "/accounts", icon: "calculator" },
   { label: "Sales & Marketing", href: "#", icon: "trending-up" },
   { label: "Maintenance", href: "#", icon: "wrench" },
 ];

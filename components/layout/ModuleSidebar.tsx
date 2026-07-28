@@ -70,6 +70,14 @@ import {
   Award,
   FileSpreadsheet,
   CheckCircle2,
+  Calculator,
+  HelpCircle,
+  Star,
+  Printer,
+  Coins,
+  Scale,
+  FolderKanban,
+  Settings,
 } from "lucide-react";
 import type { ModuleNavItem } from "@/app/data/types";
 import { cn } from "@/lib/utils";
@@ -137,6 +145,14 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   award: Award,
   "file-spreadsheet": FileSpreadsheet,
   "check-circle": CheckCircle2,
+  calculator: Calculator,
+  "help-circle": HelpCircle,
+  star: Star,
+  printer: Printer,
+  coins: Coins,
+  scale: Scale,
+  "folder-kanban": FolderKanban,
+  settings: Settings,
 };
 
 interface ModuleSidebarProps {
