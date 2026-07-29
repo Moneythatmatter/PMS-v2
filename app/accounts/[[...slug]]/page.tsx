@@ -1,6 +1,20 @@
 import { accountsNavItems } from "@/app/data/navigation/accounts";
 import { AccountsDashboardView } from "@/components/accounts/AccountsDashboardView";
 import { GLTransactionView } from "@/components/accounts/GLTransactionView";
+import { TrialBalanceView } from "@/components/accounts/TrialBalanceView";
+import { ProfitLossView } from "@/components/accounts/ProfitLossView";
+import { GeneralLedgerView } from "@/components/accounts/GeneralLedgerView";
+import { GLReceiptsPaymentsView } from "@/components/accounts/GLReceiptsPaymentsView";
+import { ProvisionalTransactionsView } from "@/components/accounts/ProvisionalTransactionsView";
+import { BankReconciliationView } from "@/components/accounts/BankReconciliationView";
+import { BankReconciliationReversingView } from "@/components/accounts/BankReconciliationReversingView";
+import { ClosingStockView } from "@/components/accounts/ClosingStockView";
+import { FiscalPeriodClosingView } from "@/components/accounts/FiscalPeriodClosingView";
+import { FiscalPeriodClosingReversingView } from "@/components/accounts/FiscalPeriodClosingReversingView";
+import { ReprintVoucherView } from "@/components/accounts/ReprintVoucherView";
+import { OutstandingBillsAgingView } from "@/components/accounts/OutstandingBillsAgingView";
+import { OutstandingAgingSummaryView } from "@/components/accounts/OutstandingAgingSummaryView";
+import { OutstandingBillsAgingCustomView } from "@/components/accounts/OutstandingBillsAgingCustomView";
 import { ChevronRight, FolderOpen } from "lucide-react";
 
 function findNavLabel(slugPath: string): { title: string; category?: string } {
@@ -54,6 +68,106 @@ export default async function AccountsPage({
 
   if (slugPath === "transactions/gl-transaction") {
     return <GLTransactionView />;
+  }
+
+  if (
+    slugPath === "transactions/gl-receipts-payments" ||
+    slugPath === "gl-receipts-payments"
+  ) {
+    return <GLReceiptsPaymentsView />;
+  }
+
+  if (
+    slugPath === "transactions/provisional-transactions" ||
+    slugPath === "provisional-transactions"
+  ) {
+    return <ProvisionalTransactionsView />;
+  }
+
+  if (
+    slugPath === "transactions/bank-reconciliation" ||
+    slugPath === "bank-reconciliation"
+  ) {
+    return <BankReconciliationView />;
+  }
+
+  if (
+    slugPath === "transactions/bank-reconciliation-reversing" ||
+    slugPath === "bank-reconciliation-reversing"
+  ) {
+    return <BankReconciliationReversingView />;
+  }
+
+  if (
+    slugPath === "transactions/closing-stock" ||
+    slugPath === "closing-stock"
+  ) {
+    return <ClosingStockView />;
+  }
+
+  if (
+    slugPath === "transactions/fiscal-period-closing" ||
+    slugPath === "fiscal-period-closing"
+  ) {
+    return <FiscalPeriodClosingView />;
+  }
+
+  if (
+    slugPath === "transactions/fiscal-period-closing-reversing" ||
+    slugPath === "fiscal-period-closing-reversing"
+  ) {
+    return <FiscalPeriodClosingReversingView />;
+  }
+
+  if (
+    slugPath === "transactions/reprint-voucher" ||
+    slugPath === "reprint-voucher"
+  ) {
+    return <ReprintVoucherView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/bills-aging" ||
+    slugPath === "party-outstanding/outstanding-bills-aging" ||
+    slugPath === "bills-aging" ||
+    slugPath === "outstanding-bills-aging"
+  ) {
+    return <OutstandingBillsAgingView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/bills-aging-custom" ||
+    slugPath === "party-outstanding/outstanding-bills-aging-custom" ||
+    slugPath === "bills-aging-custom" ||
+    slugPath === "outstanding-bills-aging-custom"
+  ) {
+    return <OutstandingBillsAgingCustomView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/aging-summary" ||
+    slugPath === "party-outstanding/outstanding-aging-summary" ||
+    slugPath === "aging-summary" ||
+    slugPath === "outstanding-aging-summary"
+  ) {
+    return <OutstandingAgingSummaryView />;
+  }
+
+  if (slugPath === "reports/trial-balance" || slugPath === "trial-balance") {
+    return <TrialBalanceView />;
+  }
+
+  if (
+    slugPath === "reports/profit-and-loss" ||
+    slugPath === "reports/profit-loss" ||
+    slugPath === "profit-and-loss" ||
+    slugPath === "profit-loss"
+  ) {
+    return <ProfitLossView />;
+  }
+
+  if (slugPath === "reports/general-ledger" || slugPath === "general-ledger") {
+    return <GeneralLedgerView />;
   }
 
   const { title, category } = findNavLabel(slugPath);

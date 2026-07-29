@@ -5,6 +5,7 @@ export { Modal, ConfirmModal } from "./Modal";
 export { Drawer } from "./Drawer";
 export { AlertBanner } from "./AlertBanner";
 export { FOSearchToolbar } from "./FOSearchToolbar";
+export { FODatePicker } from "./FODatePicker";
 
 interface FOPageHeaderProps {
   eyebrow?: string;
