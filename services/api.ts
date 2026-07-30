@@ -1,6 +1,18 @@
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-  "http://127.0.0.1:5001";
+
+const getApiBaseUrl = (): string => {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!envUrl) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn(
+        "⚠️ [API Warning]: NEXT_PUBLIC_API_URL is missing in environment variables. Defaulting to http://127.0.0.1:5001"
+      );
+    }
+    return "http://127.0.0.1:5001";
+  }
+  return envUrl.replace(/\/$/, "");
+};
+
+const API_BASE = getApiBaseUrl();
 
 export type ApiResponse<T> = {
   success: boolean;

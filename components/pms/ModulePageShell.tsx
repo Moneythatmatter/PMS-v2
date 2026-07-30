@@ -19,8 +19,10 @@ interface ModulePageShellProps {
   eyebrow?: string;
   title: string;
   description?: string;
+  breadcrumbs?: { label: string; href?: string }[];
   primaryAction?: { label: string; onClick: () => void };
   secondaryActions?: React.ReactNode;
+  actionButtons?: React.ReactNode;
   stats?: {
     label: string;
     value: string | number;
@@ -61,8 +63,10 @@ export function ModulePageShell({
   eyebrow = "Front Office",
   title,
   description,
+  breadcrumbs,
   primaryAction,
   secondaryActions,
+  actionButtons,
   stats,
   search,
   onSearchChange,
@@ -119,10 +123,12 @@ export function ModulePageShell({
         eyebrow={eyebrow}
         title={title}
         description={description}
+        breadcrumbs={breadcrumbs}
         action={
-          (primaryAction || secondaryActions) && (
+          (primaryAction || secondaryActions || actionButtons) && (
             <div className="flex flex-wrap gap-2">
               {secondaryActions}
+              {actionButtons}
               {primaryAction && (
                 <Button
                   size="sm"
