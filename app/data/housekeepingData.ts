@@ -10,7 +10,7 @@ import type {
   HKRequisition,
   HKHistoryLog,
   HKLuggageJob
-} from "./HousekeepingTypes";
+} from "../../components/housekeeping/HousekeepingTypes";
 
 export const initialHKRooms: HKRoom[] = [
   { roomNo: "101", category: "Standard", type: "Standard", bedType: "King", floor: "1st Floor", wing: "East Wing", maxOccupancy: 2, cleaningFrequency: "Daily", deepCleaningFrequency: "Every 30 Days", lastDeepCleaned: "10 Jun 2026", status: "Occupied", hkStatus: "Clean", foStatus: "Occupied", guestName: "James Wilson", checkoutDate: "27 Jun", maintenance: "OK", dnd: false, sleepOut: false, facilities: ["WiFi", "TV", "Safe"], remarks: "Needs standard check-out cleaning." },
@@ -21,19 +21,21 @@ export const initialHKRooms: HKRoom[] = [
   { roomNo: "201", category: "Deluxe", type: "Deluxe", bedType: "King", floor: "2nd Floor", wing: "East Wing", maxOccupancy: 3, cleaningFrequency: "Daily", deepCleaningFrequency: "Every 60 Days", lastDeepCleaned: "28 May 2026", status: "Occupied Dirty", hkStatus: "Dirty", foStatus: "Occupied", guestName: "Sarah Chen", checkoutDate: "28 Jun", maintenance: "OK", dnd: false, sleepOut: false, facilities: ["WiFi", "TV", "Safe", "Mini Bar"], remarks: "VIP guest in room. Stay-over clean." },
   { roomNo: "202", category: "Deluxe", type: "Deluxe", bedType: "Queen", floor: "2nd Floor", wing: "East Wing", maxOccupancy: 2, cleaningFrequency: "Daily", deepCleaningFrequency: "Every 60 Days", lastDeepCleaned: "01 Jun 2026", status: "Occupied", hkStatus: "Clean", foStatus: "Occupied", guestName: "Meghna Nair", checkoutDate: "29 Jun", maintenance: "OK", dnd: false, sleepOut: false, facilities: ["WiFi", "TV", "Safe", "Mini Bar"], remarks: "" },
   { roomNo: "203", category: "Deluxe", type: "Deluxe", bedType: "King", floor: "2nd Floor", wing: "West Wing", maxOccupancy: 3, cleaningFrequency: "Daily", deepCleaningFrequency: "Every 60 Days", lastDeepCleaned: "02 Jun 2026", status: "Cleaning", hkStatus: "Cleaning", foStatus: "Vacant", maintenance: "OK", dnd: false, sleepOut: false, facilities: ["WiFi", "TV", "Safe", "Mini Bar"], remarks: "Cleaning in progress by Housekeeper Meena.", assignedStaff: "Meena", cleaningTimer: { startedAt: new Date().toISOString(), elapsedSeconds: 240, paused: false, lastTick: new Date().toISOString() }, cleaningProgress: 45 },
-  { roomNo: "204", category: "Deluxe", type: "Deluxe", bedType: "King", floor: "2nd Floor", wing: "West Wing", maxOccupancy: 3, cleaningFrequency: "Daily", deepCleaningFrequency: "Every 60 Days", lastDeepCleaned: "03 Jun 2026", status: "Inspection Pending", hkStatus: "Cleaning", foStatus: "Vacant", guestName: "Rahul Sharma", checkoutDate: "26 Jun", maintenance: "OK", dnd: false, sleepOut: false, facilities: ["WiFi", "TV", "Safe", "Mini Bar"], remarks: "Cleaning completed. Awaiting Supervisor verification.", assignedStaff: "Meena", assignedSupervisor: "Ramesh", photos: ["/sample-bathroom.jpg"], inspectionHistory: [
-    {
-      id: "INS-99210",
-      date: "15 Jul 2026",
-      time: "09:30 AM",
-      inspector: "Ramesh Kumar",
-      supervisor: "Ramesh Kumar",
-      result: "Rejected" as const,
-      qualityScore: 78,
-      remarks: "Bathroom mirror had smudges.",
-      signature: "Ramesh Kumar"
-    }
-  ] },
+  {
+    roomNo: "204", category: "Deluxe", type: "Deluxe", bedType: "King", floor: "2nd Floor", wing: "West Wing", maxOccupancy: 3, cleaningFrequency: "Daily", deepCleaningFrequency: "Every 60 Days", lastDeepCleaned: "03 Jun 2026", status: "Inspection Pending", hkStatus: "Cleaning", foStatus: "Vacant", guestName: "Rahul Sharma", checkoutDate: "26 Jun", maintenance: "OK", dnd: false, sleepOut: false, facilities: ["WiFi", "TV", "Safe", "Mini Bar"], remarks: "Cleaning completed. Awaiting Supervisor verification.", assignedStaff: "Meena", assignedSupervisor: "Ramesh", photos: ["/sample-bathroom.jpg"], inspectionHistory: [
+      {
+        id: "INS-99210",
+        date: "15 Jul 2026",
+        time: "09:30 AM",
+        inspector: "Ramesh Kumar",
+        supervisor: "Ramesh Kumar",
+        result: "Rejected" as const,
+        qualityScore: 78,
+        remarks: "Bathroom mirror had smudges.",
+        signature: "Ramesh Kumar"
+      }
+    ]
+  },
   { roomNo: "301", category: "Executive Suite", type: "Executive Suite", bedType: "King", floor: "3rd Floor", wing: "East Wing", maxOccupancy: 4, cleaningFrequency: "Daily", deepCleaningFrequency: "Every 90 Days", lastDeepCleaned: "10 May 2026", status: "Occupied", hkStatus: "Clean", foStatus: "Occupied", guestName: "John Doe", checkoutDate: "30 Jun", maintenance: "OK", dnd: false, sleepOut: true, facilities: ["WiFi", "TV", "Safe", "Mini Bar", "Bathtub", "Balcony"], remarks: "Guest noted as Sleep Out (did not spend night)." },
   { roomNo: "302", category: "Executive Suite", type: "Executive Suite", bedType: "King", floor: "3rd Floor", wing: "East Wing", maxOccupancy: 4, cleaningFrequency: "Daily", deepCleaningFrequency: "Every 90 Days", lastDeepCleaned: "15 May 2026", status: "Out of Service", hkStatus: "OOS", foStatus: "Vacant", maintenance: "OK", dnd: false, sleepOut: false, facilities: ["WiFi", "TV", "Safe", "Mini Bar", "Bathtub", "Balcony"], remarks: "Balcony door lock minor issue. Placed OOS." },
   { roomNo: "305", category: "Deluxe", type: "Deluxe", bedType: "King", floor: "3rd Floor", wing: "West Wing", maxOccupancy: 3, cleaningFrequency: "Daily", deepCleaningFrequency: "Every 60 Days", lastDeepCleaned: "20 May 2026", status: "Occupied Dirty", hkStatus: "Dirty", foStatus: "Occupied", guestName: "Michael Brown", checkoutDate: "24 Jun", maintenance: "OK", dnd: false, sleepOut: false, facilities: ["WiFi", "TV", "Safe", "Mini Bar"], remarks: "Stay-over clean due. TV remote reported broken." },
