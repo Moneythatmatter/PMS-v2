@@ -15,6 +15,14 @@ import { ReprintVoucherView } from "@/components/accounts/ReprintVoucherView";
 import { OutstandingBillsAgingView } from "@/components/accounts/OutstandingBillsAgingView";
 import { OutstandingAgingSummaryView } from "@/components/accounts/OutstandingAgingSummaryView";
 import { OutstandingBillsAgingCustomView } from "@/components/accounts/OutstandingBillsAgingCustomView";
+import { OutstandingAgingSummaryCustomView } from "@/components/accounts/OutstandingAgingSummaryCustomView";
+import { PartyBillsSettlementView } from "@/components/accounts/PartyBillsSettlementView";
+import { PartyBillsView } from "@/components/accounts/PartyBillsView";
+import { ReminderLetterView } from "@/components/accounts/ReminderLetterView";
+import { BalanceConfirmationView } from "@/components/accounts/BalanceConfirmationView";
+import { PaymentAdviceView } from "@/components/accounts/PaymentAdviceView";
+import { BillCoveringLetterView } from "@/components/accounts/BillCoveringLetterView";
+import { BillCoveringLetterReversalView } from "@/components/accounts/BillCoveringLetterReversalView";
 import { ChevronRight, FolderOpen } from "lucide-react";
 
 function findNavLabel(slugPath: string): { title: string; category?: string } {
@@ -151,6 +159,74 @@ export default async function AccountsPage({
     slugPath === "outstanding-aging-summary"
   ) {
     return <OutstandingAgingSummaryView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/aging-summary-custom" ||
+    slugPath === "party-outstanding/outstanding-aging-summary-custom" ||
+    slugPath === "aging-summary-custom" ||
+    slugPath === "outstanding-aging-summary-custom"
+  ) {
+    return <OutstandingAgingSummaryCustomView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/bills-and-settlement" ||
+    slugPath === "party-outstanding/party-bills-settlement" ||
+    slugPath === "bills-and-settlement" ||
+    slugPath === "party-bills-settlement"
+  ) {
+    return <PartyBillsSettlementView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/party-bills" ||
+    slugPath === "party-bills" ||
+    slugPath === "bills"
+  ) {
+    return <PartyBillsView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/reminder-letter" ||
+    slugPath === "reminder-letter" ||
+    slugPath === "reminder"
+  ) {
+    return <ReminderLetterView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/balance-confirmation" ||
+    slugPath === "balance-confirmation" ||
+    slugPath === "confirmation"
+  ) {
+    return <BalanceConfirmationView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/payment-advice" ||
+    slugPath === "payment-advice" ||
+    slugPath === "advice"
+  ) {
+    return <PaymentAdviceView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/bill-covering-letter" ||
+    slugPath === "bill-covering-letter" ||
+    slugPath === "covering-letter"
+  ) {
+    return <BillCoveringLetterView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/bill-covering-letter-reversal" ||
+    slugPath === "party-outstanding/bill-covering-letter-reversal" ||
+    slugPath === "bill-covering-letter-reversal" ||
+    slugPath === "covering-letter-reversal" ||
+    slugPath === "reversal"
+  ) {
+    return <BillCoveringLetterReversalView />;
   }
 
   if (slugPath === "reports/trial-balance" || slugPath === "trial-balance") {
