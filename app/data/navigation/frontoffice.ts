@@ -1,7 +1,7 @@
 import type { ModuleNavItem } from "../types";
 
 export const frontOfficeNavItems: ModuleNavItem[] = [
-  { label: "Dashboard", href: "/frontoffice/dashbaord", icon: "layout-grid" },
+  { label: "Dashboard", href: "/frontoffice/dashboard", icon: "layout-grid" },
   { label: "Reservations", href: "/frontoffice/reservation", icon: "calendar-check" },
   { label: "Check-In", href: "/frontoffice/check-in", icon: "user-check" },
   { label: "In-House Guests", href: "/frontoffice/in-house-guests", icon: "users" },

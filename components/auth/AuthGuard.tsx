@@ -13,10 +13,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
     if (!user && !isLogin) {
-      router.replace(`/login?next=${encodeURIComponent(pathname || "/dasbboard")}`);
+      router.replace(`/login?next=${encodeURIComponent(pathname || "/dashboard")}`);
     }
     if (user && isLogin) {
-      router.replace("/dasbboard");
+      router.replace("/dashboard");
     }
   }, [user, loading, isLogin, pathname, router]);
 

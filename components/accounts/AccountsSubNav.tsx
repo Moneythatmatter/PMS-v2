@@ -36,7 +36,7 @@ export function AccountsSubNav() {
     >
       {accountsShortcutItems.map((item) => {
         const Icon = iconMap[item.icon] ?? FileText;
-        const isActive = item.href !== "/dasbboard" && (pathname === item.href || pathname.startsWith(`${item.href}/`));
+        const isActive = item.href !== "/dashboard" && (pathname === item.href || pathname.startsWith(`${item.href}/`));
 
         return (
           <Link

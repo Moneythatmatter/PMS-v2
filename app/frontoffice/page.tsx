@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function FrontOfficePage() {
-  redirect("/frontoffice/dashbaord");
+  redirect("/frontoffice/dashboard");
 }

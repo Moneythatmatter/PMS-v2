@@ -8,7 +8,7 @@ export const accountsShortcutItems: NavItem[] = [
   { label: "Balance Sheet", href: "/accounts/reports/balance-sheet", icon: "file-text" },
   { label: "General Ledger", href: "/accounts/reports/general-ledger", icon: "book-open" },
   { label: "Day Book", href: "/accounts/reports/day-book", icon: "calendar-clock" },
-  { label: "Exit", href: "/dasbboard", icon: "log-out" },
+  { label: "Exit", href: "/dashboard", icon: "log-out" },
 ];
 
 export const accountsNavItems: ModuleNavItem[] = [

@@ -99,7 +99,7 @@ export function GLTransactionView() {
     >
       {/* Breadcrumb Navigation */}
       <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium mb-4">
-        <Link href="/dasbboard" className="hover:text-emerald-700 transition-colors">
+        <Link href="/dashboard" className="hover:text-emerald-700 transition-colors">
           Home
         </Link>
         <ChevronRight className="h-3 w-3 text-slate-400" />
