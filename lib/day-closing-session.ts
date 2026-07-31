@@ -1,16 +1,22 @@
 import {
   cashierShiftRecords,
   dayClosingSummary,
+  initialNightAuditItems,
   openPosTabs,
   pendingDepartures,
   roomChargePostings,
   type CashierShiftRecord,
   type DayClosingReport,
   type DayClosingSummary,
+  type NightAuditItem,
+  type NightAuditItemStatus,
   type OpenPosTab,
   type PendingDeparture,
   type RoomChargePosting,
 } from "@/app/data/frontoffice/closing";
+
+export type { NightAuditItem, NightAuditItemStatus };
+export { initialNightAuditItems };
 
 export const DAY_CLOSING_STORAGE_KEY = "pms-day-closing-v1";
 export const NIGHT_AUDIT_STORAGE_KEY = "pms-night-audit-v1";
@@ -26,20 +32,6 @@ export type DayClosingSessionState = {
   nightAuditCompleted: boolean;
 };
 
-export type NightAuditItemStatus = "Posted" | "Pending" | "Exception" | "Resolved";
-
-export type NightAuditItem = {
-  id: string;
-  roomNo: string;
-  guestName: string;
-  roomRate: number;
-  extras: number;
-  posted: number;
-  auditTime: string;
-  status: NightAuditItemStatus;
-  note?: string;
-};
-
 export type NightAuditSessionState = {
   items: NightAuditItem[];
   running: boolean;
@@ -48,72 +40,6 @@ export type NightAuditSessionState = {
   completedBy: string | null;
   auditLog: string[];
 };
-
-export const initialNightAuditItems: NightAuditItem[] = [
-  {
-    id: "N1",
-    roomNo: "112",
-    guestName: "James Wilson",
-    roomRate: 3200,
-    extras: 850,
-    posted: 4050,
-    auditTime: "11:45 PM",
-    status: "Posted",
-    note: "Restaurant charge included",
-  },
-  {
-    id: "N2",
-    roomNo: "204",
-    guestName: "Rahul Sharma",
-    roomRate: 4500,
-    extras: 200,
-    posted: 4700,
-    auditTime: "11:46 PM",
-    status: "Posted",
-  },
-  {
-    id: "N3",
-    roomNo: "305",
-    guestName: "Michael Brown",
-    roomRate: 5200,
-    extras: 0,
-    posted: 5200,
-    auditTime: "11:47 PM",
-    status: "Posted",
-  },
-  {
-    id: "N4",
-    roomNo: "501",
-    guestName: "Priya Patel",
-    roomRate: 8500,
-    extras: 680,
-    posted: 9180,
-    auditTime: "11:48 PM",
-    status: "Posted",
-  },
-  {
-    id: "N5",
-    roomNo: "118",
-    guestName: "—",
-    roomRate: 0,
-    extras: 0,
-    posted: 0,
-    auditTime: "—",
-    status: "Exception",
-    note: "No-show — room vacant",
-  },
-  {
-    id: "N6",
-    roomNo: "412",
-    guestName: "Sarah Chen",
-    roomRate: 3500,
-    extras: 120,
-    posted: 0,
-    auditTime: "—",
-    status: "Pending",
-    note: "Late checkout — hold posting",
-  },
-];
 
 export function createInitialDayClosingState(): DayClosingSessionState {
   return {
