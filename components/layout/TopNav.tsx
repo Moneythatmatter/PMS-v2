@@ -41,7 +41,7 @@ export function TopNav({ items }: TopNavProps) {
         const Icon = iconMap[item.icon] ?? LayoutDashboard;
         const isActive =
           pathname === item.href ||
-          (item.href !== "#" && item.href !== "/dasbboard" && pathname.startsWith(item.href));
+          (item.href !== "#" && item.href !== "/dashboard" && pathname.startsWith(item.href));
 
         return (
           <Link

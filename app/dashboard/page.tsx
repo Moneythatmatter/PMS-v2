@@ -26,7 +26,7 @@ import { OverallRatings } from "@/components/dashboard/OverallRatings";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { BookingList } from "@/components/dashboard/BookingList";
 import { WakeUpCallsAlert } from "@/components/frontoffice/WakeUpCallsAlert";
-import { initialHKRooms } from "@/components/housekeeping/HousekeepingData";
+import { initialHKRooms } from "@/app/data/housekeepingData";
 import type { HKRoom } from "@/components/housekeeping/HousekeepingTypes";
 
 export default function DashboardPage() {

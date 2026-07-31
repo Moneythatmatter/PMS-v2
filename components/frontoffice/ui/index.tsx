@@ -5,6 +5,7 @@ export { Modal, ConfirmModal } from "./Modal";
 export { Drawer } from "./Drawer";
 export { AlertBanner } from "./AlertBanner";
 export { FOSearchToolbar } from "./FOSearchToolbar";
+export { FODatePicker } from "./FODatePicker";
 
 interface FOPageHeaderProps {
   eyebrow?: string;
@@ -12,6 +13,7 @@ interface FOPageHeaderProps {
   description?: string;
   badge?: React.ReactNode;
   action?: React.ReactNode;
+  breadcrumbs?: { label: string; href?: string }[];
 }
 
 export function FOPageHeader({
@@ -20,11 +22,28 @@ export function FOPageHeader({
   description,
   badge,
   action,
+  breadcrumbs,
 }: FOPageHeaderProps) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
-        {eyebrow && (
+        {breadcrumbs && breadcrumbs.length > 0 && (
+          <nav className="mb-1 flex items-center space-x-1 text-xs text-slate-500">
+            {breadcrumbs.map((crumb, idx) => (
+              <span key={idx} className="flex items-center space-x-1">
+                {idx > 0 && <span className="text-slate-400">/</span>}
+                {crumb.href ? (
+                  <a href={crumb.href} className="hover:text-slate-700 hover:underline">
+                    {crumb.label}
+                  </a>
+                ) : (
+                  <span className="font-medium text-slate-700">{crumb.label}</span>
+                )}
+              </span>
+            ))}
+          </nav>
+        )}
+        {eyebrow && !breadcrumbs && (
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
             {eyebrow}
           </p>
@@ -32,7 +51,7 @@ export function FOPageHeader({
         <h1
           className={cn(
             "font-bold text-slate-900 sm:text-2xl",
-            eyebrow ? "mt-1 text-xl" : "text-lg sm:text-xl",
+            eyebrow || breadcrumbs ? "mt-1 text-xl" : "text-lg sm:text-xl",
           )}
         >
           {title}

@@ -30,7 +30,8 @@ import {
   initialHKRequisitions,
   initialHKHistory,
   initialHKLuggageJobs
-} from "./HousekeepingData";
+} from "@/app/data/housekeepingData"
+
 
 import {
   housekeepingRequests as initialHKRequests,

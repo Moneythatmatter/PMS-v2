@@ -1,2 +1,2 @@
 export * from "@/components/housekeeping/HousekeepingTypes";
-export * from "@/components/housekeeping/HousekeepingData";
+export * from "@/app/data/housekeepingData";
