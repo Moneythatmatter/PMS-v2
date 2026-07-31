@@ -30,6 +30,11 @@ import type {
   WakeUpCall,
 } from "@/app/data/frontoffice/modules";
 import {
+  initialGuestFeedback,
+  initialTaxiLogs,
+  initialWakeupCalls,
+} from "@/app/data/frontoffice/extraServices";
+import {
   feedbackService,
   housekeepingRequestService,
   invoiceService,

@@ -47,33 +47,23 @@ import {
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 
+import {
+  baseSteps,
+  bookingTypeOptions,
+  mockAvailableRooms,
+  mockCorporateProfiles,
+  mockRatePlans,
+  walkInRates,
+  type CheckInStep as Step,
+} from "@/app/data/frontoffice/checkin";
+
 const emptyOption = (label: string) => (
   <option value="" disabled hidden>{label}</option>
 );
 
-type Step = "find" | "verify" | "assign" | "done";
 type CheckInMode = "reserved" | "walkin";
 
-const walkInRates: Record<string, number> = {
-  Standard: 3500,
-  Deluxe: 5200,
-  Suite: 8500,
-  Premium: 6200,
-};
-
-const baseSteps: { id: Step; label: string; num: number }[] = [
-  { id: "find", label: "Find Booking", num: 1 },
-  { id: "verify", label: "Verify Guest", num: 2 },
-  { id: "assign", label: "Assign Room", num: 3 },
-  { id: "done", label: "Complete", num: 4 },
-];
-
 const inputClass = "rounded-xl";
-
-const bookingTypeOptions = [
-  { id: "Individual", label: "Individual", hint: "Personal" },
-  { id: "Company", label: "Company", hint: "Corporate" },
-] as const;
 
 const defaultWalkIn = {
   firstName: "",

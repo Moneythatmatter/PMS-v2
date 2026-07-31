@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
+import { initialLuggageItems } from "@/app/data/housekeeping/luggage";
 
 const LUGGAGE_STATUS_STEPS = ["Registered", "Assigned", "Collected", "Stored", "Delivered", "Returned", "Completed"];
 
