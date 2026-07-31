@@ -14,6 +14,7 @@ import {
   type PendingDeparture,
   type RoomChargePosting,
 } from "@/app/data/frontoffice/closing";
+import { safeGetStorage, safeRemoveStorage, safeSetStorage } from "@/lib/utils";
 
 export type { NightAuditItem, NightAuditItemStatus };
 export { initialNightAuditItems };
@@ -80,53 +81,48 @@ export function formatBusinessDate(isoDate: string) {
 }
 
 export function loadDayClosingState(): DayClosingSessionState {
-  if (typeof window === "undefined") return createInitialDayClosingState();
-  try {
-    const raw = sessionStorage.getItem(DAY_CLOSING_STORAGE_KEY);
-    if (!raw) return createInitialDayClosingState();
-    const parsed = JSON.parse(raw) as DayClosingSessionState;
-    return {
-      ...createInitialDayClosingState(),
-      ...parsed,
-      nightAuditCompleted: parsed.nightAuditCompleted ?? false,
-    };
-  } catch {
-    return createInitialDayClosingState();
-  }
+  const initial = createInitialDayClosingState();
+  const parsed = safeGetStorage<Partial<DayClosingSessionState> | null>(
+    DAY_CLOSING_STORAGE_KEY,
+    null,
+    true,
+  );
+  if (!parsed) return initial;
+  return {
+    ...initial,
+    ...parsed,
+    nightAuditCompleted: parsed.nightAuditCompleted ?? false,
+  };
 }
 
 export function saveDayClosingState(state: DayClosingSessionState) {
-  if (typeof window === "undefined") return;
-  sessionStorage.setItem(DAY_CLOSING_STORAGE_KEY, JSON.stringify(state));
+  safeSetStorage(DAY_CLOSING_STORAGE_KEY, state, true);
 }
 
 export function clearDayClosingState() {
-  if (typeof window === "undefined") return;
-  sessionStorage.removeItem(DAY_CLOSING_STORAGE_KEY);
+  safeRemoveStorage(DAY_CLOSING_STORAGE_KEY, true);
 }
 
 export function loadNightAuditState(): NightAuditSessionState {
-  if (typeof window === "undefined") return createInitialNightAuditState();
-  try {
-    const raw = sessionStorage.getItem(NIGHT_AUDIT_STORAGE_KEY);
-    if (!raw) return createInitialNightAuditState();
-    return {
-      ...createInitialNightAuditState(),
-      ...(JSON.parse(raw) as NightAuditSessionState),
-    };
-  } catch {
-    return createInitialNightAuditState();
-  }
+  const initial = createInitialNightAuditState();
+  const parsed = safeGetStorage<Partial<NightAuditSessionState> | null>(
+    NIGHT_AUDIT_STORAGE_KEY,
+    null,
+    true,
+  );
+  if (!parsed) return initial;
+  return {
+    ...initial,
+    ...parsed,
+  };
 }
 
 export function saveNightAuditState(state: NightAuditSessionState) {
-  if (typeof window === "undefined") return;
-  sessionStorage.setItem(NIGHT_AUDIT_STORAGE_KEY, JSON.stringify(state));
+  safeSetStorage(NIGHT_AUDIT_STORAGE_KEY, state, true);
 }
 
 export function clearNightAuditState() {
-  if (typeof window === "undefined") return;
-  sessionStorage.removeItem(NIGHT_AUDIT_STORAGE_KEY);
+  safeRemoveStorage(NIGHT_AUDIT_STORAGE_KEY, true);
 }
 
 export function resetClosingDemo() {
