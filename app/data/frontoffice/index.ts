@@ -22,7 +22,10 @@ export type {
   SplittableChargeKey,
   CheckoutBillGroup,
 } from "./checkout";
+export * from "./checkin";
+export * from "./extraServices";
 export * from "./closing";
 export * from "./masters";
 export * from "./modules";
 export * from "./reports";
+

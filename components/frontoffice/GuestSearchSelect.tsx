@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
 import type { InHouseGuest } from "@/app/data/frontoffice/modules";
 import { reservationService } from "@/services/front-office";
+import { SearchSelect } from "@/components/ui/SearchSelect";
 
 interface GuestSearchSelectProps {
   value: string;
@@ -22,7 +22,6 @@ export function GuestSearchSelect({
   placeholder = "Search guest name or room…",
   className,
 }: GuestSearchSelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
   const [guests, setGuests] = useState<InHouseGuest[]>([]);
 
   useEffect(() => {
@@ -40,61 +39,37 @@ export function GuestSearchSelect({
     };
   }, []);
 
-  const matches = useMemo(() => {
-    const q = value.toLowerCase();
-    if (!q) return [];
-    return guests.filter(
-      (g) =>
-        g.guestName.toLowerCase().includes(q) ||
-        g.room.includes(q),
-    );
-  }, [value, guests]);
-
-  const selectedGuest = selectedGuestId
-    ? guests.find((g) => g.id === selectedGuestId)
-    : null;
-
-  const showDropdown =
-    isOpen &&
-    matches.length > 0 &&
-    value.length > 0 &&
-    !(selectedGuest && selectedGuest.guestName === value);
+  const options = useMemo(() => {
+    return guests.map((g) => ({
+      id: g.id,
+      label: g.guestName,
+      sublabel: `Room ${g.room}`,
+      data: g,
+    }));
+  }, [guests]);
 
   return (
-    <div className={className ?? "relative"}>
-      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setIsOpen(true);
-        }}
-        onFocus={() => setIsOpen(true)}
-        onBlur={() => setTimeout(() => setIsOpen(false), 150)}
-        placeholder={placeholder}
-        className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-      />
-      {showDropdown && (
-        <div className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-          {matches.map((g) => (
-            <button
-              key={g.id}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                onSelect(g);
-                onChange(g.guestName);
-                setIsOpen(false);
-              }}
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-emerald-50"
-            >
-              <span className="font-medium">{g.guestName}</span>
-              <span className="text-xs text-slate-500">Room {g.room}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <SearchSelect
+      options={options}
+      value={value}
+      onChange={onChange}
+      selectedId={selectedGuestId}
+      onSelect={(opt) => {
+        const guest = opt.data as InHouseGuest;
+        onSelect(guest);
+        onChange(guest.guestName);
+      }}
+      placeholder={placeholder}
+      className={className}
+      renderOption={(opt) => {
+        const g = opt.data as InHouseGuest;
+        return (
+          <div className="flex w-full items-center justify-between">
+            <span className="font-medium text-slate-900">{g.guestName}</span>
+            <span className="text-xs text-slate-500">Room {g.room}</span>
+          </div>
+        );
+      }}
+    />
   );
 }

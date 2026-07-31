@@ -83,6 +83,20 @@ export interface DayClosingReport {
   posTransferred: number;
 }
 
+export type NightAuditItemStatus = "Posted" | "Pending" | "Exception" | "Resolved";
+
+export interface NightAuditItem {
+  id: string;
+  roomNo: string;
+  guestName: string;
+  roomRate: number;
+  extras: number;
+  posted: number;
+  auditTime: string;
+  status: NightAuditItemStatus;
+  note?: string;
+}
+
 export const currentShiftSummary: CashierShiftSummary = {
   cashExpected: 8450,
   cardExpected: 12300,
@@ -209,3 +223,70 @@ export const dayClosingChecklist: DayClosingChecklistItem[] = [
   { id: "pos", label: "POS bills transferred", status: "warning", detail: "2 open POS tabs" },
   { id: "audit", label: "Night audit ready", status: "pending", detail: "Run after day closing", href: "/frontoffice/reports/night-audit" },
 ];
+
+export const initialNightAuditItems: NightAuditItem[] = [
+  {
+    id: "N1",
+    roomNo: "112",
+    guestName: "James Wilson",
+    roomRate: 3200,
+    extras: 850,
+    posted: 4050,
+    auditTime: "11:45 PM",
+    status: "Posted",
+    note: "Restaurant charge included",
+  },
+  {
+    id: "N2",
+    roomNo: "204",
+    guestName: "Rahul Sharma",
+    roomRate: 4500,
+    extras: 200,
+    posted: 4700,
+    auditTime: "11:46 PM",
+    status: "Posted",
+  },
+  {
+    id: "N3",
+    roomNo: "305",
+    guestName: "Michael Brown",
+    roomRate: 5200,
+    extras: 0,
+    posted: 5200,
+    auditTime: "11:47 PM",
+    status: "Posted",
+  },
+  {
+    id: "N4",
+    roomNo: "501",
+    guestName: "Priya Patel",
+    roomRate: 8500,
+    extras: 680,
+    posted: 9180,
+    auditTime: "11:48 PM",
+    status: "Posted",
+  },
+  {
+    id: "N5",
+    roomNo: "118",
+    guestName: "—",
+    roomRate: 0,
+    extras: 0,
+    posted: 0,
+    auditTime: "—",
+    status: "Exception",
+    note: "No-show — room vacant",
+  },
+  {
+    id: "N6",
+    roomNo: "412",
+    guestName: "Sarah Chen",
+    roomRate: 3500,
+    extras: 120,
+    posted: 0,
+    auditTime: "—",
+    status: "Pending",
+    note: "Late checkout — hold posting",
+  },
+];
+
