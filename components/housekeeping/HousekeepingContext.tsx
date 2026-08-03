@@ -40,6 +40,23 @@ import {
 } from "@/app/data/frontoffice/modules";
 
 import * as actions from "./HousekeepingActions";
+import {
+  hkRoomService,
+  hkPublicAreaService,
+  hkInventoryService,
+  hkLaundryService,
+  hkDamageService,
+  hkRequisitionService,
+  hkHistoryService,
+  hkLuggageService,
+  hkGuestRequestService,
+  hkMaintenanceService,
+  hkLostFoundService,
+  hkStaffService,
+  hkChecklistService,
+  hkShiftService,
+  hkDashboardService,
+} from "@/services/housekeeping";
 
 interface HousekeepingContextType {
   rooms: HKRoom[];
@@ -58,6 +75,9 @@ interface HousekeepingContextType {
   shifts: HKShift[];
   currentUserRole: string;
   currentUsername: string;
+  loading: boolean;
+  apiConnected: boolean;
+  refreshFromApi: () => Promise<void>;
   setRooms: React.Dispatch<React.SetStateAction<HKRoom[]>>;
   setStaff: React.Dispatch<React.SetStateAction<HKStaff[]>>;
   setChecklists: React.Dispatch<React.SetStateAction<HKChecklistTemplate[]>>;
@@ -142,48 +162,119 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
   const [currentUsername, setCurrentUsername] = useState("Admin User");
 
   const [hydrated, setHydrated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [apiConnected, setApiConnected] = useState(false);
 
-  // Read state from localStorage
-  useEffect(() => {
+  const hydrateFromLocal = () => {
+    const getOrInit = <T,>(key: string, initial: T): T => {
+      const val = localStorage.getItem(key);
+      if (val) return JSON.parse(val);
+      localStorage.setItem(key, JSON.stringify(initial));
+      return initial;
+    };
+
+    setRooms(getOrInit("hk_rooms", initialHKRooms));
+
+    const loadedPublicAreas = getOrInit("hk_publicAreas", initialHKPublicAreas);
+    const verifiedPublicAreas = loadedPublicAreas.map((area: any) => {
+      const defaultArea =
+        initialHKPublicAreas.find((a) => a.id === area.id) ||
+        initialHKPublicAreas[0];
+      return {
+        ...defaultArea,
+        ...area,
+        checklist: area.checklist || defaultArea.checklist || [],
+        history: area.history || defaultArea.history || [],
+      };
+    });
+    setPublicAreas(verifiedPublicAreas);
+
+    setInventory(getOrInit("hk_inventory", initialHKInventory));
+    setLaundryJobs(getOrInit("hk_laundry", initialHKLaundry));
+    setDamageReports(getOrInit("hk_damages", initialHKDamageReports));
+    setRequisitions(getOrInit("hk_requisitions", initialHKRequisitions));
+    setHistory(getOrInit("hk_history", initialHKHistory));
+    setLuggageJobs(getOrInit("hk_luggage", initialHKLuggageJobs));
+    setRequests(getOrInit("hk_requests", initialHKRequests));
+    const loadedMaint = getOrInit("hk_maintenance", initialMaintenanceRequests);
+    const uniqueMaint = Array.isArray(loadedMaint)
+      ? loadedMaint.filter(
+          (item: any, index: number, self: any[]) =>
+            index === self.findIndex((t: any) => t.id === item.id),
+        )
+      : loadedMaint;
+    setMaintenance(uniqueMaint);
+    setLostFound(getOrInit("hk_lostfound", initialLostFoundItems));
+    setStaff(getOrInit("hk_staff", initialHKStaff));
+    setChecklists(getOrInit("hk_checklists", initialHKChecklistTemplates));
+    setShifts(getOrInit("hk_shifts", initialHKShifts));
+  };
+
+  const refreshFromApi = async () => {
+    setLoading(true);
     try {
-      const getOrInit = <T,>(key: string, initial: T): T => {
-        const val = localStorage.getItem(key);
-        if (val) return JSON.parse(val);
-        localStorage.setItem(key, JSON.stringify(initial));
-        return initial;
+      const settled = await Promise.allSettled([
+        hkDashboardService.get(),
+        hkRoomService.list(),
+        hkPublicAreaService.list(),
+        hkInventoryService.list(),
+        hkLaundryService.list(),
+        hkDamageService.list(),
+        hkRequisitionService.list(),
+        hkHistoryService.list(),
+        hkLuggageService.list(),
+        hkGuestRequestService.list(),
+        hkMaintenanceService.list(),
+        hkLostFoundService.list(),
+        hkStaffService.list(),
+        hkChecklistService.list(),
+        hkShiftService.list(),
+      ]);
+
+      const value = <T,>(i: number, fallback: T): T => {
+        const r = settled[i];
+        return r.status === "fulfilled" ? (r.value as T) : fallback;
       };
 
-      setRooms(getOrInit("hk_rooms", initialHKRooms));
+      const anyOk = settled.some((r) => r.status === "fulfilled");
+      if (!anyOk) {
+        throw new Error("All housekeeping API calls failed");
+      }
 
-      const loadedPublicAreas = getOrInit("hk_publicAreas", initialHKPublicAreas);
-      const verifiedPublicAreas = loadedPublicAreas.map((area: any) => {
-        const defaultArea = initialHKPublicAreas.find((a) => a.id === area.id) || initialHKPublicAreas[0];
-        return {
-          ...defaultArea,
-          ...area,
-          checklist: area.checklist || defaultArea.checklist || [],
-          history: area.history || defaultArea.history || [],
-        };
-      });
-      setPublicAreas(verifiedPublicAreas);
+      const apiRooms = value<HKRoom[]>(1, []);
+      setRooms(
+        apiRooms.map((r) => ({
+          ...r,
+          roomNo: String(r.roomNo || (r as { id?: string }).id || ""),
+        })),
+      );
+      setPublicAreas(value(2, initialHKPublicAreas));
+      setInventory(value(3, initialHKInventory));
+      setLaundryJobs(value(4, initialHKLaundry));
+      setDamageReports(value(5, initialHKDamageReports));
+      setRequisitions(value(6, initialHKRequisitions));
+      setHistory(value(7, initialHKHistory));
+      setLuggageJobs(value(8, initialHKLuggageJobs));
+      setRequests(value(9, initialHKRequests) as HousekeepingRequest[]);
+      setMaintenance(value(10, initialMaintenanceRequests) as MaintenanceRequest[]);
+      setLostFound(value(11, initialLostFoundItems) as LostFoundItem[]);
+      setStaff(value(12, initialHKStaff));
+      setChecklists(value(13, initialHKChecklistTemplates));
+      setShifts(value(14, initialHKShifts));
+      setApiConnected(true);
+    } catch (e) {
+      console.warn("[HK] API unavailable — falling back to local data", e);
+      setApiConnected(false);
+      hydrateFromLocal();
+    } finally {
+      setLoading(false);
+      setHydrated(true);
+    }
+  };
 
-      setInventory(getOrInit("hk_inventory", initialHKInventory));
-      setLaundryJobs(getOrInit("hk_laundry", initialHKLaundry));
-      setDamageReports(getOrInit("hk_damages", initialHKDamageReports));
-      setRequisitions(getOrInit("hk_requisitions", initialHKRequisitions));
-      setHistory(getOrInit("hk_history", initialHKHistory));
-      setLuggageJobs(getOrInit("hk_luggage", initialHKLuggageJobs));
-      setRequests(getOrInit("hk_requests", initialHKRequests));
-      const loadedMaint = getOrInit("hk_maintenance", initialMaintenanceRequests);
-      const uniqueMaint = Array.isArray(loadedMaint)
-        ? loadedMaint.filter((item: any, index: number, self: any[]) => index === self.findIndex((t: any) => t.id === item.id))
-        : loadedMaint;
-      setMaintenance(uniqueMaint);
-      setLostFound(getOrInit("hk_lostfound", initialLostFoundItems));
-      setStaff(getOrInit("hk_staff", initialHKStaff));
-      setChecklists(getOrInit("hk_checklists", initialHKChecklistTemplates));
-      setShifts(getOrInit("hk_shifts", initialHKShifts));
-
+  // Bootstrap from backend (FO/F&B style); localStorage is fallback only
+  useEffect(() => {
+    try {
       const role = localStorage.getItem("hk_role") || "Executive Housekeeper";
       setCurrentUserRole(role);
       setCurrentUsername(
@@ -195,13 +286,13 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
               ? "Somnath Sen"
               : role === "Engineering Staff"
                 ? "Suresh Gupta"
-                : "Admin User"
+                : "Admin User",
       );
-
-      setHydrated(true);
-    } catch (e) {
-      console.error("Local storage hydration failed", e);
+    } catch {
+      /* ignore */
     }
+    void refreshFromApi();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Window storage sync listener to keep tabs synchronized in real-time
@@ -539,6 +630,9 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         shifts,
         currentUserRole,
         currentUsername,
+        loading,
+        apiConnected,
+        refreshFromApi,
         setRooms,
         setStaff,
         setChecklists,
