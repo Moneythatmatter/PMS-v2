@@ -653,7 +653,7 @@ export default function LaundryOperations() {
           </p>
         </div>
 
-        <div className="flex gap-2.5 text-xs self-start lg:self-center">
+        <div className="flex flex-wrap gap-2.5 text-xs self-start lg:self-center">
           <Button
             onClick={() => {
               setSelectedItem(hotelLinenItems[0]?.name || "");
@@ -677,7 +677,7 @@ export default function LaundryOperations() {
 
       {/* Tabs Menu */}
       <div className="border-b border-slate-200">
-        <nav className="flex flex-wrap gap-4 md:gap-6 text-xs font-bold uppercase tracking-wider">
+        <nav className="flex gap-4 overflow-x-auto scrollbar-none md:gap-6 text-xs font-bold uppercase tracking-wider">
           {[
             { id: "laundry", label: `Active Queue (${laundryJobs.filter((l) => l.status !== "Delivered").length})` },
             { id: "discard", label: `Linen Stock & Discards (${hotelLinenItems.length})` },
@@ -707,7 +707,7 @@ export default function LaundryOperations() {
       {/* Toast Notification */}
       {toast && (
         <div className={cn(
-          "fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-xl p-3.5 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-bottom-2",
+          "fixed bottom-4 left-4 right-4 z-50 flex items-center gap-2 rounded-xl p-3.5 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-bottom-2 sm:left-auto sm:max-w-sm",
           toast.variant === "success" ? "bg-emerald-600 text-white" :
           toast.variant === "error" ? "bg-red-655 text-white" : "bg-blue-600 text-white"
         )}>
@@ -876,8 +876,63 @@ export default function LaundryOperations() {
                 </div>
               </OperationsFilterDrawer>
 
+              {/* Mobile cards */}
+              <div className="space-y-3 md:hidden">
+                {filteredJobs.length === 0 ? (
+                  <p className="py-10 text-center text-sm text-slate-400 italic">
+                    No active laundry jobs match your filters.
+                  </p>
+                ) : (
+                  filteredJobs.map((job) => {
+                    const extra = getJobExtra(job);
+                    const isDelayed = isJobDelayed(job);
+                    return (
+                      <button
+                        key={job.id}
+                        type="button"
+                        onClick={() => setSelectedJobId(job.id)}
+                        className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-2xs"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-extrabold text-slate-600">{job.id}</p>
+                            <p className="font-bold text-slate-800 truncate">
+                              {job.type === "Guest"
+                                ? `Room ${job.room}`
+                                : extra.employeeName
+                                ? extra.employeeName
+                                : "Hotel Linen"}
+                            </p>
+                            <p className="text-[11px] text-slate-500 truncate">{job.item}</p>
+                          </div>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-2 py-0.5 text-[8.5px] border font-extrabold uppercase",
+                              isDelayed
+                                ? statusBadges.Delayed
+                                : statusBadges[job.status] || "bg-slate-50 text-slate-600 border-slate-250"
+                            )}
+                          >
+                            {isDelayed ? "Delayed" : job.status}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
+                          <span className="rounded bg-slate-50 px-1.5 py-0.5 font-bold uppercase border border-slate-100">
+                            {job.type}
+                          </span>
+                          <span>{job.quantity} pcs</span>
+                          <span className="font-bold text-slate-800">
+                            {job.type === "Guest" ? `INR ${job.charges}` : "Cost Allocated"}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
               {/* Table Container */}
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm scrollbar-thin">
+              <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm scrollbar-thin md:block">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/50 text-[10px] uppercase tracking-wider text-slate-400">
@@ -1958,7 +2013,7 @@ export default function LaundryOperations() {
 
           {type === "Guest" && (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="Room Number" required>
                   <TextInput value={room} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoom(e.target.value)} />
                 </FormField>
@@ -1978,7 +2033,7 @@ export default function LaundryOperations() {
 
           {type === "Staff" && (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="Employee Name" required>
                   <TextInput value={employeeName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmployeeName(e.target.value)} />
                 </FormField>
@@ -2014,7 +2069,7 @@ export default function LaundryOperations() {
             </FormField>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Service Type" required>
               <SelectInput value={serviceType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setServiceType(e.target.value as any)}>
                 <option value="Wash & Fold">Wash & Fold</option>
@@ -2032,7 +2087,7 @@ export default function LaundryOperations() {
             </FormField>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Quantity (Pcs)" required>
               <TextInput type="number" min="1" value={quantity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuantity(e.target.value)} />
             </FormField>

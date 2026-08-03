@@ -538,7 +538,7 @@ export default function StaffWorkforceMastersPage() {
 
       {/* Reusable Master Tabs */}
       <div className="border-b border-slate-200">
-        <nav className="flex gap-4 text-xs font-bold uppercase tracking-wider">
+        <nav className="flex gap-4 overflow-x-auto scrollbar-none text-xs font-bold uppercase tracking-wider">
           {[
             { id: "staff", label: `Staff Master (${staffList.length})` },
             { id: "shifts", label: `Shift Master (${shiftList.length})` },
@@ -1122,7 +1122,7 @@ export default function StaffWorkforceMastersPage() {
               />
             </FormField>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Role">
                 <SelectInput
                   value={editStaffItem.role}
@@ -1168,7 +1168,7 @@ export default function StaffWorkforceMastersPage() {
               </SelectInput>
             </FormField>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Mobile Phone">
                 <TextInput
                   value={editStaffItem.phone}
@@ -1271,7 +1271,7 @@ export default function StaffWorkforceMastersPage() {
               />
             </FormField>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Start Time">
                 <TextInput
                   value={editShiftItem.startTime}
@@ -1379,7 +1379,7 @@ export default function StaffWorkforceMastersPage() {
         <form onSubmit={handleAddSubmit} className="space-y-4 select-none">
           {activeTab === "staff" && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField label="Employee ID">
                   <TextInput
                     value={newEmpId}
@@ -1399,7 +1399,7 @@ export default function StaffWorkforceMastersPage() {
                 </FormField>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField label="Housekeeping Role" required>
                   <SelectInput
                     value={newRole}
@@ -1439,7 +1439,7 @@ export default function StaffWorkforceMastersPage() {
                 </SelectInput>
               </FormField>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField label="Mobile Phone">
                   <TextInput
                     value={newPhone}
@@ -1463,7 +1463,7 @@ export default function StaffWorkforceMastersPage() {
 
           {activeTab === "shifts" && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField label="Shift Code" required>
                   <TextInput
                     value={newShiftCode}
@@ -1483,7 +1483,7 @@ export default function StaffWorkforceMastersPage() {
                 </FormField>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField label="Start Time" required>
                   <TextInput
                     value={newStartTime}
@@ -1507,7 +1507,7 @@ export default function StaffWorkforceMastersPage() {
 
           {activeTab === "roles" && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField label="Role Code" required>
                   <TextInput
                     value={newRoleCode}
@@ -1531,7 +1531,7 @@ export default function StaffWorkforceMastersPage() {
 
           {activeTab === "teams" && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField label="Team Code" required>
                   <TextInput
                     value={newTeamCode}
@@ -1555,7 +1555,7 @@ export default function StaffWorkforceMastersPage() {
 
           {activeTab === "rules" && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField label="Rule Code" required>
                   <TextInput
                     value={newRuleCode}

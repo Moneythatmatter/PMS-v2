@@ -128,7 +128,7 @@ export default function RoomMasterConfig() {
 
       {/* Tabs */}
       <div className="border-b border-slate-200">
-        <nav className="flex gap-6 text-sm font-semibold">
+        <nav className="flex gap-6 overflow-x-auto scrollbar-none text-sm font-semibold">
           <button
             onClick={() => setActiveTab("floorplan")}
             className={cn(
@@ -397,7 +397,7 @@ export default function RoomMasterConfig() {
       {/* Drawer: Add New Room */}
       <Drawer open={createOpen} onClose={() => setCreateOpen(false)} title="Create New Hotel Room Master">
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Room Number" required>
               <TextInput placeholder="e.g. 105" value={newRoomNo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewRoomNo(e.target.value)} />
             </FormField>
@@ -412,7 +412,7 @@ export default function RoomMasterConfig() {
             </FormField>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Bed Specification">
               <SelectInput value={newBed} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewBed(e.target.value)}>
                 {BED_TYPES.map((bed) => (
@@ -433,7 +433,7 @@ export default function RoomMasterConfig() {
             </FormField>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Hotel Wing">
               <TextInput placeholder="e.g. East Wing" value={newWing} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewWing(e.target.value)} />
             </FormField>

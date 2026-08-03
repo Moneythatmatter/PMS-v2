@@ -358,8 +358,127 @@ export function MaintenanceRequestsView() {
         </div>
       </OperationsFilterDrawer>
 
-      {/* Data Table */}
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* Mobile cards */}
+      <div className="space-y-3 md:hidden">
+        {filteredMaint.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-500">No work orders match your filters.</p>
+        ) : (
+          filteredMaint.map((m, idx) => {
+            const isOpen = m.status === "Open";
+            const isAssigned = m.status === "Assigned";
+            const isProgress = m.status === "In Progress";
+            const isAwaiting = m.status === "Awaiting Verification";
+            const isClosed = m.status === "Closed";
+            return (
+              <div
+                key={`${m.id}-${idx}-m`}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800">Room {m.room}</p>
+                    <p className="text-[11px] text-slate-500 font-semibold">{m.id}</p>
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase",
+                      m.status === "Closed"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                        : m.status === "Awaiting Verification"
+                        ? "bg-purple-50 text-purple-700 border border-purple-100"
+                        : m.status === "In Progress"
+                        ? "bg-amber-50 text-amber-700 border border-amber-100"
+                        : m.status === "Assigned"
+                        ? "bg-blue-50 text-blue-700 border border-blue-100"
+                        : "bg-slate-100 text-slate-700 border border-slate-200"
+                    )}
+                  >
+                    {m.status}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-slate-700 font-medium line-clamp-2">{m.problem}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase",
+                      m.priority === "Critical"
+                        ? "bg-red-100 text-red-700 border border-red-200"
+                        : m.priority === "High"
+                        ? "bg-red-50 text-red-700 border border-red-100"
+                        : m.priority === "Medium"
+                        ? "bg-amber-50 text-amber-700 border border-amber-100"
+                        : "bg-slate-100 text-slate-700"
+                    )}
+                  >
+                    {m.priority}
+                  </span>
+                  <span>{m.engineer || "Unassigned"}</span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {isOpen && (
+                    <Button
+                      variant="outline"
+                      onClick={() => handleOpenAssign(m.id)}
+                      className="py-1.5 px-3 text-[11px] font-semibold text-slate-700 border-slate-200"
+                    >
+                      Assign
+                    </Button>
+                  )}
+                  {isAssigned && (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleOpenAssign(m.id)}
+                        className="py-1.5 px-3 text-[11px] font-semibold text-slate-700 border-slate-200"
+                      >
+                        Reassign
+                      </Button>
+                      <Button
+                        onClick={() => handleStartRepair(m.id)}
+                        className="py-1.5 px-3 text-[11px] font-semibold bg-emerald-700 hover:bg-emerald-800 text-white"
+                      >
+                        Start Repair
+                      </Button>
+                    </>
+                  )}
+                  {isProgress && (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleOpenAssign(m.id)}
+                        className="py-1.5 px-3 text-[11px] font-semibold text-slate-700 border-slate-200"
+                      >
+                        Reassign
+                      </Button>
+                      <Button
+                        onClick={() => handleMarkComplete(m.id)}
+                        className="py-1.5 px-3 text-[11px] font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                      >
+                        Complete
+                      </Button>
+                    </>
+                  )}
+                  {isAwaiting && (
+                    <Button
+                      onClick={() => handleVerify(m.id)}
+                      disabled={!isSupervisor}
+                      className="py-1.5 px-3 text-[11px] font-semibold bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1"
+                    >
+                      <ShieldCheck className="h-3 w-3" /> Verify & Close
+                    </Button>
+                  )}
+                  {isClosed && (
+                    <span className="text-[11px] text-slate-400 font-semibold">Completed ✓</span>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
             <tr>
@@ -513,7 +632,7 @@ export function MaintenanceRequestsView() {
       {/* Drawer: Report Issue */}
       <Drawer open={createOpen} onClose={() => setCreateOpen(false)} title="Report Maintenance Issue">
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Room Number" required>
               <TextInput value={roomNo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoomNo(e.target.value)} />
             </FormField>
@@ -528,7 +647,7 @@ export function MaintenanceRequestsView() {
             </FormField>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Priority / Urgency" required>
               <SelectInput value={priority} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPriority(e.target.value as any)}>
                 <option value="Low">Low (OOS minor hold)</option>

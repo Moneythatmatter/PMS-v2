@@ -285,8 +285,91 @@ export function HousekeepingRequestsView() {
         </div>
       </OperationsFilterDrawer>
 
-      {/* Table List of Requests */}
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* Mobile cards */}
+      <div className="space-y-3 md:hidden">
+        {filteredRequests.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-500">No requests match your filters.</p>
+        ) : (
+          filteredRequests.map((req) => {
+            const isOpen = req.status === "Open";
+            const isProgress = req.status === "In Progress";
+            return (
+              <div
+                key={req.id}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800">Room {req.room}</p>
+                    <p className="text-[11px] text-slate-500 font-semibold truncate">{req.guest}</p>
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase",
+                      req.status === "Completed"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : req.status === "In Progress"
+                        ? "bg-amber-50 text-amber-700"
+                        : "bg-red-50 text-red-700"
+                    )}
+                  >
+                    {req.status}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-slate-700 font-medium line-clamp-2">{req.issue}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase",
+                      req.priority === "High" ? "bg-red-50 text-red-700 border border-red-100" :
+                      req.priority === "Medium" ? "bg-amber-50 text-amber-700 border border-amber-100" :
+                      "bg-slate-100 text-slate-700"
+                    )}
+                  >
+                    {req.priority}
+                  </span>
+                  <span>{req.assignedStaff || "Unassigned"}</span>
+                  <span>·</span>
+                  <span>{req.createdAt}</span>
+                </div>
+                {(isOpen || isProgress) && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {isOpen && (
+                      <Button
+                        variant="outline"
+                        onClick={() => handleOpenAssign(req.id)}
+                        className="py-1.5 px-3 text-[11px] font-semibold text-slate-700 border-slate-200"
+                      >
+                        Assign
+                      </Button>
+                    )}
+                    {isProgress && (
+                      <>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleOpenAssign(req.id)}
+                          className="py-1.5 px-3 text-[11px] font-semibold text-slate-700 border-slate-200"
+                        >
+                          Reassign
+                        </Button>
+                        <Button
+                          onClick={() => handleMarkComplete(req.id)}
+                          className="py-1.5 px-3 text-[11px] font-semibold bg-emerald-700 hover:bg-emerald-800 text-white"
+                        >
+                          Complete
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
             <tr>
@@ -387,7 +470,7 @@ export function HousekeepingRequestsView() {
       {/* Drawer: Create New Guest Request */}
       <Drawer open={createOpen} onClose={() => setCreateOpen(false)} title="Create Guest Request">
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Room Number" required>
               <TextInput value={roomNo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoomNo(e.target.value)} />
             </FormField>

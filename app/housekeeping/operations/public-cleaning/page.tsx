@@ -1150,7 +1150,7 @@ export default function PublicAreaCleaning() {
               {/* Editable Fields for Supervisor / Admin if not actively cleaning */}
               {selectedArea.status !== "Cleaning" && selectedArea.status !== "Pending Inspection" && (currentUserRole === "Supervisor" || currentUserRole === "Executive Housekeeper") ? (
                 <div className="space-y-3 text-xs font-semibold">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <FormField label="Assigned Housekeeper">
                       <SelectInput value={assignedHousekeeper} onChange={(e) => setAssignedHousekeeper(e.target.value)}>
                         <option value="">Unassigned</option>
@@ -1511,7 +1511,7 @@ export default function PublicAreaCleaning() {
         size="md"
       >
         <form onSubmit={handleAddAreaSubmit} className="space-y-4 text-xs font-semibold text-slate-700">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Area Name *" required>
               <TextInput
                 placeholder="e.g. Grand Banquet Hall"
@@ -1661,7 +1661,7 @@ export default function PublicAreaCleaning() {
         size="md"
       >
         <form onSubmit={handleEditAreaSubmit} className="space-y-4 text-xs font-semibold text-slate-700">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Area Name *" required>
               <TextInput
                 value={editAreaForm.name || ""}
@@ -1892,7 +1892,7 @@ export default function PublicAreaCleaning() {
                 </FormField>
 
                 {/* Frequency and Duration defaults */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Default Cleaning Frequency">
                     <TextInput
                       value={templateFrequency}

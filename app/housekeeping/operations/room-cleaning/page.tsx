@@ -354,7 +354,68 @@ export default function RoomCleaningOperations() {
         </div>
       ) : (
         /* List View */
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <>
+          <div className="space-y-3 md:hidden">
+            {filteredRooms.map((room) => (
+              <button
+                key={room.roomNo}
+                type="button"
+                onClick={() => handleRoomClick(room.roomNo)}
+                className={cn(
+                  "w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-2xs transition-colors",
+                  selectedIds.has(room.roomNo) && "border-emerald-300 bg-emerald-50/40",
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(room.roomNo)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => {
+                        const next = new Set(selectedIds);
+                        if (next.has(room.roomNo)) next.delete(room.roomNo);
+                        else next.add(room.roomNo);
+                        setSelectedIds(next);
+                      }}
+                      className="mt-0.5 rounded border-slate-300"
+                      aria-label={`Select room ${room.roomNo}`}
+                    />
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-800">Room {room.roomNo}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {room.category} · {room.floor}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase",
+                      room.status === "Vacant Ready"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : room.status.includes("Dirty")
+                        ? "bg-red-50 text-red-700"
+                        : room.status === "Cleaning"
+                        ? "bg-amber-50 text-amber-700"
+                        : "bg-blue-50 text-blue-700"
+                    )}
+                  >
+                    {room.status}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                  <span>HK: {room.assignedStaff || "—"}</span>
+                  {room.status === "Cleaning" && room.cleaningTimer && (
+                    <span className="font-semibold text-amber-700">
+                      {formatTime(room.cleaningTimer.elapsedSeconds)}
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
               <tr>
@@ -439,7 +500,8 @@ export default function RoomCleaningOperations() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Drawer: Detailed Cleaning Operations */}
@@ -633,7 +695,7 @@ export default function RoomCleaningOperations() {
                   <Camera className="h-4 w-4 text-emerald-700" />
                   Inspection Evidence Photos
                 </h3>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {uploadedPhotos.map((url, i) => (
                     <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-200 group bg-slate-50">
                       {/* eslint-disable-next-line @next/next/no-img-element */}

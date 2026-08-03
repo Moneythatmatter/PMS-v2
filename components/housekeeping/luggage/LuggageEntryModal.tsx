@@ -110,7 +110,7 @@ export function LuggageEntryModal({
           </SelectInput>
         </FormField>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Guest Name" required>
             <TextInput value={guest} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGuest(e.target.value)} />
           </FormField>
@@ -119,7 +119,7 @@ export function LuggageEntryModal({
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {type === "Room Move" ? (
             <FormField label="Source Room" required>
               <TextInput value={room} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoom(e.target.value)} />
@@ -148,7 +148,7 @@ export function LuggageEntryModal({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Tag ID Number" required>
             <TextInput value={tagNumber} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTagNumber(e.target.value)} />
           </FormField>
@@ -157,7 +157,7 @@ export function LuggageEntryModal({
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Baggage Type" required>
             <SelectInput value={bagType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setBagType(e.target.value as any)}>
               <option value="Suitcase">Suitcases</option>

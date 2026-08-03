@@ -375,7 +375,7 @@ export function LuggageView() {
 
       {/* Primary Tabs */}
       <div className="border-b border-slate-200">
-        <nav className="flex flex-wrap gap-4 md:gap-6 text-xs font-bold uppercase tracking-wider">
+        <nav className="flex gap-4 overflow-x-auto scrollbar-none md:gap-6 text-xs font-bold uppercase tracking-wider">
           {[
             { id: "active", label: `Active Queue (${luggageJobs.filter(j => j.status !== "Delivered").length})` },
             { id: "lockers", label: "Locker Storage Room Map" },
@@ -504,7 +504,7 @@ export function LuggageView() {
                 </Button>
 
                 {isFilterPopoverOpen && (
-                  <div className="absolute right-0 z-40 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl animate-in fade-in zoom-in-95">
+                  <div className="absolute left-0 right-0 z-40 mt-2 w-auto max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl animate-in fade-in zoom-in-95 sm:left-auto sm:right-0 sm:w-72 sm:max-w-none">
                     <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider mb-3">
                       Refine Baggage Queue
                     </h4>
@@ -590,8 +590,46 @@ export function LuggageView() {
             </div>
           </div>
 
+          {/* Mobile luggage cards */}
+          <div className="space-y-3 md:hidden">
+            {filteredLuggage.length === 0 ? (
+              <p className="py-10 text-center text-sm text-slate-400">No active baggage jobs match your criteria.</p>
+            ) : (
+              filteredLuggage.map((job) => {
+                const extra = getJobExtra(job);
+                return (
+                  <button
+                    key={job.id}
+                    type="button"
+                    onClick={() => setSelectedJobId(job.id)}
+                    className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-2xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-mono text-[11px] font-extrabold text-emerald-800">{job.tagNumber}</p>
+                        <p className="font-bold text-slate-900 truncate">
+                          {job.guest}
+                          {extra.vipHandling ? " · VIP" : ""}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          Room {job.room} · {job.type} · {job.bagCount} bags
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-slate-50 border border-slate-200 px-2 py-0.5 text-[9px] font-bold uppercase text-slate-700">
+                        {job.status}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[11px] text-slate-500">
+                      {job.bellBoy || "Unassigned"} · {job.pickupTime}
+                    </p>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
           {/* Table */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+          <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs md:block">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-100 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">

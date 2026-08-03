@@ -289,7 +289,7 @@ export default function RequisitionsPage() {
 
       {/* Top Navigation Tabs */}
       <div className="border-b border-slate-200">
-        <nav className="flex flex-wrap gap-4 text-xs font-bold uppercase tracking-wider">
+        <nav className="flex gap-4 overflow-x-auto scrollbar-none text-xs font-bold uppercase tracking-wider">
           {[
             { id: "active", label: `Active Requisitions (${MOCK_ACTIVE_REQUISITIONS.length})` },
             { id: "backorders", label: `Backorders (${MOCK_BACKORDERS.length})` },
@@ -748,7 +748,7 @@ export default function RequisitionsPage() {
           <div className="space-y-2.5">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 border-b border-slate-100 pb-1">Basic Information</h4>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Requisition Number" required>
                 <TextInput value={reqNo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReqNo(e.target.value)} className="h-9 text-xs rounded-xl font-mono" />
               </FormField>
@@ -762,7 +762,7 @@ export default function RequisitionsPage() {
               </FormField>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <FormField label="Requested By" required>
                 <TextInput value={requestedByStaff} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRequestedByStaff(e.target.value)} className="h-9 text-xs rounded-xl" />
               </FormField>
@@ -776,7 +776,7 @@ export default function RequisitionsPage() {
               </FormField>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Priority" required>
                 <SelectInput value={priority} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPriority(e.target.value)} className="h-9 text-xs rounded-xl bg-white text-slate-700">
                   <option value="High">High</option>
@@ -913,7 +913,7 @@ export default function RequisitionsPage() {
           <div className="space-y-2.5 border-t border-slate-100 pt-3">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 border-b border-slate-100 pb-1">Receiving Verification</h4>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Received By Staff" required>
                 <TextInput value={receivedBy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReceivedBy(e.target.value)} className="h-8 text-xs rounded-xl" />
               </FormField>

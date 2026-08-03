@@ -222,7 +222,7 @@ export function LostFoundView() {
           <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Operations</span>
           <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">Lost & Found Management</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             onClick={() => setCreateLostOpen(true)}
             variant="outline"
@@ -242,7 +242,7 @@ export function LostFoundView() {
       {/* Toast notifier */}
       {toast && (
         <div className={cn(
-          "fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-xl p-3 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-bottom-2",
+          "fixed bottom-4 left-4 right-4 z-50 flex items-center gap-2 rounded-xl p-3 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-bottom-2 sm:left-auto sm:max-w-sm",
           toast.variant === "success" ? "bg-emerald-600 text-white" : "bg-blue-600 text-white"
         )}>
           <CheckCircle2 className="h-4 w-4" />
@@ -295,7 +295,7 @@ export function LostFoundView() {
 
       {/* Navigation Tabs with Exact Counts */}
       <div className="border-b border-slate-200">
-        <nav className="flex flex-wrap gap-4 text-xs font-bold uppercase tracking-wider">
+        <nav className="flex gap-4 overflow-x-auto scrollbar-none text-xs font-bold uppercase tracking-wider">
           {[
             { id: "found", label: `Active Found Items (${foundItemsList.length})` },
             { id: "lost", label: `Lost Complaints (${SAMPLE_LOST_COMPLAINTS.length})` },
@@ -391,8 +391,35 @@ export function LostFoundView() {
             </div>
           </OperationsFilterDrawer>
 
+          {/* Mobile found items */}
+          <div className="space-y-3 md:hidden">
+            {filteredFoundItems.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-400 italic">No active found items match your filter.</p>
+            ) : (
+              filteredFoundItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSelectedFoundItem(item)}
+                  className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-2xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-extrabold text-emerald-800">{item.id}</p>
+                      <p className="font-bold text-slate-800 truncate">{item.name}</p>
+                      <p className="text-[11px] text-slate-500">{item.category} · {item.location}</p>
+                    </div>
+                    <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[8.5px] border font-bold uppercase", statusBadges[item.status] || "bg-slate-50")}>
+                      {item.status}
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+
           {/* Compact Found Items Table */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs scrollbar-thin">
+          <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs scrollbar-thin md:block">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 bg-slate-50 z-10">
@@ -802,7 +829,7 @@ export function LostFoundView() {
               />
             </FormField>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Category" required>
                 <SelectInput
                   value={foundCat}
@@ -835,7 +862,7 @@ export function LostFoundView() {
           {/* Section 2: Location & Staff */}
           <div className="space-y-2.5">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 border-b border-slate-100 pb-1">Location & Staff</h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Found Location" required>
                 <TextInput
                   placeholder="e.g. Room 305 or Poolside"
@@ -902,7 +929,7 @@ export function LostFoundView() {
       {/* DRAWER: REGISTER LOST COMPLAINT */}
       <Drawer open={createLostOpen} onClose={() => setCreateLostOpen(false)} title="Register Guest Lost Complaint">
         <div className="space-y-3 select-none">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FormField label="Guest Name" required>
               <TextInput placeholder="e.g. Emily Watson" value={lostGuest} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLostGuest(e.target.value)} />
             </FormField>

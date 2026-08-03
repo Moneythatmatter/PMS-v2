@@ -277,7 +277,55 @@ export default function HistoryAuditLogsPage() {
 
       {/* Main Audit Logs Table */}
       <div className="space-y-2">
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs scrollbar-thin">
+        <div className="space-y-3 md:hidden">
+          {filteredLogs.map((log) => (
+            <div
+              key={log.id}
+              className={cn(
+                "rounded-xl border border-slate-200 bg-white p-4 shadow-2xs",
+                selectedIds.has(log.id) && "border-emerald-300 bg-emerald-50/40",
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(log.id)}
+                  onChange={() => {
+                    const next = new Set(selectedIds);
+                    if (next.has(log.id)) next.delete(log.id);
+                    else next.add(log.id);
+                    setSelectedIds(next);
+                  }}
+                  className="mt-0.5 rounded border-slate-300"
+                  aria-label={`Select ${log.auditCode}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[11px] font-bold text-slate-700">{log.auditCode}</p>
+                      <p className="font-extrabold text-slate-900 truncate">{log.userName}</p>
+                      <p className="text-[10px] text-slate-400">{log.timestamp}</p>
+                    </div>
+                    {renderSeverityBadge(log.severity)}
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-600">
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-extrabold uppercase text-slate-700">
+                      {log.actionType}
+                    </span>{" "}
+                    · {log.category} · {log.targetEntity}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500 line-clamp-2">
+                    <span className="line-through text-slate-400">{log.oldValue}</span>
+                    {" → "}
+                    <span className="font-bold text-slate-800">{log.newValue}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs scrollbar-thin md:block">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 z-10">
