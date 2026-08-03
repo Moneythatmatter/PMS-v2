@@ -33,12 +33,6 @@ import {
 } from "@/app/data/housekeepingData"
 
 
-import {
-  housekeepingRequests as initialHKRequests,
-  maintenanceRequests as initialMaintenanceRequests,
-  lostFoundItems as initialLostFoundItems,
-} from "@/app/data/frontoffice/modules";
-
 import * as actions from "./HousekeepingActions";
 import {
   hkRoomService,
@@ -57,6 +51,10 @@ import {
   hkShiftService,
   hkDashboardService,
 } from "@/services/housekeeping";
+
+const initialHKRequests: HousekeepingRequest[] = [];
+const initialMaintenanceRequests: MaintenanceRequest[] = [];
+const initialLostFoundItems: LostFoundItem[] = [];
 
 interface HousekeepingContextType {
   rooms: HKRoom[];

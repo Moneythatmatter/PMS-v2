@@ -85,8 +85,17 @@ function ReportListView({ type }: { type: ReportId }) {
         const data = await reportService.get(type);
         if (!cancelled) {
           const apiRows = (data.rows as ReportDefinition["rows"]) ?? [];
+          const summary = data.summary ?? {};
+          const summaryStats = Object.entries(summary).map(([label, value]) => ({
+            label: label
+              .replace(/([A-Z])/g, " $1")
+              .replace(/^./, (c) => c.toUpperCase())
+              .trim(),
+            value: typeof value === "number" || typeof value === "string" ? value : String(value),
+          }));
           setDefinition({
             ...base,
+            stats: summaryStats.length > 0 ? summaryStats : base.stats,
             rows: apiRows.map((row, index) => ({
               ...row,
               id:

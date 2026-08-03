@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { companyMasters } from "@/app/data";
+import { useEffect, useMemo, useState } from "react";
+import { companyService } from "@/services/front-office";
 import type { CompanyMaster } from "@/app/data/frontoffice/masters";
 import { SearchSelect } from "@/components/ui/SearchSelect";
 
@@ -26,8 +26,25 @@ export function CompanySearchSelect({
   className,
   inputClassName,
 }: CompanySearchSelectProps) {
+  const [companies, setCompanies] = useState<CompanyMaster[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await companyService.list();
+        if (!cancelled) setCompanies(data);
+      } catch {
+        if (!cancelled) setCompanies([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const options = useMemo(() => {
-    return companyMasters
+    return companies
       .filter((c) => c.status === "Active")
       .map((c) => ({
         id: c.id,
@@ -35,7 +52,7 @@ export function CompanySearchSelect({
         sublabel: `${c.code} · ${c.city}`,
         data: c,
       }));
-  }, []);
+  }, [companies]);
 
   return (
     <SearchSelect

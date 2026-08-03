@@ -64,5 +64,3 @@ export const states = [
   "Gujarat",
   "Rajasthan",
 ] as const;
-
-export const roomNumbers = ["101", "102", "112", "204", "305", "501", "602"] as const;

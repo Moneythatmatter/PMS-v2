@@ -17,12 +17,17 @@ import {
   mealPlans,
   paymentModes,
   ratePlans,
-  roomNumbers,
   roomTypes,
 } from "@/app/data/frontoffice/constants";
 import { currentUser } from "@/app/data";
 import type { GuestProfile } from "@/app/data/frontoffice/modules";
-import { guestService, reservationService } from "@/services/front-office";
+import {
+  guestService,
+  ratePlanService,
+  reservationService,
+  roomService,
+  roomTypeService,
+} from "@/services/front-office";
 import { CompanySearchSelect } from "@/components/frontoffice/CompanySearchSelect";
 import { SearchSelect } from "@/components/frontoffice/SearchSelect";
 import { Button } from "@/components/ui/Button";
@@ -51,21 +56,6 @@ function nightsBetween(checkIn: string, checkOut: string) {
   const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
   return diff > 0 ? diff : 0;
 }
-
-const rateByPlan: Record<string, number> = {
-  BAR: 4500,
-  Corporate: 3800,
-  OTA: 4200,
-  Weekend: 5200,
-  "Long Stay": 3200,
-};
-
-const baseRateByRoom: Record<string, number> = {
-  Standard: 3500,
-  Deluxe: 5200,
-  Suite: 8500,
-  Premium: 6200,
-};
 
 type Step = "guest" | "booking" | "payment" | "done";
 
@@ -113,6 +103,10 @@ const bookingTypeOptions = [
 export function NewReservationForm() {
   const searchParams = useSearchParams();
   const [ref] = useState(generateRef);
+  const [availableRoomNos, setAvailableRoomNos] = useState<string[]>([]);
+  const [rateByPlanMap, setRateByPlanMap] = useState<Record<string, number>>({});
+  const [baseRateByRoomMap, setBaseRateByRoomMap] = useState<Record<string, number>>({});
+  const [roomsByType, setRoomsByType] = useState<Record<string, string[]>>({});
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -165,6 +159,52 @@ export function NewReservationForm() {
       ...(checkOut ? { checkOut } : {}),
     }));
   }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [rooms, roomTypesData, ratePlansData] = await Promise.all([
+          roomService.list(),
+          roomTypeService.list().catch(() => []),
+          ratePlanService.list().catch(() => []),
+        ]);
+        if (cancelled) return;
+
+        const byType: Record<string, string[]> = {};
+        const nos: string[] = [];
+        for (const r of rooms) {
+          nos.push(r.roomNo);
+          const key = r.roomType || "Other";
+          if (!byType[key]) byType[key] = [];
+          byType[key].push(r.roomNo);
+        }
+        setAvailableRoomNos(nos);
+        setRoomsByType(byType);
+
+        const roomRates: Record<string, number> = {};
+        for (const rt of roomTypesData) {
+          if (rt.name) roomRates[rt.name] = rt.baseRate || 0;
+        }
+        setBaseRateByRoomMap(roomRates);
+
+        const planRates: Record<string, number> = {};
+        for (const rp of ratePlansData) {
+          if (rp.code) planRates[rp.code] = rp.baseRate || 0;
+          if (rp.name) planRates[rp.name] = rp.baseRate || 0;
+        }
+        setRateByPlanMap(planRates);
+      } catch {
+        if (!cancelled) {
+          setAvailableRoomNos([]);
+          setRoomsByType({});
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Automated Existing Guest Detection and Auto-Fill
   useEffect(() => {
@@ -265,22 +305,18 @@ export function NewReservationForm() {
   );
 
   const roomRate = useMemo(() => {
-    if (form.ratePlan && rateByPlan[form.ratePlan]) return rateByPlan[form.ratePlan];
-    if (form.roomType && baseRateByRoom[form.roomType]) return baseRateByRoom[form.roomType];
-    return 3500;
-  }, [form.ratePlan, form.roomType]);
+    if (form.ratePlan && rateByPlanMap[form.ratePlan]) return rateByPlanMap[form.ratePlan];
+    if (form.roomType && baseRateByRoomMap[form.roomType]) return baseRateByRoomMap[form.roomType];
+    return 0;
+  }, [form.ratePlan, form.roomType, rateByPlanMap, baseRateByRoomMap]);
 
   const totalAmount = nights * roomRate;
   const pendingAmount = Math.max(0, totalAmount - form.advancePaid);
 
   const filteredRooms = useMemo(() => {
-    if (!form.roomType) return roomNumbers;
-    const prefix =
-      form.roomType === "Standard" ? "1" :
-      form.roomType === "Deluxe" ? "2" :
-      form.roomType === "Suite" ? "5" : "";
-    return prefix ? roomNumbers.filter((r) => r.startsWith(prefix)) : roomNumbers;
-  }, [form.roomType]);
+    if (!form.roomType) return availableRoomNos;
+    return roomsByType[form.roomType] ?? availableRoomNos;
+  }, [form.roomType, availableRoomNos, roomsByType]);
 
   const completion = useMemo(() => {
     const fields = [
@@ -598,7 +634,7 @@ export function NewReservationForm() {
               <FormField label="Rate Plan">
                 <SelectInput className={inputClass} value={form.ratePlan} onChange={(e) => update("ratePlan", e.target.value)}>
                   {emptyOption("Select rate plan")}
-                  {ratePlans.map((p) => <option key={p} value={p}>{p} — {formatINR(rateByPlan[p] ?? 3500)}/night</option>)}
+                  {ratePlans.map((p) => <option key={p} value={p}>{p} — {formatINR(rateByPlanMap[p] ?? 0)}/night</option>)}
                 </SelectInput>
               </FormField>
               <FormField label="Meal Plan">

@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Minus, Percent, Plus, Receipt, ShoppingCart, Tag, Trash2 } from "lucide-react";
-import { inHouseGuests, posMenuItems } from "@/app/data";
+import type { PosMenuItem } from "@/app/data/frontoffice/modules";
+import { reservationService, type InHouseGuestDto } from "@/services/front-office";
+import { menuItemService } from "@/services/food-beverages";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -27,6 +29,19 @@ interface OrderLine {
 const tables = ["Table 1", "Table 2", "Table 3", "Table 5", "Table 8", "Table 12"];
 const GST_RATE = 0.18;
 
+function mapMenuItem(raw: Record<string, unknown>): PosMenuItem | null {
+  const id = String(raw.id ?? raw._id ?? "");
+  const name = String(raw.name ?? raw.itemName ?? "");
+  const price = Number(raw.price ?? raw.sellingPrice ?? raw.amount ?? 0);
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    category: String(raw.category ?? raw.categoryName ?? "General"),
+    price,
+  };
+}
+
 export function PosBillingView() {
   const [billingType, setBillingType] = useState<"walk-in" | "in-house">("walk-in");
   const [tableOrRoom, setTableOrRoom] = useState(tables[3]);
@@ -36,6 +51,34 @@ export function PosBillingView() {
   const [discount, setDiscount] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [settled, setSettled] = useState(false);
+  const [inHouseGuests, setInHouseGuests] = useState<InHouseGuestDto[]>([]);
+  const [posMenuItems, setPosMenuItems] = useState<PosMenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [guests, menuRaw] = await Promise.all([
+          reservationService.inHouse().catch(() => [] as InHouseGuestDto[]),
+          menuItemService.list().catch(() => [] as Record<string, unknown>[]),
+        ]);
+        if (cancelled) return;
+        setInHouseGuests(guests);
+        setPosMenuItems(
+          (menuRaw as Record<string, unknown>[])
+            .map(mapMenuItem)
+            .filter((x): x is PosMenuItem => !!x),
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filteredMenu = useMemo(() => {
     const q = menuSearch.toLowerCase();
@@ -46,18 +89,18 @@ export function PosBillingView() {
         item.category.toLowerCase().includes(q);
       return matchesCat && matchesSearch;
     });
-  }, [menuSearch, category]);
+  }, [menuSearch, category, posMenuItems]);
 
   const categories = useMemo(
     () => ["all", ...new Set(posMenuItems.map((m) => m.category))],
-    [],
+    [posMenuItems],
   );
 
   const subtotal = cart.reduce((s, l) => s + l.price * l.qty, 0);
   const gst = Math.round((subtotal - discount) * GST_RATE);
   const total = subtotal - discount + gst;
 
-  const addToCart = (item: (typeof posMenuItems)[0]) => {
+  const addToCart = (item: PosMenuItem) => {
     setSettled(false);
     setCart((prev) => {
       const existing = prev.find((l) => l.id === item.id);
@@ -103,6 +146,10 @@ export function PosBillingView() {
   };
 
   const roomOptions = inHouseGuests.map((g) => `${g.room} — ${g.guestName}`);
+
+  if (loading) {
+    return <p className="text-sm text-slate-500">Loading POS…</p>;
+  }
 
   return (
     <div className="space-y-5">
@@ -202,7 +249,12 @@ export function PosBillingView() {
             </div>
 
             <div className="grid gap-2 sm:grid-cols-2">
-              {filteredMenu.map((item) => (
+              {filteredMenu.length === 0 ? (
+                <p className="col-span-full rounded-lg border border-dashed border-slate-200 px-3 py-8 text-center text-sm text-slate-500">
+                  No menu items from database yet.
+                </p>
+              ) : (
+                filteredMenu.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -220,7 +272,8 @@ export function PosBillingView() {
                     <Plus className="h-4 w-4 text-emerald-600" />
                   </div>
                 </button>
-              ))}
+              ))
+              )}
             </div>
           </div>
         </div>

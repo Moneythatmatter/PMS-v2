@@ -1,6 +1,7 @@
 export { api, ApiError, apiRequest, foPath } from "../api";
 export { dashboardService } from "./dashboard";
 export { reservationService } from "./reservations";
+export type { InHouseGuestDto } from "./reservations";
 export { roomService } from "./rooms";
 export {
   mastersService,

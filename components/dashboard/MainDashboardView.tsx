@@ -13,7 +13,6 @@ import {
   bookings,
   navItems,
   currentUser,
-  wakeUpCalls,
 } from "@/app/data";
 import { AppShell } from "@/components/layout/AppShell";
 import { StatCard } from "@/components/ui/StatCard";
@@ -28,9 +27,12 @@ import { BookingList } from "@/components/dashboard/BookingList";
 import { WakeUpCallsAlert } from "@/components/frontoffice/WakeUpCallsAlert";
 import { initialHKRooms } from "@/app/data/housekeepingData";
 import type { HKRoom } from "@/components/housekeeping/HousekeepingTypes";
+import { wakeUpCallService } from "@/services/front-office";
+import type { WakeUpCall } from "@/app/data/frontoffice/modules";
 
 export function MainDashboardView() {
   const [rooms, setRooms] = useState<HKRoom[]>([]);
+  const [wakeUpCalls, setWakeUpCalls] = useState<WakeUpCall[]>([]);
 
   useEffect(() => {
     const loadRooms = () => {
@@ -45,6 +47,21 @@ export function MainDashboardView() {
     loadRooms();
     window.addEventListener("storage", loadRooms);
     return () => window.removeEventListener("storage", loadRooms);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const calls = await wakeUpCallService.list();
+        if (!cancelled) setWakeUpCalls(calls);
+      } catch {
+        if (!cancelled) setWakeUpCalls([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const computedOccupancy = useMemo(() => {
