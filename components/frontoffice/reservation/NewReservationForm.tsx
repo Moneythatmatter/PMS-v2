@@ -35,15 +35,10 @@ import {
   AlertBanner,
   FormField,
   FOPageHeader,
-  SelectInput,
   TextInput,
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
-
-const emptyOption = (label: string) => (
-  <option value="" disabled hidden>{label}</option>
-);
 
 function generateRef() {
   return `BK-${1044 + Math.floor(Math.random() * 100)}`;
@@ -53,7 +48,9 @@ function nightsBetween(checkIn: string, checkOut: string) {
   if (!checkIn || !checkOut) return 0;
   const start = new Date(checkIn);
   const end = new Date(checkOut);
-  const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  const diff = Math.ceil(
+    (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
+  );
   return diff > 0 ? diff : 0;
 }
 
@@ -619,35 +616,63 @@ export function NewReservationForm() {
                 <TextInput className={inputClass} type="number" min={0} value={form.children} onChange={(e) => update("children", Number(e.target.value))} />
               </FormField>
               <FormField label="Room Type" required>
-                <SelectInput className={inputClass} value={form.roomType} onChange={(e) => update("roomType", e.target.value)}>
-                  {emptyOption("Select room type")}
-                  {roomTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={roomTypes.map((t) => ({ id: t, label: t }))}
+                  selectedId={form.roomType || null}
+                  placeholder="Search room type…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("roomType", opt.id)}
+                  onClear={() => update("roomType", "")}
+                />
                 {errors.roomType && <p className="text-xs text-red-500">{errors.roomType}</p>}
               </FormField>
               <FormField label="Room Number">
-                <SelectInput className={inputClass} value={form.roomNumber} onChange={(e) => update("roomNumber", e.target.value)}>
-                  {emptyOption("Select room number")}
-                  {filteredRooms.map((r) => <option key={r} value={r}>{r}</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={filteredRooms.map((r) => ({
+                    id: r,
+                    label: `Room ${r}`,
+                    hint: form.roomType || undefined,
+                  }))}
+                  selectedId={form.roomNumber || null}
+                  placeholder="Search room number…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("roomNumber", opt.id)}
+                  onClear={() => update("roomNumber", "")}
+                />
               </FormField>
               <FormField label="Rate Plan">
-                <SelectInput className={inputClass} value={form.ratePlan} onChange={(e) => update("ratePlan", e.target.value)}>
-                  {emptyOption("Select rate plan")}
-                  {ratePlans.map((p) => <option key={p} value={p}>{p} — {formatINR(rateByPlanMap[p] ?? 0)}/night</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={ratePlans.map((p) => ({
+                    id: p,
+                    label: p,
+                    hint: `${formatINR(rateByPlanMap[p] ?? 0)}/night`,
+                  }))}
+                  selectedId={form.ratePlan || null}
+                  placeholder="Search rate plan…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("ratePlan", opt.id)}
+                  onClear={() => update("ratePlan", "")}
+                />
               </FormField>
               <FormField label="Meal Plan">
-                <SelectInput className={inputClass} value={form.mealPlan} onChange={(e) => update("mealPlan", e.target.value)}>
-                  {emptyOption("Select meal plan")}
-                  {mealPlans.map((m) => <option key={m} value={m}>{m}</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={mealPlans.map((m) => ({ id: m, label: m }))}
+                  selectedId={form.mealPlan || null}
+                  placeholder="Search meal plan…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("mealPlan", opt.id)}
+                  onClear={() => update("mealPlan", "")}
+                />
               </FormField>
               <FormField label="Source">
-                <SelectInput className={inputClass} value={form.source} onChange={(e) => update("source", e.target.value)}>
-                  {emptyOption("Select source")}
-                  {bookingSources.map((s) => <option key={s} value={s}>{s}</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={bookingSources.map((s) => ({ id: s, label: s }))}
+                  selectedId={form.source || null}
+                  placeholder="Search source…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("source", opt.id)}
+                  onClear={() => update("source", "")}
+                />
               </FormField>
             </SectionCard>
 
@@ -656,10 +681,14 @@ export function NewReservationForm() {
                 <TextInput className={inputClass} type="number" min={0} value={form.advancePaid} onChange={(e) => update("advancePaid", Number(e.target.value))} />
               </FormField>
               <FormField label="Payment Mode">
-                <SelectInput className={inputClass} value={form.paymentMode} onChange={(e) => update("paymentMode", e.target.value)}>
-                  {emptyOption("Select payment mode")}
-                  {paymentModes.map((m) => <option key={m} value={m}>{m}</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={paymentModes.map((m) => ({ id: m, label: m }))}
+                  selectedId={form.paymentMode || null}
+                  placeholder="Search payment mode…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("paymentMode", opt.id)}
+                  onClear={() => update("paymentMode", "")}
+                />
                 {errors.paymentMode && <p className="text-xs text-red-500">{errors.paymentMode}</p>}
               </FormField>
               <FormField label="Pending Amount">

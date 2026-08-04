@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
-import { FormField, SelectInput, TextAreaInput, TextInput } from "@/components/frontoffice/ui";
+import React, { useMemo } from "react";
+import { FormField, TextAreaInput, TextInput } from "@/components/frontoffice/ui";
+import { SearchSelect } from "@/components/frontoffice/SearchSelect";
 
 const inputClass = "rounded-xl";
 
@@ -28,18 +29,31 @@ export function RoomAssignmentSection({
   onRemarksChange,
   availableRooms,
 }: RoomAssignmentSectionProps) {
+  const roomOptions = useMemo(
+    () =>
+      availableRooms.map((rm) => ({
+        id: rm,
+        label: `Room ${rm}`,
+        hint: "Vacant",
+      })),
+    [availableRooms],
+  );
+
   return (
     <>
       <FormField label="Assigned Room Number" required>
-        <SelectInput
-          className={inputClass}
-          value={assignedRoom}
-          onChange={(e) => onAssignedRoomChange(e.target.value)}
-        >
-          {availableRooms.map((rm) => (
-            <option key={rm} value={rm}>Room {rm}</option>
-          ))}
-        </SelectInput>
+        <SearchSelect
+          options={roomOptions}
+          selectedId={assignedRoom || null}
+          placeholder={
+            roomOptions.length === 0
+              ? "No vacant rooms available"
+              : "Search vacant room…"
+          }
+          inputClassName={inputClass}
+          onSelect={(opt) => onAssignedRoomChange(opt.id)}
+          onClear={() => onAssignedRoomChange("")}
+        />
       </FormField>
 
       <FormField label="Key Card RFID Number">

@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
-import { FormField, SelectInput, TextInput, formatINR } from "@/components/frontoffice/ui";
+import React, { useMemo } from "react";
+import { FormField, TextInput, formatINR } from "@/components/frontoffice/ui";
+import { SearchSelect } from "@/components/frontoffice/SearchSelect";
 import { paymentModes } from "@/app/data/frontoffice/constants";
 
 const inputClass = "rounded-xl";
@@ -22,19 +23,22 @@ export function PaymentBillingSection({
   totalAmount,
 }: PaymentBillingSectionProps) {
   const balance = Math.max(0, totalAmount - deposit);
+  const paymentOptions = useMemo(
+    () => paymentModes.map((mode) => ({ id: mode, label: mode })),
+    [],
+  );
 
   return (
     <>
       <FormField label="Payment Mode" required>
-        <SelectInput
-          className={inputClass}
-          value={paymentMode}
-          onChange={(e) => onPaymentModeChange(e.target.value)}
-        >
-          {paymentModes.map((mode) => (
-            <option key={mode} value={mode}>{mode}</option>
-          ))}
-        </SelectInput>
+        <SearchSelect
+          options={paymentOptions}
+          selectedId={paymentMode || null}
+          placeholder="Search payment mode…"
+          inputClassName={inputClass}
+          onSelect={(opt) => onPaymentModeChange(opt.id)}
+          onClear={() => onPaymentModeChange("")}
+        />
       </FormField>
 
       <FormField label="Advance Deposit Collected (₹)">

@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { CompanySearchSelect } from "@/components/frontoffice/CompanySearchSelect";
+import { SearchSelect } from "@/components/frontoffice/SearchSelect";
 import type { ReservationBooking } from "@/app/data/types/frontoffice";
 import {
   guestService,
@@ -30,7 +31,6 @@ import {
   AlertBanner,
   FormField,
   FOPageHeader,
-  SelectInput,
   TextInput,
   formatINR,
 } from "@/components/frontoffice/ui";
@@ -42,15 +42,9 @@ import { GuestDetailsSection } from "./GuestDetailsSection";
 import { RoomAssignmentSection } from "./RoomAssignmentSection";
 import { PaymentBillingSection } from "./PaymentBillingSection";
 
-const emptyOption = (label: string) => (
-  <option value="" disabled hidden>
-    {label}
-  </option>
-);
+const inputClass = "rounded-xl";
 
 type CheckInMode = "reserved" | "walkin";
-
-const inputClass = "rounded-xl";
 
 const defaultWalkIn = {
   firstName: "",
@@ -173,6 +167,7 @@ export function CheckInForm() {
     idNumber: "",
   });
   const [toast, setToast] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
   const [completed, setCompleted] = useState(false);
   const [pmsBookings, setPmsBookings] = useState<any[]>([]);
   const [availableRooms, setAvailableRooms] = useState<
@@ -184,36 +179,25 @@ export function CheckInForm() {
     let cancelled = false;
     (async () => {
       try {
-        const [bookings, rooms, roomTypes] = await Promise.all([
+        const [bookings, roomCards, roomTypes] = await Promise.all([
           reservationService.list(),
-          roomService.list(),
+          roomService.status(),
           roomTypeService.list().catch(() => []),
         ]);
         if (cancelled) return;
         setPmsBookings(bookings);
-        const sellable = rooms.filter((r) => {
-          const status = String(r.status || "").toLowerCase();
-          const hk = String(r.housekeeping || "").toLowerCase();
-          const vacant =
-            status.includes("vacant") ||
-            status.includes("available") ||
-            status === "clean" ||
-            !r.guestName;
-          const ready =
-            !hk ||
-            hk.includes("clean") ||
-            hk.includes("inspect") ||
-            hk.includes("ready");
-          return vacant && ready;
-        });
-        setAvailableRooms(
-          (sellable.length > 0 ? sellable : rooms).map((r) => ({
+
+        // Same source/rules as Room Status: only Vacant rooms are assignable
+        const assignable = roomCards
+          .filter((r) => String(r.status || "").trim().toLowerCase() === "vacant")
+          .map((r) => ({
             roomNo: r.roomNo,
-            roomType: r.roomType,
+            roomType: r.type,
             status: r.status,
             housekeeping: r.housekeeping,
-          })),
-        );
+          }));
+        setAvailableRooms(assignable);
+
         const rates: Record<string, number> = {};
         for (const rt of roomTypes) {
           if (rt.name) rates[rt.name] = rt.baseRate || 0;
@@ -261,9 +245,17 @@ export function CheckInForm() {
   const loadArrival = (found: any) => {
     setBooking(found);
     setBookingId(found.id);
-    setAssignedRoom(found.assignedRoom || found.roomNo || "");
+    const preassigned = String(found.assignedRoom || found.roomNo || "").trim();
+    // Never treat booking placeholders (TBA / unassigned) as a real room
+    const isRealRoom =
+      preassigned &&
+      !/^tba$/i.test(preassigned) &&
+      !/^n\/?a$/i.test(preassigned) &&
+      !/^unassigned$/i.test(preassigned);
+    setAssignedRoom(isRealRoom ? preassigned : "");
     setDeposit(found.advancePaid || 0);
     setLookupError("");
+    setToastVariant("success");
     setToast(`Loaded booking reference ${found.id} for ${found.guestName}.`);
   };
 
@@ -299,6 +291,11 @@ export function CheckInForm() {
     }
   };
 
+  const showToast = (message: string, variant: "success" | "error" = "success") => {
+    setToastVariant(variant);
+    setToast(message);
+  };
+
   const handleCompleteCheckIn = async () => {
     const guestNameForApi =
       checkInMode === "reserved"
@@ -308,6 +305,58 @@ export function CheckInForm() {
       checkInMode === "reserved"
         ? assignedRoom
         : walkIn.room || assignedRoom;
+
+    if (checkInMode === "walkin") {
+      if (!walkIn.firstName.trim() || !walkIn.lastName.trim()) {
+        showToast("First name and last name are required.", "error");
+        return;
+      }
+      if (!walkIn.mobile.trim()) {
+        showToast("Mobile phone is required.", "error");
+        return;
+      }
+      if (!walkIn.bookingType) {
+        showToast("Booking type is required.", "error");
+        return;
+      }
+      if (walkIn.bookingType === "Company" && !walkIn.companyId) {
+        showToast("Please select a company.", "error");
+        return;
+      }
+    }
+
+    const missingIdentity = [
+      ["Gender", guestDetails.gender],
+      ["Date of Birth", guestDetails.dob],
+      ["Nationality", guestDetails.nationality],
+      ["Address", guestDetails.address],
+      ["City", guestDetails.city],
+      ["State", guestDetails.state],
+      ["Country", guestDetails.country],
+      ["Pincode", guestDetails.pincode],
+      ["ID Proof Type", guestDetails.idProofType],
+      ["ID Document Number", guestDetails.idNumber],
+    ].find(([, value]) => !String(value || "").trim());
+
+    if (missingIdentity) {
+      showToast(`${missingIdentity[0]} is required.`, "error");
+      return;
+    }
+
+    if (!idFile) {
+      showToast("Please upload an ID document.", "error");
+      return;
+    }
+
+    if (!String(roomForApi || "").trim()) {
+      showToast("Please assign a vacant room.", "error");
+      return;
+    }
+
+    if (checkInMode === "walkin" && !walkIn.paymentMode) {
+      showToast("Payment mode is required.", "error");
+      return;
+    }
 
     try {
       if (checkInMode === "reserved" && booking) {
@@ -340,28 +389,38 @@ export function CheckInForm() {
       }
 
       setCompleted(true);
-      setToast(
+      showToast(
         `Check-in completed successfully for ${guestNameForApi} in Room ${roomForApi}!`,
       );
     } catch (e) {
-      setToast(
+      showToast(
         e instanceof Error ? e.message : "Failed to complete check-in.",
+        "error",
       );
     }
   };
 
   const availableRoomNumbers = useMemo(() => {
-    const type = walkIn.roomType || booking?.roomType;
-    const rooms = type
+    const type = String(walkIn.roomType || booking?.roomType || "").trim();
+    const matchingType = type
       ? availableRooms.filter(
-          (r) =>
-            !type ||
-            r.roomType?.toLowerCase() === type.toLowerCase() ||
-            r.roomType?.toLowerCase().includes(type.toLowerCase()),
+          (r) => r.roomType?.toLowerCase() === type.toLowerCase(),
         )
-      : availableRooms;
-    const list = (rooms.length > 0 ? rooms : availableRooms).map((r) => r.roomNo);
-    if (assignedRoom && !list.includes(assignedRoom)) list.unshift(assignedRoom);
+      : [];
+    // Prefer same room type; if none vacant, show all vacant rooms
+    const pool = matchingType.length > 0 ? matchingType : availableRooms;
+    const list = pool.map((r) => r.roomNo);
+
+    // Keep a already-selected real vacant room visible if status just changed
+    const selected = String(assignedRoom || "").trim();
+    const isPlaceholder =
+      !selected ||
+      /^tba$/i.test(selected) ||
+      /^n\/?a$/i.test(selected) ||
+      /^unassigned$/i.test(selected);
+    if (!isPlaceholder && !list.includes(selected)) {
+      list.unshift(selected);
+    }
     return list;
   }, [availableRooms, walkIn.roomType, booking?.roomType, assignedRoom]);
 
@@ -369,7 +428,7 @@ export function CheckInForm() {
     <div className="space-y-6 select-none">
       {toast && (
         <AlertBanner
-          variant="success"
+          variant={toastVariant}
           message={toast}
           onDismiss={() => setToast(null)}
         />
@@ -456,9 +515,9 @@ export function CheckInForm() {
         </div>
 
       ) : checkInMode === "reserved" ? (
-        <div className="grid items-start gap-6 lg:grid-cols-5">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(260px,300px)_minmax(0,44rem)] xl:grid-cols-[minmax(280px,320px)_minmax(0,48rem)]">
           {/* Left — search & arriving list (sticky like Check-Out) */}
-          <div className="space-y-5 lg:sticky lg:top-4 lg:col-span-2 lg:self-start">
+          <div className="w-full space-y-5 lg:sticky lg:top-4 lg:self-start">
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
@@ -578,7 +637,7 @@ export function CheckInForm() {
           </div>
 
           {/* Right — guest card & registration form */}
-          <div className="space-y-5 lg:col-span-3">
+          <div className="min-w-0 space-y-5">
                 {!booking ? (
                   <div className="flex h-full min-h-[400px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
                     <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
@@ -765,36 +824,42 @@ export function CheckInForm() {
                     }
                   />
                 </FormField>
-                <FormField label="Booking Category" required>
-                  <SelectInput
-                    className={inputClass}
-                    value={walkIn.bookingType}
-                    onChange={(e) =>
+                <FormField label="Booking Type" required>
+                  <SearchSelect
+                    options={[...bookingTypeOptions]}
+                    selectedId={walkIn.bookingType || null}
+                    placeholder="Search booking type…"
+                    inputClassName={inputClass}
+                    onSelect={(option) => {
                       setWalkIn((p) => ({
                         ...p,
-                        bookingType: e.target.value as any,
+                        bookingType: option.id as "Individual" | "Company",
+                        ...(option.id === "Individual"
+                          ? { companyName: "", companyId: "" }
+                          : {}),
+                      }));
+                    }}
+                    onClear={() =>
+                      setWalkIn((p) => ({
+                        ...p,
+                        bookingType: "",
+                        companyName: "",
+                        companyId: "",
                       }))
                     }
-                  >
-                    {emptyOption("Select type")}
-                    {bookingTypeOptions.map((t) => {
-                      const idVal = typeof t === "string" ? t : (t as any).id;
-                      const labelVal =
-                        typeof t === "string" ? t : (t as any).label;
-                      return (
-                        <option key={idVal} value={idVal}>
-                          {labelVal}
-                        </option>
-                      );
-                    })}
-                  </SelectInput>
+                  />
                 </FormField>
                 {walkIn.bookingType === "Company" && (
                   <FormField label="Company Name">
                     <CompanySearchSelect
                       value={walkIn.companyName}
+                      selectedCompanyId={walkIn.companyId || null}
                       onChange={(val) =>
-                        setWalkIn((p) => ({ ...p, companyName: val }))
+                        setWalkIn((p) => ({
+                          ...p,
+                          companyName: val,
+                          companyId: "",
+                        }))
                       }
                       onSelect={(c) =>
                         setWalkIn((p) => ({
@@ -803,6 +868,15 @@ export function CheckInForm() {
                           companyId: c.id,
                         }))
                       }
+                      onClear={() =>
+                        setWalkIn((p) => ({
+                          ...p,
+                          companyName: "",
+                          companyId: "",
+                        }))
+                      }
+                      placeholder="Search company name or code…"
+                      inputClassName={inputClass}
                     />
                   </FormField>
                 )}
