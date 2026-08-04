@@ -54,6 +54,25 @@ function nightsBetween(checkIn: string, checkOut: string) {
   return diff > 0 ? diff : 0;
 }
 
+function getTodayString() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getNextDayString(dateStr: string) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() + 1);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 type Step = "guest" | "booking" | "payment" | "done";
 
 const steps: { id: Step; label: string; num: number }[] = [
@@ -99,6 +118,27 @@ const bookingTypeOptions = [
 
 export function NewReservationForm() {
   const searchParams = useSearchParams();
+  const todayStr = useMemo(() => getTodayString(), []);
+
+  const searchParamCheckIn = searchParams.get("checkIn");
+  const searchParamCheckOut = searchParams.get("checkOut");
+
+  const initialCheckIn = searchParamCheckIn
+    ? searchParamCheckIn < todayStr
+      ? todayStr
+      : searchParamCheckIn
+    : "";
+
+  const initialCheckOut = searchParamCheckOut
+    ? searchParamCheckOut < todayStr
+      ? initialCheckIn
+        ? getNextDayString(initialCheckIn)
+        : getNextDayString(todayStr)
+      : initialCheckIn && searchParamCheckOut <= initialCheckIn
+        ? getNextDayString(initialCheckIn)
+        : searchParamCheckOut
+    : "";
+
   const [ref] = useState(generateRef);
   const [availableRoomNos, setAvailableRoomNos] = useState<string[]>([]);
   const [rateByPlanMap, setRateByPlanMap] = useState<Record<string, number>>({});
@@ -112,8 +152,8 @@ export function NewReservationForm() {
     bookingType: "" as "" | "Individual" | "Company",
     companyName: "",
     companyId: "",
-    checkIn: searchParams.get("checkIn") ?? "",
-    checkOut: searchParams.get("checkOut") ?? "",
+    checkIn: initialCheckIn,
+    checkOut: initialCheckOut,
     adults: 1,
     children: 0,
     roomType: searchParams.get("roomType") ?? "",
@@ -148,12 +188,26 @@ export function NewReservationForm() {
     const checkIn = searchParams.get("checkIn");
     const checkOut = searchParams.get("checkOut");
     if (!room && !roomType && !checkIn && !checkOut) return;
+
+    const today = getTodayString();
+    let validCheckIn = checkIn ?? undefined;
+    if (validCheckIn && validCheckIn < today) {
+      validCheckIn = today;
+    }
+
+    let validCheckOut = checkOut ?? undefined;
+    if (validCheckOut && validCheckOut < today) {
+      validCheckOut = validCheckIn ? getNextDayString(validCheckIn) : getNextDayString(today);
+    } else if (validCheckIn && validCheckOut && validCheckOut <= validCheckIn) {
+      validCheckOut = getNextDayString(validCheckIn);
+    }
+
     setForm((prev) => ({
       ...prev,
       ...(room ? { roomNumber: room } : {}),
       ...(roomType ? { roomType } : {}),
-      ...(checkIn ? { checkIn } : {}),
-      ...(checkOut ? { checkOut } : {}),
+      ...(validCheckIn ? { checkIn: validCheckIn } : {}),
+      ...(validCheckOut ? { checkOut: validCheckOut } : {}),
     }));
   }, [searchParams]);
 
@@ -339,6 +393,11 @@ export function NewReservationForm() {
     setForm((prev) => {
       const next = { ...prev, [field]: value };
       if (field === "roomType") next.roomNumber = "";
+      if (field === "checkIn" && typeof value === "string") {
+        if (next.checkOut && next.checkOut <= value) {
+          next.checkOut = getNextDayString(value);
+        }
+      }
       return next;
     });
     setErrors((prev) => {
@@ -350,6 +409,7 @@ export function NewReservationForm() {
   };
 
   const validate = () => {
+    const today = getTodayString();
     const next: Record<string, string> = {};
     if (!form.firstName.trim()) next.firstName = "Required";
     if (!form.lastName.trim()) next.lastName = "Required";
@@ -358,10 +418,18 @@ export function NewReservationForm() {
     if (!form.bookingType) next.bookingType = "Required";
     if (form.bookingType === "Company" && !form.companyId)
       next.companyName = "Please select a company";
-    if (!form.checkIn) next.checkIn = "Required";
-    if (!form.checkOut) next.checkOut = "Required";
-    if (form.checkIn && form.checkOut && nights <= 0)
-      next.checkOut = "Must be after check-in";
+    if (!form.checkIn) {
+      next.checkIn = "Required";
+    } else if (form.checkIn < today) {
+      next.checkIn = "Check-in date cannot be in the past";
+    }
+    if (!form.checkOut) {
+      next.checkOut = "Required";
+    } else if (form.checkOut < today) {
+      next.checkOut = "Check-out date cannot be in the past";
+    } else if (form.checkIn && form.checkOut <= form.checkIn) {
+      next.checkOut = "Check-out date must be after check-in date";
+    }
     if (!form.roomType) next.roomType = "Required";
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -608,11 +676,23 @@ export function NewReservationForm() {
 
             <SectionCard icon={BedDouble} title="Booking Details" description="Stay dates, room allocation, and rate plan">
               <FormField label="Check-in Date" required>
-                <TextInput className={inputClass} type="date" value={form.checkIn} onChange={(e) => update("checkIn", e.target.value)} />
+                <TextInput
+                  className={inputClass}
+                  type="date"
+                  min={todayStr}
+                  value={form.checkIn}
+                  onChange={(e) => update("checkIn", e.target.value)}
+                />
                 {errors.checkIn && <p className="text-xs text-red-500">{errors.checkIn}</p>}
               </FormField>
               <FormField label="Check-out Date" required>
-                <TextInput className={inputClass} type="date" value={form.checkOut} onChange={(e) => update("checkOut", e.target.value)} />
+                <TextInput
+                  className={inputClass}
+                  type="date"
+                  min={form.checkIn || todayStr}
+                  value={form.checkOut}
+                  onChange={(e) => update("checkOut", e.target.value)}
+                />
                 {errors.checkOut && <p className="text-xs text-red-500">{errors.checkOut}</p>}
               </FormField>
               <FormField label="Nights">
