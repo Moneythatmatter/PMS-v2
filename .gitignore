@@ -45,3 +45,4 @@ next-env.d.ts
 # developer guide 
 DEVELOPER_GUIDE.md
 CODE_QUALITY_AUDIT.md
+FRONT_OFFICE_BUGS.md
