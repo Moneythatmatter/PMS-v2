@@ -251,11 +251,12 @@ export function NewReservationForm() {
         const matchLastName = nameParts.slice(1).join(" ") || "";
 
         setForm((prev) => {
+          const cleanMatchedMobile = (matchedGuest!.mobile || "").replace(/\D/g, "");
           if (
             prev.guestId === matchedGuest!.id &&
             prev.firstName === matchFirstName &&
             prev.lastName === matchLastName &&
-            prev.mobile === matchedGuest!.mobile &&
+            prev.mobile === cleanMatchedMobile &&
             prev.email === matchedGuest!.email
           ) {
             return prev;
@@ -266,7 +267,7 @@ export function NewReservationForm() {
             guestId: matchedGuest!.id,
             firstName: matchFirstName,
             lastName: matchLastName,
-            mobile: matchedGuest!.mobile,
+            mobile: cleanMatchedMobile,
             email: matchedGuest!.email,
             nationality: matchedGuest!.nationality || prev.nationality || "",
             idProofType: matchedGuest!.idType || prev.idProofType || "",
@@ -544,7 +545,15 @@ export function NewReservationForm() {
                 {errors.lastName && <p className="text-xs text-red-500">{errors.lastName}</p>}
               </FormField>
               <FormField label="Mobile" required>
-                <TextInput className={inputClass} placeholder="Enter mobile number" value={form.mobile} onChange={(e) => update("mobile", e.target.value)} />
+                <TextInput
+                  className={inputClass}
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder="Enter mobile number"
+                  value={form.mobile}
+                  onChange={(e) => update("mobile", e.target.value.replace(/\D/g, ""))}
+                  maxLength={10}
+                />
                 {errors.mobile && <p className="text-xs text-red-500">{errors.mobile}</p>}
               </FormField>
               <FormField label="Email" required>
@@ -750,10 +759,10 @@ export function NewReservationForm() {
               </div>
 
               <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-2">
-                <Button onClick={handleSave} className="h-11 w-full bg-slate-900 hover:bg-slate-800">
+                <Button onClick={handleSave} className="h-11 w-full bg-slate-900 hover:bg-slate-800 cursor-pointer">
                   Save Reservation
                 </Button>
-                <button type="button" onClick={() => window.history.back()} className="w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-700">
+                <button type="button" onClick={() => window.history.back()} className="w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-700 cursor-pointer">
                   Cancel
                 </button>
               </div>

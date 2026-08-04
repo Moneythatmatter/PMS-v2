@@ -3,7 +3,7 @@ import "./globals.css";
 import { AppProviders } from "@/components/auth/AppProviders";
 
 export const metadata: Metadata = {
-  title: "Hotel PMS",
+  title: "Impact PMS",
   description: "Hotel Property Management System",
 };
 
