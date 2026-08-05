@@ -41,6 +41,10 @@ import { TransactionValidationView } from "@/components/accounts/TransactionVali
 import { VoucherTypeUserPrivilegeView } from "@/components/accounts/VoucherTypeUserPrivilegeView";
 import { QueriesView } from "@/components/accounts/QueriesView";
 import { FinancialAnalysisView } from "@/components/accounts/FinancialAnalysisView";
+import { BalanceSheetView } from "@/components/accounts/BalanceSheetView";
+import { DayBookView } from "@/components/accounts/DayBookView";
+import { SecondaryReportsView } from "@/components/accounts/SecondaryReportsView";
+import { AccountsToolsView } from "@/components/accounts/AccountsToolsView";
 import { ChevronRight, FolderOpen } from "lucide-react";
 
 function findNavLabel(slugPath: string): { title: string; category?: string } {
@@ -408,6 +412,38 @@ export default async function AccountsPage({
 
   if (slugPath === "reports/general-ledger" || slugPath === "general-ledger") {
     return <GeneralLedgerView />;
+  }
+
+  if (
+    slugPath === "reports/balance-sheet" ||
+    slugPath === "balance-sheet" ||
+    slugPath === "balancesheet"
+  ) {
+    return <BalanceSheetView />;
+  }
+
+  if (
+    slugPath === "reports/day-book" ||
+    slugPath === "day-book" ||
+    slugPath === "daybook"
+  ) {
+    return <DayBookView />;
+  }
+
+  if (
+    slugPath === "reports2" ||
+    slugPath === "reports2/catalog" ||
+    slugPath === "reports-2"
+  ) {
+    return <SecondaryReportsView />;
+  }
+
+  if (
+    slugPath === "tools" ||
+    slugPath === "tools/utilities" ||
+    slugPath === "utilities"
+  ) {
+    return <AccountsToolsView />;
   }
 
   const { title, category } = findNavLabel(slugPath);

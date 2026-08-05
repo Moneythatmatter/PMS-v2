@@ -120,7 +120,7 @@ export function GLTransactionView() {
   }, [totalDebit, totalCredit]);
 
   const isBalanced = useMemo(() => {
-    return totalDebit > 0 && totalDebit === totalCredit;
+    return Math.abs(totalDebit - totalCredit) < 0.01;
   }, [totalDebit, totalCredit]);
 
   // Row Manipulation Handlers
@@ -204,28 +204,55 @@ export function GLTransactionView() {
 
   // Button Action Handler: Save
   const handleSaveVoucher = () => {
+    // 1. Validate GL Account selections
+    const hasEmptyAccount = rows.some((r) => !r.account || r.account.trim() === "");
+    if (hasEmptyAccount) {
+      setToastMessage("Cannot Save: Please select a valid GL Account for all line items.");
+      return;
+    }
+
+    // 2. Validate Debit = Credit Parity
+    if (totalDebit <= 0) {
+      setToastMessage("Cannot Save: Total Debit amount must be greater than ₹ 0.00.");
+      return;
+    }
+
     if (!isBalanced) {
       setToastMessage(
-        `Cannot Save: Total Debit (${formatINR(totalDebit)}) does not equal Total Credit (${formatINR(
+        `⚠ Cannot Save Out-of-Balance Voucher: Total Debit (${formatINR(totalDebit)}) does not equal Total Credit (${formatINR(
           totalCredit
-        )}). Difference: ${formatINR(difference)}`
+        )}). Out of balance by ${formatINR(difference)}.`
       );
       return;
     }
+
+    // 3. Mark Status as Posted on successful save
     setStatus("Posted");
-    setToastMessage(`GL Journal Voucher ${currentVoucherNo} saved & posted successfully!`);
+    setToastMessage(`✓ GL Journal Voucher ${currentVoucherNo} saved & posted successfully!`);
   };
 
   // Button Action Handler: Save & New
   const handleSaveAndNewVoucher = () => {
+    const hasEmptyAccount = rows.some((r) => !r.account || r.account.trim() === "");
+    if (hasEmptyAccount) {
+      setToastMessage("Cannot Save: Please select a valid GL Account for all line items.");
+      return;
+    }
+
+    if (totalDebit <= 0) {
+      setToastMessage("Cannot Save: Total Debit amount must be greater than ₹ 0.00.");
+      return;
+    }
+
     if (!isBalanced) {
       setToastMessage(
-        `Cannot Save: Total Debit (${formatINR(totalDebit)}) does not equal Total Credit (${formatINR(
+        `⚠ Cannot Save Out-of-Balance Voucher: Total Debit (${formatINR(totalDebit)}) does not equal Total Credit (${formatINR(
           totalCredit
-        )}).`
+        )}). Out of balance by ${formatINR(difference)}.`
       );
       return;
     }
+
     const savedNo = currentVoucherNo;
     const nextIdx = voucherNumberIndex + 1;
     setVoucherNumberIndex(nextIdx);
@@ -260,7 +287,7 @@ export function GLTransactionView() {
       },
     ]);
     const nextNo = `VCH-2026-${String(nextIdx).padStart(3, "0")}`;
-    setToastMessage(`Voucher ${savedNo} saved! Prepared next entry ${nextNo}.`);
+    setToastMessage(`✓ Voucher ${savedNo} saved! Prepared next entry ${nextNo}.`);
   };
 
   // Button Action Handler: Cancel
@@ -504,12 +531,24 @@ export function GLTransactionView() {
           />
         </FormField>
 
-        <FormField label="Status" required>
-          <SelectInput value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="Draft">Draft</option>
-            <option value="Posted">Posted</option>
-            <option value="Reversed">Reversed</option>
-          </SelectInput>
+        <FormField label="Voucher Status (System Managed)">
+          <div className="flex items-center gap-2 h-9 px-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-xs text-slate-800 cursor-not-allowed">
+            <span
+              className={cn(
+                "px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-extrabold border",
+                status === "Posted"
+                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                  : status === "Reversed"
+                  ? "bg-rose-100 text-rose-800 border-rose-300"
+                  : "bg-amber-100 text-amber-800 border-amber-300"
+              )}
+            >
+              {status}
+            </span>
+            <span className="text-[11px] text-slate-400 font-normal">
+              (Auto-updated to Posted on Save)
+            </span>
+          </div>
         </FormField>
       </FormSection>
 

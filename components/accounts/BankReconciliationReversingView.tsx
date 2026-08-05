@@ -43,17 +43,20 @@ export function BankReconciliationReversingView() {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   // Bank & Filter Controls
-  const [selectedBank, setSelectedBank] = useState("YES BANK A/c #9012");
+  const [selectedBank, setSelectedBank] = useState("<ALL Banks>");
+  const [appliedBank, setAppliedBank] = useState("<ALL Banks>");
   const [fromReconDate, setFromReconDate] = useState("2026-04-01");
   const [toReconDate, setToReconDate] = useState("2027-03-31");
+  const [appliedFromReconDate, setAppliedFromReconDate] = useState("2026-04-01");
+  const [appliedToReconDate, setAppliedToReconDate] = useState("2027-03-31");
   const [searchQuery, setSearchQuery] = useState("");
 
   // Reversal Options
   const [reverseReason, setReverseReason] = useState("Statement Mismatch Correction");
   const [keepAuditLog, setKeepAuditLog] = useState(true);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(["bank-recon-1", "bank-recon-4"]));
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Reconciled Entries List (Initial state with reconciled items)
+  // Reconciled Entries List (Initial state with reconciled items across bank accounts)
   const [reconciledEntries, setReconciledEntries] = useState<BankReconciliationEntry[]>(() =>
     sampleBankReconciliationData.map((item, idx) => ({
       ...item,
@@ -72,25 +75,71 @@ export function BankReconciliationReversingView() {
   const [authorizationConfirmed, setAuthorizationConfirmed] = useState(false);
   const [targetReversalIds, setTargetReversalIds] = useState<Set<string>>(new Set());
 
-  // Filtered Reconciled Entries
+  // Helper to parse DD/MM/YYYY into YYYY-MM-DD for date comparisons
+  const parseFormattedDate = (dateStr: string): string => {
+    if (!dateStr) return "";
+    if (dateStr.includes("-")) return dateStr;
+    const parts = dateStr.split("/");
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+    }
+    return dateStr;
+  };
+
+  // Filtered Reconciled Entries by Applied Bank Account & Applied Date Range
   const filteredData = useMemo(() => {
     return reconciledEntries.filter((item) => {
-      // Only show entries that are currently reconciled for reversal
+      // 1. Only show entries that are currently reconciled for reversal
       if (!item.reconciled) return false;
 
+      // 2. Bank Account Filter (<ALL Banks> or specific selected bank)
+      if (
+        appliedBank &&
+        appliedBank !== "<ALL Banks>" &&
+        item.bankName !== appliedBank
+      ) {
+        return false;
+      }
+
+      // 3. Date Period Filter (Applied From & To Recon Dates)
+      const itemDate = parseFormattedDate(item.reconDate || item.vouchDt);
+      if (appliedFromReconDate && itemDate < appliedFromReconDate) return false;
+      if (appliedToReconDate && itemDate > appliedToReconDate) return false;
+
+      // 4. Search Query Filter
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         return (
           item.vouchNo.toLowerCase().includes(q) ||
           item.chqNo.toLowerCase().includes(q) ||
-          item.narration.toLowerCase().includes(q)
+          item.narration.toLowerCase().includes(q) ||
+          item.bankName.toLowerCase().includes(q)
         );
       }
       return true;
     });
-  }, [reconciledEntries, searchQuery]);
+  }, [
+    reconciledEntries,
+    appliedBank,
+    appliedFromReconDate,
+    appliedToReconDate,
+    searchQuery,
+  ]);
 
-  // Statistics
+  // Synchronized Selection Calculations
+  const selectedEntriesInLog = useMemo(() => {
+    return filteredData.filter((item) => selectedIds.has(item.id));
+  }, [filteredData, selectedIds]);
+
+  const selectedCount = selectedEntriesInLog.length;
+  const selectedTotalValue = useMemo(() => {
+    return selectedEntriesInLog.reduce(
+      (sum, item) => sum + Math.max(item.drAmt, item.crAmt),
+      0
+    );
+  }, [selectedEntriesInLog]);
+
+  // Overall Statistics
   const totalReconciledCount = filteredData.length;
   const totalReconciledDr = useMemo(
     () => filteredData.reduce((sum, item) => sum + item.drAmt, 0),
@@ -114,14 +163,14 @@ export function BankReconciliationReversingView() {
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.size === filteredData.length) {
+    if (selectedCount === filteredData.length && filteredData.length > 0) {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(filteredData.map((e) => e.id)));
     }
   };
 
-  // Selected Items to be reversed calculation
+  // Selected Items to be reversed calculation for Modal
   const targetItems = useMemo(() => {
     return reconciledEntries.filter((item) => targetReversalIds.has(item.id));
   }, [reconciledEntries, targetReversalIds]);
@@ -132,12 +181,21 @@ export function BankReconciliationReversingView() {
 
   // Initiation of Reversal Process (Opens Verification Modal)
   const handleInitiateReversal = (specificId?: string) => {
-    const idsToUse = specificId ? new Set([specificId]) : selectedIds;
-    if (idsToUse.size === 0) {
-      setToastMessage("Please select at least one reconciled entry to reverse.");
+    const rawIdsToUse = specificId ? new Set([specificId]) : selectedIds;
+    
+    // Ensure only valid IDs present in current filtered log are processed
+    const validIds = new Set(
+      Array.from(rawIdsToUse).filter((id) => filteredData.some((f) => f.id === id))
+    );
+
+    if (validIds.size === 0) {
+      setToastMessage(
+        "⚠ Please select at least one reconciled entry from the log table to perform reversal."
+      );
       return;
     }
-    setTargetReversalIds(idsToUse);
+
+    setTargetReversalIds(validIds);
     setAuthorizationConfirmed(false);
     setShowVerificationModal(true);
   };
@@ -164,13 +222,24 @@ export function BankReconciliationReversingView() {
         })
       );
       setToastMessage(
-        `Successfully reversed ${targetReversalIds.size} bank reconciliation item(s) for ${selectedBank}.`
+        `✓ Successfully reversed ${targetReversalIds.size} bank reconciliation item(s) for ${appliedBank}.`
       );
       setSelectedIds(new Set());
       setTargetReversalIds(new Set());
       setShowVerificationModal(false);
       setIsReversing(false);
     }, 500);
+  };
+
+  // Fetch Reconciled Logs Handler (Third Fix: Filters accurately by Bank & Period)
+  const handleFetchReconciledLogs = () => {
+    setAppliedBank(selectedBank);
+    setAppliedFromReconDate(fromReconDate);
+    setAppliedToReconDate(toReconDate);
+    setSelectedIds(new Set());
+    setToastMessage(
+      `✓ Fetched reconciled logs for ${selectedBank} (Period: ${fromReconDate} to ${toReconDate}).`
+    );
   };
 
   // Filter Form Controls Component
@@ -254,10 +323,8 @@ export function BankReconciliationReversingView() {
 
         <Button
           type="button"
-          onClick={() => {
-            setToastMessage(`Fetched reconciled records for period ${fromReconDate} to ${toReconDate}.`);
-          }}
-          className="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs h-7 rounded-lg font-bold"
+          onClick={handleFetchReconciledLogs}
+          className="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs h-7 rounded-lg font-bold cursor-pointer"
         >
           Fetch Reconciled Logs
         </Button>
@@ -291,12 +358,15 @@ export function BankReconciliationReversingView() {
 
           <Button
             type="button"
-            disabled={selectedIds.size === 0 || isReversing}
+            disabled={selectedCount === 0 || isReversing}
             onClick={() => handleInitiateReversal()}
-            className="bg-rose-700 hover:bg-rose-800 text-white shadow-xs font-bold"
+            className={cn(
+              "bg-rose-700 hover:bg-rose-800 text-white shadow-xs font-bold transition-all cursor-pointer",
+              (selectedCount === 0 || isReversing) && "opacity-50 cursor-not-allowed"
+            )}
           >
             <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-            {isReversing ? "Reversing..." : `Reverse Selected (${selectedIds.size})`}
+            {isReversing ? "Reversing..." : `Reverse Selected (${selectedCount})`}
           </Button>
 
           <Button
@@ -321,7 +391,7 @@ export function BankReconciliationReversingView() {
           </div>
           <button
             onClick={() => setToastMessage(null)}
-            className="text-slate-400 hover:text-white ml-4 text-sm font-bold"
+            className="text-slate-400 hover:text-white ml-4 text-sm font-bold cursor-pointer"
           >
             ✕
           </button>
@@ -347,7 +417,7 @@ export function BankReconciliationReversingView() {
             <div className="flex items-center gap-2">
               <RotateCcw className="h-4 w-4 text-rose-600" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Reversal Search Parameters & Options
+                Reversal Search Parameters &amp; Options
               </h3>
             </div>
           </div>
@@ -373,8 +443,8 @@ export function BankReconciliationReversingView() {
         />
         <StatMiniCard
           label="Selected for Reversal"
-          value={`${selectedIds.size} Entries`}
-          sublabel="Ready to be un-reconciled"
+          value={`${selectedCount} ${selectedCount === 1 ? "Entry" : "Entries"}`}
+          sublabel={selectedCount > 0 ? `Total Value: ${formatINR(selectedTotalValue)}` : "Select checkboxes in log below"}
           accent="#e11d48"
           icon={RotateCcw}
         />
@@ -407,9 +477,9 @@ export function BankReconciliationReversingView() {
               variant="outline"
               size="sm"
               onClick={handleSelectAll}
-              className="text-xs border-slate-300 font-semibold"
+              className="text-xs border-slate-300 font-semibold cursor-pointer"
             >
-              {selectedIds.size === filteredData.length && filteredData.length > 0
+              {selectedCount === filteredData.length && filteredData.length > 0
                 ? "Deselect All"
                 : "Select All"}
             </Button>
