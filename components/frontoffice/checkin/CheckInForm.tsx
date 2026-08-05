@@ -35,6 +35,7 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { isArrivingToday } from "@/lib/reservation-dates";
 
 import { bookingTypeOptions } from "@/app/data/frontoffice/checkin";
 
@@ -72,34 +73,6 @@ function getInitials(name: string) {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? "")
     .join("");
-}
-
-function todayIso() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function isArrivingToday(b: {
-  checkIn?: string;
-  arrivingToday?: boolean;
-}) {
-  if (b.arrivingToday) return true;
-  const checkIn = String(b.checkIn ?? "");
-  if (!checkIn) return false;
-  const today = todayIso();
-  const displayToday = new Date().toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-  return (
-    checkIn === today ||
-    checkIn.startsWith(today) ||
-    checkIn.includes(displayToday)
-  );
 }
 
 function SectionCard({

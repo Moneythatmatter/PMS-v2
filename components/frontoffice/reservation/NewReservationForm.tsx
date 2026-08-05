@@ -145,6 +145,9 @@ export function NewReservationForm() {
   const [tariffByPlanMap, setTariffByPlanMap] = useState<Record<string, number>>({});
   const [baseRateByRoomMap, setBaseRateByRoomMap] = useState<Record<string, number>>({});
   const [roomsByType, setRoomsByType] = useState<Record<string, string[]>>({});
+  const [roomTypeOptions, setRoomTypeOptions] = useState<string[]>(() => [
+    ...roomTypes,
+  ]);
   const [sourceOptions, setSourceOptions] = useState<
     { id: string; label: string; hint?: string }[]
   >(() =>
@@ -221,20 +224,22 @@ export function NewReservationForm() {
     let cancelled = false;
     (async () => {
       try {
-        const [rooms, roomTypesData, tariffPlansData, sourcesData] =
+        const [roomCards, roomTypesData, tariffPlansData, sourcesData] =
           await Promise.all([
-            roomService.list(),
+            roomService.status(),
             roomTypeService.list().catch(() => []),
             tariffPlanService.list().catch(() => []),
             bookingSourceService.list().catch(() => []),
           ]);
         if (cancelled) return;
 
+        // Same source/rules as Room Status: only Vacant rooms are assignable
         const byType: Record<string, string[]> = {};
         const nos: string[] = [];
-        for (const r of rooms) {
+        for (const r of roomCards) {
+          if (String(r.status || "").trim().toLowerCase() !== "vacant") continue;
           nos.push(r.roomNo);
-          const key = r.roomType || "Other";
+          const key = r.type || "Other";
           if (!byType[key]) byType[key] = [];
           byType[key].push(r.roomNo);
         }
@@ -242,10 +247,14 @@ export function NewReservationForm() {
         setRoomsByType(byType);
 
         const roomRates: Record<string, number> = {};
+        const typeNames: string[] = [];
         for (const rt of roomTypesData) {
-          if (rt.name) roomRates[rt.name] = rt.baseRate || 0;
+          if (!rt.name) continue;
+          roomRates[rt.name] = rt.baseRate || 0;
+          if (rt.status !== "Inactive") typeNames.push(rt.name);
         }
         setBaseRateByRoomMap(roomRates);
+        if (typeNames.length > 0) setRoomTypeOptions(typeNames);
 
         const planRates: Record<string, number> = {};
         for (const rp of tariffPlansData) {
@@ -386,7 +395,7 @@ export function NewReservationForm() {
 
   const filteredRooms = useMemo(() => {
     if (!form.roomType) return availableRoomNos;
-    return roomsByType[form.roomType] ?? availableRoomNos;
+    return roomsByType[form.roomType] ?? [];
   }, [form.roomType, availableRoomNos, roomsByType]);
 
   const completion = useMemo(() => {
@@ -725,7 +734,7 @@ export function NewReservationForm() {
               </FormField>
               <FormField label="Room Type" required>
                 <SearchSelect
-                  options={roomTypes.map((t) => ({ id: t, label: t }))}
+                  options={roomTypeOptions.map((t) => ({ id: t, label: t }))}
                   selectedId={form.roomType || null}
                   placeholder="Search room type…"
                   inputClassName={inputClass}
@@ -742,11 +751,20 @@ export function NewReservationForm() {
                     hint: form.roomType || undefined,
                   }))}
                   selectedId={form.roomNumber || null}
-                  placeholder="Search room number…"
+                  placeholder={
+                    form.roomType
+                      ? "Search vacant room…"
+                      : "Select a room type first…"
+                  }
                   inputClassName={inputClass}
                   onSelect={(opt) => update("roomNumber", opt.id)}
                   onClear={() => update("roomNumber", "")}
                 />
+                {form.roomType && filteredRooms.length === 0 && (
+                  <p className="text-xs text-amber-600">
+                    No vacant {form.roomType} rooms — booking will be saved as TBA.
+                  </p>
+                )}
               </FormField>
               <FormField label="Tariff Plan">
                 <SearchSelect
