@@ -214,9 +214,16 @@ interface FormFieldProps {
   children: React.ReactNode;
   required?: boolean;
   className?: string;
+  error?: string;
 }
 
-export function FormField({ label, children, required, className }: FormFieldProps) {
+export function FormField({
+  label,
+  children,
+  required,
+  className,
+  error,
+}: FormFieldProps) {
   return (
     <label className={cn("block space-y-1.5", className)}>
       <span className="text-xs font-medium text-slate-600">
@@ -224,6 +231,7 @@ export function FormField({ label, children, required, className }: FormFieldPro
         {required && <span className="text-red-500"> *</span>}
       </span>
       {children}
+      {error && <p className="mt-1 text-xs font-medium text-red-500">{error}</p>}
     </label>
   );
 }

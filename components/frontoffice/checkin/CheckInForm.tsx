@@ -237,6 +237,7 @@ export function CheckInForm() {
     setAssignedRoom(isRealRoom ? preassigned : "");
     setDeposit(found.advancePaid || 0);
     setLookupError("");
+    setErrors({});
     setToastVariant("success");
     setToast(`Loaded booking reference ${found.id} for ${found.guestName}.`);
   };
@@ -288,22 +289,29 @@ export function CheckInForm() {
         ? assignedRoom
         : walkIn.room || assignedRoom;
 
+    const newErrors: Record<string, string> = {};
+    const todayStr = todayIso();
+
     if (checkInMode === "walkin") {
-      if (!walkIn.firstName.trim() || !walkIn.lastName.trim()) {
-        showToast("First name and last name are required.", "error");
-        return;
+      if (!walkIn.firstName.trim()) {
+        newErrors.firstName = "First name is required.";
       }
-      if (!walkIn.mobile.trim()) {
-        showToast("Mobile phone is required.", "error");
-        return;
+      if (!walkIn.lastName.trim()) {
+        newErrors.lastName = "Last name is required.";
       }
+
+      const cleanMobile = walkIn.mobile.trim().replace(/\D/g, "");
+      if (!cleanMobile) {
+        newErrors.mobile = "Mobile phone is required.";
+      } else if (cleanMobile.length !== 10 || !/^[6-9]\d{9}$/.test(cleanMobile)) {
+        newErrors.mobile = "Mobile number must be a valid 10-digit number.";
+      }
+
       if (!walkIn.bookingType) {
-        showToast("Booking type is required.", "error");
-        return;
+        newErrors.bookingType = "Booking type is required.";
       }
       if (walkIn.bookingType === "Company" && !walkIn.companyId) {
-        showToast("Please select a company.", "error");
-        return;
+        newErrors.companyName = "Please select a company.";
       }
     }
 
@@ -342,6 +350,7 @@ export function CheckInForm() {
       );
       return;
     }
+    setErrors({});
 
     try {
       if (checkInMode === "reserved" && booking) {
@@ -712,8 +721,14 @@ export function CheckInForm() {
                   <GuestDetailsSection
                     guestDetails={guestDetails}
                     onChange={handleGuestDetailChange}
-                    onFileUpload={setIdFile}
+                    onFileUpload={(fn) => {
+                      setIdFile(fn);
+                      if (errors.idFile) {
+                        setErrors((p) => ({ ...p, idFile: "" }));
+                      }
+                    }}
                     idFile={idFile}
+                    errors={errors}
                   />
                 </SectionCard>
 
@@ -724,7 +739,12 @@ export function CheckInForm() {
                 >
                   <RoomAssignmentSection
                     assignedRoom={assignedRoom}
-                    onAssignedRoomChange={setAssignedRoom}
+                    onAssignedRoomChange={(room) => {
+                      setAssignedRoom(room);
+                      if (errors.room) {
+                        setErrors((p) => ({ ...p, room: "" }));
+                      }
+                    }}
                     keyCard={keyCard}
                     onKeyCardChange={setKeyCard}
                     vehicle={vehicle}
@@ -768,34 +788,45 @@ export function CheckInForm() {
             title="Walk-In Guest Details"
             description="Log instant walk-in guest information."
           >
-            <FormField label="First Name" required>
+            <FormField label="First Name" required error={errors.firstName}>
               <TextInput
                 className={inputClass}
                 placeholder="e.g. Rajesh"
                 value={walkIn.firstName}
-                onChange={(e) =>
-                  setWalkIn((p) => ({ ...p, firstName: e.target.value }))
-                }
+                onChange={(e) => {
+                  setWalkIn((p) => ({ ...p, firstName: e.target.value }));
+                  if (errors.firstName) {
+                    setErrors((p) => ({ ...p, firstName: "" }));
+                  }
+                }}
               />
             </FormField>
-            <FormField label="Last Name" required>
+            <FormField label="Last Name" required error={errors.lastName}>
               <TextInput
                 className={inputClass}
                 placeholder="e.g. Kumar"
                 value={walkIn.lastName}
-                onChange={(e) =>
-                  setWalkIn((p) => ({ ...p, lastName: e.target.value }))
-                }
+                onChange={(e) => {
+                  setWalkIn((p) => ({ ...p, lastName: e.target.value }));
+                  if (errors.lastName) {
+                    setErrors((p) => ({ ...p, lastName: "" }));
+                  }
+                }}
               />
             </FormField>
-            <FormField label="Mobile Phone" required>
+            <FormField label="Mobile Phone" required error={errors.mobile}>
               <TextInput
                 className={inputClass}
-                placeholder="+91 98765 43210"
+                placeholder="10-digit mobile number"
+                maxLength={10}
                 value={walkIn.mobile}
-                onChange={(e) =>
-                  setWalkIn((p) => ({ ...p, mobile: e.target.value }))
-                }
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                  setWalkIn((p) => ({ ...p, mobile: val }));
+                  if (errors.mobile) {
+                    setErrors((p) => ({ ...p, mobile: "" }));
+                  }
+                }}
               />
             </FormField>
             <FormField label="Email Address">
@@ -809,7 +840,7 @@ export function CheckInForm() {
                 }
               />
             </FormField>
-            <FormField label="Booking Type" required>
+            <FormField label="Booking Type" required error={errors.bookingType}>
               <SearchSelect
                 options={[...bookingTypeOptions]}
                 selectedId={walkIn.bookingType || null}
@@ -823,6 +854,9 @@ export function CheckInForm() {
                       ? { companyName: "", companyId: "" }
                       : {}),
                   }));
+                  if (errors.bookingType) {
+                    setErrors((p) => ({ ...p, bookingType: "" }));
+                  }
                 }}
                 onClear={() =>
                   setWalkIn((p) => ({
@@ -835,7 +869,7 @@ export function CheckInForm() {
               />
             </FormField>
             {walkIn.bookingType === "Company" && (
-              <FormField label="Company Name">
+              <FormField label="Company Name" error={errors.companyName}>
                 <CompanySearchSelect
                   value={walkIn.companyName}
                   selectedCompanyId={walkIn.companyId || null}
@@ -846,13 +880,16 @@ export function CheckInForm() {
                       companyId: "",
                     }))
                   }
-                  onSelect={(c) =>
+                  onSelect={(c) => {
                     setWalkIn((p) => ({
                       ...p,
                       companyName: c.name,
                       companyId: c.id,
-                    }))
-                  }
+                    }));
+                    if (errors.companyName) {
+                      setErrors((p) => ({ ...p, companyName: "" }));
+                    }
+                  }}
                   onClear={() =>
                     setWalkIn((p) => ({
                       ...p,
@@ -875,8 +912,14 @@ export function CheckInForm() {
             <GuestDetailsSection
               guestDetails={guestDetails}
               onChange={handleGuestDetailChange}
-              onFileUpload={setIdFile}
+              onFileUpload={(fn) => {
+                setIdFile(fn);
+                if (errors.idFile) {
+                  setErrors((p) => ({ ...p, idFile: "" }));
+                }
+              }}
               idFile={idFile}
+              errors={errors}
             />
           </SectionCard>
 
