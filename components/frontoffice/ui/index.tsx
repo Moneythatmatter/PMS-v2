@@ -131,27 +131,29 @@ export function StatMiniCard({
   icon: Icon,
 }: StatMiniCardProps) {
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
+    <div className="group relative h-full min-w-0 overflow-hidden rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md sm:p-5">
       <div
         className="absolute inset-0 opacity-30 transition-opacity group-hover:opacity-50"
         style={{ background: `linear-gradient(135deg, ${accent}18, transparent)` }}
       />
-      <div className="relative flex items-start justify-between gap-3">
+      <div className="relative flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-slate-500">{label}</p>
-          <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">{value}</p>
+          <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">{label}</p>
+          <p className="mt-1.5 truncate text-lg font-bold tracking-tight text-slate-900 sm:mt-2 sm:text-2xl">
+            {value}
+          </p>
           {sublabel && (
-            <p className="mt-0.5 text-xs font-medium" style={{ color: accent }}>
+            <p className="mt-0.5 truncate text-[11px] font-medium sm:text-xs" style={{ color: accent }}>
               {sublabel}
             </p>
           )}
         </div>
         {Icon && (
           <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-sm sm:h-8 sm:w-8 sm:rounded-xl"
             style={{ backgroundColor: `${accent}20`, color: accent }}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </div>
         )}
       </div>

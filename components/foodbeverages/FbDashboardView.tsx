@@ -24,6 +24,7 @@ import {
   type LiveTable,
 } from "@/services/food-beverages";
 import { Button } from "@/components/ui/Button";
+import { Card, CardHeader } from "@/components/ui/Card";
 import { ModulePageShell } from "@/components/pms";
 import { cn } from "@/lib/utils";
 
@@ -309,309 +310,335 @@ export function FbDashboardView() {
       eyebrow="Food & Beverages"
       title="Dashboard"
       description="Live outlet performance, open work, and banquet activity."
-      stats={shellStats}
       wrapChildren={false}
     >
-      {/* Needs attention */}
-      <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <h2 className="text-sm font-semibold text-slate-900">Needs attention</h2>
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-              {alerts.length}
-            </span>
-          </div>
-          <Link
-            href="/food-beverages/restaurants/orders"
-            className="text-xs font-medium text-emerald-700 hover:underline"
-          >
-            View all operations
-          </Link>
-        </div>
-        {alerts.length === 0 ? (
-          <p className="text-sm text-slate-500">No open alerts from live F&B data.</p>
-        ) : (
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            {alerts.map((alert) => (
-              <Link
-                key={alert.id}
-                href={alert.href}
-                className={cn(
-                  "rounded-xl border p-3 transition hover:-translate-y-0.5 hover:shadow-sm",
-                  toneClass(alert.tone),
-                )}
-              >
-                <div className="flex items-start gap-2">
+      <div className="min-w-0 space-y-4 sm:space-y-6 lg:space-y-8">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6">
+          {shellStats.map((stat) => {
+            const Icon = stat.icon ?? TrendingUp;
+            return (
+              <Card key={stat.label} className="h-full min-w-0 p-3 sm:p-5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+                    {stat.label}
+                  </p>
                   <span
-                    className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", toneDot(alert.tone))}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold leading-snug">{alert.title}</p>
-                    <p className="mt-0.5 text-xs opacity-80">{alert.detail}</p>
-                    <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold">
-                      {alert.action}
-                      <ArrowRight className="h-3 w-3" />
-                    </span>
-                  </div>
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:h-8 sm:w-8"
+                    style={{ backgroundColor: `${stat.accent}20`, color: stat.accent }}
+                  >
+                    <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </span>
                 </div>
+                <p className="mt-1.5 truncate text-lg font-bold tracking-tight text-slate-900 sm:mt-2 sm:text-2xl">
+                  {stat.value}
+                </p>
+                {stat.sublabel && (
+                  <p className="mt-0.5 truncate text-[11px] text-slate-500 sm:text-xs">
+                    {stat.sublabel}
+                  </p>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+
+        <Card className="min-w-0">
+          <CardHeader
+            title="Needs attention"
+            subtitle={
+              alerts.length === 0
+                ? "No open alerts"
+                : `${alerts.length} item${alerts.length === 1 ? "" : "s"} to review`
+            }
+            action={
+              <Link
+                href="/food-beverages/restaurants/orders"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 hover:underline"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                View all operations
               </Link>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <div className="mt-4 grid gap-4 xl:grid-cols-5">
-        {/* Outlet performance */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 xl:col-span-3">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Outlet performance</h2>
-              <p className="text-xs text-slate-500">Sales, covers, and floor pressure right now</p>
-            </div>
-            <Link
-              href="/food-beverages/restaurants/outlets"
-              className="text-xs font-medium text-emerald-700 hover:underline"
-            >
-              Manage outlets
-            </Link>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
-                  <th className="pb-2 pr-3 font-semibold">Outlet</th>
-                  <th className="pb-2 pr-3 font-semibold">Sales</th>
-                  <th className="pb-2 pr-3 font-semibold">Covers</th>
-                  <th className="pb-2 pr-3 font-semibold">Open</th>
-                  <th className="pb-2 pr-3 font-semibold">Floor</th>
-                  <th className="pb-2 font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {restaurantOutlets.map((outlet) => {
-                  const openOrders = openByOutlet[outlet.id] ?? 0;
-                  const floor = tablesByOutlet[outlet.id];
-                  const occupied = floor?.occupied ?? 0;
-                  const total = floor?.total ?? outlet.tables ?? 0;
-                  const occupancy = total > 0 ? Math.round((occupied / total) * 100) : 0;
-                  const status = outletStatus(outlet, openOrders);
-                  const sales =
-                    typeof outlet.sales === "string"
-                      ? outlet.sales
-                      : outlet.sales != null
-                        ? formatINR(Number(outlet.sales))
-                        : "—";
-                  return (
-                    <tr key={outlet.id} className="group hover:bg-emerald-50/30">
-                      <td className="py-3 pr-3">
-                        <Link
-                          href="/food-beverages/restaurants/tables"
-                          className="block"
-                        >
-                          <p className="font-semibold text-slate-900 group-hover:text-emerald-800">
-                            {outlet.name}
-                          </p>
-                          <p className="text-[11px] capitalize text-slate-500">{outlet.type}</p>
-                        </Link>
-                      </td>
-                      <td className="py-3 pr-3 font-medium text-slate-800">{sales}</td>
-                      <td className="py-3 pr-3 text-slate-700">{outlet.covers ?? "—"}</td>
-                      <td className="py-3 pr-3 text-slate-700">{openOrders}</td>
-                      <td className="py-3 pr-3">
-                        <div className="space-y-1">
-                          <p className="text-xs text-slate-600">
-                            {total > 0 ? `${occupied} / ${total}` : "—"} occupied
-                          </p>
-                          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
-                            <div
-                              className="h-full rounded-full bg-emerald-600"
-                              style={{ width: `${occupancy}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
-                            statusBadge(status),
-                          )}
-                        >
-                          {status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {restaurantOutlets.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
-                      No outlets available
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* Quick actions */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 xl:col-span-2">
-          <div className="mb-3">
-            <h2 className="text-sm font-semibold text-slate-900">Quick actions</h2>
-            <p className="text-xs text-slate-500">Jump into daily F&B ops</p>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {quickLinks.map((link) => {
-              const Icon = link.icon;
-              return (
+            }
+          />
+          {alerts.length === 0 ? (
+            <p className="text-sm text-slate-500">No open alerts from live F&B data.</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {alerts.map((alert) => (
                 <Link
-                  key={link.href}
-                  href={link.href}
-                  className="group rounded-xl border border-slate-200 bg-slate-50/50 p-3 transition hover:border-emerald-300 hover:bg-emerald-50/50"
+                  key={alert.id}
+                  href={alert.href}
+                  className={cn(
+                    "block min-w-0 rounded-lg border p-3 transition hover:shadow-sm",
+                    toneClass(alert.tone),
+                  )}
                 >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200 group-hover:ring-emerald-200">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">{link.label}</p>
-                  <p className="text-[11px] text-slate-500">{link.hint}</p>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        {/* Banquet today */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Banquet today</h2>
-              <p className="text-xs text-slate-500">{banquetVenues.length} venues configured</p>
-            </div>
-            <Link href="/food-beverages/banquet/bookings">
-              <Button type="button" size="sm" variant="outline">
-                All bookings
-              </Button>
-            </Link>
-          </div>
-          <ul className="space-y-2">
-            {banquetToday.length === 0 ? (
-              <li className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-sm text-slate-400">
-                No banquet bookings from API
-              </li>
-            ) : (
-              banquetToday.map((event) => (
-                <li
-                  key={event.id}
-                  className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {event.event ?? "Event"}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {event.venue ?? "Venue"}
-                        {event.time ? ` · ${event.time}` : ""}
-                        {event.pax != null ? ` · ${event.pax} pax` : ""}
-                      </p>
-                    </div>
+                  <div className="flex items-start gap-2">
                     <span
-                      className={cn(
-                        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
-                        statusBadge(String(event.status ?? "")),
-                      )}
-                    >
-                      {event.status ?? "—"}
-                    </span>
+                      className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", toneDot(alert.tone))}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold leading-snug">{alert.title}</p>
+                      <p className="mt-0.5 truncate text-xs opacity-80">{alert.detail}</p>
+                      <span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold">
+                        {alert.action}
+                        <ArrowRight className="h-3 w-3" />
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-xs">
-                    <span className="text-slate-500">
-                      Balance{" "}
-                      {typeof event.balance === "number"
-                        ? formatINR(event.balance)
-                        : String(event.balance ?? "—")}
-                    </span>
-                    <Link
-                      href="/food-beverages/banquet/bookings"
-                      className="font-medium text-emerald-700 hover:underline"
-                    >
-                      Open
-                    </Link>
-                  </div>
-                </li>
-              ))
-            )}
-          </ul>
-        </section>
-
-        {/* Recent orders */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 lg:col-span-2">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Live orders</h2>
-              <p className="text-xs text-slate-500">Latest tickets across restaurants, cafe & bar</p>
+                </Link>
+              ))}
             </div>
-            <Link
-              href="/food-beverages/restaurants/orders"
-              className="text-xs font-medium text-emerald-700 hover:underline"
-            >
-              Open orders
-            </Link>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
-                  <th className="pb-2 pr-3 font-semibold">Order</th>
-                  <th className="pb-2 pr-3 font-semibold">Outlet</th>
-                  <th className="pb-2 pr-3 font-semibold">Table</th>
-                  <th className="pb-2 pr-3 font-semibold">Amount</th>
-                  <th className="pb-2 pr-3 font-semibold">Status</th>
-                  <th className="pb-2 font-semibold">Age</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {data.recentOrders.map((order) => {
-                  const outletName =
-                    data.outlets.find((o) => o.id === order.outletId)?.name ?? order.outletId;
-                  return (
-                    <tr key={order.id} className="hover:bg-emerald-50/30">
-                      <td className="py-2.5 pr-3 font-medium text-slate-900">{order.orderNo}</td>
-                      <td className="py-2.5 pr-3 text-slate-700">{outletName}</td>
-                      <td className="py-2.5 pr-3 text-slate-700">{order.ref}</td>
-                      <td className="py-2.5 pr-3 font-medium text-slate-900">
-                        {formatINR(order.amount)}
-                      </td>
-                      <td className="py-2.5 pr-3">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
-                            statusBadge(order.status),
-                          )}
-                        >
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="py-2.5 text-xs text-slate-500">{order.placedAt}</td>
-                    </tr>
-                  );
-                })}
-                {data.recentOrders.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
-                      No recent orders
-                    </td>
+          )}
+        </Card>
+
+        <div className="grid gap-4 sm:gap-6 xl:grid-cols-5 lg:gap-8">
+          <Card className="min-w-0 xl:col-span-3">
+            <CardHeader
+              title="Outlet performance"
+              subtitle="Sales, covers, and floor pressure right now"
+              action={
+                <Link
+                  href="/food-beverages/restaurants/outlets"
+                  className="text-xs font-medium text-emerald-700 hover:underline"
+                >
+                  Manage outlets
+                </Link>
+              }
+            />
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+                    <th className="pb-2 pr-3 font-semibold">Outlet</th>
+                    <th className="pb-2 pr-3 font-semibold">Sales</th>
+                    <th className="pb-2 pr-3 font-semibold">Covers</th>
+                    <th className="pb-2 pr-3 font-semibold">Open</th>
+                    <th className="pb-2 pr-3 font-semibold">Floor</th>
+                    <th className="pb-2 font-semibold">Status</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {restaurantOutlets.map((outlet) => {
+                    const openOrders = openByOutlet[outlet.id] ?? 0;
+                    const floor = tablesByOutlet[outlet.id];
+                    const occupied = floor?.occupied ?? 0;
+                    const total = floor?.total ?? outlet.tables ?? 0;
+                    const occupancy = total > 0 ? Math.round((occupied / total) * 100) : 0;
+                    const status = outletStatus(outlet, openOrders);
+                    const sales =
+                      typeof outlet.sales === "string"
+                        ? outlet.sales
+                        : outlet.sales != null
+                          ? formatINR(Number(outlet.sales))
+                          : "—";
+                    return (
+                      <tr key={outlet.id} className="group hover:bg-emerald-50/30">
+                        <td className="py-3 pr-3">
+                          <Link
+                            href="/food-beverages/restaurants/tables"
+                            className="block"
+                          >
+                            <p className="text-sm font-medium text-slate-900 group-hover:text-emerald-800">
+                              {outlet.name}
+                            </p>
+                            <p className="text-xs capitalize text-slate-500">{outlet.type}</p>
+                          </Link>
+                        </td>
+                        <td className="py-3 pr-3 font-medium text-slate-800">{sales}</td>
+                        <td className="py-3 pr-3 text-slate-700">{outlet.covers ?? "—"}</td>
+                        <td className="py-3 pr-3 text-slate-700">{openOrders}</td>
+                        <td className="py-3 pr-3">
+                          <div className="space-y-1">
+                            <p className="text-xs text-slate-600">
+                              {total > 0 ? `${occupied} / ${total}` : "—"} occupied
+                            </p>
+                            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full bg-emerald-600"
+                                style={{ width: `${occupancy}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3">
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset",
+                              statusBadge(status),
+                            )}
+                          >
+                            {status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {restaurantOutlets.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
+                        No outlets available
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card className="min-w-0 xl:col-span-2">
+            <CardHeader title="Quick actions" subtitle="Jump into daily F&B ops" />
+            <div className="grid grid-cols-2 gap-3">
+              {quickLinks.map((link) => {
+                const Icon = link.icon;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="group rounded-lg border border-slate-200 bg-slate-50/50 p-3 transition hover:border-emerald-300 hover:bg-emerald-50/50"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-emerald-700 ring-1 ring-slate-200 group-hover:ring-emerald-200">
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">{link.label}</p>
+                    <p className="text-xs text-slate-500">{link.hint}</p>
+                  </Link>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 lg:gap-8">
+          <Card className="min-w-0">
+            <CardHeader
+              title="Banquet today"
+              subtitle={`${banquetVenues.length} venues configured`}
+              action={
+                <Link href="/food-beverages/banquet/bookings">
+                  <Button type="button" size="sm" variant="outline">
+                    All bookings
+                  </Button>
+                </Link>
+              }
+            />
+            <ul className="space-y-2">
+              {banquetToday.length === 0 ? (
+                <li className="rounded-lg border border-dashed border-slate-200 px-3 py-6 text-center text-sm text-slate-400">
+                  No banquet bookings from API
+                </li>
+              ) : (
+                banquetToday.map((event) => (
+                  <li
+                    key={event.id}
+                    className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">
+                          {event.event ?? "Event"}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {event.venue ?? "Venue"}
+                          {event.time ? ` · ${event.time}` : ""}
+                          {event.pax != null ? ` · ${event.pax} pax` : ""}
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          "inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset",
+                          statusBadge(String(event.status ?? "")),
+                        )}
+                      >
+                        {event.status ?? "—"}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-xs">
+                      <span className="text-slate-500">
+                        Balance{" "}
+                        {typeof event.balance === "number"
+                          ? formatINR(event.balance)
+                          : String(event.balance ?? "—")}
+                      </span>
+                      <Link
+                        href="/food-beverages/banquet/bookings"
+                        className="font-medium text-emerald-700 hover:underline"
+                      >
+                        Open
+                      </Link>
+                    </div>
+                  </li>
+                ))
+              )}
+            </ul>
+          </Card>
+
+          <Card className="min-w-0 lg:col-span-2">
+            <CardHeader
+              title="Live orders"
+              subtitle="Latest tickets across restaurants, cafe & bar"
+              action={
+                <Link
+                  href="/food-beverages/restaurants/orders"
+                  className="text-xs font-medium text-emerald-700 hover:underline"
+                >
+                  Open orders
+                </Link>
+              }
+            />
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+                    <th className="pb-2 pr-3 font-semibold">Order</th>
+                    <th className="pb-2 pr-3 font-semibold">Outlet</th>
+                    <th className="pb-2 pr-3 font-semibold">Table</th>
+                    <th className="pb-2 pr-3 font-semibold">Amount</th>
+                    <th className="pb-2 pr-3 font-semibold">Status</th>
+                    <th className="pb-2 font-semibold">Age</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {data.recentOrders.map((order) => {
+                    const outletName =
+                      data.outlets.find((o) => o.id === order.outletId)?.name ?? order.outletId;
+                    return (
+                      <tr key={order.id} className="hover:bg-emerald-50/30">
+                        <td className="py-3 pr-3 text-sm font-medium text-slate-900">
+                          {order.orderNo}
+                        </td>
+                        <td className="py-3 pr-3 text-slate-700">{outletName}</td>
+                        <td className="py-3 pr-3 text-slate-700">{order.ref}</td>
+                        <td className="py-3 pr-3 font-medium text-slate-900">
+                          {formatINR(order.amount)}
+                        </td>
+                        <td className="py-3 pr-3">
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset",
+                              statusBadge(order.status),
+                            )}
+                          >
+                            {order.status}
+                          </span>
+                        </td>
+                        <td className="py-3 text-xs text-slate-500">{order.placedAt}</td>
+                      </tr>
+                    );
+                  })}
+                  {data.recentOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
+                        No recent orders
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
       </div>
     </ModulePageShell>
   );

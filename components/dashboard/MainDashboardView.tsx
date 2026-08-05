@@ -90,47 +90,49 @@ export function MainDashboardView() {
       navItems={navItems}
       user={currentUser}
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {summaryStats.map((stat, index) => (
-          <StatCard key={index} stat={stat} />
-        ))}
-      </div>
+      <div className="min-w-0 space-y-4 sm:space-y-6 lg:space-y-8">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6">
+          {summaryStats.map((stat, index) => (
+            <StatCard key={index} stat={stat} />
+          ))}
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        <div>
-          <GuestsChart data={guestData} />
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8">
+          <div className="min-w-0">
+            <GuestsChart data={guestData} />
+          </div>
+          <div className="min-w-0">
+            <RevenueChart data={revenueData} />
+          </div>
+          <div className="min-w-0 md:col-span-2 lg:col-span-1">
+            <WakeUpCallsAlert calls={wakeUpCalls} />
+          </div>
         </div>
-        <div>
-          <RevenueChart data={revenueData} />
-        </div>
-        <div>
-          <WakeUpCallsAlert calls={wakeUpCalls} />
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        <div>
-          <BookingsChart data={bookingsChartData} />
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8">
+          <div className="min-w-0">
+            <BookingsChart data={bookingsChartData} />
+          </div>
+          <div className="min-w-0">
+            <PlatformChart data={platformData} />
+          </div>
+          <div className="min-w-0 md:col-span-2 lg:col-span-1">
+            <RoomOccupancy data={computedOccupancy} />
+          </div>
         </div>
-        <div>
-          <PlatformChart data={platformData} />
-        </div>
-        <div>
-          <RoomOccupancy data={computedOccupancy} />
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        <div>
-          <OverallRatings data={ratingsData} />
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3 lg:gap-8">
+          <div className="min-w-0">
+            <OverallRatings data={ratingsData} />
+          </div>
+          <div className="min-w-0 lg:col-span-2">
+            <RecentActivity activities={activityLog} />
+          </div>
         </div>
-        <div className="lg:col-span-2">
-          <RecentActivity activities={activityLog} />
-        </div>
-      </div>
 
-      <div>
-        <BookingList bookings={bookings} />
+        <div className="min-w-0 overflow-hidden">
+          <BookingList bookings={bookings} />
+        </div>
       </div>
     </AppShell>
   );
