@@ -148,11 +148,21 @@ export function NewReservationForm() {
   const [roomTypeOptions, setRoomTypeOptions] = useState<string[]>(() => [
     ...roomTypes,
   ]);
+  const [tariffPlanOptions, setTariffPlanOptions] = useState<
+    { id: string; label: string; hint?: string; mealPlan?: string }[]
+  >(() =>
+    tariffPlans.map((p) => ({
+      id: p,
+      label: p,
+      hint: "₹0.00/night",
+    })),
+  );
   const [sourceOptions, setSourceOptions] = useState<
     { id: string; label: string; hint?: string }[]
   >(() =>
     fallbackBookingSources.map((s) => ({ id: s, label: s })),
   );
+
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -257,9 +267,38 @@ export function NewReservationForm() {
         if (typeNames.length > 0) setRoomTypeOptions(typeNames);
 
         const planRates: Record<string, number> = {};
-        for (const rp of tariffPlansData) {
-          if (rp.code) planRates[rp.code] = rp.baseRate || 0;
-          if (rp.name) planRates[rp.name] = rp.baseRate || 0;
+        if (tariffPlansData && tariffPlansData.length > 0) {
+          const activePlans = tariffPlansData.filter((rp) => rp.status !== "Inactive");
+          const planOptions = activePlans.map((rp) => {
+            const planKey = rp.name || rp.code;
+            const displayLabel =
+              rp.name && rp.code && rp.name !== rp.code
+                ? `${rp.name} (${rp.code})`
+                : rp.name || rp.code;
+            return {
+              id: planKey,
+              label: displayLabel,
+              hint: `${formatINR(rp.baseRate || 0)}/night`,
+              mealPlan: rp.mealPlan,
+            };
+          });
+          setTariffPlanOptions(planOptions);
+
+          for (const rp of tariffPlansData) {
+            if (rp.code) planRates[rp.code] = rp.baseRate || 0;
+            if (rp.name) planRates[rp.name] = rp.baseRate || 0;
+            if (rp.code && rp.name) {
+              planRates[`${rp.name} (${rp.code})`] = rp.baseRate || 0;
+            }
+            if (rp.name?.toLowerCase().includes("corporate")) planRates["Corporate"] = rp.baseRate || 0;
+            if (rp.name?.toLowerCase().includes("weekend")) planRates["Weekend"] = rp.baseRate || 0;
+            if (rp.name?.toLowerCase().includes("long")) planRates["Long Stay"] = rp.baseRate || 0;
+          }
+        } else {
+          planRates["BAR"] = 3500;
+          planRates["Corporate"] = 3200;
+          planRates["Weekend"] = 4800;
+          planRates["Long Stay"] = 3000;
         }
         setTariffByPlanMap(planRates);
 
@@ -768,15 +807,17 @@ export function NewReservationForm() {
               </FormField>
               <FormField label="Tariff Plan">
                 <SearchSelect
-                  options={tariffPlans.map((p) => ({
-                    id: p,
-                    label: p,
-                    hint: `${formatINR(tariffByPlanMap[p] ?? 0)}/night`,
-                  }))}
+                  options={tariffPlanOptions}
                   selectedId={form.tariffPlan || null}
                   placeholder="Search tariff plan…"
                   inputClassName={inputClass}
-                  onSelect={(opt) => update("tariffPlan", opt.id)}
+                  onSelect={(opt) => {
+                    update("tariffPlan", opt.id);
+                    const selected = tariffPlanOptions.find((p) => p.id === opt.id);
+                    if (selected?.mealPlan && !form.mealPlan) {
+                      update("mealPlan", selected.mealPlan);
+                    }
+                  }}
                   onClear={() => update("tariffPlan", "")}
                 />
               </FormField>
