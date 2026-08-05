@@ -252,11 +252,11 @@ export function CheckInForm() {
       arrivalsToday.length > 0
         ? arrivalsToday
         : pmsBookings.filter(
-            (b) =>
-              b.status !== "Checked In" &&
-              b.status !== "Cancelled" &&
-              b.status !== "Checked Out",
-          );
+          (b) =>
+            b.status !== "Checked In" &&
+            b.status !== "Cancelled" &&
+            b.status !== "Checked Out",
+        );
 
     const found = pool.find(
       (b) =>
@@ -389,8 +389,8 @@ export function CheckInForm() {
     const type = String(walkIn.roomType || booking?.roomType || "").trim();
     const matchingType = type
       ? availableRooms.filter(
-          (r) => r.roomType?.toLowerCase() === type.toLowerCase(),
-        )
+        (r) => r.roomType?.toLowerCase() === type.toLowerCase(),
+      )
       : [];
     // Prefer same room type; if none vacant, show all vacant rooms
     const pool = matchingType.length > 0 ? matchingType : availableRooms;
@@ -443,7 +443,7 @@ export function CheckInForm() {
           type="button"
           onClick={() => setCheckInMode("reserved")}
           className={cn(
-            "flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all",
+            "flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all cursor-pointer",
             checkInMode === "reserved"
               ? "bg-white text-emerald-800 shadow-sm"
               : "text-slate-600 hover:text-slate-900",
@@ -460,13 +460,13 @@ export function CheckInForm() {
             setLookupError("");
           }}
           className={cn(
-            "flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all",
+            "flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all cursor-pointer",
             checkInMode === "walkin"
               ? "bg-white text-emerald-800 shadow-sm"
               : "text-slate-600 hover:text-slate-900",
           )}
         >
-          <Zap className="h-4 w-4 text-amber-500" />
+          <Zap className="h-4 w-4 " />
           Instant Walk-In Registration
         </button>
       </div>
@@ -623,309 +623,307 @@ export function CheckInForm() {
 
           {/* Right — guest card & registration form */}
           <div className="min-w-0 space-y-5">
-                {!booking ? (
-                  <div className="flex h-full min-h-[400px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
-                      <UserCheck className="h-8 w-8 text-slate-400" />
-                    </div>
-                    <p className="mt-4 text-base font-semibold text-slate-700">
-                      No guest selected
-                    </p>
-                    <p className="mt-1 max-w-xs text-sm text-slate-500">
-                      Look up a booking or select from arriving today to
-                      continue check-in.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex min-w-0 items-center gap-4">
-                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-lg font-bold text-white">
-                            {getInitials(booking.guestName)}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="truncate text-lg font-bold text-slate-900">
-                                {booking.guestName}
-                              </p>
-                              {(booking as { isVip?: boolean }).isVip && (
-                                <Crown className="h-4 w-4 shrink-0 text-amber-500" />
-                              )}
-                            </div>
-                            <p className="text-sm text-slate-500">{booking.id}</p>
-                          </div>
+            {!booking ? (
+              <div className="flex h-full min-h-[400px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
+                  <UserCheck className="h-8 w-8 text-slate-400" />
+                </div>
+                <p className="mt-4 text-base font-semibold text-slate-700">
+                  No guest selected
+                </p>
+                <p className="mt-1 max-w-xs text-sm text-slate-500">
+                  Look up a booking or select from arriving today to
+                  continue check-in.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex min-w-0 items-center gap-4">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-lg font-bold text-white">
+                        {getInitials(booking.guestName)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-lg font-bold text-slate-900">
+                            {booking.guestName}
+                          </p>
+                          {(booking as { isVip?: boolean }).isVip && (
+                            <Crown className="h-4 w-4 shrink-0 text-amber-500" />
+                          )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBooking(null);
-                            setBookingId("");
-                            setLookupError("");
-                          }}
-                          className="shrink-0 text-xs font-medium text-slate-400 hover:text-slate-600"
-                        >
-                          Change guest
-                        </button>
-                      </div>
-                      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {[
-                          {
-                            icon: BedDouble,
-                            label: "Room",
-                            value: `${assignedRoom || booking.roomNo || "TBA"} · ${booking.roomType}`,
-                          },
-                          {
-                            icon: Calendar,
-                            label: "Stay",
-                            value: `${booking.checkIn} – ${booking.checkOut}`,
-                          },
-                          {
-                            icon: Phone,
-                            label: "Mobile",
-                            value: booking.phone || "—",
-                          },
-                          {
-                            icon: CreditCard,
-                            label: "Nights",
-                            value: `${booking.nights ?? "—"} night${(booking.nights ?? 0) === 1 ? "" : "s"}`,
-                          },
-                        ].map(({ icon: Icon, label, value }) => (
-                          <div key={label} className="rounded-xl bg-slate-50 p-3">
-                            <div className="flex items-center gap-1 text-[10px] font-medium uppercase text-slate-400">
-                              <Icon className="h-3 w-3" />
-                              {label}
-                            </div>
-                            <p className="mt-1 truncate text-xs font-semibold text-slate-800">
-                              {value}
-                            </p>
-                          </div>
-                        ))}
+                        <p className="text-sm text-slate-500">{booking.id}</p>
                       </div>
                     </div>
-
-                    <SectionCard
-                      icon={UserCheck}
-                      title="Identity & Registration"
-                      description="Verify guest identification and address credentials."
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBooking(null);
+                        setBookingId("");
+                        setLookupError("");
+                      }}
+                      className="shrink-0 text-xs font-medium text-slate-400 hover:text-slate-600"
                     >
-                      <GuestDetailsSection
-                        guestDetails={guestDetails}
-                        onChange={handleGuestDetailChange}
-                        onFileUpload={setIdFile}
-                        idFile={idFile}
-                        errors={identityErrors}
-                      />
-                    </SectionCard>
+                      Change guest
+                    </button>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {[
+                      {
+                        icon: BedDouble,
+                        label: "Room",
+                        value: `${assignedRoom || booking.roomNo || "TBA"} · ${booking.roomType}`,
+                      },
+                      {
+                        icon: Calendar,
+                        label: "Stay",
+                        value: `${booking.checkIn} – ${booking.checkOut}`,
+                      },
+                      {
+                        icon: Phone,
+                        label: "Mobile",
+                        value: booking.phone || "—",
+                      },
+                      {
+                        icon: CreditCard,
+                        label: "Nights",
+                        value: `${booking.nights ?? "—"} night${(booking.nights ?? 0) === 1 ? "" : "s"}`,
+                      },
+                    ].map(({ icon: Icon, label, value }) => (
+                      <div key={label} className="rounded-xl bg-slate-50 p-3">
+                        <div className="flex items-center gap-1 text-[10px] font-medium uppercase text-slate-400">
+                          <Icon className="h-3 w-3" />
+                          {label}
+                        </div>
+                        <p className="mt-1 truncate text-xs font-semibold text-slate-800">
+                          {value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-                    <SectionCard
-                      icon={KeyRound}
-                      title="Room Assignment & Keycard"
-                      description="Assign clean ready room and encode keycard RFID."
-                    >
-                      <RoomAssignmentSection
-                        assignedRoom={assignedRoom}
-                        onAssignedRoomChange={setAssignedRoom}
-                        keyCard={keyCard}
-                        onKeyCardChange={setKeyCard}
-                        vehicle={vehicle}
-                        onVehicleChange={setVehicle}
-                        remarks={remarks}
-                        onRemarksChange={setRemarks}
-                        availableRooms={availableRoomNumbers}
-                      />
-                    </SectionCard>
+                <SectionCard
+                  icon={UserCheck}
+                  title="Identity & Registration"
+                  description="Verify guest identification and address credentials."
+                >
+                  <GuestDetailsSection
+                    guestDetails={guestDetails}
+                    onChange={handleGuestDetailChange}
+                    onFileUpload={setIdFile}
+                    idFile={idFile}
+                  />
+                </SectionCard>
 
-                    <SectionCard
-                      icon={CreditCard}
-                      title="Billing & Deposit Collection"
-                      description="Collect advance deposit and confirm payment mode."
-                    >
-                      <PaymentBillingSection
-                        paymentMode="Cash"
-                        onPaymentModeChange={() => {}}
-                        deposit={deposit}
-                        onDepositChange={setDeposit}
-                        totalAmount={booking.totalAmount ?? 4500}
-                      />
-                    </SectionCard>
+                <SectionCard
+                  icon={KeyRound}
+                  title="Room Assignment & Keycard"
+                  description="Assign clean ready room and encode keycard RFID."
+                >
+                  <RoomAssignmentSection
+                    assignedRoom={assignedRoom}
+                    onAssignedRoomChange={setAssignedRoom}
+                    keyCard={keyCard}
+                    onKeyCardChange={setKeyCard}
+                    vehicle={vehicle}
+                    onVehicleChange={setVehicle}
+                    remarks={remarks}
+                    onRemarksChange={setRemarks}
+                    availableRooms={availableRoomNumbers}
+                  />
+                </SectionCard>
 
-                    <div className="flex justify-end border-t border-slate-200 pt-4">
-                      <Button
-                        onClick={handleCompleteCheckIn}
-                        className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] rounded-xl px-8 py-3 text-sm font-bold text-white shadow-md"
-                      >
-                        Complete Check-In Process
-                      </Button>
-                    </div>
-                  </>
-                )}
+                <SectionCard
+                  icon={CreditCard}
+                  title="Billing & Deposit Collection"
+                  description="Collect advance deposit and confirm payment mode."
+                >
+                  <PaymentBillingSection
+                    paymentMode="Cash"
+                    onPaymentModeChange={() => { }}
+                    deposit={deposit}
+                    onDepositChange={setDeposit}
+                    totalAmount={booking.totalAmount ?? 4500}
+                  />
+                </SectionCard>
+
+                <div className="flex justify-end border-t border-slate-200 pt-4">
+                  <Button
+                    onClick={handleCompleteCheckIn}
+                    className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] rounded-xl px-8 py-3 text-sm font-bold text-white shadow-md"
+                  >
+                    Complete Check-In Process
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : (
-            <>
-              <SectionCard
-                icon={User}
-                title="Walk-In Guest Details"
-                description="Log instant walk-in guest information."
-              >
-                <FormField label="First Name" required>
-                  <TextInput
-                    className={inputClass}
-                    placeholder="e.g. Rajesh"
-                    value={walkIn.firstName}
-                    onChange={(e) =>
-                      setWalkIn((p) => ({ ...p, firstName: e.target.value }))
-                    }
-                  />
-                </FormField>
-                <FormField label="Last Name" required>
-                  <TextInput
-                    className={inputClass}
-                    placeholder="e.g. Kumar"
-                    value={walkIn.lastName}
-                    onChange={(e) =>
-                      setWalkIn((p) => ({ ...p, lastName: e.target.value }))
-                    }
-                  />
-                </FormField>
-                <FormField label="Mobile Phone" required>
-                  <TextInput
-                    className={inputClass}
-                    placeholder="+91 98765 43210"
-                    value={walkIn.mobile}
-                    onChange={(e) =>
-                      setWalkIn((p) => ({ ...p, mobile: e.target.value }))
-                    }
-                  />
-                </FormField>
-                <FormField label="Email Address">
-                  <TextInput
-                    type="email"
-                    className={inputClass}
-                    placeholder="guest@example.com"
-                    value={walkIn.email}
-                    onChange={(e) =>
-                      setWalkIn((p) => ({ ...p, email: e.target.value }))
-                    }
-                  />
-                </FormField>
-                <FormField label="Booking Type" required>
-                  <SearchSelect
-                    options={[...bookingTypeOptions]}
-                    selectedId={walkIn.bookingType || null}
-                    placeholder="Search booking type…"
-                    inputClassName={inputClass}
-                    onSelect={(option) => {
-                      setWalkIn((p) => ({
-                        ...p,
-                        bookingType: option.id as "Individual" | "Company",
-                        ...(option.id === "Individual"
-                          ? { companyName: "", companyId: "" }
-                          : {}),
-                      }));
-                    }}
-                    onClear={() =>
-                      setWalkIn((p) => ({
-                        ...p,
-                        bookingType: "",
-                        companyName: "",
-                        companyId: "",
-                      }))
-                    }
-                  />
-                </FormField>
-                {walkIn.bookingType === "Company" && (
-                  <FormField label="Company Name">
-                    <CompanySearchSelect
-                      value={walkIn.companyName}
-                      selectedCompanyId={walkIn.companyId || null}
-                      onChange={(val) =>
-                        setWalkIn((p) => ({
-                          ...p,
-                          companyName: val,
-                          companyId: "",
-                        }))
-                      }
-                      onSelect={(c) =>
-                        setWalkIn((p) => ({
-                          ...p,
-                          companyName: c.name,
-                          companyId: c.id,
-                        }))
-                      }
-                      onClear={() =>
-                        setWalkIn((p) => ({
-                          ...p,
-                          companyName: "",
-                          companyId: "",
-                        }))
-                      }
-                      placeholder="Search company name or code…"
-                      inputClassName={inputClass}
-                    />
-                  </FormField>
-                )}
-              </SectionCard>
-
-              <SectionCard
-                icon={UserCheck}
-                title="Identity & Registration"
-                description="Verify guest identification and address credentials."
-              >
-                <GuestDetailsSection
-                  guestDetails={guestDetails}
-                  onChange={handleGuestDetailChange}
-                  onFileUpload={setIdFile}
-                  idFile={idFile}
-                  errors={identityErrors}
-                />
-              </SectionCard>
-
-              <SectionCard
-                icon={KeyRound}
-                title="Room Assignment & Keycard"
-                description="Assign clean ready room and encode keycard RFID."
-              >
-                <RoomAssignmentSection
-                  assignedRoom={assignedRoom}
-                  onAssignedRoomChange={setAssignedRoom}
-                  keyCard={keyCard}
-                  onKeyCardChange={setKeyCard}
-                  vehicle={vehicle}
-                  onVehicleChange={setVehicle}
-                  remarks={remarks}
-                  onRemarksChange={setRemarks}
-                  availableRooms={availableRoomNumbers}
-                />
-              </SectionCard>
-
-              <SectionCard
-                icon={CreditCard}
-                title="Billing & Deposit Collection"
-                description="Collect advance deposit and confirm payment mode."
-              >
-                <PaymentBillingSection
-                  paymentMode={walkIn.paymentMode}
-                  onPaymentModeChange={(val) =>
-                    setWalkIn((p) => ({ ...p, paymentMode: val }))
+        <>
+          <SectionCard
+            icon={User}
+            title="Walk-In Guest Details"
+            description="Log instant walk-in guest information."
+          >
+            <FormField label="First Name" required>
+              <TextInput
+                className={inputClass}
+                placeholder="e.g. Rajesh"
+                value={walkIn.firstName}
+                onChange={(e) =>
+                  setWalkIn((p) => ({ ...p, firstName: e.target.value }))
+                }
+              />
+            </FormField>
+            <FormField label="Last Name" required>
+              <TextInput
+                className={inputClass}
+                placeholder="e.g. Kumar"
+                value={walkIn.lastName}
+                onChange={(e) =>
+                  setWalkIn((p) => ({ ...p, lastName: e.target.value }))
+                }
+              />
+            </FormField>
+            <FormField label="Mobile Phone" required>
+              <TextInput
+                className={inputClass}
+                placeholder="+91 98765 43210"
+                value={walkIn.mobile}
+                onChange={(e) =>
+                  setWalkIn((p) => ({ ...p, mobile: e.target.value }))
+                }
+              />
+            </FormField>
+            <FormField label="Email Address">
+              <TextInput
+                type="email"
+                className={inputClass}
+                placeholder="guest@example.com"
+                value={walkIn.email}
+                onChange={(e) =>
+                  setWalkIn((p) => ({ ...p, email: e.target.value }))
+                }
+              />
+            </FormField>
+            <FormField label="Booking Type" required>
+              <SearchSelect
+                options={[...bookingTypeOptions]}
+                selectedId={walkIn.bookingType || null}
+                placeholder="Search booking type…"
+                inputClassName={inputClass}
+                onSelect={(option) => {
+                  setWalkIn((p) => ({
+                    ...p,
+                    bookingType: option.id as "Individual" | "Company",
+                    ...(option.id === "Individual"
+                      ? { companyName: "", companyId: "" }
+                      : {}),
+                  }));
+                }}
+                onClear={() =>
+                  setWalkIn((p) => ({
+                    ...p,
+                    bookingType: "",
+                    companyName: "",
+                    companyId: "",
+                  }))
+                }
+              />
+            </FormField>
+            {walkIn.bookingType === "Company" && (
+              <FormField label="Company Name">
+                <CompanySearchSelect
+                  value={walkIn.companyName}
+                  selectedCompanyId={walkIn.companyId || null}
+                  onChange={(val) =>
+                    setWalkIn((p) => ({
+                      ...p,
+                      companyName: val,
+                      companyId: "",
+                    }))
                   }
-                  deposit={deposit}
-                  onDepositChange={setDeposit}
-                  totalAmount={walkInTotal}
+                  onSelect={(c) =>
+                    setWalkIn((p) => ({
+                      ...p,
+                      companyName: c.name,
+                      companyId: c.id,
+                    }))
+                  }
+                  onClear={() =>
+                    setWalkIn((p) => ({
+                      ...p,
+                      companyName: "",
+                      companyId: "",
+                    }))
+                  }
+                  placeholder="Search company name or code…"
+                  inputClassName={inputClass}
                 />
-              </SectionCard>
+              </FormField>
+            )}
+          </SectionCard>
 
-              <div className="flex justify-end border-t border-slate-200 pt-4">
-                <Button
-                  onClick={handleCompleteCheckIn}
-                  className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] rounded-xl px-8 py-3 text-sm font-bold text-white shadow-md"
-                >
-                  Complete Check-In Process
-                </Button>
-              </div>
-            </>
-          )}
+          <SectionCard
+            icon={UserCheck}
+            title="Identity & Registration"
+            description="Verify guest identification and address credentials."
+          >
+            <GuestDetailsSection
+              guestDetails={guestDetails}
+              onChange={handleGuestDetailChange}
+              onFileUpload={setIdFile}
+              idFile={idFile}
+            />
+          </SectionCard>
+
+          <SectionCard
+            icon={KeyRound}
+            title="Room Assignment & Keycard"
+            description="Assign clean ready room and encode keycard RFID."
+          >
+            <RoomAssignmentSection
+              assignedRoom={assignedRoom}
+              onAssignedRoomChange={setAssignedRoom}
+              keyCard={keyCard}
+              onKeyCardChange={setKeyCard}
+              vehicle={vehicle}
+              onVehicleChange={setVehicle}
+              remarks={remarks}
+              onRemarksChange={setRemarks}
+              availableRooms={availableRoomNumbers}
+            />
+          </SectionCard>
+
+          <SectionCard
+            icon={CreditCard}
+            title="Billing & Deposit Collection"
+            description="Collect advance deposit and confirm payment mode."
+          >
+            <PaymentBillingSection
+              paymentMode={walkIn.paymentMode}
+              onPaymentModeChange={(val) =>
+                setWalkIn((p) => ({ ...p, paymentMode: val }))
+              }
+              deposit={deposit}
+              onDepositChange={setDeposit}
+              totalAmount={walkInTotal}
+            />
+          </SectionCard>
+
+          <div className="flex justify-end border-t border-slate-200 pt-4">
+            <Button
+              onClick={handleCompleteCheckIn}
+              className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] rounded-xl px-8 py-3 text-sm font-bold text-white shadow-md"
+            >
+              Complete Check-In Process
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

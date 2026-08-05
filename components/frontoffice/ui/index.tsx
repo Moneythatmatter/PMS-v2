@@ -337,7 +337,7 @@ export function FilterPills({ options, active, onChange }: FilterPillsProps) {
           type="button"
           onClick={() => onChange(opt.id)}
           className={cn(
-            "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all sm:px-3 sm:text-xs",
+            "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all sm:px-3 sm:text-xs cursor-pointer",
             active === opt.id
               ? "border-emerald-700 bg-emerald-700 text-white shadow-sm"
               : "border-slate-200 bg-white text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800",
@@ -371,7 +371,7 @@ export function ActionButtons({
             type="button"
             onClick={item.onClick}
             className={cn(
-              "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+              "rounded-md px-2 py-1 text-xs font-medium transition-colors cursor-pointer",
               item.variant === "danger"
                 ? "text-red-600 hover:bg-red-50"
                 : "text-emerald-700 hover:bg-emerald-50",

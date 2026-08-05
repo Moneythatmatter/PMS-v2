@@ -6,6 +6,7 @@ import {
   Calendar,
   CreditCard,
   LogIn,
+  LogOut,
   Mail,
   MapPin,
   Pencil,
@@ -93,14 +94,21 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
             <Printer className="h-3.5 w-3.5" />
             Print
           </Button>
-          {booking.status !== "Cancelled" && booking.status !== "Checked Out" && (
+          {booking.status === "Checked In" || booking.status === "In-House" ? (
+            <Link href="/frontoffice/check-out">
+              <Button className="gap-1.5 bg-emerald-700 hover:bg-emerald-800">
+                <LogOut className="h-3.5 w-3.5" />
+                Check Out
+              </Button>
+            </Link>
+          ) : booking.status !== "Cancelled" && booking.status !== "Checked Out" ? (
             <Link href="/frontoffice/check-in">
               <Button className="gap-1.5 bg-emerald-700 hover:bg-emerald-800">
                 <LogIn className="h-3.5 w-3.5" />
                 Check In
               </Button>
             </Link>
-          )}
+          ) : null}
         </>
       }
     >

@@ -592,7 +592,7 @@ export function AllBookingsView() {
                               onClick={() =>
                                 setOpenMenu(openMenu === booking.id ? null : booking.id)
                               }
-                              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
                               aria-label="More actions"
                             >
                               <MoreHorizontal className="h-4 w-4" />
@@ -618,16 +618,16 @@ export function AllBookingsView() {
                                       onClick: () => window.print(),
                                     },
                                     ...(booking.status === "Cancelled" ||
-                                    booking.status === "Checked Out"
+                                      booking.status === "Checked Out"
                                       ? []
                                       : [
-                                          {
-                                            icon: XCircle,
-                                            label: "Cancel",
-                                            onClick: () => setCancelBooking(booking),
-                                            danger: true,
-                                          },
-                                        ]),
+                                        {
+                                          icon: XCircle,
+                                          label: "Cancel",
+                                          onClick: () => setCancelBooking(booking),
+                                          danger: true,
+                                        },
+                                      ]),
                                   ].map(({ icon: Icon, label, onClick, danger }) => (
                                     <button
                                       key={label}
