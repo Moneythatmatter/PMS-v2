@@ -1,5 +1,6 @@
-import { RatePlansView } from "@/components/frontoffice/MastersViews";
+import { redirect } from "next/navigation";
 
+/** Legacy path — Rate Plans renamed to Tariff Plans */
 export default function RatePlansPage() {
-  return <RatePlansView />;
+  redirect("/frontoffice/masters/tariff-plans");
 }

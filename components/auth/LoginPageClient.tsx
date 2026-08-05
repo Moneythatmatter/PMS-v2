@@ -53,7 +53,7 @@ export function LoginPageClient() {
       <div className="relative w-full max-w-md">
         <div className="mb-8 text-center">
           <p className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Hotel <span className="text-emerald-400">PMS</span>
+            IMPACT <span className="text-emerald-400">PMS</span>
           </p>
           <p className="mt-2 text-sm text-slate-400">
             Property management for front office, F&B, and housekeeping

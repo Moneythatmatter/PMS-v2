@@ -78,6 +78,7 @@ import {
   Scale,
   FolderKanban,
   Settings,
+  Globe,
 } from "lucide-react";
 import type { ModuleNavItem } from "@/app/data/types";
 import { cn } from "@/lib/utils";
@@ -102,6 +103,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   tag: Tag,
   "pie-chart": PieChart,
   "building-2": Building2,
+  globe: Globe,
   clock: Clock,
   "user-plus": UserPlus,
   luggage: Luggage,

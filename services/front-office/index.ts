@@ -7,8 +7,10 @@ export {
   mastersService,
   roomTypeService,
   ratePlanService,
+  tariffPlanService,
   marketSegmentService,
   companyService,
+  bookingSourceService,
 } from "./masters";
 export {
   guestService,

@@ -13,7 +13,7 @@ export interface RoomTypeMaster {
   status: "Active" | "Inactive";
 }
 
-export interface RatePlanMaster {
+export interface TariffPlanMaster {
   id: string;
   code: string;
   name: string;
@@ -27,6 +27,9 @@ export interface RatePlanMaster {
   validTo: string;
   status: "Active" | "Inactive";
 }
+
+/** @deprecated Use TariffPlanMaster */
+export type RatePlanMaster = TariffPlanMaster;
 
 export interface MarketSegmentMaster {
   id: string;
@@ -53,5 +56,13 @@ export interface CompanyMaster {
   city: string;
   corporateDiscount: number;
   creditLimit: number;
+  status: "Active" | "Inactive";
+}
+
+export interface BookingSourceMaster {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
   status: "Active" | "Inactive";
 }
