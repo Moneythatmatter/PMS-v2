@@ -24,6 +24,8 @@ export interface SearchSelectProps {
   className?: string;
   inputClassName?: string;
   renderOption?: (option: SearchOption) => ReactNode;
+  /** Allow committing typed text that is not in the options list. */
+  allowCustom?: boolean;
 }
 
 export function SearchSelect({
@@ -38,6 +40,7 @@ export function SearchSelect({
   className,
   inputClassName,
   renderOption,
+  allowCustom = false,
 }: SearchSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [internalQuery, setInternalQuery] = useState("");
@@ -46,18 +49,13 @@ export function SearchSelect({
   const isControlledQuery = onChange !== undefined;
   const query = isControlledQuery ? value : internalQuery;
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const selected =
+    (selectedId ? options.find((o) => o.id === selectedId) : null) ??
+    (selectedId
+      ? { id: selectedId, label: selectedId, data: { id: selectedId, label: selectedId } }
+      : null);
 
-  const selected = selectedId ? options.find((o) => o.id === selectedId) : null;
-  const displayValue = isOpen ? query : (selected?.label ?? query);
+  const displayValue = isOpen ? query : (selected?.label ?? "");
 
   const matches = options.filter((opt) => {
     const q = query.toLowerCase().trim();
@@ -70,7 +68,47 @@ export function SearchSelect({
     );
   });
 
-  const showDropdown = isOpen && matches.length > 0;
+  const trimmedQuery = query.trim();
+  const exactMatch = options.some(
+    (o) =>
+      o.id.toLowerCase() === trimmedQuery.toLowerCase() ||
+      o.label.toLowerCase() === trimmedQuery.toLowerCase(),
+  );
+  const canCommitCustom = allowCustom && trimmedQuery.length > 0 && !exactMatch;
+
+  const commitCustom = (raw: string) => {
+    const text = raw.trim();
+    if (!text) return;
+    const custom: SearchOption = {
+      id: text,
+      label: text,
+      hint: "Custom",
+      data: { id: text, label: text, hint: "Custom" },
+    };
+    onSelect?.(custom);
+    if (!isControlledQuery) setInternalQuery("");
+    setIsOpen(false);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+        if (allowCustom && !isControlledQuery && internalQuery.trim()) {
+          commitCustom(internalQuery);
+          return;
+        }
+        // Typed text that never matched an option is not a selection — don't leave it
+        // in the box looking like one.
+        if (!isControlledQuery) setInternalQuery("");
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- commit uses latest query via refs would be overkill; query captured on each open cycle
+  }, [allowCustom, isControlledQuery, internalQuery]);
+
+  const showDropdown = isOpen;
   const showClear = Boolean(selectedId || displayValue.trim());
 
   const handleClear = () => {
@@ -107,11 +145,17 @@ export function SearchSelect({
             }
             setIsOpen(true);
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && canCommitCustom) {
+              e.preventDefault();
+              commitCustom(trimmedQuery);
+            }
+          }}
           placeholder={placeholder}
           className={cn(
             "h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 transition",
             showClear ? "pr-9" : "pr-3",
-            inputClassName
+            inputClassName,
           )}
         />
         {showClear && (
@@ -129,6 +173,26 @@ export function SearchSelect({
 
       {showDropdown && (
         <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {canCommitCustom && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => commitCustom(trimmedQuery)}
+              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-emerald-50 transition"
+            >
+              <span className="font-medium text-emerald-800">
+                Use “{trimmedQuery}”
+              </span>
+              <span className="text-xs text-slate-500">Custom</span>
+            </button>
+          )}
+          {matches.length === 0 && !canCommitCustom && (
+            <p className="px-3 py-2 text-sm text-slate-500">
+              {trimmedQuery
+                ? `No match for “${trimmedQuery}” — pick an option from the list`
+                : "No options available"}
+            </p>
+          )}
           {matches.map((opt) => (
             <button
               key={opt.id}

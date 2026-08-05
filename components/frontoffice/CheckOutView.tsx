@@ -31,6 +31,7 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { isDepartingToday } from "@/lib/reservation-dates";
 import { CheckoutInvoiceDrawer } from "@/components/frontoffice/CheckoutInvoice";
 
 type Step = "find" | "review" | "pay" | "done";
@@ -96,7 +97,7 @@ function mapInHouseToFolio(g: {
     discount: 0,
     advancePaid: 0,
     isVip: g.isVip,
-    departingToday: true,
+    departingToday: isDepartingToday({ checkOut: g.checkOut }),
   };
 }
 
@@ -142,7 +143,7 @@ export function CheckOutView() {
   }, []);
 
   const departingToday = useMemo(
-    () => folios.filter((f) => f.departingToday),
+    () => folios.filter((f) => isDepartingToday(f)),
     [folios],
   );
 
@@ -464,7 +465,12 @@ export function CheckOutView() {
                 </span>
               </div>
               <div className="space-y-2">
-                {departingToday.map((f) => {
+                {departingToday.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-orange-200 bg-white/70 px-3 py-6 text-center text-sm text-slate-500">
+                    No guests scheduled to check out today
+                  </p>
+                ) : (
+                  departingToday.map((f) => {
                   const t = computeCheckoutTotals(f);
                   const isSelected = selected?.id === f.id;
                   return (
@@ -496,7 +502,8 @@ export function CheckOutView() {
                       </div>
                     </button>
                   );
-                })}
+                })
+                )}
               </div>
             </div>
           </div>

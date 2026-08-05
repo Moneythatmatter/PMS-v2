@@ -17,6 +17,8 @@ interface SearchSelectProps {
   placeholder?: string;
   className?: string;
   inputClassName?: string;
+  /** Allow committing typed text that is not in the options list. */
+  allowCustom?: boolean;
 }
 
 export function SearchSelect({
@@ -27,6 +29,7 @@ export function SearchSelect({
   placeholder = "Search…",
   className,
   inputClassName,
+  allowCustom = false,
 }: SearchSelectProps) {
   const searchOptions: SearchOption[] = useMemo(
     () =>
@@ -43,11 +46,14 @@ export function SearchSelect({
     <BaseSearchSelect
       options={searchOptions}
       selectedId={selectedId}
-      onSelect={(opt) => onSelect(opt.data as SearchSelectOption)}
+      onSelect={(opt) =>
+        onSelect((opt.data as SearchSelectOption) ?? { id: opt.id, label: opt.label, hint: opt.hint })
+      }
       onClear={onClear}
       placeholder={placeholder}
       className={className}
       inputClassName={inputClassName}
+      allowCustom={allowCustom}
     />
   );
 }

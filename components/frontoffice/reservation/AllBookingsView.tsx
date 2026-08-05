@@ -7,6 +7,7 @@ import {
   Calendar,
   Download,
   LogIn,
+  LogOut,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -61,6 +62,27 @@ function getInitials(name: string) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+/** Reserved bookings can be checked in; in-house bookings can only be checked out. */
+function primaryAction(booking: ReservationBooking) {
+  if (booking.status === "Checked In" || booking.status === "In-House") {
+    return {
+      href: "/frontoffice/check-out",
+      icon: LogOut,
+      title: "Check out",
+      className: "text-orange-700 hover:bg-orange-50",
+    };
+  }
+  if (booking.status === "Reserved" || booking.status === "Confirmed") {
+    return {
+      href: "/frontoffice/check-in",
+      icon: LogIn,
+      title: "Check in",
+      className: "text-emerald-700 hover:bg-emerald-50",
+    };
+  }
+  return null;
 }
 
 function matchesFilter(booking: ReservationBooking, filter: ReservationFilter) {
@@ -445,12 +467,20 @@ export function AllBookingsView() {
                           {formatBalance(booking.balance)}
                         </p>
                         <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                          <Link
-                            href="/frontoffice/check-in"
-                            className="rounded-lg p-2 text-emerald-700 hover:bg-emerald-50"
-                          >
-                            <LogIn className="h-4 w-4" />
-                          </Link>
+                          {(() => {
+                            const action = primaryAction(booking);
+                            if (!action) return null;
+                            const ActionIcon = action.icon;
+                            return (
+                              <Link
+                                href={action.href}
+                                title={action.title}
+                                className={cn("rounded-lg p-2", action.className)}
+                              >
+                                <ActionIcon className="h-4 w-4" />
+                              </Link>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -542,13 +572,20 @@ export function AllBookingsView() {
                       </td>
                       <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
-                          <Link
-                            href="/frontoffice/check-in"
-                            className="rounded-lg p-2 text-emerald-700 hover:bg-emerald-50"
-                            title="Check in"
-                          >
-                            <LogIn className="h-4 w-4" />
-                          </Link>
+                          {(() => {
+                            const action = primaryAction(booking);
+                            if (!action) return null;
+                            const ActionIcon = action.icon;
+                            return (
+                              <Link
+                                href={action.href}
+                                className={cn("rounded-lg p-2", action.className)}
+                                title={action.title}
+                              >
+                                <ActionIcon className="h-4 w-4" />
+                              </Link>
+                            );
+                          })()}
                           <div className="relative">
                             <button
                               type="button"
@@ -580,12 +617,17 @@ export function AllBookingsView() {
                                       label: "Print",
                                       onClick: () => window.print(),
                                     },
-                                    {
-                                      icon: XCircle,
-                                      label: "Cancel",
-                                      onClick: () => setCancelBooking(booking),
-                                      danger: true,
-                                    },
+                                    ...(booking.status === "Cancelled" ||
+                                    booking.status === "Checked Out"
+                                      ? []
+                                      : [
+                                          {
+                                            icon: XCircle,
+                                            label: "Cancel",
+                                            onClick: () => setCancelBooking(booking),
+                                            danger: true,
+                                          },
+                                        ]),
                                   ].map(({ icon: Icon, label, onClick, danger }) => (
                                     <button
                                       key={label}
