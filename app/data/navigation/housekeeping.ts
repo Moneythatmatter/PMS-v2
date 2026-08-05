@@ -48,7 +48,7 @@ export const housekeepingNavItems: ModuleNavItem[] = [
   {
     label: "Settings",
     href: "/housekeeping/settings",
-    icon: "shield",
+    icon: "settings",
   },
 ];
 
