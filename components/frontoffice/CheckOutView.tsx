@@ -421,9 +421,9 @@ export function CheckOutView() {
           </Button>
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-5">
+        <div className="grid items-start gap-6 lg:grid-cols-5">
           {/* Left — search & departing list */}
-          <div className="space-y-5 lg:col-span-2">
+          <div className="space-y-5 lg:sticky lg:top-4 lg:col-span-2 lg:self-start">
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">

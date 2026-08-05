@@ -27,6 +27,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import {
   FormField,
   StatMiniCard,
@@ -526,25 +527,14 @@ export function BillCoveringLetterReversalView() {
       </section>
 
       {/* Single-Step Reversal Verification Modal */}
-      {showReversalModal && selectedVoucher && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl border border-slate-200 space-y-4 font-sans text-xs">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="h-5 w-5 text-rose-600" />
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  Confirm Bill Covering Letter Reversal
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowReversalModal(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
+      {selectedVoucher && (
+        <Modal
+          isOpen={showReversalModal}
+          onClose={() => setShowReversalModal(false)}
+          title="Confirm Bill Covering Letter Reversal"
+          maxWidth="md"
+        >
+          <div className="space-y-4 font-sans text-xs">
             <div className="space-y-3 bg-rose-50/70 p-3.5 rounded-xl border border-rose-200 text-slate-800">
               <div className="flex justify-between">
                 <span>Voucher No:</span>
@@ -614,7 +604,7 @@ export function BillCoveringLetterReversalView() {
               </Button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </ModulePageShell>
   );

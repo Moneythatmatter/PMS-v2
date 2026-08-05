@@ -1,4 +1,5 @@
 import { api } from "@/services/api";
+import { safeGetStorage, safeRemoveStorage, safeSetStorage } from "@/lib/utils";
 
 export type AuthUser = {
   id: string;
@@ -17,14 +18,7 @@ const SESSION_KEY = "pms_session";
 const TOKEN_KEY = "pms_token";
 
 export function getSessionUser(): AuthUser | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as AuthUser;
-  } catch {
-    return null;
-  }
+  return safeGetStorage<AuthUser | null>(SESSION_KEY, null);
 }
 
 export function getAuthToken(): string | null {
@@ -34,11 +28,15 @@ export function getAuthToken(): string | null {
 
 export function setSession(user: AuthUser | null, token?: string | null) {
   if (user && token) {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    localStorage.setItem(TOKEN_KEY, token);
+    safeSetStorage(SESSION_KEY, user);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(TOKEN_KEY, token);
+    }
   } else {
-    localStorage.removeItem(SESSION_KEY);
-    localStorage.removeItem(TOKEN_KEY);
+    safeRemoveStorage(SESSION_KEY);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(TOKEN_KEY);
+    }
   }
 }
 

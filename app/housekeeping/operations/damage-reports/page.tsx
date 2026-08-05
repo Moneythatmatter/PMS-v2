@@ -309,7 +309,7 @@ export default function DamageReportsPage() {
 
       {/* Top Navigation Tabs */}
       <div className="border-b border-slate-200">
-        <nav className="flex flex-wrap gap-4 text-xs font-bold uppercase tracking-wider">
+        <nav className="flex gap-4 overflow-x-auto scrollbar-none text-xs font-bold uppercase tracking-wider">
           {[
             { id: "active", label: `Active Damage Reports (${MOCK_ACTIVE_REPORTS.length})` },
             { id: "finance", label: `Financial Recovery (${MOCK_FINANCIAL_RECOVERY.length})` },
@@ -773,7 +773,7 @@ export default function DamageReportsPage() {
               />
             </FormField>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Room / Area" required>
                 <TextInput
                   placeholder="e.g. 305 or Lobby"
@@ -797,7 +797,7 @@ export default function DamageReportsPage() {
               </FormField>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <FormField label="Reported By" required>
                 <SelectInput
                   value={reportedByStaff}
@@ -839,7 +839,7 @@ export default function DamageReportsPage() {
           <div className="space-y-2.5">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 border-b border-slate-100 pb-1">Asset Information</h4>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Asset Tag ID" required>
                 <TextInput
                   value={assetTag}
@@ -857,7 +857,7 @@ export default function DamageReportsPage() {
               </FormField>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Replacement Cost (₹)" required>
                 <TextInput
                   value={replCost}
@@ -880,7 +880,7 @@ export default function DamageReportsPage() {
           <div className="space-y-2.5">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 border-b border-slate-100 pb-1">Damage Assessment</h4>
             
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <FormField label="Category" required>
                 <SelectInput
                   value={category}
@@ -1014,7 +1014,7 @@ export default function DamageReportsPage() {
 
             {reqEngineering && (
               <div className="space-y-2 rounded-xl border border-purple-200 bg-purple-50/30 p-3 text-xs">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Assigned Engineer">
                     <SelectInput
                       value={engineer}
@@ -1057,7 +1057,7 @@ export default function DamageReportsPage() {
 
             {reqInsurance && (
               <div className="space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/30 p-3 text-xs">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Policy Number">
                     <TextInput value={policyNo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPolicyNo(e.target.value)} className="h-8 text-xs rounded-xl font-mono" />
                   </FormField>
@@ -1072,7 +1072,7 @@ export default function DamageReportsPage() {
           {/* SECTION 8: PHOTO EVIDENCE */}
           <div className="space-y-2.5 border-t border-slate-100 pt-3">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 border-b border-slate-100 pb-1">Photo Evidence</h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-center space-y-1 cursor-pointer hover:bg-slate-100/60 transition-colors">
                 <Camera className="h-5 w-5 mx-auto text-slate-400" />
                 <p className="text-[10px] font-bold text-slate-700">Damage Photo</p>

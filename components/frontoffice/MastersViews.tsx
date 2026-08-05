@@ -43,20 +43,7 @@ import {
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 
-function StatusBadge({ status }: { status: "Active" | "Inactive" }) {
-  return (
-    <span
-      className={cn(
-        "rounded-full px-2 py-0.5 text-[11px] font-medium",
-        status === "Active"
-          ? "bg-emerald-50 text-emerald-700"
-          : "bg-slate-100 text-slate-600",
-      )}
-    >
-      {status}
-    </span>
-  );
-}
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 function MasterTable({
   columns,

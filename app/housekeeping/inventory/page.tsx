@@ -396,7 +396,51 @@ export default function HousekeepingInventoryPage() {
 
       {/* Main Inventory Data Table */}
       <div className="space-y-2">
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs scrollbar-thin">
+        <div className="space-y-3 md:hidden">
+          {filteredInventory.map((item) => (
+            <div
+              key={item.id}
+              className={cn(
+                "rounded-xl border border-slate-200 bg-white p-4 shadow-2xs",
+                selectedIds.has(item.id) && "border-emerald-300 bg-emerald-50/40",
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(item.id)}
+                  onChange={() => {
+                    const next = new Set(selectedIds);
+                    if (next.has(item.id)) next.delete(item.id);
+                    else next.add(item.id);
+                    setSelectedIds(next);
+                  }}
+                  className="mt-0.5 rounded border-slate-300"
+                  aria-label={`Select ${item.name}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-extrabold text-slate-900 truncate">{item.name}</p>
+                      <p className="text-[10px] text-slate-400">{item.sku} · {item.category}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase text-slate-700">
+                      {item.status}
+                    </span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-slate-600">
+                    <span>Avail: <strong>{item.available}</strong> {item.unit}</span>
+                    <span>Par: {item.parStock}</span>
+                    <span className="text-red-600">Dmg/Lost: {item.damaged}/{item.lost}</span>
+                    <span className="truncate">{item.storageLocation || "—"}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs scrollbar-thin md:block">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 z-10">
@@ -740,7 +784,7 @@ export default function HousekeepingInventoryPage() {
         title="Register New Inventory Item"
       >
         <form onSubmit={handleSaveAddItem} className="space-y-4 select-none pb-6">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FormField label="Item SKU Code">
               <TextInput
                 value={newSku}
@@ -774,7 +818,7 @@ export default function HousekeepingInventoryPage() {
             />
           </FormField>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <FormField label="Sub-Category">
               <TextInput
                 value={newSubCategory}
@@ -803,7 +847,7 @@ export default function HousekeepingInventoryPage() {
             </FormField>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FormField label="Storage Bay Location">
               <TextInput
                 value={newStorage}

@@ -19,10 +19,10 @@ export function Header({ user: fallbackUser }: HeaderProps) {
   const router = useRouter();
   const user = authUser
     ? {
-        name: authUser.name,
-        role: authUser.role,
-        initials: authUser.initials,
-      }
+      name: authUser.name,
+      role: authUser.role,
+      initials: authUser.initials,
+    }
     : fallbackUser;
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -54,8 +54,8 @@ export function Header({ user: fallbackUser }: HeaderProps) {
             </button>
           )}
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold tracking-tight text-white">
-              Hotel <span className="text-emerald-500">PMS</span>
+            <p className="truncate text-sm font-semibold tracking-tight text-white uppercase">
+              Impact <span className="text-emerald-500">PMS</span>
             </p>
           </div>
         </div>

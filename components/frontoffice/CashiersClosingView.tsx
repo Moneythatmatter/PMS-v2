@@ -2,10 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, CreditCard, IndianRupee, Smartphone, Wallet } from "lucide-react";
-import {
-  currentShiftSummary,
-  type CashierShiftRecord,
-} from "@/app/data/frontoffice/closing";
+import type { CashierShiftRecord } from "@/app/data/frontoffice/closing";
 import { currentUser } from "@/app/data";
 import { cashierShiftService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
@@ -26,8 +23,8 @@ export function CashiersClosingView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cashActual, setCashActual] = useState("");
-  const [cardActual, setCardActual] = useState(String(currentShiftSummary.cardExpected));
-  const [upiActual, setUpiActual] = useState(String(currentShiftSummary.upiExpected));
+  const [cardActual, setCardActual] = useState("");
+  const [upiActual, setUpiActual] = useState("");
   const [notes, setNotes] = useState("");
   const [closed, setClosed] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -41,6 +38,15 @@ export function CashiersClosingView() {
         if (!cancelled) {
           setRecords(data);
           setError(null);
+          const open = data.find((r) => r.status === "Open");
+          if (open) {
+            const cash = open.cashExpected ?? Math.round((open.expected || 0) * 0.4);
+            const card = open.cardExpected ?? Math.round((open.expected || 0) * 0.35);
+            const upi =
+              open.upiExpected ?? Math.max(0, (open.expected || 0) - cash - card);
+            setCardActual(String(card));
+            setUpiActual(String(upi));
+          }
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
@@ -48,24 +54,30 @@ export function CashiersClosingView() {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const expected = useMemo(() => {
+    const open = records.find((r) => r.status === "Open");
+    const cashExpected = open?.cashExpected ?? Math.round((open?.expected || 0) * 0.4);
+    const cardExpected = open?.cardExpected ?? Math.round((open?.expected || 0) * 0.35);
+    const upiExpected =
+      open?.upiExpected ??
+      Math.max(0, (open?.expected || 0) - cashExpected - cardExpected);
+    const refunds = open?.refunds ?? 0;
     const total =
-      currentShiftSummary.cashExpected +
-      currentShiftSummary.cardExpected +
-      currentShiftSummary.upiExpected -
-      currentShiftSummary.refunds;
-    return { ...currentShiftSummary, total };
-  }, []);
+      (open?.expected ?? cashExpected + cardExpected + upiExpected) - refunds;
+    return { cashExpected, cardExpected, upiExpected, refunds, total };
+  }, [records]);
 
   const actualTotal = useMemo(() => {
     const cash = parseFloat(cashActual) || 0;
     const card = parseFloat(cardActual) || 0;
     const upi = parseFloat(upiActual) || 0;
-    return cash + card + upi - currentShiftSummary.refunds;
-  }, [cashActual, cardActual, upiActual]);
+    return cash + card + upi - expected.refunds;
+  }, [cashActual, cardActual, upiActual, expected.refunds]);
 
   const variance = actualTotal - expected.total;
 
@@ -195,7 +207,7 @@ export function CashiersClosingView() {
                 </FormField>
                 <FormField label="Refunds" className="sm:col-span-2">
                   <TextInput
-                    value={formatINR(currentShiftSummary.refunds)}
+                    value={formatINR(expected.refunds)}
                     readOnly
                     className="text-red-600"
                   />

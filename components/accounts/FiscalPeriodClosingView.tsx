@@ -23,6 +23,7 @@ import {
   Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import {
   FormField,
   StatMiniCard,
@@ -569,100 +570,81 @@ export function FiscalPeriodClosingView() {
       </section>
 
       {/* Single-Step Closing Verification Modal */}
-      {showCloseModal && targetPeriod && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 font-bold">
-                  <ShieldAlert className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    Fiscal Period Closing Security Lock Check
-                  </h3>
-                  <p className="text-[11px] text-slate-500 font-medium">
-                    WINHMS Financial Period Audit Confirmation
-                  </p>
-                </div>
+      {targetPeriod && (
+        <Modal
+          isOpen={showCloseModal}
+          onClose={() => setShowCloseModal(false)}
+          title="Fiscal Period Closing Security Lock Check"
+          description="WINHMS Financial Period Audit Confirmation"
+          maxWidth="lg"
+        >
+          <div className="space-y-4 font-sans">
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0" />
+                <span>Audit Review & Closing Impact</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowCloseModal(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <p className="text-slate-700 leading-relaxed text-[11px]">
+                You are about to lock and close{" "}
+                <strong className="text-slate-900">{targetPeriod.periodName}</strong> for{" "}
+                <strong>{selectedCompany}</strong>. Once closed, new voucher entries and backdated edits for this period will be locked.
+              </p>
             </div>
 
-            <div className="space-y-4">
-              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs space-y-1.5">
-                <div className="flex items-center gap-1.5 font-bold text-amber-900">
-                  <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0" />
-                  <span>Audit Review & Closing Impact</span>
-                </div>
-                <p className="text-slate-700 leading-relaxed text-[11px]">
-                  You are about to lock and close{" "}
-                  <strong className="text-slate-900">{targetPeriod.periodName}</strong> for{" "}
-                  <strong>{selectedCompany}</strong>. Once closed, new voucher entries and backdated edits for this period will be locked.
-                </p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1.5 text-xs">
+              <p className="font-bold text-slate-800 uppercase text-[10px] tracking-wider">
+                Period Audit Summary:
+              </p>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-slate-600">Period Duration:</span>
+                <span className="font-bold text-slate-800">{targetPeriod.startDate} to {targetPeriod.endDate}</span>
               </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1.5 text-xs">
-                <p className="font-bold text-slate-800 uppercase text-[10px] tracking-wider">
-                  Period Audit Summary:
-                </p>
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-600">Period Duration:</span>
-                  <span className="font-bold text-slate-800">{targetPeriod.startDate} to {targetPeriod.endDate}</span>
-                </div>
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-600">Unposted Draft Vouchers:</span>
-                  <span className="font-bold text-emerald-700">0 Drafts (Passed)</span>
-                </div>
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-600">Trial Balance Status:</span>
-                  <span className="font-bold text-emerald-700">Balanced (Diff ₹0.00)</span>
-                </div>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-slate-600">Unposted Draft Vouchers:</span>
+                <span className="font-bold text-emerald-700">0 Drafts (Passed)</span>
               </div>
-
-              {/* Single Step Confirmation Checkbox */}
-              <label className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-200 cursor-pointer hover:border-emerald-300 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={authorizationConfirmed}
-                  onChange={(e) => setAuthorizationConfirmed(e.target.checked)}
-                  className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
-                />
-                <span className="text-[11px] text-slate-700 font-medium leading-relaxed">
-                  I confirm that I have completed the pre-closing audit and am authorized to lock and close this financial period.
-                </span>
-              </label>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowCloseModal(false)}
-                  className="text-xs font-semibold text-slate-600 cursor-pointer"
-                >
-                  Cancel
-                </Button>
-
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={!authorizationConfirmed || isClosing}
-                  onClick={handleExecuteClosing}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs disabled:opacity-50 cursor-pointer"
-                >
-                  {isClosing ? "Closing Period..." : "Confirm & Lock Fiscal Period"}
-                </Button>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-slate-600">Trial Balance Status:</span>
+                <span className="font-bold text-emerald-700">Balanced (Diff ₹0.00)</span>
               </div>
+            </div>
+
+            {/* Single Step Confirmation Checkbox */}
+            <label className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-200 cursor-pointer hover:border-emerald-300 transition-colors">
+              <input
+                type="checkbox"
+                checked={authorizationConfirmed}
+                onChange={(e) => setAuthorizationConfirmed(e.target.checked)}
+                className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
+              />
+              <span className="text-[11px] text-slate-700 font-medium leading-relaxed">
+                I confirm that I have completed the pre-closing audit and am authorized to lock and close this financial period.
+              </span>
+            </label>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCloseModal(false)}
+                className="text-xs font-semibold text-slate-600 cursor-pointer"
+              >
+                Cancel
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                disabled={!authorizationConfirmed || isClosing}
+                onClick={handleExecuteClosing}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs disabled:opacity-50 cursor-pointer"
+              >
+                {isClosing ? "Closing Period..." : "Confirm & Lock Fiscal Period"}
+              </Button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </ModulePageShell>
   );

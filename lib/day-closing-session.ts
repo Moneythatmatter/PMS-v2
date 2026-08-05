@@ -1,16 +1,21 @@
-import {
-  cashierShiftRecords,
-  dayClosingSummary,
-  openPosTabs,
-  pendingDepartures,
-  roomChargePostings,
-  type CashierShiftRecord,
-  type DayClosingReport,
-  type DayClosingSummary,
-  type OpenPosTab,
-  type PendingDeparture,
-  type RoomChargePosting,
+import type {
+  CashierShiftRecord,
+  DayClosingReport,
+  DayClosingSummary,
+  NightAuditItem,
+  NightAuditItemStatus,
+  OpenPosTab,
+  PendingDeparture,
+  RoomChargePosting,
 } from "@/app/data/frontoffice/closing";
+import {
+  cashierShiftService,
+  reservationService,
+  roomChargePostingService,
+} from "@/services/front-office";
+import { safeGetStorage, safeRemoveStorage, safeSetStorage } from "@/lib/utils";
+
+export type { NightAuditItem, NightAuditItemStatus };
 
 export const DAY_CLOSING_STORAGE_KEY = "pms-day-closing-v1";
 export const NIGHT_AUDIT_STORAGE_KEY = "pms-night-audit-v1";
@@ -26,20 +31,6 @@ export type DayClosingSessionState = {
   nightAuditCompleted: boolean;
 };
 
-export type NightAuditItemStatus = "Posted" | "Pending" | "Exception" | "Resolved";
-
-export type NightAuditItem = {
-  id: string;
-  roomNo: string;
-  guestName: string;
-  roomRate: number;
-  extras: number;
-  posted: number;
-  auditTime: string;
-  status: NightAuditItemStatus;
-  note?: string;
-};
-
 export type NightAuditSessionState = {
   items: NightAuditItem[];
   running: boolean;
@@ -49,79 +40,34 @@ export type NightAuditSessionState = {
   auditLog: string[];
 };
 
-export const initialNightAuditItems: NightAuditItem[] = [
-  {
-    id: "N1",
-    roomNo: "112",
-    guestName: "James Wilson",
-    roomRate: 3200,
-    extras: 850,
-    posted: 4050,
-    auditTime: "11:45 PM",
-    status: "Posted",
-    note: "Restaurant charge included",
-  },
-  {
-    id: "N2",
-    roomNo: "204",
-    guestName: "Rahul Sharma",
-    roomRate: 4500,
-    extras: 200,
-    posted: 4700,
-    auditTime: "11:46 PM",
-    status: "Posted",
-  },
-  {
-    id: "N3",
-    roomNo: "305",
-    guestName: "Michael Brown",
-    roomRate: 5200,
-    extras: 0,
-    posted: 5200,
-    auditTime: "11:47 PM",
-    status: "Posted",
-  },
-  {
-    id: "N4",
-    roomNo: "501",
-    guestName: "Priya Patel",
-    roomRate: 8500,
-    extras: 680,
-    posted: 9180,
-    auditTime: "11:48 PM",
-    status: "Posted",
-  },
-  {
-    id: "N5",
-    roomNo: "118",
-    guestName: "—",
-    roomRate: 0,
-    extras: 0,
-    posted: 0,
-    auditTime: "—",
-    status: "Exception",
-    note: "No-show — room vacant",
-  },
-  {
-    id: "N6",
-    roomNo: "412",
-    guestName: "Sarah Chen",
-    roomRate: 3500,
-    extras: 120,
-    posted: 0,
-    auditTime: "—",
-    status: "Pending",
-    note: "Late checkout — hold posting",
-  },
-];
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function createEmptyDayClosingSummary(
+  businessDate = todayIso(),
+): DayClosingSummary {
+  return {
+    businessDate,
+    totalRevenue: 0,
+    roomRevenue: 0,
+    fbRevenue: 0,
+    otherRevenue: 0,
+    occupancy: 0,
+    arrivals: 0,
+    departures: 0,
+    inHouse: 0,
+    pendingCheckouts: 0,
+  };
+}
 
 export function createInitialDayClosingState(): DayClosingSessionState {
   return {
-    shifts: structuredClone(cashierShiftRecords),
-    pending: structuredClone(pendingDepartures),
-    charges: structuredClone(roomChargePostings),
-    posTabs: structuredClone(openPosTabs),
-    summary: structuredClone(dayClosingSummary),
+    shifts: [],
+    pending: [],
+    charges: [],
+    posTabs: [],
+    summary: createEmptyDayClosingSummary(),
     completed: false,
     report: null,
     nightAuditCompleted: false,
@@ -130,13 +76,93 @@ export function createInitialDayClosingState(): DayClosingSessionState {
 
 export function createInitialNightAuditState(): NightAuditSessionState {
   return {
-    items: structuredClone(initialNightAuditItems),
+    items: [],
     running: false,
     completed: false,
     completedAt: null,
     completedBy: null,
     auditLog: [],
   };
+}
+
+/** Load live day-closing inputs from FO APIs (no mock seed). */
+export async function fetchLiveDayClosingState(): Promise<
+  Pick<DayClosingSessionState, "shifts" | "pending" | "charges" | "posTabs" | "summary">
+> {
+  const [shifts, inHouse, charges] = await Promise.all([
+    cashierShiftService.list().catch(() => [] as CashierShiftRecord[]),
+    reservationService.inHouse().catch(() => []),
+    roomChargePostingService.list().catch(() => [] as RoomChargePosting[]),
+  ]);
+
+  const today = todayIso();
+  const pending: PendingDeparture[] = inHouse
+    .filter((g) => {
+      const out = String(g.checkOut || "").slice(0, 10);
+      return !out || out <= today;
+    })
+    .map((g) => ({
+      id: g.id,
+      guestName: g.guestName,
+      roomNo: g.room,
+      checkOut: g.checkOut,
+      balance: g.balance ?? 0,
+      status: "Pending" as const,
+    }));
+
+  const summary: DayClosingSummary = {
+    ...createEmptyDayClosingSummary(today),
+    inHouse: inHouse.length,
+    pendingCheckouts: pending.length,
+    roomRevenue: charges.reduce(
+      (sum, c) => sum + (c.roomRate || 0) + (c.extras || 0),
+      0,
+    ),
+    totalRevenue: charges.reduce(
+      (sum, c) => sum + (c.roomRate || 0) + (c.extras || 0),
+      0,
+    ),
+  };
+
+  return {
+    shifts,
+    pending,
+    charges,
+    posTabs: [],
+    summary,
+  };
+}
+
+/** Build night-audit rows from room charge postings / in-house guests. */
+export async function fetchLiveNightAuditItems(): Promise<NightAuditItem[]> {
+  const [charges, inHouse] = await Promise.all([
+    roomChargePostingService.list().catch(() => [] as RoomChargePosting[]),
+    reservationService.inHouse().catch(() => []),
+  ]);
+
+  if (charges.length > 0) {
+    return charges.map((c) => ({
+      id: c.id,
+      roomNo: c.roomNo,
+      guestName: c.guestName,
+      roomRate: c.roomRate,
+      extras: c.extras,
+      posted: c.roomRate + c.extras,
+      auditTime: "",
+      status: c.status === "Posted" ? ("Posted" as const) : ("Pending" as const),
+    }));
+  }
+
+  return inHouse.map((g) => ({
+    id: g.id,
+    roomNo: g.room,
+    guestName: g.guestName,
+    roomRate: Math.max(0, (g.balance || 0) - (g.restaurantBill || 0) - (g.laundry || 0)),
+    extras: (g.restaurantBill || 0) + (g.laundry || 0),
+    posted: g.balance || 0,
+    auditTime: "",
+    status: "Pending" as const,
+  }));
 }
 
 export function addDaysIso(isoDate: string, days: number) {
@@ -154,53 +180,48 @@ export function formatBusinessDate(isoDate: string) {
 }
 
 export function loadDayClosingState(): DayClosingSessionState {
-  if (typeof window === "undefined") return createInitialDayClosingState();
-  try {
-    const raw = sessionStorage.getItem(DAY_CLOSING_STORAGE_KEY);
-    if (!raw) return createInitialDayClosingState();
-    const parsed = JSON.parse(raw) as DayClosingSessionState;
-    return {
-      ...createInitialDayClosingState(),
-      ...parsed,
-      nightAuditCompleted: parsed.nightAuditCompleted ?? false,
-    };
-  } catch {
-    return createInitialDayClosingState();
-  }
+  const initial = createInitialDayClosingState();
+  const parsed = safeGetStorage<Partial<DayClosingSessionState> | null>(
+    DAY_CLOSING_STORAGE_KEY,
+    null,
+    true,
+  );
+  if (!parsed) return initial;
+  return {
+    ...initial,
+    ...parsed,
+    nightAuditCompleted: parsed.nightAuditCompleted ?? false,
+  };
 }
 
 export function saveDayClosingState(state: DayClosingSessionState) {
-  if (typeof window === "undefined") return;
-  sessionStorage.setItem(DAY_CLOSING_STORAGE_KEY, JSON.stringify(state));
+  safeSetStorage(DAY_CLOSING_STORAGE_KEY, state, true);
 }
 
 export function clearDayClosingState() {
-  if (typeof window === "undefined") return;
-  sessionStorage.removeItem(DAY_CLOSING_STORAGE_KEY);
+  safeRemoveStorage(DAY_CLOSING_STORAGE_KEY, true);
 }
 
 export function loadNightAuditState(): NightAuditSessionState {
-  if (typeof window === "undefined") return createInitialNightAuditState();
-  try {
-    const raw = sessionStorage.getItem(NIGHT_AUDIT_STORAGE_KEY);
-    if (!raw) return createInitialNightAuditState();
-    return {
-      ...createInitialNightAuditState(),
-      ...(JSON.parse(raw) as NightAuditSessionState),
-    };
-  } catch {
-    return createInitialNightAuditState();
-  }
+  const initial = createInitialNightAuditState();
+  const parsed = safeGetStorage<Partial<NightAuditSessionState> | null>(
+    NIGHT_AUDIT_STORAGE_KEY,
+    null,
+    true,
+  );
+  if (!parsed) return initial;
+  return {
+    ...initial,
+    ...parsed,
+  };
 }
 
 export function saveNightAuditState(state: NightAuditSessionState) {
-  if (typeof window === "undefined") return;
-  sessionStorage.setItem(NIGHT_AUDIT_STORAGE_KEY, JSON.stringify(state));
+  safeSetStorage(NIGHT_AUDIT_STORAGE_KEY, state, true);
 }
 
 export function clearNightAuditState() {
-  if (typeof window === "undefined") return;
-  sessionStorage.removeItem(NIGHT_AUDIT_STORAGE_KEY);
+  safeRemoveStorage(NIGHT_AUDIT_STORAGE_KEY, true);
 }
 
 export function resetClosingDemo() {

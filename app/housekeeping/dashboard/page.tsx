@@ -92,7 +92,16 @@ function Pill({ status }: { status: string }) {
 }
 
 export default function HousekeepingDashboard() {
-  const { rooms, requests, maintenance, inventory, laundryJobs, publicAreas } = useHousekeeping();
+  const {
+    rooms,
+    requests,
+    maintenance,
+    inventory,
+    laundryJobs,
+    publicAreas,
+    loading,
+    apiConnected,
+  } = useHousekeeping();
 
   const stats = useMemo(() => {
     const dirty = rooms.filter((r) => r.status.includes("Dirty")).length;
@@ -198,9 +207,19 @@ export default function HousekeepingDashboard() {
     <ModulePageShell
       eyebrow="Housekeeping"
       title="Dashboard"
-      description="Room status, guest requests, inspections, and linen work for today."
+      description={
+        loading
+          ? "Loading housekeeping data…"
+          : apiConnected
+            ? "Room status, guest requests, inspections, and linen work for today."
+            : "Offline mode — using local data (backend unavailable)."
+      }
       wrapChildren={false}
     >
+      {loading ? (
+        <p className="py-12 text-center text-sm text-slate-500">Loading housekeeping…</p>
+      ) : (
+      <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatMiniCard
           label="Dirty Rooms"
@@ -503,6 +522,8 @@ export default function HousekeepingDashboard() {
           </ul>
         </section>
       </div>
+      </>
+      )}
     </ModulePageShell>
   );
 }

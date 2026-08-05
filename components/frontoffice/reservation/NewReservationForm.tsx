@@ -17,12 +17,17 @@ import {
   mealPlans,
   paymentModes,
   ratePlans,
-  roomNumbers,
   roomTypes,
 } from "@/app/data/frontoffice/constants";
 import { currentUser } from "@/app/data";
 import type { GuestProfile } from "@/app/data/frontoffice/modules";
-import { guestService, reservationService } from "@/services/front-office";
+import {
+  guestService,
+  ratePlanService,
+  reservationService,
+  roomService,
+  roomTypeService,
+} from "@/services/front-office";
 import { CompanySearchSelect } from "@/components/frontoffice/CompanySearchSelect";
 import { SearchSelect } from "@/components/frontoffice/SearchSelect";
 import { Button } from "@/components/ui/Button";
@@ -30,15 +35,10 @@ import {
   AlertBanner,
   FormField,
   FOPageHeader,
-  SelectInput,
   TextInput,
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
-
-const emptyOption = (label: string) => (
-  <option value="" disabled hidden>{label}</option>
-);
 
 function generateRef() {
   return `BK-${1044 + Math.floor(Math.random() * 100)}`;
@@ -48,24 +48,30 @@ function nightsBetween(checkIn: string, checkOut: string) {
   if (!checkIn || !checkOut) return 0;
   const start = new Date(checkIn);
   const end = new Date(checkOut);
-  const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  const diff = Math.ceil(
+    (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
+  );
   return diff > 0 ? diff : 0;
 }
 
-const rateByPlan: Record<string, number> = {
-  BAR: 4500,
-  Corporate: 3800,
-  OTA: 4200,
-  Weekend: 5200,
-  "Long Stay": 3200,
-};
+function getTodayString() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
-const baseRateByRoom: Record<string, number> = {
-  Standard: 3500,
-  Deluxe: 5200,
-  Suite: 8500,
-  Premium: 6200,
-};
+function getNextDayString(dateStr: string) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() + 1);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 type Step = "guest" | "booking" | "payment" | "done";
 
@@ -112,7 +118,32 @@ const bookingTypeOptions = [
 
 export function NewReservationForm() {
   const searchParams = useSearchParams();
+  const todayStr = useMemo(() => getTodayString(), []);
+
+  const searchParamCheckIn = searchParams.get("checkIn");
+  const searchParamCheckOut = searchParams.get("checkOut");
+
+  const initialCheckIn = searchParamCheckIn
+    ? searchParamCheckIn < todayStr
+      ? todayStr
+      : searchParamCheckIn
+    : "";
+
+  const initialCheckOut = searchParamCheckOut
+    ? searchParamCheckOut < todayStr
+      ? initialCheckIn
+        ? getNextDayString(initialCheckIn)
+        : getNextDayString(todayStr)
+      : initialCheckIn && searchParamCheckOut <= initialCheckIn
+        ? getNextDayString(initialCheckIn)
+        : searchParamCheckOut
+    : "";
+
   const [ref] = useState(generateRef);
+  const [availableRoomNos, setAvailableRoomNos] = useState<string[]>([]);
+  const [rateByPlanMap, setRateByPlanMap] = useState<Record<string, number>>({});
+  const [baseRateByRoomMap, setBaseRateByRoomMap] = useState<Record<string, number>>({});
+  const [roomsByType, setRoomsByType] = useState<Record<string, string[]>>({});
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -121,8 +152,8 @@ export function NewReservationForm() {
     bookingType: "" as "" | "Individual" | "Company",
     companyName: "",
     companyId: "",
-    checkIn: searchParams.get("checkIn") ?? "",
-    checkOut: searchParams.get("checkOut") ?? "",
+    checkIn: initialCheckIn,
+    checkOut: initialCheckOut,
     adults: 1,
     children: 0,
     roomType: searchParams.get("roomType") ?? "",
@@ -157,14 +188,74 @@ export function NewReservationForm() {
     const checkIn = searchParams.get("checkIn");
     const checkOut = searchParams.get("checkOut");
     if (!room && !roomType && !checkIn && !checkOut) return;
+
+    const today = getTodayString();
+    let validCheckIn = checkIn ?? undefined;
+    if (validCheckIn && validCheckIn < today) {
+      validCheckIn = today;
+    }
+
+    let validCheckOut = checkOut ?? undefined;
+    if (validCheckOut && validCheckOut < today) {
+      validCheckOut = validCheckIn ? getNextDayString(validCheckIn) : getNextDayString(today);
+    } else if (validCheckIn && validCheckOut && validCheckOut <= validCheckIn) {
+      validCheckOut = getNextDayString(validCheckIn);
+    }
+
     setForm((prev) => ({
       ...prev,
       ...(room ? { roomNumber: room } : {}),
       ...(roomType ? { roomType } : {}),
-      ...(checkIn ? { checkIn } : {}),
-      ...(checkOut ? { checkOut } : {}),
+      ...(validCheckIn ? { checkIn: validCheckIn } : {}),
+      ...(validCheckOut ? { checkOut: validCheckOut } : {}),
     }));
   }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [rooms, roomTypesData, ratePlansData] = await Promise.all([
+          roomService.list(),
+          roomTypeService.list().catch(() => []),
+          ratePlanService.list().catch(() => []),
+        ]);
+        if (cancelled) return;
+
+        const byType: Record<string, string[]> = {};
+        const nos: string[] = [];
+        for (const r of rooms) {
+          nos.push(r.roomNo);
+          const key = r.roomType || "Other";
+          if (!byType[key]) byType[key] = [];
+          byType[key].push(r.roomNo);
+        }
+        setAvailableRoomNos(nos);
+        setRoomsByType(byType);
+
+        const roomRates: Record<string, number> = {};
+        for (const rt of roomTypesData) {
+          if (rt.name) roomRates[rt.name] = rt.baseRate || 0;
+        }
+        setBaseRateByRoomMap(roomRates);
+
+        const planRates: Record<string, number> = {};
+        for (const rp of ratePlansData) {
+          if (rp.code) planRates[rp.code] = rp.baseRate || 0;
+          if (rp.name) planRates[rp.name] = rp.baseRate || 0;
+        }
+        setRateByPlanMap(planRates);
+      } catch {
+        if (!cancelled) {
+          setAvailableRoomNos([]);
+          setRoomsByType({});
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Automated Existing Guest Detection and Auto-Fill
   useEffect(() => {
@@ -214,11 +305,12 @@ export function NewReservationForm() {
         const matchLastName = nameParts.slice(1).join(" ") || "";
 
         setForm((prev) => {
+          const cleanMatchedMobile = (matchedGuest!.mobile || "").replace(/\D/g, "");
           if (
             prev.guestId === matchedGuest!.id &&
             prev.firstName === matchFirstName &&
             prev.lastName === matchLastName &&
-            prev.mobile === matchedGuest!.mobile &&
+            prev.mobile === cleanMatchedMobile &&
             prev.email === matchedGuest!.email
           ) {
             return prev;
@@ -229,7 +321,7 @@ export function NewReservationForm() {
             guestId: matchedGuest!.id,
             firstName: matchFirstName,
             lastName: matchLastName,
-            mobile: matchedGuest!.mobile,
+            mobile: cleanMatchedMobile,
             email: matchedGuest!.email,
             nationality: matchedGuest!.nationality || prev.nationality || "",
             idProofType: matchedGuest!.idType || prev.idProofType || "",
@@ -265,22 +357,18 @@ export function NewReservationForm() {
   );
 
   const roomRate = useMemo(() => {
-    if (form.ratePlan && rateByPlan[form.ratePlan]) return rateByPlan[form.ratePlan];
-    if (form.roomType && baseRateByRoom[form.roomType]) return baseRateByRoom[form.roomType];
-    return 3500;
-  }, [form.ratePlan, form.roomType]);
+    if (form.ratePlan && rateByPlanMap[form.ratePlan]) return rateByPlanMap[form.ratePlan];
+    if (form.roomType && baseRateByRoomMap[form.roomType]) return baseRateByRoomMap[form.roomType];
+    return 0;
+  }, [form.ratePlan, form.roomType, rateByPlanMap, baseRateByRoomMap]);
 
   const totalAmount = nights * roomRate;
   const pendingAmount = Math.max(0, totalAmount - form.advancePaid);
 
   const filteredRooms = useMemo(() => {
-    if (!form.roomType) return roomNumbers;
-    const prefix =
-      form.roomType === "Standard" ? "1" :
-      form.roomType === "Deluxe" ? "2" :
-      form.roomType === "Suite" ? "5" : "";
-    return prefix ? roomNumbers.filter((r) => r.startsWith(prefix)) : roomNumbers;
-  }, [form.roomType]);
+    if (!form.roomType) return availableRoomNos;
+    return roomsByType[form.roomType] ?? availableRoomNos;
+  }, [form.roomType, availableRoomNos, roomsByType]);
 
   const completion = useMemo(() => {
     const fields = [
@@ -305,6 +393,11 @@ export function NewReservationForm() {
     setForm((prev) => {
       const next = { ...prev, [field]: value };
       if (field === "roomType") next.roomNumber = "";
+      if (field === "checkIn" && typeof value === "string") {
+        if (next.checkOut && next.checkOut <= value) {
+          next.checkOut = getNextDayString(value);
+        }
+      }
       return next;
     });
     setErrors((prev) => {
@@ -316,6 +409,7 @@ export function NewReservationForm() {
   };
 
   const validate = () => {
+    const today = getTodayString();
     const next: Record<string, string> = {};
     if (!form.firstName.trim()) next.firstName = "Required";
     if (!form.lastName.trim()) next.lastName = "Required";
@@ -324,10 +418,18 @@ export function NewReservationForm() {
     if (!form.bookingType) next.bookingType = "Required";
     if (form.bookingType === "Company" && !form.companyId)
       next.companyName = "Please select a company";
-    if (!form.checkIn) next.checkIn = "Required";
-    if (!form.checkOut) next.checkOut = "Required";
-    if (form.checkIn && form.checkOut && nights <= 0)
-      next.checkOut = "Must be after check-in";
+    if (!form.checkIn) {
+      next.checkIn = "Required";
+    } else if (form.checkIn < today) {
+      next.checkIn = "Check-in date cannot be in the past";
+    }
+    if (!form.checkOut) {
+      next.checkOut = "Required";
+    } else if (form.checkOut < today) {
+      next.checkOut = "Check-out date cannot be in the past";
+    } else if (form.checkIn && form.checkOut <= form.checkIn) {
+      next.checkOut = "Check-out date must be after check-in date";
+    }
     if (!form.roomType) next.roomType = "Required";
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -511,7 +613,15 @@ export function NewReservationForm() {
                 {errors.lastName && <p className="text-xs text-red-500">{errors.lastName}</p>}
               </FormField>
               <FormField label="Mobile" required>
-                <TextInput className={inputClass} placeholder="Enter mobile number" value={form.mobile} onChange={(e) => update("mobile", e.target.value)} />
+                <TextInput
+                  className={inputClass}
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder="Enter mobile number"
+                  value={form.mobile}
+                  onChange={(e) => update("mobile", e.target.value.replace(/\D/g, ""))}
+                  maxLength={10}
+                />
                 {errors.mobile && <p className="text-xs text-red-500">{errors.mobile}</p>}
               </FormField>
               <FormField label="Email" required>
@@ -566,11 +676,23 @@ export function NewReservationForm() {
 
             <SectionCard icon={BedDouble} title="Booking Details" description="Stay dates, room allocation, and rate plan">
               <FormField label="Check-in Date" required>
-                <TextInput className={inputClass} type="date" value={form.checkIn} onChange={(e) => update("checkIn", e.target.value)} />
+                <TextInput
+                  className={inputClass}
+                  type="date"
+                  min={todayStr}
+                  value={form.checkIn}
+                  onChange={(e) => update("checkIn", e.target.value)}
+                />
                 {errors.checkIn && <p className="text-xs text-red-500">{errors.checkIn}</p>}
               </FormField>
               <FormField label="Check-out Date" required>
-                <TextInput className={inputClass} type="date" value={form.checkOut} onChange={(e) => update("checkOut", e.target.value)} />
+                <TextInput
+                  className={inputClass}
+                  type="date"
+                  min={form.checkIn || todayStr}
+                  value={form.checkOut}
+                  onChange={(e) => update("checkOut", e.target.value)}
+                />
                 {errors.checkOut && <p className="text-xs text-red-500">{errors.checkOut}</p>}
               </FormField>
               <FormField label="Nights">
@@ -583,35 +705,63 @@ export function NewReservationForm() {
                 <TextInput className={inputClass} type="number" min={0} value={form.children} onChange={(e) => update("children", Number(e.target.value))} />
               </FormField>
               <FormField label="Room Type" required>
-                <SelectInput className={inputClass} value={form.roomType} onChange={(e) => update("roomType", e.target.value)}>
-                  {emptyOption("Select room type")}
-                  {roomTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={roomTypes.map((t) => ({ id: t, label: t }))}
+                  selectedId={form.roomType || null}
+                  placeholder="Search room type…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("roomType", opt.id)}
+                  onClear={() => update("roomType", "")}
+                />
                 {errors.roomType && <p className="text-xs text-red-500">{errors.roomType}</p>}
               </FormField>
               <FormField label="Room Number">
-                <SelectInput className={inputClass} value={form.roomNumber} onChange={(e) => update("roomNumber", e.target.value)}>
-                  {emptyOption("Select room number")}
-                  {filteredRooms.map((r) => <option key={r} value={r}>{r}</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={filteredRooms.map((r) => ({
+                    id: r,
+                    label: `Room ${r}`,
+                    hint: form.roomType || undefined,
+                  }))}
+                  selectedId={form.roomNumber || null}
+                  placeholder="Search room number…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("roomNumber", opt.id)}
+                  onClear={() => update("roomNumber", "")}
+                />
               </FormField>
               <FormField label="Rate Plan">
-                <SelectInput className={inputClass} value={form.ratePlan} onChange={(e) => update("ratePlan", e.target.value)}>
-                  {emptyOption("Select rate plan")}
-                  {ratePlans.map((p) => <option key={p} value={p}>{p} — {formatINR(rateByPlan[p] ?? 3500)}/night</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={ratePlans.map((p) => ({
+                    id: p,
+                    label: p,
+                    hint: `${formatINR(rateByPlanMap[p] ?? 0)}/night`,
+                  }))}
+                  selectedId={form.ratePlan || null}
+                  placeholder="Search rate plan…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("ratePlan", opt.id)}
+                  onClear={() => update("ratePlan", "")}
+                />
               </FormField>
               <FormField label="Meal Plan">
-                <SelectInput className={inputClass} value={form.mealPlan} onChange={(e) => update("mealPlan", e.target.value)}>
-                  {emptyOption("Select meal plan")}
-                  {mealPlans.map((m) => <option key={m} value={m}>{m}</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={mealPlans.map((m) => ({ id: m, label: m }))}
+                  selectedId={form.mealPlan || null}
+                  placeholder="Search meal plan…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("mealPlan", opt.id)}
+                  onClear={() => update("mealPlan", "")}
+                />
               </FormField>
               <FormField label="Source">
-                <SelectInput className={inputClass} value={form.source} onChange={(e) => update("source", e.target.value)}>
-                  {emptyOption("Select source")}
-                  {bookingSources.map((s) => <option key={s} value={s}>{s}</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={bookingSources.map((s) => ({ id: s, label: s }))}
+                  selectedId={form.source || null}
+                  placeholder="Search source…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("source", opt.id)}
+                  onClear={() => update("source", "")}
+                />
               </FormField>
             </SectionCard>
 
@@ -620,10 +770,14 @@ export function NewReservationForm() {
                 <TextInput className={inputClass} type="number" min={0} value={form.advancePaid} onChange={(e) => update("advancePaid", Number(e.target.value))} />
               </FormField>
               <FormField label="Payment Mode">
-                <SelectInput className={inputClass} value={form.paymentMode} onChange={(e) => update("paymentMode", e.target.value)}>
-                  {emptyOption("Select payment mode")}
-                  {paymentModes.map((m) => <option key={m} value={m}>{m}</option>)}
-                </SelectInput>
+                <SearchSelect
+                  options={paymentModes.map((m) => ({ id: m, label: m }))}
+                  selectedId={form.paymentMode || null}
+                  placeholder="Search payment mode…"
+                  inputClassName={inputClass}
+                  onSelect={(opt) => update("paymentMode", opt.id)}
+                  onClear={() => update("paymentMode", "")}
+                />
                 {errors.paymentMode && <p className="text-xs text-red-500">{errors.paymentMode}</p>}
               </FormField>
               <FormField label="Pending Amount">
@@ -685,10 +839,10 @@ export function NewReservationForm() {
               </div>
 
               <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-2">
-                <Button onClick={handleSave} className="h-11 w-full bg-slate-900 hover:bg-slate-800">
+                <Button onClick={handleSave} className="h-11 w-full bg-slate-900 hover:bg-slate-800 cursor-pointer">
                   Save Reservation
                 </Button>
-                <button type="button" onClick={() => window.history.back()} className="w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-700">
+                <button type="button" onClick={() => window.history.back()} className="w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-700 cursor-pointer">
                   Cancel
                 </button>
               </div>

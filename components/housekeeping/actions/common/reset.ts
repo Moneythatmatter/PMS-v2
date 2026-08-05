@@ -1,5 +1,4 @@
 import {
-
   initialHKRooms,
   initialHKPublicAreas,
   initialHKInventory,
@@ -7,13 +6,8 @@ import {
   initialHKDamageReports,
   initialHKRequisitions,
   initialHKHistory,
-  initialHKLuggageJobs
+  initialHKLuggageJobs,
 } from "@/app/data/housekeepingData";
-import {
-  housekeepingRequests as initialHKRequests,
-  maintenanceRequests as initialMaintenanceRequests,
-  lostFoundItems as initialLostFoundItems,
-} from "@/app/data/frontoffice/modules";
 import { logAudit } from "./audit";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 
@@ -38,9 +32,16 @@ export const resetState = (dispatchers: HousekeepingDispatchers) => {
   dispatchers.setRequisitions(initialHKRequisitions);
   dispatchers.setHistory(initialHKHistory);
   dispatchers.setLuggageJobs(initialHKLuggageJobs);
-  dispatchers.setRequests(initialHKRequests);
-  dispatchers.setMaintenance(initialMaintenanceRequests);
-  dispatchers.setLostFound(initialLostFoundItems);
+  dispatchers.setRequests([]);
+  dispatchers.setMaintenance([]);
+  dispatchers.setLostFound([]);
 
-  logAudit("Room Status", "State Reset", "Reset all PMS database elements back to default.", undefined, dispatchers.currentUsername, dispatchers.setHistory);
+  logAudit(
+    "Room Status",
+    "State Reset",
+    "Reset all PMS database elements back to default.",
+    undefined,
+    dispatchers.currentUsername,
+    dispatchers.setHistory,
+  );
 };

@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils";
 import {
   addDaysIso,
   createInitialDayClosingState,
+  fetchLiveDayClosingState,
   formatBusinessDate,
   loadDayClosingState,
   resetClosingDemo,
@@ -144,8 +145,29 @@ export function DayClosingView() {
   const [stepIndex, setStepIndex] = useState(-1);
 
   useEffect(() => {
-    setState(loadDayClosingState());
-    setHydrated(true);
+    let cancelled = false;
+    (async () => {
+      const stored = loadDayClosingState();
+      try {
+        const live = await fetchLiveDayClosingState();
+        if (cancelled) return;
+        setState({
+          ...stored,
+          ...live,
+          // Keep session progress flags from local storage only
+          completed: stored.completed,
+          report: stored.report,
+          nightAuditCompleted: stored.nightAuditCompleted,
+        });
+      } catch {
+        if (!cancelled) setState(stored);
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -338,7 +360,10 @@ export function DayClosingView() {
     resetClosingDemo();
     localStorage.removeItem("pms_business_date");
     setState(createInitialDayClosingState());
-    setToastMsg("Day closing demo reset to start-of-day state.");
+    void fetchLiveDayClosingState().then((live) => {
+      setState((prev) => ({ ...prev, ...live }));
+    });
+    setToastMsg("Day closing session reset.");
   };
 
   const exportReport = () => {

@@ -333,7 +333,7 @@ export default function DeepCleaningPage() {
 
       {/* Top Navigation Tabs */}
       <div className="border-b border-slate-200">
-        <nav className="flex flex-wrap gap-4 text-xs font-bold uppercase tracking-wider">
+        <nav className="flex gap-4 overflow-x-auto scrollbar-none text-xs font-bold uppercase tracking-wider">
           {[
             { id: "active", label: `Active Schedule (${MOCK_ACTIVE_SCHEDULE.length})` },
             { id: "recurring", label: `Recurring Schedule (${MOCK_RECURRING_SCHEDULE.length})` },
@@ -773,7 +773,7 @@ export default function DeepCleaningPage() {
               />
             </FormField>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Room / Area" required>
                 <TextInput
                   placeholder="e.g. Room 305 or Main Lobby"
@@ -798,7 +798,7 @@ export default function DeepCleaningPage() {
               </FormField>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <FormField label="Priority" required>
                 <SelectInput
                   value={priority}
@@ -842,7 +842,7 @@ export default function DeepCleaningPage() {
           <div className="space-y-2.5">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 border-b border-slate-100 pb-1">Scheduling & Room Blocking</h4>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Schedule Date" required>
                 <TextInput
                   type="date"
@@ -933,7 +933,7 @@ export default function DeepCleaningPage() {
           {/* SECTION 5: PHOTO EVIDENCE */}
           <div className="space-y-2.5">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 border-b border-slate-100 pb-1">Photo Evidence</h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-center space-y-1 cursor-pointer hover:bg-slate-100/60 transition-colors">
                 <Camera className="h-5 w-5 mx-auto text-slate-400" />
                 <p className="text-[10px] font-bold text-slate-700">Before Cleaning</p>
@@ -965,7 +965,7 @@ export default function DeepCleaningPage() {
 
             {hasMaintIssue && (
               <div className="space-y-2.5 rounded-xl border border-red-200 bg-red-50/40 p-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Category" required>
                     <SelectInput
                       value={maintCategory}

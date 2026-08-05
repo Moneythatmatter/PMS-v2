@@ -31,6 +31,7 @@ import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { cn } from "@/lib/utils";
 import {
   createInitialNightAuditState,
+  fetchLiveNightAuditItems,
   formatBusinessDate,
   loadDayClosingState,
   loadNightAuditState,
@@ -80,9 +81,34 @@ export function NightAuditView() {
   const [focusItemId, setFocusItemId] = useState<string | null>(null);
 
   useEffect(() => {
-    setDayClose(loadDayClosingState());
-    setAudit(loadNightAuditState());
-    setHydrated(true);
+    let cancelled = false;
+    (async () => {
+      const storedAudit = loadNightAuditState();
+      const day = loadDayClosingState();
+      try {
+        const items = await fetchLiveNightAuditItems();
+        if (cancelled) return;
+        setDayClose(day);
+        setAudit({
+          ...storedAudit,
+          // Prefer live items unless a completed audit session already has items
+          items:
+            storedAudit.completed && storedAudit.items.length > 0
+              ? storedAudit.items
+              : items,
+        });
+      } catch {
+        if (!cancelled) {
+          setDayClose(day);
+          setAudit(storedAudit);
+        }
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

@@ -288,7 +288,7 @@ export default function HousekeepingSettingsPage() {
                   <p className="text-xs text-slate-500 font-medium">Default property timezone, work week schedule, and housekeeping operational status.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Property Time Zone">
                     <SelectInput
                       value={currentSettings.propertyTimeZone}
@@ -314,7 +314,7 @@ export default function HousekeepingSettingsPage() {
                   </FormField>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Default Shift Schedule">
                     <TextInput
                       value={currentSettings.defaultShift}
@@ -360,7 +360,7 @@ export default function HousekeepingSettingsPage() {
                   onChange={(val) => handleUpdateSetting("autoAssignRooms", val)}
                 />
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Maximum Rooms Per Staff Shift">
                     <TextInput
                       type="number"
@@ -408,7 +408,7 @@ export default function HousekeepingSettingsPage() {
                   <p className="text-xs text-slate-500 font-medium">Passing score thresholds, critical defect auto-fails, and photo evidence.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Pass Percentage Cutoff Target (%)">
                     <TextInput
                       type="number"
@@ -459,7 +459,7 @@ export default function HousekeepingSettingsPage() {
                   <p className="text-xs text-slate-500 font-medium">Target completion SLAs, escalation triggers, and supervisor alerts.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Default Target SLA (Minutes)">
                     <TextInput
                       type="number"
@@ -503,7 +503,7 @@ export default function HousekeepingSettingsPage() {
                   onChange={(val) => handleUpdateSetting("expressLaundryEnabled", val)}
                 />
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Express Surcharge (%)">
                     <TextInput
                       type="number"
@@ -539,7 +539,7 @@ export default function HousekeepingSettingsPage() {
                   <p className="text-xs text-slate-500 font-medium">Retention thresholds, high-value asset holding periods, and disposal sign-offs.</p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <FormField label="Standard Retention (Days)">
                     <TextInput
                       type="number"
@@ -592,7 +592,7 @@ export default function HousekeepingSettingsPage() {
                   onChange={(val) => handleUpdateSetting("recurringScheduleEnabled", val)}
                 />
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Default Block Type">
                     <SelectInput
                       value={currentSettings.defaultBlockType}
