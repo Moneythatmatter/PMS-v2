@@ -139,6 +139,7 @@ export function CheckInForm() {
     idProofType: "",
     idNumber: "",
   });
+  const [identityErrors, setIdentityErrors] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
   const [completed, setCompleted] = useState(false);
@@ -213,6 +214,14 @@ export function CheckInForm() {
 
   const handleGuestDetailChange = (key: string, value: string) => {
     setGuestDetails((prev) => ({ ...prev, [key]: value }));
+    if (value.trim()) {
+      setIdentityErrors((prev) => {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
   };
 
   const loadArrival = (found: any) => {
@@ -298,36 +307,39 @@ export function CheckInForm() {
       }
     }
 
-    const missingIdentity = [
-      ["Gender", guestDetails.gender],
-      ["Date of Birth", guestDetails.dob],
-      ["Nationality", guestDetails.nationality],
-      ["Address", guestDetails.address],
-      ["City", guestDetails.city],
-      ["State", guestDetails.state],
-      ["Country", guestDetails.country],
-      ["Pincode", guestDetails.pincode],
-      ["ID Proof Type", guestDetails.idProofType],
-      ["ID Document Number", guestDetails.idNumber],
-    ].find(([, value]) => !String(value || "").trim());
+    const identityFields: [keyof typeof guestDetails, string][] = [
+      ["gender", "Gender"],
+      ["dob", "Date of Birth"],
+      ["nationality", "Nationality"],
+      ["address", "Address"],
+      ["city", "City"],
+      ["state", "State / Province"],
+      ["country", "Country"],
+      ["pincode", "Pincode / Zip"],
+      ["idProofType", "ID Proof Type"],
+      ["idNumber", "ID Document Number"],
+    ];
 
-    if (missingIdentity) {
-      showToast(`${missingIdentity[0]} is required.`, "error");
-      return;
-    }
+    const missingIdentity = identityFields.filter(
+      ([key]) => !String(guestDetails[key] || "").trim(),
+    );
+    const missingLabels = missingIdentity.map(([, label]) => label);
 
-    if (!idFile) {
-      showToast("Please upload an ID document.", "error");
-      return;
-    }
-
-    if (!String(roomForApi || "").trim()) {
-      showToast("Please assign a vacant room.", "error");
-      return;
-    }
-
+    if (!idFile) missingLabels.push("Upload ID Document");
+    if (!String(roomForApi || "").trim()) missingLabels.push("Assigned Room Number");
     if (checkInMode === "walkin" && !walkIn.paymentMode) {
-      showToast("Payment mode is required.", "error");
+      missingLabels.push("Payment Mode");
+    }
+
+    setIdentityErrors(Object.fromEntries(missingIdentity.map(([key]) => [key, true])));
+
+    if (missingLabels.length > 0) {
+      showToast(
+        missingLabels.length === 1
+          ? `${missingLabels[0]} is required.`
+          : `Please complete ${missingLabels.length} required fields: ${missingLabels.join(", ")}.`,
+        "error",
+      );
       return;
     }
 
@@ -702,6 +714,7 @@ export function CheckInForm() {
                         onChange={handleGuestDetailChange}
                         onFileUpload={setIdFile}
                         idFile={idFile}
+                        errors={identityErrors}
                       />
                     </SectionCard>
 
@@ -865,6 +878,7 @@ export function CheckInForm() {
                   onChange={handleGuestDetailChange}
                   onFileUpload={setIdFile}
                   idFile={idFile}
+                  errors={identityErrors}
                 />
               </SectionCard>
 
