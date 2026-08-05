@@ -5,6 +5,7 @@ import {
   BedDouble,
   Building2,
   CheckCircle2,
+  Globe,
   IndianRupee,
   Mail,
   Percent,
@@ -15,16 +16,18 @@ import {
   Users,
 } from "lucide-react";
 import type {
+  BookingSourceMaster,
   CompanyMaster,
   MarketSegmentMaster,
-  RatePlanMaster,
+  TariffPlanMaster,
   RoomTypeMaster,
 } from "@/app/data/frontoffice/masters";
 import { mealPlans, roomTypes } from "@/app/data/frontoffice/constants";
 import {
+  bookingSourceService,
   companyService,
   marketSegmentService,
-  ratePlanService,
+  tariffPlanService,
   roomTypeService,
 } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
@@ -379,14 +382,14 @@ export function RoomTypesView() {
   );
 }
 
-export function RatePlansView() {
-  const [items, setItems] = useState<RatePlanMaster[]>([]);
+export function TariffPlansView() {
+  const [items, setItems] = useState<TariffPlanMaster[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
-  const [preview, setPreview] = useState<RatePlanMaster | null>(null);
+  const [preview, setPreview] = useState<TariffPlanMaster | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const [code, setCode] = useState("");
@@ -401,7 +404,7 @@ export function RatePlansView() {
     (async () => {
       try {
         setLoading(true);
-        const data = await ratePlanService.list();
+        const data = await tariffPlanService.list();
         if (!cancelled) {
           setItems(data);
           setError(null);
@@ -461,7 +464,7 @@ export function RatePlansView() {
     }
     try {
       const rate = parseFloat(baseRate);
-      const record = await ratePlanService.create({
+      const record = await tariffPlanService.create({
         code: code.toUpperCase(),
         name,
         roomType,
@@ -477,7 +480,7 @@ export function RatePlansView() {
       setItems((prev) => [record, ...prev]);
       setFormOpen(false);
       resetForm();
-      setToast(`Rate plan "${name}" added successfully.`);
+      setToast(`Tariff plan "${name}" added successfully.`);
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Failed to save");
     }
@@ -494,18 +497,18 @@ export function RatePlansView() {
 
       <FOPageHeader
         eyebrow="Front Office · Masters"
-        title="Rate Plans"
-        description="Configure nightly rates, meal plans, and cancellation policies."
+        title="Tariff Plans"
+        description="Configure nightly tariffs, meal plans, and cancellation policies."
         action={
           <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800" onClick={() => { resetForm(); setFormOpen(true); }}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Add Rate Plan
+            Add Tariff Plan
           </Button>
         }
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <StatMiniCard label="Rate Plans" value={stats.total} icon={Tag} />
+        <StatMiniCard label="Tariff Plans" value={stats.total} icon={Tag} />
         <StatMiniCard label="Active" value={stats.active} accent="#10b981" icon={CheckCircle2} />
         <StatMiniCard label="Avg. Base Rate" value={formatINR(stats.avgRate)} accent="#15803d" icon={Percent} />
       </div>
@@ -528,19 +531,19 @@ export function RatePlansView() {
         <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
           <MasterTable
             rows={filtered as never[]}
-            onRowClick={(r) => setPreview(r as RatePlanMaster)}
+            onRowClick={(r) => setPreview(r as TariffPlanMaster)}
             columns={[
               {
                 key: "code",
                 header: "Code",
-                render: (r: RatePlanMaster) => (
+                render: (r: TariffPlanMaster) => (
                   <span className="font-mono text-xs font-semibold text-emerald-700">{r.code}</span>
                 ),
               },
               {
                 key: "name",
                 header: "Plan",
-                render: (r: RatePlanMaster) => (
+                render: (r: TariffPlanMaster) => (
                   <div>
                     <p className="font-medium text-slate-900">{r.name}</p>
                     <p className="text-xs text-slate-400">{r.roomType}</p>
@@ -550,19 +553,19 @@ export function RatePlansView() {
               {
                 key: "rate",
                 header: "Base / Weekend",
-                render: (r: RatePlanMaster) => (
+                render: (r: TariffPlanMaster) => (
                   <div className="text-sm">
                     <span className="font-medium">{formatINR(r.baseRate)}</span>
                     <span className="text-slate-400"> / {formatINR(r.weekendRate)}</span>
                   </div>
                 ),
               },
-              { key: "meal", header: "Meal", render: (r: RatePlanMaster) => r.mealPlan },
-              { key: "min", header: "Min Nights", render: (r: RatePlanMaster) => r.minNights },
+              { key: "meal", header: "Meal", render: (r: TariffPlanMaster) => r.mealPlan },
+              { key: "min", header: "Min Nights", render: (r: TariffPlanMaster) => r.minNights },
               {
                 key: "status",
                 header: "Status",
-                render: (r: RatePlanMaster) => <StatusBadge status={r.status} />,
+                render: (r: TariffPlanMaster) => <StatusBadge status={r.status} />,
               },
             ]}
           />
@@ -571,8 +574,8 @@ export function RatePlansView() {
       <Drawer
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        title="Add Rate Plan"
-        description="Create a new pricing plan."
+        title="Add Tariff Plan"
+        description="Create a new tariff plan."
         width="md"
         footer={
           <>
@@ -661,6 +664,9 @@ export function RatePlansView() {
     </div>
   );
 }
+
+/** @deprecated Use TariffPlansView */
+export const RatePlansView = TariffPlansView;
 
 export function MarketSegmentsView() {
   const [items, setItems] = useState<MarketSegmentMaster[]>([]);
@@ -945,6 +951,264 @@ export function MarketSegmentsView() {
                 </div>
               ))}
             </dl>
+          </div>
+        )}
+      </Drawer>
+    </div>
+  );
+}
+
+export function BookingSourcesView() {
+  const [items, setItems] = useState<BookingSourceMaster[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [formOpen, setFormOpen] = useState(false);
+  const [preview, setPreview] = useState<BookingSourceMaster | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await bookingSourceService.list();
+        if (!cancelled) {
+          setItems(data);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return items.filter((r) => {
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" && r.status === "Active") ||
+        (statusFilter === "inactive" && r.status === "Inactive");
+      return (
+        matchesStatus &&
+        (r.name.toLowerCase().includes(q) ||
+          r.code.toLowerCase().includes(q) ||
+          (r.description || "").toLowerCase().includes(q))
+      );
+    });
+  }, [items, search, statusFilter]);
+
+  const stats = useMemo(
+    () => ({
+      total: items.length,
+      active: items.filter((r) => r.status === "Active").length,
+    }),
+    [items],
+  );
+
+  const resetForm = () => {
+    setCode("");
+    setName("");
+    setDescription("");
+  };
+
+  const handleSave = async () => {
+    if (!code.trim() || !name.trim()) {
+      setToast("Please fill code and name.");
+      return;
+    }
+    try {
+      const record = await bookingSourceService.create({
+        code: code.toUpperCase(),
+        name,
+        description: description || `${name} booking source`,
+        status: "Active",
+      });
+      setItems((prev) => [record, ...prev]);
+      setFormOpen(false);
+      resetForm();
+      setToast(`Booking source "${name}" added successfully.`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to save");
+    }
+  };
+
+  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
+
+  return (
+    <div className="space-y-5">
+      {toast && (
+        <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />
+      )}
+
+      <FOPageHeader
+        eyebrow="Front Office · Masters"
+        title="Booking Sources"
+        description="Manage channels where reservations originate — walk-in, website, OTAs, and agents."
+        action={
+          <Button
+            size="sm"
+            className="bg-emerald-700 hover:bg-emerald-800"
+            onClick={() => {
+              resetForm();
+              setFormOpen(true);
+            }}
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Add Source
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <StatMiniCard label="Sources" value={stats.total} icon={Globe} />
+        <StatMiniCard label="Active" value={stats.active} accent="#10b981" icon={CheckCircle2} />
+      </div>
+
+      <FOSearchToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search code, name…"
+        filterPills={{
+          active: statusFilter,
+          onChange: setStatusFilter,
+          options: [
+            { id: "all", label: "All" },
+            { id: "active", label: "Active" },
+            { id: "inactive", label: "Inactive" },
+          ],
+        }}
+      />
+
+      <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+        <MasterTable
+          rows={filtered as never[]}
+          onRowClick={(r) => setPreview(r as BookingSourceMaster)}
+          columns={[
+            {
+              key: "code",
+              header: "Code",
+              render: (r: BookingSourceMaster) => (
+                <span className="font-mono text-xs font-semibold text-emerald-700">
+                  {r.code}
+                </span>
+              ),
+            },
+            {
+              key: "name",
+              header: "Source",
+              render: (r: BookingSourceMaster) => (
+                <div>
+                  <p className="font-medium text-slate-900">{r.name}</p>
+                  <p className="max-w-xs truncate text-xs text-slate-400">
+                    {r.description}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: "status",
+              header: "Status",
+              render: (r: BookingSourceMaster) => (
+                <StatusBadge status={r.status} />
+              ),
+            },
+          ]}
+        />
+      </div>
+
+      <Drawer
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        title="Add Booking Source"
+        description="Create a new reservation channel."
+        width="md"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setFormOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-700 hover:bg-emerald-800"
+              onClick={handleSave}
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Code" required>
+              <TextInput
+                placeholder="WALKIN"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </FormField>
+            <FormField label="Name" required>
+              <TextInput
+                placeholder="Walk-in"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </FormField>
+          </div>
+          <FormField label="Description">
+            <TextInput
+              placeholder="Where this booking originates…"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </FormField>
+        </div>
+      </Drawer>
+
+      <Drawer
+        open={!!preview}
+        onClose={() => setPreview(null)}
+        title={preview?.name ?? ""}
+        description={preview?.code}
+        width="md"
+        footer={
+          <Button variant="outline" onClick={() => setPreview(null)}>
+            Close
+          </Button>
+        }
+      >
+        {preview && (
+          <div className="space-y-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                  <Globe className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold text-slate-900">
+                    {preview.name}
+                  </p>
+                  <p className="font-mono text-xs text-emerald-700">
+                    {preview.code}
+                  </p>
+                </div>
+              </div>
+              <StatusBadge status={preview.status} />
+            </div>
+            <p className="text-sm text-slate-600">
+              {preview.description || "No description"}
+            </p>
           </div>
         )}
       </Drawer>

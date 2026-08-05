@@ -162,8 +162,8 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
             label="Room"
             value={`Room ${booking.roomNo} · ${booking.roomType}`}
           />
-          {booking.ratePlan && (
-            <DetailRow label="Rate Plan" value={booking.ratePlan} />
+          {booking.tariffPlan && (
+            <DetailRow label="Tariff Plan" value={booking.tariffPlan} />
           )}
           {booking.mealPlan && (
             <DetailRow icon={Utensils} label="Meal Plan" value={booking.mealPlan} />

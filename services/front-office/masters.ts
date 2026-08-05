@@ -1,8 +1,9 @@
 import { api, foPath } from "../api";
 import type {
+  BookingSourceMaster,
   CompanyMaster,
   MarketSegmentMaster,
-  RatePlanMaster,
+  TariffPlanMaster,
   RoomTypeMaster,
 } from "@/app/data/frontoffice/masters";
 
@@ -18,14 +19,20 @@ function crud<T>(base: string) {
 }
 
 export const roomTypeService = crud<RoomTypeMaster>("/masters/room-types");
-export const ratePlanService = crud<RatePlanMaster>("/masters/rate-plans");
+export const tariffPlanService = crud<TariffPlanMaster>("/masters/tariff-plans");
+/** @deprecated Use tariffPlanService */
+export const ratePlanService = tariffPlanService;
 export const marketSegmentService =
   crud<MarketSegmentMaster>("/masters/market-segments");
 export const companyService = crud<CompanyMaster>("/masters/companies");
+export const bookingSourceService =
+  crud<BookingSourceMaster>("/masters/booking-sources");
 
 export const mastersService = {
   roomTypes: roomTypeService,
-  ratePlans: ratePlanService,
+  tariffPlans: tariffPlanService,
+  ratePlans: tariffPlanService,
   marketSegments: marketSegmentService,
   companies: companyService,
+  bookingSources: bookingSourceService,
 };

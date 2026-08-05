@@ -13,17 +13,18 @@ import {
   Users,
 } from "lucide-react";
 import {
-  bookingSources,
+  bookingSources as fallbackBookingSources,
   mealPlans,
   paymentModes,
-  ratePlans,
+  tariffPlans,
   roomTypes,
 } from "@/app/data/frontoffice/constants";
 import { currentUser } from "@/app/data";
 import type { GuestProfile } from "@/app/data/frontoffice/modules";
 import {
+  bookingSourceService,
   guestService,
-  ratePlanService,
+  tariffPlanService,
   reservationService,
   roomService,
   roomTypeService,
@@ -101,9 +102,14 @@ export function NewReservationForm() {
   const searchParams = useSearchParams();
   const [ref] = useState(generateRef);
   const [availableRoomNos, setAvailableRoomNos] = useState<string[]>([]);
-  const [rateByPlanMap, setRateByPlanMap] = useState<Record<string, number>>({});
+  const [tariffByPlanMap, setTariffByPlanMap] = useState<Record<string, number>>({});
   const [baseRateByRoomMap, setBaseRateByRoomMap] = useState<Record<string, number>>({});
   const [roomsByType, setRoomsByType] = useState<Record<string, string[]>>({});
+  const [sourceOptions, setSourceOptions] = useState<
+    { id: string; label: string; hint?: string }[]
+  >(() =>
+    fallbackBookingSources.map((s) => ({ id: s, label: s })),
+  );
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -118,7 +124,7 @@ export function NewReservationForm() {
     children: 0,
     roomType: searchParams.get("roomType") ?? "",
     roomNumber: searchParams.get("room") ?? "",
-    ratePlan: "",
+    tariffPlan: "",
     mealPlan: "",
     source: "",
     advancePaid: 0,
@@ -161,11 +167,13 @@ export function NewReservationForm() {
     let cancelled = false;
     (async () => {
       try {
-        const [rooms, roomTypesData, ratePlansData] = await Promise.all([
-          roomService.list(),
-          roomTypeService.list().catch(() => []),
-          ratePlanService.list().catch(() => []),
-        ]);
+        const [rooms, roomTypesData, tariffPlansData, sourcesData] =
+          await Promise.all([
+            roomService.list(),
+            roomTypeService.list().catch(() => []),
+            tariffPlanService.list().catch(() => []),
+            bookingSourceService.list().catch(() => []),
+          ]);
         if (cancelled) return;
 
         const byType: Record<string, string[]> = {};
@@ -186,11 +194,22 @@ export function NewReservationForm() {
         setBaseRateByRoomMap(roomRates);
 
         const planRates: Record<string, number> = {};
-        for (const rp of ratePlansData) {
+        for (const rp of tariffPlansData) {
           if (rp.code) planRates[rp.code] = rp.baseRate || 0;
           if (rp.name) planRates[rp.name] = rp.baseRate || 0;
         }
-        setRateByPlanMap(planRates);
+        setTariffByPlanMap(planRates);
+
+        const activeSources = sourcesData.filter((s) => s.status === "Active");
+        if (activeSources.length > 0) {
+          setSourceOptions(
+            activeSources.map((s) => ({
+              id: s.name,
+              label: s.name,
+              hint: s.code,
+            })),
+          );
+        }
       } catch {
         if (!cancelled) {
           setAvailableRoomNos([]);
@@ -303,10 +322,10 @@ export function NewReservationForm() {
   );
 
   const roomRate = useMemo(() => {
-    if (form.ratePlan && rateByPlanMap[form.ratePlan]) return rateByPlanMap[form.ratePlan];
+    if (form.tariffPlan && tariffByPlanMap[form.tariffPlan]) return tariffByPlanMap[form.tariffPlan];
     if (form.roomType && baseRateByRoomMap[form.roomType]) return baseRateByRoomMap[form.roomType];
     return 0;
-  }, [form.ratePlan, form.roomType, rateByPlanMap, baseRateByRoomMap]);
+  }, [form.tariffPlan, form.roomType, tariffByPlanMap, baseRateByRoomMap]);
 
   const totalAmount = nights * roomRate;
   const pendingAmount = Math.max(0, totalAmount - form.advancePaid);
@@ -422,7 +441,7 @@ export function NewReservationForm() {
         nights,
         adults: form.adults,
         children: form.children,
-        ratePlan: form.ratePlan || "BAR",
+        tariffPlan: form.tariffPlan || "BAR",
         mealPlan: form.mealPlan || "EP",
         roomRate,
         totalAmount,
@@ -606,7 +625,7 @@ export function NewReservationForm() {
               )}
             </SectionCard>
 
-            <SectionCard icon={BedDouble} title="Booking Details" description="Stay dates, room allocation, and rate plan">
+            <SectionCard icon={BedDouble} title="Booking Details" description="Stay dates, room allocation, and tariff plan">
               <FormField label="Check-in Date" required>
                 <TextInput className={inputClass} type="date" value={form.checkIn} onChange={(e) => update("checkIn", e.target.value)} />
                 {errors.checkIn && <p className="text-xs text-red-500">{errors.checkIn}</p>}
@@ -649,18 +668,18 @@ export function NewReservationForm() {
                   onClear={() => update("roomNumber", "")}
                 />
               </FormField>
-              <FormField label="Rate Plan">
+              <FormField label="Tariff Plan">
                 <SearchSelect
-                  options={ratePlans.map((p) => ({
+                  options={tariffPlans.map((p) => ({
                     id: p,
                     label: p,
-                    hint: `${formatINR(rateByPlanMap[p] ?? 0)}/night`,
+                    hint: `${formatINR(tariffByPlanMap[p] ?? 0)}/night`,
                   }))}
-                  selectedId={form.ratePlan || null}
-                  placeholder="Search rate plan…"
+                  selectedId={form.tariffPlan || null}
+                  placeholder="Search tariff plan…"
                   inputClassName={inputClass}
-                  onSelect={(opt) => update("ratePlan", opt.id)}
-                  onClear={() => update("ratePlan", "")}
+                  onSelect={(opt) => update("tariffPlan", opt.id)}
+                  onClear={() => update("tariffPlan", "")}
                 />
               </FormField>
               <FormField label="Meal Plan">
@@ -675,7 +694,7 @@ export function NewReservationForm() {
               </FormField>
               <FormField label="Source">
                 <SearchSelect
-                  options={bookingSources.map((s) => ({ id: s, label: s }))}
+                  options={sourceOptions}
                   selectedId={form.source || null}
                   placeholder="Search source…"
                   inputClassName={inputClass}

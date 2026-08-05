@@ -10,7 +10,9 @@ export const idProofTypes = [
 
 export const roomTypes = ["Standard", "Deluxe", "Suite", "Premium"] as const;
 
-export const ratePlans = ["BAR", "Corporate", "Weekend", "Long Stay"] as const;
+export const tariffPlans = ["BAR", "Corporate", "Weekend", "Long Stay"] as const;
+/** @deprecated Use tariffPlans */
+export const ratePlans = tariffPlans;
 
 export const mealPlans = ["EP", "CP", "MAP", "AP"] as const;
 
