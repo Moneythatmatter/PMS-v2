@@ -8,11 +8,14 @@ import {
   Globe,
   IndianRupee,
   Mail,
+  Pencil,
   Percent,
   Phone,
   PieChart,
   Plus,
+  RotateCcw,
   Tag,
+  Trash2,
   Users,
 } from "lucide-react";
 import type {
@@ -34,6 +37,7 @@ import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
 import {
   AlertBanner,
+  ConfirmModal,
   Drawer,
   FOSearchToolbar,
   FormField,
@@ -965,8 +969,15 @@ export function BookingSourcesView() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<BookingSourceMaster | null>(null);
   const [preview, setPreview] = useState<BookingSourceMaster | null>(null);
+  const [softDeleteTarget, setSoftDeleteTarget] =
+    useState<BookingSourceMaster | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">(
+    "success",
+  );
+  const [saving, setSaving] = useState(false);
 
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -983,7 +994,8 @@ export function BookingSourcesView() {
           setError(null);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : "Failed to load");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -992,6 +1004,14 @@ export function BookingSourcesView() {
       cancelled = true;
     };
   }, []);
+
+  const showToast = (
+    message: string,
+    variant: "success" | "error" = "success",
+  ) => {
+    setToastVariant(variant);
+    setToast(message);
+  };
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -1013,34 +1033,110 @@ export function BookingSourcesView() {
     () => ({
       total: items.length,
       active: items.filter((r) => r.status === "Active").length,
+      inactive: items.filter((r) => r.status === "Inactive").length,
     }),
     [items],
   );
 
   const resetForm = () => {
+    setEditing(null);
     setCode("");
     setName("");
     setDescription("");
   };
 
+  const openCreate = () => {
+    resetForm();
+    setFormOpen(true);
+  };
+
+  const openEdit = (row: BookingSourceMaster) => {
+    setEditing(row);
+    setCode(row.code);
+    setName(row.name);
+    setDescription(row.description || "");
+    setPreview(null);
+    setFormOpen(true);
+  };
+
   const handleSave = async () => {
     if (!code.trim() || !name.trim()) {
-      setToast("Please fill code and name.");
+      showToast("Please fill code and name.", "error");
       return;
     }
+    setSaving(true);
     try {
-      const record = await bookingSourceService.create({
-        code: code.toUpperCase(),
-        name,
-        description: description || `${name} booking source`,
+      if (editing) {
+        const record = await bookingSourceService.update(editing.id, {
+          code: code.toUpperCase(),
+          name,
+          description: description || `${name} booking source`,
+          status: editing.status,
+        });
+        setItems((prev) =>
+          prev.map((r) => (r.id === editing.id ? record : r)),
+        );
+        setFormOpen(false);
+        resetForm();
+        showToast(`Booking source "${name}" updated.`);
+      } else {
+        const record = await bookingSourceService.create({
+          code: code.toUpperCase(),
+          name,
+          description: description || `${name} booking source`,
+          status: "Active",
+        });
+        setItems((prev) => [record, ...prev]);
+        setFormOpen(false);
+        resetForm();
+        showToast(`Booking source "${name}" added successfully.`);
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to save", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSoftDelete = async () => {
+    if (!softDeleteTarget) return;
+    setSaving(true);
+    try {
+      const record = await bookingSourceService.update(softDeleteTarget.id, {
+        status: "Inactive",
+      });
+      setItems((prev) =>
+        prev.map((r) => (r.id === softDeleteTarget.id ? record : r)),
+      );
+      setSoftDeleteTarget(null);
+      setPreview(null);
+      showToast(`"${softDeleteTarget.name}" deactivated (soft delete).`);
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to deactivate",
+        "error",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReactivate = async (row: BookingSourceMaster) => {
+    setSaving(true);
+    try {
+      const record = await bookingSourceService.update(row.id, {
         status: "Active",
       });
-      setItems((prev) => [record, ...prev]);
-      setFormOpen(false);
-      resetForm();
-      setToast(`Booking source "${name}" added successfully.`);
+      setItems((prev) => prev.map((r) => (r.id === row.id ? record : r)));
+      setPreview(null);
+      showToast(`"${row.name}" reactivated.`);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Failed to save");
+      showToast(
+        e instanceof Error ? e.message : "Failed to reactivate",
+        "error",
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1050,7 +1146,11 @@ export function BookingSourcesView() {
   return (
     <div className="space-y-5">
       {toast && (
-        <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />
+        <AlertBanner
+          variant={toastVariant}
+          message={toast}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       <FOPageHeader
@@ -1061,10 +1161,7 @@ export function BookingSourcesView() {
           <Button
             size="sm"
             className="bg-emerald-700 hover:bg-emerald-800"
-            onClick={() => {
-              resetForm();
-              setFormOpen(true);
-            }}
+            onClick={openCreate}
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Add Source
@@ -1074,7 +1171,18 @@ export function BookingSourcesView() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <StatMiniCard label="Sources" value={stats.total} icon={Globe} />
-        <StatMiniCard label="Active" value={stats.active} accent="#10b981" icon={CheckCircle2} />
+        <StatMiniCard
+          label="Active"
+          value={stats.active}
+          accent="#10b981"
+          icon={CheckCircle2}
+        />
+        <StatMiniCard
+          label="Inactive"
+          value={stats.inactive}
+          accent="#94a3b8"
+          icon={Trash2}
+        />
       </div>
 
       <FOSearchToolbar
@@ -1125,26 +1233,78 @@ export function BookingSourcesView() {
                 <StatusBadge status={r.status} />
               ),
             },
+            {
+              key: "actions",
+              header: "Actions",
+              render: (r: BookingSourceMaster) => (
+                <div
+                  className="flex items-center gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    title="Edit"
+                    className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-emerald-700"
+                    onClick={() => openEdit(r)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  {r.status === "Active" ? (
+                    <button
+                      type="button"
+                      title="Deactivate (soft delete)"
+                      className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600"
+                      onClick={() => setSoftDeleteTarget(r)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      title="Reactivate"
+                      className="rounded-lg p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700"
+                      onClick={() => handleReactivate(r)}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ),
+            },
           ]}
         />
       </div>
 
       <Drawer
         open={formOpen}
-        onClose={() => setFormOpen(false)}
-        title="Add Booking Source"
-        description="Create a new reservation channel."
+        onClose={() => {
+          setFormOpen(false);
+          resetForm();
+        }}
+        title={editing ? "Edit Booking Source" : "Add Booking Source"}
+        description={
+          editing
+            ? "Update this reservation channel."
+            : "Create a new reservation channel."
+        }
         width="md"
         footer={
           <>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setFormOpen(false);
+                resetForm();
+              }}
+            >
               Cancel
             </Button>
             <Button
               className="bg-emerald-700 hover:bg-emerald-800"
               onClick={handleSave}
+              disabled={saving}
             >
-              Save
+              {saving ? "Saving…" : editing ? "Update" : "Save"}
             </Button>
           </>
         }
@@ -1183,9 +1343,39 @@ export function BookingSourcesView() {
         description={preview?.code}
         width="md"
         footer={
-          <Button variant="outline" onClick={() => setPreview(null)}>
-            Close
-          </Button>
+          preview ? (
+            <div className="flex w-full flex-wrap gap-2">
+              <Button variant="outline" onClick={() => setPreview(null)}>
+                Close
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => openEdit(preview)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </Button>
+              {preview.status === "Active" ? (
+                <Button
+                  variant="outline"
+                  className="gap-1.5 text-red-600 hover:bg-red-50"
+                  onClick={() => setSoftDeleteTarget(preview)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Deactivate
+                </Button>
+              ) : (
+                <Button
+                  className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
+                  onClick={() => handleReactivate(preview)}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reactivate
+                </Button>
+              )}
+            </div>
+          ) : null
         }
       >
         {preview && (
@@ -1212,6 +1402,21 @@ export function BookingSourcesView() {
           </div>
         )}
       </Drawer>
+
+      <ConfirmModal
+        open={!!softDeleteTarget}
+        onClose={() => setSoftDeleteTarget(null)}
+        onConfirm={handleSoftDelete}
+        title="Deactivate booking source?"
+        message={
+          softDeleteTarget
+            ? `"${softDeleteTarget.name}" will be marked Inactive. It won’t appear in reservation Source dropdowns, but the record stays in the database (soft delete — not permanently removed).`
+            : ""
+        }
+        confirmLabel="Deactivate"
+        variant="danger"
+        loading={saving}
+      />
     </div>
   );
 }
