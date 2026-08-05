@@ -83,6 +83,6 @@ export const purchaseStoresNavItems: ModuleNavItem[] = [
   {
     label: "Settings",
     href: "/purchase-stores/settings",
-    icon: "shield",
+    icon: "settings",
   },
 ];

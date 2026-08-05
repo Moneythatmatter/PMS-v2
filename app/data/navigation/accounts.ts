@@ -86,7 +86,7 @@ export const accountsNavItems: ModuleNavItem[] = [
     ],
   },
   { label: "Reports2", href: "/accounts/reports2", icon: "file-spreadsheet" },
-  { label: "Settings", href: "/accounts/settings", icon: "sliders" },
+  { label: "Settings", href: "/accounts/settings", icon: "settings" },
   { label: "Tools", href: "/accounts/tools", icon: "wrench" },
   { label: "Favorites", href: "/accounts/favorites", icon: "star" },
   { label: "Help", href: "/accounts/help", icon: "help-circle" },

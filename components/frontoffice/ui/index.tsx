@@ -214,9 +214,16 @@ interface FormFieldProps {
   children: React.ReactNode;
   required?: boolean;
   className?: string;
+  error?: string;
 }
 
-export function FormField({ label, children, required, className }: FormFieldProps) {
+export function FormField({
+  label,
+  children,
+  required,
+  className,
+  error,
+}: FormFieldProps) {
   return (
     <label className={cn("block space-y-1.5", className)}>
       <span className="text-xs font-medium text-slate-600">
@@ -224,6 +231,7 @@ export function FormField({ label, children, required, className }: FormFieldPro
         {required && <span className="text-red-500"> *</span>}
       </span>
       {children}
+      {error && <p className="mt-1 text-xs font-medium text-red-500">{error}</p>}
     </label>
   );
 }
@@ -246,7 +254,7 @@ export function SelectInput({
     <select
       className={cn(
         inputClass,
-        "appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2716%27 height=%2716%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%2394a3b8%27 stroke-width=%272%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E')] bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-9",
+        "appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2716%27 height=%2716%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%2394a3b8%27 stroke-width=%272%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E')] bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-9 cursor-pointer",
         className,
       )}
       {...props}
@@ -337,7 +345,7 @@ export function FilterPills({ options, active, onChange }: FilterPillsProps) {
           type="button"
           onClick={() => onChange(opt.id)}
           className={cn(
-            "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all sm:px-3 sm:text-xs",
+            "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all sm:px-3 sm:text-xs cursor-pointer",
             active === opt.id
               ? "border-emerald-700 bg-emerald-700 text-white shadow-sm"
               : "border-slate-200 bg-white text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800",
@@ -371,7 +379,7 @@ export function ActionButtons({
             type="button"
             onClick={item.onClick}
             className={cn(
-              "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+              "rounded-md px-2 py-1 text-xs font-medium transition-colors cursor-pointer",
               item.variant === "danger"
                 ? "text-red-600 hover:bg-red-50"
                 : "text-emerald-700 hover:bg-emerald-50",

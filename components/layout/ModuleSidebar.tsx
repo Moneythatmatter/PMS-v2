@@ -79,6 +79,7 @@ import {
   FolderKanban,
   Settings,
   Globe,
+  CarTaxiFront,
 } from "lucide-react";
 import type { ModuleNavItem } from "@/app/data/types";
 import { cn } from "@/lib/utils";
@@ -113,6 +114,8 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "package-search": PackageSearch,
   "message-square": MessageSquare,
   zap: Zap,
+  "car-taxi-front": CarTaxiFront,
+  "taxi-booking": CarTaxiFront,
   mail: Mail,
   history: History,
   wallet: Wallet,

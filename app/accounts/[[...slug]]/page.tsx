@@ -23,6 +23,28 @@ import { BalanceConfirmationView } from "@/components/accounts/BalanceConfirmati
 import { PaymentAdviceView } from "@/components/accounts/PaymentAdviceView";
 import { BillCoveringLetterView } from "@/components/accounts/BillCoveringLetterView";
 import { BillCoveringLetterReversalView } from "@/components/accounts/BillCoveringLetterReversalView";
+import { BillCoveringLetterPrintView } from "@/components/accounts/BillCoveringLetterPrintView";
+import { ChartOfAccountsView } from "@/components/accounts/ChartOfAccountsView";
+import { PartyMasterView } from "@/components/accounts/PartyMasterView";
+import { CompanyCreationView } from "@/components/accounts/CompanyCreationView";
+import { CompanySettingsView } from "@/components/accounts/CompanySettingsView";
+import { NextFiscalYearCreationView } from "@/components/accounts/NextFiscalYearCreationView";
+import { FiscalYearClosingView } from "@/components/accounts/FiscalYearClosingView";
+import { ClosedFiscalYearReversingView } from "@/components/accounts/ClosedFiscalYearReversingView";
+import { VoucherTypeView } from "@/components/accounts/VoucherTypeView";
+import { CurrencyMasterView } from "@/components/accounts/CurrencyMasterView";
+import { PartyTypeMasterView } from "@/components/accounts/PartyTypeMasterView";
+import { PartySubTypeMasterView } from "@/components/accounts/PartySubTypeMasterView";
+import { BankReconciliationTypeMasterView } from "@/components/accounts/BankReconciliationTypeMasterView";
+import { DivisionMasterView } from "@/components/accounts/DivisionMasterView";
+import { TransactionValidationView } from "@/components/accounts/TransactionValidationView";
+import { VoucherTypeUserPrivilegeView } from "@/components/accounts/VoucherTypeUserPrivilegeView";
+import { QueriesView } from "@/components/accounts/QueriesView";
+import { FinancialAnalysisView } from "@/components/accounts/FinancialAnalysisView";
+import { BalanceSheetView } from "@/components/accounts/BalanceSheetView";
+import { DayBookView } from "@/components/accounts/DayBookView";
+import { SecondaryReportsView } from "@/components/accounts/SecondaryReportsView";
+import { AccountsToolsView } from "@/components/accounts/AccountsToolsView";
 import { ChevronRight, FolderOpen } from "lucide-react";
 
 function findNavLabel(slugPath: string): { title: string; category?: string } {
@@ -221,12 +243,158 @@ export default async function AccountsPage({
 
   if (
     slugPath === "party-outstanding/bill-covering-letter-reversal" ||
-    slugPath === "party-outstanding/bill-covering-letter-reversal" ||
     slugPath === "bill-covering-letter-reversal" ||
     slugPath === "covering-letter-reversal" ||
     slugPath === "reversal"
   ) {
     return <BillCoveringLetterReversalView />;
+  }
+
+  if (
+    slugPath === "party-outstanding/bill-covering-letter-print" ||
+    slugPath === "bill-covering-letter-print" ||
+    slugPath === "covering-letter-print text" ||
+    slugPath === "covering-letter-print"
+  ) {
+    return <BillCoveringLetterPrintView />;
+  }
+
+  if (
+    slugPath === "masters/chart-of-accounts" ||
+    slugPath === "chart-of-accounts" ||
+    slugPath === "coa"
+  ) {
+    return <ChartOfAccountsView />;
+  }
+
+  if (
+    slugPath === "masters/party-master" ||
+    slugPath === "party-master" ||
+    slugPath === "party"
+  ) {
+    return <PartyMasterView />;
+  }
+
+  if (
+    slugPath === "masters/company-creation" ||
+    slugPath === "company-creation" ||
+    slugPath === "company"
+  ) {
+    return <CompanyCreationView />;
+  }
+
+  if (
+    slugPath === "masters/company-settings" ||
+    slugPath === "company-settings" ||
+    slugPath === "settings"
+  ) {
+    return <CompanySettingsView />;
+  }
+
+  if (
+    slugPath === "masters/next-fiscal-year-creation" ||
+    slugPath === "next-fiscal-year-creation" ||
+    slugPath === "fiscal-year-creation" ||
+    slugPath === "next-fy"
+  ) {
+    return <NextFiscalYearCreationView />;
+  }
+
+  if (
+    slugPath === "masters/fiscal-year-closing" ||
+    slugPath === "fiscal-year-closing font" ||
+    slugPath === "fiscal-year-closing"
+  ) {
+    return <FiscalYearClosingView />;
+  }
+
+  if (
+    slugPath === "masters/closed-fiscal-year-reversing" ||
+    slugPath === "closed-fiscal-year-reversing" ||
+    slugPath === "closed-fy-reversing"
+  ) {
+    return <ClosedFiscalYearReversingView />;
+  }
+
+  if (
+    slugPath === "masters/voucher-type" ||
+    slugPath === "voucher-type" ||
+    slugPath === "vouchertype"
+  ) {
+    return <VoucherTypeView />;
+  }
+
+  if (
+    slugPath === "masters/currency" ||
+    slugPath === "currency" ||
+    slugPath === "currencies"
+  ) {
+    return <CurrencyMasterView />;
+  }
+
+  if (
+    slugPath === "masters/party-type" ||
+    slugPath === "party-type" ||
+    slugPath === "partytype"
+  ) {
+    return <PartyTypeMasterView />;
+  }
+
+  if (
+    slugPath === "masters/party-sub-type" ||
+    slugPath === "party-sub-type" ||
+    slugPath === "partysubtype"
+  ) {
+    return <PartySubTypeMasterView />;
+  }
+
+  if (
+    slugPath === "masters/bank-reconciliation-type" ||
+    slugPath === "bank-reconciliation-type" ||
+    slugPath === "bankreconciliationtype font" ||
+    slugPath === "bankreconciliationtype"
+  ) {
+    return <BankReconciliationTypeMasterView />;
+  }
+
+  if (
+    slugPath === "masters/division" ||
+    slugPath === "division" ||
+    slugPath === "divisions"
+  ) {
+    return <DivisionMasterView />;
+  }
+
+  if (
+    slugPath === "masters/transaction-validation" ||
+    slugPath === "transaction-validation" ||
+    slugPath === "transactionvalidation"
+  ) {
+    return <TransactionValidationView />;
+  }
+
+  if (
+    slugPath === "masters/voucher-type-user-privilege" ||
+    slugPath === "voucher-type-user-privilege" ||
+    slugPath === "vouchertypeuserprivilege"
+  ) {
+    return <VoucherTypeUserPrivilegeView />;
+  }
+
+  if (
+    slugPath === "queries" ||
+    slugPath === "queries/search" ||
+    slugPath === "query"
+  ) {
+    return <QueriesView />;
+  }
+
+  if (
+    slugPath === "analysis" ||
+    slugPath === "analysis/dashboard" ||
+    slugPath === "financial-analysis"
+  ) {
+    return <FinancialAnalysisView />;
   }
 
   if (slugPath === "reports/trial-balance" || slugPath === "trial-balance") {
@@ -244,6 +412,38 @@ export default async function AccountsPage({
 
   if (slugPath === "reports/general-ledger" || slugPath === "general-ledger") {
     return <GeneralLedgerView />;
+  }
+
+  if (
+    slugPath === "reports/balance-sheet" ||
+    slugPath === "balance-sheet" ||
+    slugPath === "balancesheet"
+  ) {
+    return <BalanceSheetView />;
+  }
+
+  if (
+    slugPath === "reports/day-book" ||
+    slugPath === "day-book" ||
+    slugPath === "daybook"
+  ) {
+    return <DayBookView />;
+  }
+
+  if (
+    slugPath === "reports2" ||
+    slugPath === "reports2/catalog" ||
+    slugPath === "reports-2"
+  ) {
+    return <SecondaryReportsView />;
+  }
+
+  if (
+    slugPath === "tools" ||
+    slugPath === "tools/utilities" ||
+    slugPath === "utilities"
+  ) {
+    return <AccountsToolsView />;
   }
 
   const { title, category } = findNavLabel(slugPath);

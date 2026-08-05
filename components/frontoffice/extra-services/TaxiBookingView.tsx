@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Car, CheckCircle2, Clock } from "lucide-react";
+import { CarTaxiFront, CheckCircle2, Clock } from "lucide-react";
 import { taxiBookingService } from "@/services/front-office";
 import { FormField, SelectInput, TextInput, formatINR } from "@/components/frontoffice/ui";
 import {
@@ -61,7 +61,7 @@ export function TaxiBookingView() {
     <ModuleShell toast={toast} setToast={setToast}
       header={{ title: "Taxi / Cab Booking", desc: "Arrange transport for in-house and departing guests.", btn: "Book Taxi", onBtn: () => setFormOpen(true) }}
       stats={[
-        { label: "Scheduled", value: items.filter((r) => r.status === "Scheduled").length, accent: "#15803d", icon: Car, sublabel: "Upcoming trips" },
+        { label: "Scheduled", value: items.filter((r) => r.status === "Scheduled").length, accent: "#15803d", icon: CarTaxiFront, sublabel: "Upcoming trips" },
         { label: "Completed", value: items.filter((r) => r.status === "Completed").length, accent: "#10b981", icon: CheckCircle2 },
         { label: "Total Revenue", value: formatINR(items.filter((r) => r.status === "Completed").reduce((s, r) => s + r.fare, 0)), icon: Clock },
       ]}
@@ -91,7 +91,7 @@ export function TaxiBookingView() {
         <FormField label="Estimated Fare (₹)"><TextInput type="number" value={fare} onChange={(e) => setFare(e.target.value)} /></FormField>
       </FormDrawer>
       <PreviewDrawer open={!!preview} onClose={() => setPreview(null)} title={preview?.guest ?? ""} desc={`${preview?.pickup} → ${preview?.drop}`}>
-        {preview && <PreviewGrid icon={Car} rows={[["Room", preview.room], ["Date", preview.date], ["Time", preview.time], ["Driver", preview.driver], ["Vehicle", preview.vehicle], ["Fare", formatINR(preview.fare)], ["Status", preview.status]]} />}
+        {preview && <PreviewGrid icon={CarTaxiFront} rows={[["Room", preview.room], ["Date", preview.date], ["Time", preview.time], ["Driver", preview.driver], ["Vehicle", preview.vehicle], ["Fare", formatINR(preview.fare)], ["Status", preview.status]]} />}
       </PreviewDrawer>
     </ModuleShell>
   );

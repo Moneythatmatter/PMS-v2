@@ -68,64 +68,108 @@ export function ProvisionalTransactionsView() {
   const [isPosting, setIsPosting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Post New Provisional Entry
-  const handlePostProvisional = (e: React.FormEvent) => {
+  // Double Verification State
+  interface DoubleVerificationState {
+    type: "POST" | "CONVERT" | "REVERSE";
+    item?: ProvisionalTransaction | null;
+    confirmedCheckbox: boolean;
+    verifierName: string;
+  }
+
+  const [verificationModal, setVerificationModal] = useState<DoubleVerificationState | null>(null);
+
+  // Trigger Post with Double Verification
+  const initiatePostProvisional = (e: React.FormEvent) => {
     e.preventDefault();
     if (drAmt <= 0 && crAmt <= 0) {
-      alert("Please enter a valid Debit or Credit amount greater than zero.");
+      setToastMessage("Please enter a valid Debit or Credit amount greater than zero.");
+      return;
+    }
+    setVerificationModal({
+      type: "POST",
+      confirmedCheckbox: false,
+      verifierName: "Abhijit (Senior Auditor)",
+    });
+  };
+
+  // Trigger Convert with Double Verification
+  const initiateConvert = (item: ProvisionalTransaction) => {
+    setVerificationModal({
+      type: "CONVERT",
+      item: item,
+      confirmedCheckbox: false,
+      verifierName: "Abhijit (Senior Auditor)",
+    });
+  };
+
+  // Trigger Reverse with Double Verification
+  const initiateReverse = (item: ProvisionalTransaction) => {
+    setVerificationModal({
+      type: "REVERSE",
+      item: item,
+      confirmedCheckbox: false,
+      verifierName: "Abhijit (Senior Auditor)",
+    });
+  };
+
+  // Execute Double Verified Action
+  const handleExecuteDoubleVerifiedAction = () => {
+    if (!verificationModal) return;
+    if (!verificationModal.confirmedCheckbox) {
+      alert("Please check the Double Verification confirmation box before proceeding.");
       return;
     }
 
-    setIsPosting(true);
+    const { type, item } = verificationModal;
+    setVerificationModal(null);
 
-    setTimeout(() => {
-      const newEntry: ProvisionalTransaction = {
-        id: `prv-${Date.now()}`,
-        vouchNo: vouchNo,
-        vouchDt: vouchDt,
-        expiryDt: expiryDt,
-        category: category,
-        vouchType: vouchType,
-        accountLedger: accountLedger,
-        partyName: partyName || "General Provision",
-        drAmt: Number(drAmt) || 0,
-        crAmt: Number(crAmt) || 0,
-        narration: narration,
-        status: "Provisional",
-      };
+    if (type === "POST") {
+      setIsPosting(true);
+      setTimeout(() => {
+        const newEntry: ProvisionalTransaction = {
+          id: `prv-${Date.now()}`,
+          vouchNo: vouchNo,
+          vouchDt: vouchDt,
+          expiryDt: expiryDt,
+          category: category,
+          vouchType: vouchType,
+          accountLedger: accountLedger,
+          partyName: partyName || "General Provision",
+          drAmt: Number(drAmt) || 0,
+          crAmt: Number(crAmt) || 0,
+          narration: narration,
+          status: "Provisional",
+        };
 
-      setTransactions([newEntry, ...transactions]);
-      setIsPosting(false);
-      setToastMessage(
-        `Provisional entry ${vouchNo} for ${formatINR(
-          drAmt > 0 ? drAmt : crAmt
-        )} created successfully.`
+        setTransactions([newEntry, ...transactions]);
+        setIsPosting(false);
+        setToastMessage(
+          `✓ Double Verified: Provisional entry ${vouchNo} for ${formatINR(
+            drAmt > 0 ? drAmt : crAmt
+          )} created successfully.`
+        );
+
+        // Reset form
+        setVouchNo(`PRV-2026-00${Math.floor(Math.random() * 90 + 18)}`);
+        setDrAmt(0);
+        setCrAmt(0);
+        setNarration("");
+      }, 300);
+    } else if (type === "CONVERT" && item) {
+      setTransactions(
+        transactions.map((t) =>
+          t.id === item.id ? { ...t, status: "Converted to GL" } : t
+        )
       );
-
-      // Reset form
-      setVouchNo(`PRV-2026-00${Math.floor(Math.random() * 90 + 18)}`);
-      setDrAmt(0);
-      setCrAmt(0);
-      setNarration("");
-    }, 400);
-  };
-
-  // Convert Provisional Entry to Permanent GL Voucher
-  const handleConvert = (id: string, vNo: string) => {
-    setTransactions(
-      transactions.map((t) =>
-        t.id === id ? { ...t, status: "Converted to GL" } : t
-      )
-    );
-    setToastMessage(`Provisional Voucher ${vNo} converted to permanent General Ledger voucher.`);
-  };
-
-  // Reverse Provisional Entry
-  const handleReverse = (id: string, vNo: string) => {
-    setTransactions(
-      transactions.map((t) => (t.id === id ? { ...t, status: "Reversed" } : t))
-    );
-    setToastMessage(`Provisional Voucher ${vNo} reversed successfully.`);
+      setToastMessage(
+        `✓ Double Verified: Provisional Voucher ${item.vouchNo} converted to permanent General Ledger voucher.`
+      );
+    } else if (type === "REVERSE" && item) {
+      setTransactions(
+        transactions.map((t) => (t.id === item.id ? { ...t, status: "Reversed" } : t))
+      );
+      setToastMessage(`✓ Double Verified: Provisional Voucher ${item.vouchNo} reversed successfully.`);
+    }
   };
 
   // Filtered Data
@@ -257,14 +301,14 @@ export function ProvisionalTransactionsView() {
             </div>
           </div>
 
-          <span className="inline-flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 border border-amber-200">
+          <span className="inline-flex items-center gap-1 rounded-xl bg-amber-50 px-3 py-1 text-[11px] font-bold text-amber-900 border border-amber-200">
             <AlertCircle className="h-3.5 w-3.5 text-amber-700" />
             Provisional Mode: Excluded from Tax Statements until Converted
           </span>
         </div>
 
         {/* Entry Form Grid */}
-        <form onSubmit={handlePostProvisional} className="space-y-4">
+        <form onSubmit={initiatePostProvisional} className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-xl bg-slate-50/70 p-3.5 border border-slate-200/70">
             <FormField label="Prov Voucher No">
               <TextInput
@@ -506,8 +550,8 @@ export function ProvisionalTransactionsView() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => handleConvert(row.id, row.vouchNo)}
-                          className="h-6 px-2 text-[10px] font-bold bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 rounded-md"
+                          onClick={() => initiateConvert(row)}
+                          className="h-6 px-2 text-[10px] font-bold bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 rounded-md cursor-pointer"
                           title="Convert to Permanent GL Voucher"
                         >
                           <Check className="h-3 w-3 mr-0.5" /> Convert to GL
@@ -517,8 +561,8 @@ export function ProvisionalTransactionsView() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => handleReverse(row.id, row.vouchNo)}
-                          className="h-6 px-2 text-[10px] font-bold bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 rounded-md"
+                          onClick={() => initiateReverse(row)}
+                          className="h-6 px-2 text-[10px] font-bold bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 rounded-md cursor-pointer"
                           title="Reverse Provision"
                         >
                           <RotateCcw className="h-3 w-3" />
@@ -569,8 +613,8 @@ export function ProvisionalTransactionsView() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => handleConvert(row.id, row.vouchNo)}
-                    className="h-7 text-xs font-bold bg-emerald-50 text-emerald-800 border-emerald-300 w-full justify-center"
+                    onClick={() => initiateConvert(row)}
+                    className="h-7 text-xs font-bold bg-emerald-50 text-emerald-800 border-emerald-300 w-full justify-center cursor-pointer"
                   >
                     <Check className="h-3.5 w-3.5 mr-1" /> Convert to GL
                   </Button>
@@ -580,6 +624,156 @@ export function ProvisionalTransactionsView() {
           ))}
         </div>
       </section>
+
+      {/* 🔐 DOUBLE VERIFICATION CONFIRMATION MODAL */}
+      {verificationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl border border-slate-200 space-y-4 text-xs font-sans">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-900 border border-amber-300 font-bold">
+                  🔐
+                </span>
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-900 uppercase tracking-wider">
+                    Double Verification Confirmation
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-semibold">
+                    {verificationModal.type === "POST" && "Confirming New Provisional Accrual Entry"}
+                    {verificationModal.type === "CONVERT" && "Converting Provisional Entry to Permanent GL Voucher"}
+                    {verificationModal.type === "REVERSE" && "Reversing Provisional Transaction"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVerificationModal(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Target Entry Summary Card */}
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2 font-mono text-xs">
+              {verificationModal.type === "POST" ? (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-bold">Provisional Voucher #:</span>
+                    <strong className="text-slate-900">{vouchNo}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-bold">Posting / Expiry Date:</span>
+                    <strong className="text-slate-900">{vouchDt} (Exp: {expiryDt})</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-bold">Category &amp; Ledger:</span>
+                    <strong className="text-slate-900">{category} • {accountLedger}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-bold">Party Name:</span>
+                    <strong className="text-slate-900">{partyName || "General Provision"}</strong>
+                  </div>
+                  <div className="flex justify-between border-t border-slate-200 pt-1.5 text-sm font-extrabold">
+                    <span className="text-slate-700">Provisional Amount:</span>
+                    <span className="text-emerald-800">
+                      {drAmt > 0 ? `Dr ${formatINR(drAmt)}` : `Cr ${formatINR(crAmt)}`}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                verificationModal.item && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 font-bold">Provisional Voucher #:</span>
+                      <strong className="text-slate-900">{verificationModal.item.vouchNo}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 font-bold">Posting / Expiry Date:</span>
+                      <strong className="text-slate-900">
+                        {verificationModal.item.vouchDt} (Exp: {verificationModal.item.expiryDt})
+                      </strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 font-bold">Category &amp; Ledger:</span>
+                      <strong className="text-slate-900">
+                        {verificationModal.item.category} • {verificationModal.item.accountLedger}
+                      </strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 font-bold">Party Name:</span>
+                      <strong className="text-slate-900">{verificationModal.item.partyName}</strong>
+                    </div>
+                    <div className="flex justify-between border-t border-slate-200 pt-1.5 text-sm font-extrabold">
+                      <span className="text-slate-700">Provisional Amount:</span>
+                      <span className="text-emerald-800">
+                        {verificationModal.item.drAmt > 0
+                          ? `Dr ${formatINR(verificationModal.item.drAmt)}`
+                          : `Cr ${formatINR(verificationModal.item.crAmt)}`}
+                      </span>
+                    </div>
+                  </>
+                )
+              )}
+            </div>
+
+            {/* Mandatory Verification Checkbox & Audit Stamp */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-xs">
+              <label className="flex items-start gap-2.5 cursor-pointer font-bold text-amber-950">
+                <input
+                  type="checkbox"
+                  checked={verificationModal.confirmedCheckbox}
+                  onChange={(e) =>
+                    setVerificationModal({
+                      ...verificationModal,
+                      confirmedCheckbox: e.target.checked,
+                    })
+                  }
+                  className="rounded border-amber-400 text-emerald-700 h-4 w-4 mt-0.5"
+                />
+                <span>
+                  Double Verification Check: I confirm that I have verified physical supporting invoices, GL ledger accounts, and authorized this financial action.
+                </span>
+              </label>
+
+              <div className="text-[11px] font-mono text-amber-800 pt-1 border-t border-amber-200 flex justify-between">
+                <span>Verified By Auditor: <strong>{verificationModal.verifierName}</strong></span>
+                <span>Timestamp: <strong>{new Date().toLocaleTimeString()}</strong></span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setVerificationModal(null)}
+                className="rounded-xl text-xs font-semibold bg-white cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!verificationModal.confirmedCheckbox}
+                onClick={handleExecuteDoubleVerifiedAction}
+                className={cn(
+                  "rounded-xl font-bold text-xs px-4 text-white cursor-pointer transition-all",
+                  verificationModal.type === "REVERSE"
+                    ? "bg-rose-700 hover:bg-rose-800"
+                    : "bg-emerald-700 hover:bg-emerald-800",
+                  !verificationModal.confirmedCheckbox && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <Check className="h-3.5 w-3.5 mr-1" />
+                Confirm &amp; Execute Action
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </ModulePageShell>
   );
 }

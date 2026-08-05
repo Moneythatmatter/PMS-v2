@@ -103,7 +103,7 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
   {
     label: "Settings",
     href: "/food-beverages/settings",
-    icon: "shield",
+    icon: "settings",
     children: [
       { label: "Taxes", href: "/food-beverages/settings/taxes", icon: "percent" },
       { label: "Discounts", href: "/food-beverages/settings/discounts", icon: "tag" },

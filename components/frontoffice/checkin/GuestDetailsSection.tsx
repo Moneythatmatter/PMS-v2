@@ -55,9 +55,11 @@ export function GuestDetailsSection({
   const countryOptions = useMemo(() => toOptions(countries), []);
   const idProofOptions = useMemo(() => toOptions(idProofTypes), []);
 
+  const todayIso = useMemo(() => new Date().toISOString().split("T")[0], []);
+
   return (
     <>
-      <FormField label="Gender" required>
+      <FormField label="Gender" required error={errors?.gender}>
         <SearchSelect
           options={genderOptions}
           selectedId={guestDetails.gender || null}
@@ -68,7 +70,7 @@ export function GuestDetailsSection({
         />
       </FormField>
 
-      <FormField label="Date of Birth" required>
+      <FormField label="Date of Birth" required error={errors?.dob}>
         <TextInput
           type="date"
           className={fieldClass("dob")}
@@ -77,7 +79,7 @@ export function GuestDetailsSection({
         />
       </FormField>
 
-      <FormField label="Nationality" required>
+      <FormField label="Nationality" required error={errors?.nationality}>
         <SearchSelect
           options={nationalityOptions}
           selectedId={guestDetails.nationality || null}
@@ -89,7 +91,7 @@ export function GuestDetailsSection({
         />
       </FormField>
 
-      <FormField label="Address" required>
+      <FormField label="Address" required error={errors?.address}>
         <TextInput
           className={fieldClass("address")}
           placeholder="Street address"
@@ -98,7 +100,7 @@ export function GuestDetailsSection({
         />
       </FormField>
 
-      <FormField label="City" required>
+      <FormField label="City" required error={errors?.city}>
         <TextInput
           className={fieldClass("city")}
           placeholder="City name"
@@ -107,7 +109,7 @@ export function GuestDetailsSection({
         />
       </FormField>
 
-      <FormField label="State / Province" required>
+      <FormField label="State / Province" required error={errors?.state}>
         <SearchSelect
           options={stateOptions}
           selectedId={guestDetails.state || null}
@@ -119,7 +121,7 @@ export function GuestDetailsSection({
         />
       </FormField>
 
-      <FormField label="Country" required>
+      <FormField label="Country" required error={errors?.country}>
         <SearchSelect
           options={countryOptions}
           selectedId={guestDetails.country || null}
@@ -131,16 +133,19 @@ export function GuestDetailsSection({
         />
       </FormField>
 
-      <FormField label="Pincode / Zip" required>
+      <FormField label="Pincode / Zip" required error={errors?.pincode}>
         <TextInput
           className={fieldClass("pincode")}
           placeholder="6-digit pincode"
+          maxLength={6}
           value={guestDetails.pincode}
-          onChange={(e) => onChange("pincode", e.target.value)}
+          onChange={(e) =>
+            onChange("pincode", e.target.value.replace(/\D/g, "").slice(0, 6))
+          }
         />
       </FormField>
 
-      <FormField label="ID Proof Type" required>
+      <FormField label="ID Proof Type" required error={errors?.idProofType}>
         <SearchSelect
           options={idProofOptions}
           selectedId={guestDetails.idProofType || null}
@@ -151,7 +156,7 @@ export function GuestDetailsSection({
         />
       </FormField>
 
-      <FormField label="ID Document Number" required>
+      <FormField label="ID Document Number" required error={errors?.idNumber}>
         <TextInput
           className={fieldClass("idNumber")}
           placeholder="e.g. Aadhar / Passport No"
@@ -161,7 +166,7 @@ export function GuestDetailsSection({
       </FormField>
 
       {onFileUpload && (
-        <FormField label="Upload ID Document" required>
+        <FormField label="Upload ID Document" required error={errors?.idFile}>
           <div className="flex items-center gap-3">
             <input
               type="file"

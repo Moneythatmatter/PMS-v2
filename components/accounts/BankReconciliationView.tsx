@@ -45,7 +45,8 @@ export function BankReconciliationView() {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   // Bank Account & Date Controls
-  const [selectedBank, setSelectedBank] = useState("YES BANK A/c #9012");
+  const [selectedBank, setSelectedBank] = useState("<ALL Banks>");
+  const [appliedBank, setAppliedBank] = useState("<ALL Banks>");
   const [fromDate, setFromDate] = useState("2026-04-01");
   const [toDate, setToDate] = useState("2027-03-31");
   const [appliedFromDate, setAppliedFromDate] = useState("2026-04-01");
@@ -79,6 +80,17 @@ export function BankReconciliationView() {
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Helper to parse DD/MM/YYYY into YYYY-MM-DD for date comparisons
+  const parseFormattedDate = (dateStr: string): string => {
+    if (!dateStr) return "";
+    if (dateStr.includes("-")) return dateStr;
+    const parts = dateStr.split("/");
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+    }
+    return dateStr;
+  };
+
   // Toggle Single Item Reconciled Status
   const handleToggleReconciled = (id: string) => {
     setEntries(
@@ -103,31 +115,50 @@ export function BankReconciliationView() {
     );
   };
 
-  // Date Presets Handler
+  // Date Presets Handler — Programmed to adjust From & To dates automatically
   const handleDatePreset = (preset: string) => {
     setDatePreset(preset);
     let newFrom = "2026-04-01";
     let newTo = "2027-03-31";
+
     if (preset === "fy26") {
       newFrom = "2026-04-01";
       newTo = "2027-03-31";
+    } else if (preset === "fy25") {
+      newFrom = "2025-04-01";
+      newTo = "2026-03-31";
     } else if (preset === "q1") {
       newFrom = "2026-04-01";
       newTo = "2026-06-30";
+    } else if (preset === "q2") {
+      newFrom = "2026-07-01";
+      newTo = "2026-09-30";
+    } else if (preset === "q3") {
+      newFrom = "2026-10-01";
+      newTo = "2026-12-31";
+    } else if (preset === "q4") {
+      newFrom = "2027-01-01";
+      newTo = "2027-03-31";
     } else if (preset === "thisMonth") {
       newFrom = "2026-07-01";
       newTo = "2026-07-31";
     }
+
     setFromDate(newFrom);
     setToDate(newTo);
+    setAppliedFromDate(newFrom);
+    setAppliedToDate(newTo);
   };
 
-  // Display Report Action
+  // Display Report Action — Updates transaction log according to selected date range and bank account
   const handleDisplayReport = () => {
     setIsDisplayLoading(true);
+    setAppliedBank(selectedBank);
     setAppliedFromDate(fromDate);
     setAppliedToDate(toDate);
-    setToastMessage(`Bank Reconciliation statement refreshed for ${selectedBank}.`);
+    setToastMessage(
+      `✓ Updated transaction log for ${selectedBank} (Period: ${fromDate} to ${toDate}).`
+    );
     setTimeout(() => {
       setIsDisplayLoading(false);
     }, 350);
@@ -138,27 +169,44 @@ export function BankReconciliationView() {
     setIsSaving(true);
     setTimeout(() => {
       setIsSaving(false);
-      setToastMessage(`Bank Reconciliation statement saved successfully for ${selectedBank}.`);
+      setToastMessage(
+        `✓ Bank Reconciliation statement saved successfully for ${appliedBank}.`
+      );
     }, 400);
   };
 
-  // Filtered Entries
+  // Filtered Entries by Applied Bank Account, Date Range, & User Preferences
   const filteredData = useMemo(() => {
     let result = entries.filter((item) => {
-      // Debit/Credit Toggles
+      // 1. Bank Account Filter (<ALL Banks> or specific selected bank)
+      if (
+        appliedBank &&
+        appliedBank !== "<ALL Banks>" &&
+        item.bankName !== appliedBank
+      ) {
+        return false;
+      }
+
+      // 2. Date Range Filter (Applied From & To Dates)
+      const itemDate = parseFormattedDate(item.vouchDt);
+      if (appliedFromDate && itemDate < appliedFromDate) return false;
+      if (appliedToDate && itemDate > appliedToDate) return false;
+
+      // 3. Debit/Credit Toggles
       if (!showDebit && item.drAmt > 0) return false;
       if (!showCredit && item.crAmt > 0) return false;
 
-      // Consider Reconciled Filter
+      // 4. Consider Reconciled Filter
       if (!considerReconciled && item.reconciled) return false;
 
-      // Search Query Filter
+      // 5. Search Query Filter
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         return (
           item.vouchNo.toLowerCase().includes(q) ||
           item.chqNo.toLowerCase().includes(q) ||
-          item.narration.toLowerCase().includes(q)
+          item.narration.toLowerCase().includes(q) ||
+          item.bankName.toLowerCase().includes(q)
         );
       }
 
@@ -170,21 +218,50 @@ export function BankReconciliationView() {
     }
 
     return result;
-  }, [entries, showDebit, showCredit, considerReconciled, searchQuery, sortOnChqNo]);
+  }, [
+    entries,
+    appliedBank,
+    appliedFromDate,
+    appliedToDate,
+    showDebit,
+    showCredit,
+    considerReconciled,
+    searchQuery,
+    sortOnChqNo,
+  ]);
 
-  // Balance Calculations
-  const glClosingBalance = 425000;
+  // Balance Calculations for Applied Bank Account & Date Range
+  const bankEntries = useMemo(() => {
+    return entries.filter((e) => {
+      if (appliedBank && appliedBank !== "<ALL Banks>" && e.bankName !== appliedBank) {
+        return false;
+      }
+      const d = parseFormattedDate(e.vouchDt);
+      if (appliedFromDate && d < appliedFromDate) return false;
+      if (appliedToDate && d > appliedToDate) return false;
+      return true;
+    });
+  }, [entries, appliedBank, appliedFromDate, appliedToDate]);
+
+  const glClosingBalance = useMemo(() => {
+    if (appliedBank === "<ALL Banks>") return 2275000;
+    if (appliedBank.includes("YES")) return 425000;
+    if (appliedBank.includes("HDFC")) return 850000;
+    if (appliedBank.includes("ICICI")) return 350000;
+    return 650000;
+  }, [appliedBank]);
+
   const unreconciledDeposits = useMemo(() => {
-    return entries
+    return bankEntries
       .filter((e) => !e.reconciled && e.drAmt > 0)
       .reduce((sum, e) => sum + e.drAmt, 0);
-  }, [entries]);
+  }, [bankEntries]);
 
   const unreconciledCheques = useMemo(() => {
-    return entries
+    return bankEntries
       .filter((e) => !e.reconciled && e.crAmt > 0)
       .reduce((sum, e) => sum + e.crAmt, 0);
-  }, [entries]);
+  }, [bankEntries]);
 
   const bankStatementBalance =
     glClosingBalance + unreconciledCheques - unreconciledDeposits;
@@ -334,10 +411,12 @@ export function BankReconciliationView() {
         </p>
 
         {/* Date Presets */}
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {[
             { id: "fy26", label: "FY 2026-27" },
+            { id: "fy25", label: "FY 2025-26" },
             { id: "q1", label: "Q1 Apr-Jun" },
+            { id: "q2", label: "Q2 Jul-Sep" },
             { id: "thisMonth", label: "This Month" },
           ].map((p) => (
             <button
@@ -345,7 +424,7 @@ export function BankReconciliationView() {
               type="button"
               onClick={() => handleDatePreset(p.id)}
               className={cn(
-                "flex-1 rounded-lg py-1 text-[11px] font-semibold transition-all border cursor-pointer select-none",
+                "flex-1 min-w-[70px] rounded-lg py-1 text-[10px] font-bold transition-all border cursor-pointer select-none text-center",
                 datePreset === p.id
                   ? "bg-emerald-700 text-white border-emerald-700 shadow-2xs"
                   : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
@@ -488,7 +567,7 @@ export function BankReconciliationView() {
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
             <Building2 className="h-3.5 w-3.5 text-emerald-700" />
-            Selected Bank: <span className="underline">{selectedBank}</span>
+            Selected Bank: <span className="underline">{appliedBank}</span>
           </span>
 
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
