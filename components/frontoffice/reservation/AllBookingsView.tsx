@@ -31,6 +31,7 @@ import {
   SelectInput,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { isArrivingToday } from "@/lib/reservation-dates";
 import { BookingDetailDrawer } from "./BookingDetailDrawer";
 import { ReservationStatusBadge } from "./ReservationStatusBadge";
 import { ReservationSummaryCards } from "./ReservationSummaryCards";
@@ -38,7 +39,6 @@ import { ReservationSummaryCards } from "./ReservationSummaryCards";
 const statusFilters: { id: ReservationFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "arriving-today", label: "Arriving Today" },
-  { id: "confirmed", label: "Confirmed" },
   { id: "in-house", label: "In-House" },
   { id: "reserved", label: "Reserved" },
   { id: "checked-out", label: "Checked Out" },
@@ -68,13 +68,17 @@ function matchesFilter(booking: ReservationBooking, filter: ReservationFilter) {
     case "all":
       return true;
     case "arriving-today":
-      return booking.arrivingToday === true;
+      return (
+        isArrivingToday(booking) &&
+        booking.status !== "Cancelled" &&
+        booking.status !== "Checked Out"
+      );
     case "confirmed":
       return booking.status === "Confirmed";
     case "in-house":
       return booking.status === "Checked In" || booking.status === "In-House";
     case "reserved":
-      return booking.status === "Reserved";
+      return booking.status === "Reserved" || booking.status === "Confirmed";
     case "checked-out":
       return booking.status === "Checked Out";
     case "cancelled":
@@ -142,6 +146,16 @@ export function AllBookingsView() {
         ]),
       ) as Record<ReservationFilter, number>,
     [bookings],
+  );
+
+  const displayStats = useMemo(
+    () =>
+      summaryStats.map((stat) =>
+        stat.label === "Arriving Today"
+          ? { ...stat, value: filterCounts["arriving-today"] }
+          : stat,
+      ),
+    [summaryStats, filterCounts],
   );
 
   const filtered = useMemo(() => {
@@ -272,7 +286,7 @@ export function AllBookingsView() {
       />
 
       <ReservationSummaryCards
-        stats={summaryStats}
+        stats={displayStats}
         activeFilter={activeFilter}
         onFilterClick={setActiveFilter}
       />
