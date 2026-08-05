@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
-import { StatMiniCard } from "@/components/frontoffice/ui";
+import { Card, CardHeader } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { WeeklyFlowChart } from "@/components/frontoffice/WeeklyFlowChart";
 import { BookingSourcesChart } from "@/components/frontoffice/BookingSourcesChart";
@@ -238,254 +238,267 @@ export function FrontOfficeDashboardView() {
       description="Arrivals, departures, occupancy, and desk work for today."
       wrapChildren={false}
     >
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {frontOfficeStats.map((stat, i) => {
-          const Icon = statIcons[i] ?? Users;
-          return (
-            <StatMiniCard
-              key={stat.title}
-              label={stat.title}
-              value={stat.value}
-              accent={stat.trend === "up" ? "#15803d" : "#64748b"}
-              icon={Icon}
-              sublabel={stat.note}
-            />
-          );
-        })}
-      </div>
-
-      {alerts.length > 0 && (
-        <section className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Bell className="h-3.5 w-3.5 text-amber-600" />
-              <h2 className="text-sm font-semibold text-slate-900">Needs attention</h2>
-              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                {alerts.length}
-              </span>
-            </div>
-            <Link
-              href="/frontoffice/day-closing"
-              className="text-xs font-medium text-emerald-700 hover:underline"
-            >
-              Day closing
-            </Link>
-          </div>
-          <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
-            {alerts.map((alert) => (
-              <Link
-                key={alert.id}
-                href={alert.href}
-                className={cn(
-                  "rounded-lg border px-2.5 py-2 transition hover:shadow-sm",
-                  alert.tone === "danger" && "border-red-200 bg-red-50 text-red-900",
-                  alert.tone === "warning" && "border-amber-200 bg-amber-50 text-amber-950",
-                  alert.tone === "info" && "border-emerald-200 bg-emerald-50 text-emerald-950",
-                )}
-              >
-                <p className="text-xs font-semibold leading-snug">{alert.title}</p>
-                <p className="mt-0.5 truncate text-[11px] opacity-80">{alert.detail}</p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-        <div className="mb-2 flex items-baseline justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-900">Quick actions</h2>
-          <p className="text-[11px] text-slate-500">Front desk shortcuts</p>
-        </div>
-        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 xl:grid-cols-8">
-          {quickLinks.map((link) => {
-            const Icon = link.icon;
+      <div className="min-w-0 space-y-4 sm:space-y-6 lg:space-y-8">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6">
+          {frontOfficeStats.map((stat, i) => {
+            const Icon = statIcons[i] ?? Users;
             return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-2.5 py-2 transition hover:border-emerald-300 hover:bg-emerald-50/60"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-emerald-700 ring-1 ring-slate-200">
-                  <Icon className="h-3.5 w-3.5" />
-                </span>
-                <span className="min-w-0">
-                  <p className="truncate text-xs font-semibold text-slate-900">{link.label}</p>
-                  <p className="truncate text-[10px] text-slate-500">{link.hint}</p>
-                </span>
-              </Link>
+              <Card key={stat.title} className="h-full min-w-0 p-3 sm:p-5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+                    {stat.title}
+                  </p>
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+                    <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </span>
+                </div>
+                <p className="mt-1.5 truncate text-lg font-bold tracking-tight text-slate-900 sm:mt-2 sm:text-2xl">
+                  {stat.value}
+                </p>
+                {stat.note && (
+                  <p className="mt-0.5 truncate text-[11px] text-slate-500 sm:text-xs">
+                    {stat.note}
+                  </p>
+                )}
+              </Card>
             );
           })}
         </div>
-      </section>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Today&apos;s arrivals</h2>
-              <p className="text-[11px] text-slate-500">{todaysArrivals.length} expected</p>
+        {alerts.length > 0 && (
+          <Card className="min-w-0">
+            <CardHeader
+              title="Needs attention"
+              subtitle={`${alerts.length} item${alerts.length === 1 ? "" : "s"} to review`}
+              action={
+                <Link
+                  href="/frontoffice/day-closing"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 hover:underline"
+                >
+                  <Bell className="h-3.5 w-3.5 text-amber-600" />
+                  Day closing
+                </Link>
+              }
+            />
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {alerts.map((alert) => (
+                <Link
+                  key={alert.id}
+                  href={alert.href}
+                  className={cn(
+                    "block min-w-0 rounded-lg border p-3 transition hover:shadow-sm",
+                    alert.tone === "danger" && "border-red-200 bg-red-50 text-red-900",
+                    alert.tone === "warning" && "border-amber-200 bg-amber-50 text-amber-950",
+                    alert.tone === "info" && "border-emerald-200 bg-emerald-50 text-emerald-950",
+                  )}
+                >
+                  <p className="text-sm font-semibold leading-snug">{alert.title}</p>
+                  <p className="mt-0.5 truncate text-xs opacity-80">{alert.detail}</p>
+                </Link>
+              ))}
             </div>
-            <Link href="/frontoffice/reservation/check-in">
-              <Button type="button" size="sm" variant="outline">
-                Check-in
-              </Button>
-            </Link>
-          </div>
-          <ul className="flex flex-1 flex-col divide-y divide-slate-100">
-            {todaysArrivals.map((guest) => (
-              <li
-                key={guest.id}
-                className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">{guest.name}</p>
-                  <p className="truncate text-[11px] text-slate-500">
-                    {guest.bookingId} · Rm {guest.roomNo} · {guest.roomType}
-                  </p>
-                </div>
-                <StatusBadge status={guest.status} />
-              </li>
-            ))}
-          </ul>
-        </section>
+          </Card>
+        )}
 
-        <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Today&apos;s departures</h2>
-              <p className="text-[11px] text-slate-500">{todaysDepartures.length} scheduled</p>
-            </div>
-            <Link href="/frontoffice/reservation/check-out">
-              <Button type="button" size="sm" variant="outline">
-                Check-out
-              </Button>
-            </Link>
-          </div>
-          <ul className="flex flex-1 flex-col divide-y divide-slate-100">
-            {todaysDepartures.map((guest) => (
-              <li
-                key={guest.id}
-                className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">{guest.name}</p>
-                  <p className="truncate text-[11px] text-slate-500">
-                    {guest.bookingId} · Rm {guest.roomNo} · {guest.roomType}
-                  </p>
-                </div>
-                <StatusBadge status={guest.status} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
-
-      <div className="mt-3 grid gap-3 lg:grid-cols-3">
-        <section className="flex h-full flex-col rounded-xl border border-amber-200/80 bg-amber-50/40 p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Wake-up calls</h2>
-              <p className="text-[11px] text-slate-500">
-                {todayWakeUps.length > 0
-                  ? `${todayWakeUps.length} due today`
-                  : `${pendingWakeUps.length} upcoming`}
-              </p>
-            </div>
-            <Link
-              href="/frontoffice/wake-up-calls"
-              className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 hover:underline"
-            >
-              Manage
-              <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
-          <ul className="flex flex-1 flex-col space-y-1.5">
-            {(todayWakeUps.length > 0 ? todayWakeUps : pendingWakeUps).slice(0, 3).map((call) => (
-              <li
-                key={call.id}
-                className="rounded-lg border border-amber-100 bg-white px-2.5 py-1.5"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">
-                      {call.guest}
-                      <span className="font-normal text-slate-500"> · Rm {call.room}</span>
-                    </p>
-                    {call.notes && (
-                      <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-400">{call.notes}</p>
-                    )}
-                  </div>
-                  <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-amber-800">
-                    <Clock className="h-3 w-3" />
-                    {call.time}
+        <Card className="min-w-0">
+          <CardHeader title="Quick actions" subtitle="Front desk shortcuts" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
+            {quickLinks.map((link) => {
+              const Icon = link.icon;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/60 p-3 transition hover:border-emerald-300 hover:bg-emerald-50/60"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-emerald-700 ring-1 ring-slate-200">
+                    <Icon className="h-4 w-4" />
                   </span>
-                </div>
-              </li>
-            ))}
-            {pendingWakeUps.length === 0 && (
-              <li className="py-3 text-center text-sm text-slate-500">All clear</li>
-            )}
-          </ul>
-        </section>
+                  <span className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{link.label}</p>
+                    <p className="truncate text-xs text-slate-500">{link.hint}</p>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
 
-        <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Room inventory</h2>
-              <p className="text-[11px] text-slate-500">Live house status</p>
-            </div>
-            <Link
-              href="/frontoffice/room-status"
-              className="text-xs font-medium text-emerald-700 hover:underline"
-            >
-              Details
-            </Link>
-          </div>
-          <div className="mb-3 flex items-center gap-3">
-            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
-              <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
-                <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" strokeWidth="3" />
-                <circle
-                  cx="18"
-                  cy="18"
-                  r="15.5"
-                  fill="none"
-                  stroke="#15803d"
-                  strokeWidth="3"
-                  strokeDasharray={`${roomInventory.percentage} ${100 - roomInventory.percentage}`}
-                  strokeLinecap="round"
-                />
-              </svg>
-              <span className="absolute text-xs font-bold text-slate-900">
-                {roomInventory.percentage}%
-              </span>
-            </div>
-            <div>
-              <p className="text-base font-bold text-slate-900">
-                {roomInventory.occupied} / {roomInventory.total}
-              </p>
-              <p className="text-[11px] text-slate-500">rooms in use</p>
-            </div>
-          </div>
-          <div className="mt-auto space-y-1.5">
-            {roomInventory.statuses.map((status) => (
-              <div key={status.label}>
-                <div className="mb-0.5 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-600">{status.label}</span>
-                  <span className="font-medium text-slate-900">{status.count}</span>
-                </div>
-                <ProgressBar value={status.count} max={roomInventory.total} color={status.color} />
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
+          <Card className="flex h-full min-w-0 flex-col">
+            <CardHeader
+              title="Today's arrivals"
+              subtitle={`${todaysArrivals.length} expected`}
+              action={
+                <Link href="/frontoffice/reservation/check-in">
+                  <Button type="button" size="sm" variant="outline">
+                    Check-in
+                  </Button>
+                </Link>
+              }
+            />
+            <ul className="flex flex-1 flex-col divide-y divide-slate-100">
+              {todaysArrivals.map((guest) => (
+                <li
+                  key={guest.id}
+                  className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-900">{guest.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                      {guest.bookingId} · Rm {guest.roomNo} · {guest.roomType}
+                    </p>
+                  </div>
+                  <StatusBadge status={guest.status} />
+                </li>
+              ))}
+              {todaysArrivals.length === 0 && (
+                <li className="py-6 text-center text-sm text-slate-500">No arrivals today</li>
+              )}
+            </ul>
+          </Card>
+
+          <Card className="flex h-full min-w-0 flex-col">
+            <CardHeader
+              title="Today's departures"
+              subtitle={`${todaysDepartures.length} scheduled`}
+              action={
+                <Link href="/frontoffice/reservation/check-out">
+                  <Button type="button" size="sm" variant="outline">
+                    Check-out
+                  </Button>
+                </Link>
+              }
+            />
+            <ul className="flex flex-1 flex-col divide-y divide-slate-100">
+              {todaysDepartures.map((guest) => (
+                <li
+                  key={guest.id}
+                  className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-900">{guest.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                      {guest.bookingId} · Rm {guest.roomNo} · {guest.roomType}
+                    </p>
+                  </div>
+                  <StatusBadge status={guest.status} />
+                </li>
+              ))}
+              {todaysDepartures.length === 0 && (
+                <li className="py-6 text-center text-sm text-slate-500">No departures today</li>
+              )}
+            </ul>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 lg:gap-8">
+          <Card className="flex h-full min-w-0 flex-col border-amber-200/80 bg-amber-50/40">
+            <CardHeader
+              title="Wake-up calls"
+              subtitle={
+                todayWakeUps.length > 0
+                  ? `${todayWakeUps.length} due today`
+                  : `${pendingWakeUps.length} upcoming`
+              }
+              action={
+                <Link
+                  href="/frontoffice/wake-up-calls"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 hover:underline"
+                >
+                  Manage
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              }
+            />
+            <ul className="flex flex-1 flex-col space-y-2">
+              {(todayWakeUps.length > 0 ? todayWakeUps : pendingWakeUps).slice(0, 3).map((call) => (
+                <li
+                  key={call.id}
+                  className="rounded-lg border border-amber-100 bg-white p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900">
+                        {call.guest}
+                        <span className="font-normal text-slate-500"> · Rm {call.room}</span>
+                      </p>
+                      {call.notes && (
+                        <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{call.notes}</p>
+                      )}
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-800">
+                      <Clock className="h-3.5 w-3.5" />
+                      {call.time}
+                    </span>
+                  </div>
+                </li>
+              ))}
+              {pendingWakeUps.length === 0 && (
+                <li className="py-6 text-center text-sm text-slate-500">All clear</li>
+              )}
+            </ul>
+          </Card>
+
+          <Card className="flex h-full min-w-0 flex-col">
+            <CardHeader
+              title="Room inventory"
+              subtitle="Live house status"
+              action={
+                <Link
+                  href="/frontoffice/room-status"
+                  className="text-xs font-medium text-emerald-700 hover:underline"
+                >
+                  Details
+                </Link>
+              }
+            />
+            <div className="mb-4 flex items-center gap-3">
+              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
+                <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" strokeWidth="3" />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15.5"
+                    fill="none"
+                    stroke="#15803d"
+                    strokeWidth="3"
+                    strokeDasharray={`${roomInventory.percentage} ${100 - roomInventory.percentage}`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute text-sm font-bold text-slate-900">
+                  {roomInventory.percentage}%
+                </span>
               </div>
-            ))}
-          </div>
-        </section>
+              <div className="min-w-0">
+                <p className="text-2xl font-bold tracking-tight text-slate-900">
+                  {roomInventory.occupied} / {roomInventory.total}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">rooms in use</p>
+              </div>
+            </div>
+            <div className="mt-auto space-y-2">
+              {roomInventory.statuses.map((status) => (
+                <div key={status.label}>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="text-slate-600">{status.label}</span>
+                    <span className="font-medium text-slate-900">{status.count}</span>
+                  </div>
+                  <ProgressBar value={status.count} max={roomInventory.total} color={status.color} />
+                </div>
+              ))}
+            </div>
+          </Card>
 
-        <DeskActivityFeed activities={deskActivity} />
-      </div>
+          <DeskActivityFeed activities={deskActivity} />
+        </div>
 
-      <div className="mt-3 grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
-        <WeeklyFlowChart data={weeklyFlow} />
-        <BookingSourcesChart data={bookingSources} />
+        <div className="grid grid-cols-1 items-stretch gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
+          <WeeklyFlowChart data={weeklyFlow} />
+          <BookingSourcesChart data={bookingSources} />
+        </div>
       </div>
     </ModulePageShell>
   );

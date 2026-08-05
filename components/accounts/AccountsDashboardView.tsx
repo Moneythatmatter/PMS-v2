@@ -11,14 +11,11 @@ import {
   FileText,
   Layers,
   Bell,
-  CreditCard,
-  PieChart as PieChartIcon,
-  BarChart3,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { StatMiniCard } from "@/components/frontoffice/ui";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Button } from "@/components/ui/Button";
+import { Card, CardHeader } from "@/components/ui/Card";
 import { DeskActivityFeed } from "@/components/frontoffice/DeskActivityFeed";
 import { DepartmentRevenueChart } from "@/components/charts/DepartmentRevenueChart";
 import { BookingPlatformRevenueChart } from "@/components/charts/BookingPlatformRevenueChart";
@@ -219,6 +216,37 @@ const activityLogs = [
   { id: "5", message: "Party master updated for Grand Event Corp", timestamp: "4 hrs ago" },
 ];
 
+const summaryStats = [
+  {
+    label: "Total Revenue",
+    value: "₹148,250.00",
+    accent: "#15803d",
+    icon: TrendingUp,
+    sublabel: "+12.4% vs last month",
+  },
+  {
+    label: "Accounts Receivable",
+    value: "₹34,120.00",
+    accent: "#d97706",
+    icon: Users,
+    sublabel: "18 receivables pending",
+  },
+  {
+    label: "Accounts Payable",
+    value: "₹25,500.00",
+    accent: "#0284c7",
+    icon: Wallet,
+    sublabel: "5 vendor payables due",
+  },
+  {
+    label: "Net Margin (P&L)",
+    value: "₹42,600.00",
+    accent: "#059669",
+    icon: Scale,
+    sublabel: "28.7% net margin",
+  },
+];
+
 export function AccountsDashboardView() {
   return (
     <ModulePageShell
@@ -227,258 +255,245 @@ export function AccountsDashboardView() {
       description="Real-time financial overview, departmental revenue analytics, booking channel mix, vendor payments schedule, and ledger summaries."
       wrapChildren={false}
     >
-      {/* Mini Stats Row */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatMiniCard
-          label="Total Revenue"
-          value="₹148,250.00"
-          accent="#15803d"
-          icon={TrendingUp}
-          sublabel="+12.4% vs last month"
-        />
-        <StatMiniCard
-          label="Accounts Receivable"
-          value="₹34,120.00"
-          accent="#d97706"
-          icon={Users}
-          sublabel="18 receivables pending"
-        />
-        <StatMiniCard
-          label="Accounts Payable"
-          value="₹25,500.00"
-          accent="#0284c7"
-          icon={Wallet}
-          sublabel="5 vendor payables due"
-        />
-        <StatMiniCard
-          label="Net Margin (P&L)"
-          value="₹42,600.00"
-          accent="#059669"
-          icon={Scale}
-          sublabel="28.7% net margin"
-        />
-      </div>
-
-      {/* Needs Attention Section */}
-      {alerts.length > 0 && (
-        <section className="mt-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Bell className="h-3.5 w-3.5 text-amber-600" />
-              <h2 className="text-sm font-semibold text-slate-900">Needs attention</h2>
-              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                {alerts.length}
-              </span>
-            </div>
-            <Link
-              href="/accounts/transactions/provisional-transactions"
-              className="text-xs font-medium text-emerald-700 hover:underline"
-            >
-              Provisional approvals
-            </Link>
-          </div>
-          <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
-            {alerts.map((alert) => (
-              <Link
-                key={alert.id}
-                href={alert.href}
-                className={cn(
-                  "rounded-lg border px-2.5 py-2 transition hover:shadow-sm",
-                  alert.tone === "danger" && "border-red-200 bg-red-50 text-red-900",
-                  alert.tone === "warning" && "border-amber-200 bg-amber-50 text-amber-950",
-                  alert.tone === "info" && "border-emerald-200 bg-emerald-50 text-emerald-950",
-                )}
-              >
-                <p className="text-xs font-semibold leading-snug">{alert.title}</p>
-                <p className="mt-0.5 truncate text-[11px] opacity-80">{alert.detail}</p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Quick Actions Shortcuts */}
-      <section className="mt-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="mb-2 flex items-baseline justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-900">Quick actions</h2>
-          <p className="text-[11px] text-slate-500">Accounts shortcuts</p>
-        </div>
-        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 xl:grid-cols-8">
-          {quickLinks.map((link) => {
-            const Icon = link.icon;
+      <div className="min-w-0 space-y-4 sm:space-y-6 lg:space-y-8">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6">
+          {summaryStats.map((stat) => {
+            const Icon = stat.icon;
             return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-2.5 py-2 transition hover:border-emerald-300 hover:bg-emerald-50/60"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-emerald-700 ring-1 ring-slate-200">
-                  <Icon className="h-3.5 w-3.5" />
-                </span>
-                <span className="min-w-0">
-                  <p className="truncate text-xs font-semibold text-slate-900">{link.label}</p>
-                  <p className="truncate text-[10px] text-slate-500">{link.hint}</p>
-                </span>
-              </Link>
+              <Card key={stat.label} className="h-full min-w-0 p-3 sm:p-5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+                    {stat.label}
+                  </p>
+                  <span
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:h-8 sm:w-8"
+                    style={{ backgroundColor: `${stat.accent}20`, color: stat.accent }}
+                  >
+                    <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </span>
+                </div>
+                <p className="mt-1.5 truncate text-lg font-bold tracking-tight text-slate-900 sm:mt-2 sm:text-2xl">
+                  {stat.value}
+                </p>
+                {stat.sublabel && (
+                  <p className="mt-0.5 truncate text-[11px] text-slate-500 sm:text-xs">
+                    {stat.sublabel}
+                  </p>
+                )}
+              </Card>
             );
           })}
         </div>
-      </section>
 
-      {/* Revenue Analytics Row: Departmental Revenue & Booking Platform Revenue Graphs */}
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <DepartmentRevenueChart
-          title="Departmental Revenue Distribution"
-          subtitle="Revenue contributed by operational module"
-        />
-        <BookingPlatformRevenueChart
-          title="Booking Platform Revenue"
-          subtitle="Revenue contribution by reservation channel"
-        />
-      </div>
-
-      {/* Vendor Payments & GL Vouchers Section */}
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        {/* Upcoming Vendor Payments */}
-        <UpcomingVendorPayments />
-
-        {/* Recent GL Transactions */}
-        <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Recent GL Vouchers</h2>
-              <p className="text-[11px] text-slate-500">{recentTransactions.length} latest entries</p>
+        {alerts.length > 0 && (
+          <Card className="min-w-0">
+            <CardHeader
+              title="Needs attention"
+              subtitle={`${alerts.length} item${alerts.length === 1 ? "" : "s"} to review`}
+              action={
+                <Link
+                  href="/accounts/transactions/provisional-transactions"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 hover:underline"
+                >
+                  <Bell className="h-3.5 w-3.5 text-amber-600" />
+                  Provisional approvals
+                </Link>
+              }
+            />
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {alerts.map((alert) => (
+                <Link
+                  key={alert.id}
+                  href={alert.href}
+                  className={cn(
+                    "block min-w-0 rounded-lg border p-3 transition hover:shadow-sm",
+                    alert.tone === "danger" && "border-red-200 bg-red-50 text-red-900",
+                    alert.tone === "warning" && "border-amber-200 bg-amber-50 text-amber-950",
+                    alert.tone === "info" && "border-emerald-200 bg-emerald-50 text-emerald-950",
+                  )}
+                >
+                  <p className="text-sm font-semibold leading-snug">{alert.title}</p>
+                  <p className="mt-0.5 truncate text-xs opacity-80">{alert.detail}</p>
+                </Link>
+              ))}
             </div>
-            <Link href="/accounts/transactions/gl-transaction">
-              <Button type="button" size="sm" variant="outline">
-                View all
-              </Button>
-            </Link>
-          </div>
-          <ul className="flex flex-1 flex-col divide-y divide-slate-100">
-            {recentTransactions.map((trx) => (
-              <li
-                key={trx.id}
-                className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">
-                    {trx.id} <span className="font-normal text-slate-500">· {trx.type}</span>
-                  </p>
-                  <p className="truncate text-[11px] text-slate-500">{trx.account}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs font-bold text-slate-900">₹{trx.amount}</span>
-                  <span
-                    className={cn(
-                      "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
-                      trx.statusTone === "emerald" && "bg-emerald-50 text-emerald-700 ring-emerald-200",
-                      trx.statusTone === "amber" && "bg-amber-50 text-amber-700 ring-amber-200",
-                      trx.statusTone === "red" && "bg-red-50 text-red-700 ring-red-200",
-                    )}
-                  >
-                    {trx.status}
+          </Card>
+        )}
+
+        <Card className="min-w-0">
+          <CardHeader title="Quick actions" subtitle="Accounts shortcuts" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
+            {quickLinks.map((link) => {
+              const Icon = link.icon;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/60 p-3 transition hover:border-emerald-300 hover:bg-emerald-50/60"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-emerald-700 ring-1 ring-slate-200">
+                    <Icon className="h-4 w-4" />
                   </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
-
-      {/* Bottom 3 Cards Grid */}
-      <div className="mt-3 grid gap-3 lg:grid-cols-3">
-        {/* Top Party Outstanding */}
-        <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Party Outstanding</h2>
-              <p className="text-[11px] text-slate-500">Top aging balances</p>
-            </div>
-            <Link href="/accounts/party-outstanding/bills-aging">
-              <Button type="button" size="sm" variant="outline">
-                Aging Report
-              </Button>
-            </Link>
-          </div>
-          <ul className="flex flex-1 flex-col divide-y divide-slate-100">
-            {partyOutstanding.map((party) => (
-              <li
-                key={party.name}
-                className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">{party.name}</p>
-                  <p className="truncate text-[11px] text-slate-500">
-                    {party.category} · Due: {party.dueDate}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs font-bold text-slate-900">₹{party.amount}</span>
-                  <span
-                    className={cn(
-                      "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
-                      party.statusTone === "emerald" && "bg-emerald-50 text-emerald-700 ring-emerald-200",
-                      party.statusTone === "amber" && "bg-amber-50 text-amber-700 ring-amber-200",
-                      party.statusTone === "red" && "bg-red-50 text-red-700 ring-red-200",
-                    )}
-                  >
-                    {party.status}
+                  <span className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{link.label}</p>
+                    <p className="truncate text-xs text-slate-500">{link.hint}</p>
                   </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
 
-        {/* Cash & Bank Balances */}
-        <section className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Treasury & Bank Balances</h2>
-              <p className="text-[11px] text-slate-500">Liquid assets</p>
-            </div>
-            <Link href="/accounts/masters/currency" className="text-xs font-medium text-emerald-700 hover:underline">
-              Details
-            </Link>
-          </div>
-          <div className="mb-3 flex items-center gap-3">
-            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
-              <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
-                <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" strokeWidth="3" />
-                <circle
-                  cx="18"
-                  cy="18"
-                  r="15.5"
-                  fill="none"
-                  stroke="#15803d"
-                  strokeWidth="3"
-                  strokeDasharray="85 15"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <span className="absolute text-[11px] font-bold text-slate-900">85k</span>
-            </div>
-            <div>
-              <p className="text-base font-bold text-slate-900">₹85,400.00</p>
-              <p className="text-[11px] text-slate-500">Total liquid balance</p>
-            </div>
-          </div>
-          <div className="mt-auto space-y-2">
-            {treasuryAccounts.map((acc) => (
-              <div key={acc.label}>
-                <div className="mb-0.5 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-600">{acc.label}</span>
-                  <span className="font-semibold text-slate-900">₹{acc.amount}</span>
-                </div>
-                <ProgressBar value={acc.percent} max={100} color={acc.color} />
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
+          <DepartmentRevenueChart
+            title="Departmental Revenue Distribution"
+            subtitle="Revenue contributed by operational module"
+          />
+          <BookingPlatformRevenueChart
+            title="Booking Platform Revenue"
+            subtitle="Revenue contribution by reservation channel"
+          />
+        </div>
+
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
+          <UpcomingVendorPayments />
+
+          <Card className="flex h-full min-w-0 flex-col">
+            <CardHeader
+              title="Recent GL Vouchers"
+              subtitle={`${recentTransactions.length} latest entries`}
+              action={
+                <Link href="/accounts/transactions/gl-transaction">
+                  <Button type="button" size="sm" variant="outline">
+                    View all
+                  </Button>
+                </Link>
+              }
+            />
+            <ul className="flex flex-1 flex-col divide-y divide-slate-100">
+              {recentTransactions.map((trx) => (
+                <li
+                  key={trx.id}
+                  className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-900">
+                      {trx.id} <span className="font-normal text-slate-500">· {trx.type}</span>
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{trx.account}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">₹{trx.amount}</span>
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset",
+                        trx.statusTone === "emerald" && "bg-emerald-50 text-emerald-700 ring-emerald-200",
+                        trx.statusTone === "amber" && "bg-amber-50 text-amber-700 ring-amber-200",
+                        trx.statusTone === "red" && "bg-red-50 text-red-700 ring-red-200",
+                      )}
+                    >
+                      {trx.status}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 lg:gap-8">
+          <Card className="flex h-full min-w-0 flex-col">
+            <CardHeader
+              title="Party Outstanding"
+              subtitle="Top aging balances"
+              action={
+                <Link href="/accounts/party-outstanding/bills-aging">
+                  <Button type="button" size="sm" variant="outline">
+                    Aging Report
+                  </Button>
+                </Link>
+              }
+            />
+            <ul className="flex flex-1 flex-col divide-y divide-slate-100">
+              {partyOutstanding.map((party) => (
+                <li
+                  key={party.name}
+                  className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-900">{party.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                      {party.category} · Due: {party.dueDate}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">₹{party.amount}</span>
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset",
+                        party.statusTone === "emerald" && "bg-emerald-50 text-emerald-700 ring-emerald-200",
+                        party.statusTone === "amber" && "bg-amber-50 text-amber-700 ring-amber-200",
+                        party.statusTone === "red" && "bg-red-50 text-red-700 ring-red-200",
+                      )}
+                    >
+                      {party.status}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card className="flex h-full min-w-0 flex-col">
+            <CardHeader
+              title="Treasury & Bank Balances"
+              subtitle="Liquid assets"
+              action={
+                <Link
+                  href="/accounts/masters/currency"
+                  className="text-xs font-medium text-emerald-700 hover:underline"
+                >
+                  Details
+                </Link>
+              }
+            />
+            <div className="mb-4 flex items-center gap-3">
+              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
+                <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" strokeWidth="3" />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15.5"
+                    fill="none"
+                    stroke="#15803d"
+                    strokeWidth="3"
+                    strokeDasharray="85 15"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute text-sm font-bold text-slate-900">85k</span>
               </div>
-            ))}
-          </div>
-        </section>
+              <div className="min-w-0">
+                <p className="text-2xl font-bold tracking-tight text-slate-900">₹85,400.00</p>
+                <p className="mt-0.5 text-xs text-slate-500">Total liquid balance</p>
+              </div>
+            </div>
+            <div className="mt-auto space-y-2">
+              {treasuryAccounts.map((acc) => (
+                <div key={acc.label}>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="text-slate-600">{acc.label}</span>
+                    <span className="font-medium text-slate-900">₹{acc.amount}</span>
+                  </div>
+                  <ProgressBar value={acc.percent} max={100} color={acc.color} />
+                </div>
+              ))}
+            </div>
+          </Card>
 
-        {/* Accounts Activity Feed */}
-        <DeskActivityFeed activities={activityLogs} />
+          <DeskActivityFeed activities={activityLogs} />
+        </div>
       </div>
     </ModulePageShell>
   );
