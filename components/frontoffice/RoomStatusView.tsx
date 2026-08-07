@@ -22,7 +22,8 @@ const statusConfig: Record<
   { card: string; dot: string; icon?: React.ComponentType<{ className?: string }> }
 > = {
   Vacant: { card: "border-emerald-200 bg-emerald-50/80", dot: "bg-emerald-500" },
-  Occupied: { card: "border-emerald-200 bg-emerald-50/80", dot: "bg-emerald-500" },
+  Reserved: { card: "border-sky-200 bg-sky-50/80", dot: "bg-sky-500" },
+  Occupied: { card: "border-violet-200 bg-violet-50/80", dot: "bg-violet-500" },
   Dirty: { card: "border-amber-200 bg-amber-50/80", dot: "bg-amber-500" },
   Clean: { card: "border-teal-200 bg-teal-50/80", dot: "bg-teal-500" },
   Maintenance: { card: "border-orange-200 bg-orange-50/80", dot: "bg-orange-500", icon: Wrench },
@@ -84,6 +85,7 @@ export function RoomStatusView() {
     () => ({
       total: rooms.length,
       occupied: rooms.filter((r) => r.status === "Occupied").length,
+      reserved: rooms.filter((r) => r.status === "Reserved").length,
       vacant: rooms.filter((r) => r.status === "Vacant").length,
       dirty: rooms.filter((r) => r.housekeeping === "Dirty" || r.status === "Dirty").length,
       maintenance: rooms.filter((r) => r.status === "Maintenance").length,
@@ -153,9 +155,10 @@ export function RoomStatusView() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatMiniCard label="Total Rooms" value={stats.total} icon={Building2} />
-        <StatMiniCard label="Occupied" value={stats.occupied} accent="#16a34a" icon={BedDouble} />
+        <StatMiniCard label="Occupied" value={stats.occupied} accent="#7c3aed" icon={BedDouble} />
+        <StatMiniCard label="Reserved" value={stats.reserved} accent="#0284c7" icon={BedDouble} />
         <StatMiniCard label="Vacant" value={stats.vacant} accent="#22c55e" icon={BedDouble} />
         <StatMiniCard label="Dirty / HK" value={stats.dirty} accent="#f59e0b" icon={Sparkles} />
         <StatMiniCard label="Maintenance" value={stats.maintenance} accent="#f97316" icon={Wrench} />

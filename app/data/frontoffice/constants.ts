@@ -39,6 +39,7 @@ export const reservationStatuses = [
 
 export const roomStatuses = [
   "Vacant",
+  "Reserved",
   "Occupied",
   "Dirty",
   "Clean",

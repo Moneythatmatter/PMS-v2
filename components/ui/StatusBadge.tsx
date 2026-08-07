@@ -61,6 +61,7 @@ const statusToneMap: Record<string, BadgeTone> = {
   // Info
   "Checked Out": "info",
   Occupied: "info",
+  Reserved: "info",
   Vacant: "info",
   Info: "info",
 

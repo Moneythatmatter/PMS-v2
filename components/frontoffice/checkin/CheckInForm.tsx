@@ -169,7 +169,8 @@ export function CheckInForm() {
         if (cancelled) return;
         setPmsBookings(bookings);
 
-        // Same source/rules as Room Status: only Vacant rooms are assignable
+        // Same source/rules as Room Status: only Vacant rooms are newly assignable.
+        // Pre-assigned room for this booking is kept via availableRoomNumbers.
         const assignable = roomCards
           .filter((r) => String(r.status || "").trim().toLowerCase() === "vacant")
           .map((r) => ({
