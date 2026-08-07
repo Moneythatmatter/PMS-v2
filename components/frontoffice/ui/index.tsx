@@ -214,7 +214,8 @@ interface FormFieldProps {
   children: React.ReactNode;
   required?: boolean;
   className?: string;
-  error?: string;
+  error?: string | boolean;
+  helperText?: string;
 }
 
 export function FormField({
@@ -223,6 +224,7 @@ export function FormField({
   required,
   className,
   error,
+  helperText,
 }: FormFieldProps) {
   return (
     <label className={cn("block space-y-1.5", className)}>
@@ -231,7 +233,13 @@ export function FormField({
         {required && <span className="text-red-500"> *</span>}
       </span>
       {children}
-      {error && <p className="mt-1 text-xs font-medium text-red-500">{error}</p>}
+      {error ? (
+        <p className="mt-1 text-xs font-medium text-red-500">
+          {typeof error === "string" ? error : "Required"}
+        </p>
+      ) : helperText ? (
+        <p className="mt-1 text-xs text-slate-400 font-normal">{helperText}</p>
+      ) : null}
     </label>
   );
 }

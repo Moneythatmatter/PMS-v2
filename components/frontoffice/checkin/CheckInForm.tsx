@@ -148,6 +148,7 @@ export function CheckInForm() {
     idNumber: "",
   });
   const [identityErrors, setIdentityErrors] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
   const [completed, setCompleted] = useState(false);
@@ -737,7 +738,7 @@ export function CheckInForm() {
                       }
                     }}
                     idFile={idFile}
-                    errors={errors}
+                    errors={identityErrors}
                   />
                 </SectionCard>
 
@@ -928,7 +929,7 @@ export function CheckInForm() {
                 }
               }}
               idFile={idFile}
-              errors={errors}
+              errors={identityErrors}
             />
           </SectionCard>
 

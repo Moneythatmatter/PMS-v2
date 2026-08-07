@@ -20,6 +20,7 @@ interface FOSearchToolbarProps {
   hasActiveAdvancedFilters?: boolean;
   onClearAdvancedFilters?: () => void;
   selectionBar?: React.ReactNode;
+  showFiltersButton?: boolean;
 }
 
 export function FOSearchToolbar({
@@ -32,9 +33,10 @@ export function FOSearchToolbar({
   hasActiveAdvancedFilters = false,
   onClearAdvancedFilters,
   selectionBar,
+  showFiltersButton,
 }: FOSearchToolbarProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const showFiltersButton = !!advancedFilters;
+  const showFilters = showFiltersButton ?? !!advancedFilters;
 
   return (
     <div className="space-y-3">
@@ -46,11 +48,11 @@ export function FOSearchToolbar({
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder}
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            className="h-10 w-full rounded-full border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
           />
         </div>
         {beforeFilters}
-        {showFiltersButton && (
+        {showFilters && (
           <Button
             type="button"
             variant="outline"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Plus, Search } from "lucide-react";
 import type { Booking } from "@/app/data/types";
 import { Card } from "@/components/ui/Card";
@@ -30,10 +31,12 @@ export function BookingList({ bookings }: BookingListProps) {
             Recent and upcoming bookings
           </p>
         </div>
-        <Button size="sm" className="w-full shrink-0 gap-1.5 sm:w-auto">
-          <Plus className="h-3.5 w-3.5" />
-          New Booking
-        </Button>
+        <Link href="/frontoffice/reservation/new" className="w-full sm:w-auto">
+          <Button size="sm" className="w-full shrink-0 gap-1.5 sm:w-auto">
+            <Plus className="h-3.5 w-3.5" />
+            New Booking
+          </Button>
+        </Link>
       </div>
       <div className="mb-4">
         <div className="relative w-full sm:max-w-xs">
