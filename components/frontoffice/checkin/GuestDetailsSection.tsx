@@ -37,7 +37,7 @@ interface GuestDetailsSectionProps {
   onChange: (key: string, value: string) => void;
   onFileUpload?: (filename: string) => void;
   idFile?: string;
-  errors?: Record<string, boolean>;
+  errors?: Record<string, boolean | string>;
 }
 
 export function GuestDetailsSection({
