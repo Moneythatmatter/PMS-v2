@@ -48,7 +48,7 @@ export function TopNav({ items }: TopNavProps) {
             key={item.label}
             href={item.href}
             className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-3 sm:text-sm",
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-3 sm:text-sm",
               isActive
                 ? "bg-emerald-700 text-white"
                 : "text-neutral-300 hover:bg-white/10 hover:text-white",

@@ -174,14 +174,14 @@ export function FbOrdersView() {
       onDismissToast={() => setToast(null)}
       wrapChildren={false}
       beforeFilters={
-        <div className="flex w-full flex-col gap-1.5 sm:w-auto">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <FbOutletSelect outlets={outlets} value={outletId} onChange={setOutletId} />
-          <div className="flex h-9 overflow-hidden rounded-lg border border-slate-200 bg-white p-0.5">
+          <div className="flex h-10 overflow-hidden rounded-lg border border-slate-200 bg-white p-0.5">
             <button
               type="button"
               onClick={() => setViewMode("board")}
               className={cn(
-                "inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition",
+                "inline-flex items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium transition",
                 viewMode === "board"
                   ? "bg-emerald-700 text-white shadow-sm"
                   : "text-slate-600 hover:bg-slate-50",
@@ -194,7 +194,7 @@ export function FbOrdersView() {
               type="button"
               onClick={() => setViewMode("list")}
               className={cn(
-                "inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition",
+                "inline-flex items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium transition",
                 viewMode === "list"
                   ? "bg-emerald-700 text-white shadow-sm"
                   : "text-slate-600 hover:bg-slate-50",
