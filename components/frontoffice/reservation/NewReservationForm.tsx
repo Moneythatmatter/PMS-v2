@@ -312,22 +312,6 @@ export function NewReservationForm() {
             })),
           );
         }
-        for (const rp of tariffPlansData) {
-          if (rp.code) planRates[rp.code] = rp.baseRate || 0;
-          if (rp.name) planRates[rp.name] = rp.baseRate || 0;
-        }
-        setTariffByPlanMap(planRates);
-
-        const activeSources = sourcesData.filter((s) => s.status === "Active");
-        if (activeSources.length > 0) {
-          setSourceOptions(
-            activeSources.map((s) => ({
-              id: s.name,
-              label: s.name,
-              hint: s.code,
-            })),
-          );
-        }
       } catch {
         if (!cancelled) {
           setAvailableRoomNos([]);
@@ -823,7 +807,15 @@ export function NewReservationForm() {
               </FormField>
               <FormField label="Tariff Plan">
                 <SearchSelect
-                  options={tariffPlanOptions}
+                  options={
+                    tariffPlanOptions.length > 0
+                      ? tariffPlanOptions
+                      : tariffPlans.map((p) => ({
+                        id: p,
+                        label: p,
+                        hint: `${formatINR(tariffByPlanMap[p] ?? 0)}/night`,
+                      }))
+                  }
                   selectedId={form.tariffPlan || null}
                   placeholder="Search tariff plan…"
                   inputClassName={inputClass}
@@ -834,15 +826,6 @@ export function NewReservationForm() {
                       update("mealPlan", selected.mealPlan);
                     }
                   }}
-                  options={tariffPlans.map((p) => ({
-                    id: p,
-                    label: p,
-                    hint: `${formatINR(tariffByPlanMap[p] ?? 0)}/night`,
-                  }))}
-                  selectedId={form.tariffPlan || null}
-                  placeholder="Search tariff plan…"
-                  inputClassName={inputClass}
-                  onSelect={(opt) => update("tariffPlan", opt.id)}
                   onClear={() => update("tariffPlan", "")}
                 />
               </FormField>

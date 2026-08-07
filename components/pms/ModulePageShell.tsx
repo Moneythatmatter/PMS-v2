@@ -52,6 +52,7 @@ interface ModulePageShellProps {
   contextSelector?: React.ReactNode;
   /** Rendered in the toolbar row before the Filters button */
   beforeFilters?: React.ReactNode;
+  showFiltersButton?: boolean;
   aboveTable?: React.ReactNode;
   children: React.ReactNode;
   wrapChildren?: boolean;
@@ -80,12 +81,14 @@ export function ModulePageShell({
   selectionBar,
   contextSelector,
   beforeFilters,
+  showFiltersButton,
   aboveTable,
   children,
   wrapChildren = true,
 }: ModulePageShellProps) {
+  const hasFilterControls = !!sort || !!advancedFilters;
   const builtAdvancedFilters =
-    sort || resultCount ? (
+    hasFilterControls || (showFiltersButton && (sort || resultCount || advancedFilters)) ? (
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {sort && (
           <FormField label="Sort By">
@@ -181,6 +184,7 @@ export function ModulePageShell({
           hasActiveAdvancedFilters={hasActiveAdvancedFilters}
           onClearAdvancedFilters={onClearAdvancedFilters}
           selectionBar={selectionBar}
+          showFiltersButton={showFiltersButton}
         />
       )}
 
