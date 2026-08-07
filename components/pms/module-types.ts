@@ -69,6 +69,10 @@ export interface ModuleListDefinition {
   filterKeys?: string[];
   /** Optional API-backed CRUD. When set, Add/Edit/Delete persist via these handlers. */
   crud?: ModuleCrudHandlers;
+  /** Physical tables for Merge/Split when this page is not the Tables list. */
+  tableInventory?: ModuleRow[];
+  /** Persist merge/split against the tables API. */
+  tableCrud?: ModuleCrudHandlers;
 }
 
 export interface ModuleCrudHandlers {
@@ -94,6 +98,8 @@ export const DEFAULT_STATUS_CLASSES: Record<string, string> = {
   Settled: "bg-emerald-50 text-emerald-700",
   Closed: "bg-slate-100 text-slate-600",
   Active: "bg-emerald-50 text-emerald-700",
+  Inactive: "bg-slate-100 text-slate-600",
+  Booked: "bg-sky-50 text-sky-700",
   Draft: "bg-slate-100 text-slate-600",
   Approved: "bg-emerald-50 text-emerald-700",
   Issued: "bg-emerald-50 text-emerald-800",

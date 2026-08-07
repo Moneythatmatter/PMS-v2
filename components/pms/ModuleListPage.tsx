@@ -75,13 +75,21 @@ function classifyAction(label: string): ActionKind {
 }
 
 function editableColumns(columns: ModuleColumn[]) {
-  return columns.filter((c) => c.key !== "id" && c.key !== "outletId");
+  return columns.filter((c) => c.key !== "id");
 }
 
 function blankForm(columns: ModuleColumn[]): Record<string, string> {
   const form: Record<string, string> = {};
   for (const col of editableColumns(columns)) {
-    form[col.key] = col.key === "status" ? "Available" : "";
+    if (col.inputType === "select" || (col.options && col.options.length > 0)) {
+      const first = col.options?.[0];
+      form[col.key] =
+        typeof first === "string" ? first : first?.value ?? (col.key === "status" ? "Available" : "");
+    } else if (col.key === "status") {
+      form[col.key] = "Available";
+    } else {
+      form[col.key] = "";
+    }
   }
   return form;
 }
@@ -221,6 +229,31 @@ export function ModuleListPage({
   );
   const scopedTotal = scopedRows.length;
 
+  const tableOpsRows = useMemo(() => {
+    const inventory = definition.tableInventory;
+    const source =
+      inventory && inventory.length > 0
+        ? inventory
+        : scopedRows.filter((r) => r.tableNo !== undefined);
+    return source.filter(
+      (r) => !showOutlet || !r.outletId || r.outletId === outletId,
+    );
+  }, [definition.tableInventory, scopedRows, showOutlet, outletId]);
+
+  const tableNoInUseMessage = useMemo(() => {
+    const typed = String(form.tableNo ?? "").trim().toLowerCase();
+    if (!typed) return null;
+    const formOutlet = String(form.outletId ?? outletId ?? "").trim();
+    const taken = rows.some((r) => {
+      if (editingRow && r.id === editingRow.id) return false;
+      const sameNo = String(r.tableNo ?? "").trim().toLowerCase() === typed;
+      if (!sameNo) return false;
+      if (!formOutlet) return true;
+      return !r.outletId || String(r.outletId) === formOutlet;
+    });
+    return taken ? "This table number is already used for the selected outlet." : null;
+  }, [form.tableNo, form.outletId, outletId, rows, editingRow]);
+
   const liveStats = useMemo(() => {
     // Recompute common status-style stats for the selected outlet scope
     const byStatus = (status: string) =>
@@ -253,7 +286,11 @@ export function ModuleListPage({
     setEditingRow(null);
     setActionLabel(label);
     setFormError(null);
-    setForm(blankForm(definition.columns));
+    const next = blankForm(definition.columns);
+    if (showOutlet && outletId) {
+      next.outletId = outletId;
+    }
+    setForm(next);
     setSelectA("");
     setSelectB("");
   };
@@ -279,15 +316,18 @@ export function ModuleListPage({
   };
 
   const buildRowFromForm = (base?: ModuleRow): ModuleRow => {
-    const nextId =
-      base?.id ??
-      `${definition.title.slice(0, 1).toUpperCase()}-${Date.now().toString().slice(-5)}`;
+    const nextId = base?.id ?? crypto.randomUUID();
+    const formOutletId = String(form.outletId ?? "").trim();
     const newRow: ModuleRow = {
       id: nextId,
-      outletId: base?.outletId ?? (showOutlet ? outletId : undefined),
+      outletId:
+        formOutletId ||
+        base?.outletId ||
+        (showOutlet ? outletId : undefined),
     };
 
     for (const col of editableColumns(definition.columns)) {
+      if (col.key === "outletId") continue;
       const raw = form[col.key]?.trim() ?? "";
       const isCurrency =
         col.inputType === "currency" || col.format === "currency" || col.key === "sales";
@@ -307,6 +347,13 @@ export function ModuleListPage({
         newRow[col.key] = raw || (col.key === "status" ? "Active" : "—");
       }
     }
+
+    // Keep section non-null for older DB rows; store outlet name when available
+    if (newRow.section === undefined || newRow.section === "—") {
+      const outletName = outlets.find((o) => o.id === newRow.outletId)?.name;
+      newRow.section = outletName ?? "";
+    }
+
     return newRow;
   };
 
@@ -335,6 +382,25 @@ export function ModuleListPage({
         return;
       }
 
+      const isSelect =
+        col.inputType === "select" ||
+        col.key === "outletId" ||
+        (col.options !== undefined && col.options.length > 0);
+      if (isSelect && raw !== "" && col.key === "outletId" && outlets.length > 0) {
+        if (!outlets.some((o) => o.id === raw)) {
+          setFormError("Please select a valid outlet.");
+          return;
+        }
+      } else if (isSelect && raw !== "" && col.options?.length) {
+        const allowed = col.options.map((opt) =>
+          typeof opt === "string" ? opt : opt.value,
+        );
+        if (!allowed.includes(raw)) {
+          setFormError(`${col.header} must be one of: ${allowed.join(", ")}.`);
+          return;
+        }
+      }
+
       const isNumber =
         col.inputType === "number" ||
         col.inputType === "currency" ||
@@ -342,22 +408,38 @@ export function ModuleListPage({
         ["tables", "covers", "capacity", "count", "quantity"].includes(col.key);
 
       if (isNumber && raw !== "") {
-        const cleaned = col.inputType === "currency" || col.format === "currency" || col.key === "sales"
-          ? raw.replace(/[^\d.]/g, "")
-          : raw;
+        const isCurrency =
+          col.inputType === "currency" || col.format === "currency" || col.key === "sales";
+        const cleaned = isCurrency ? raw.replace(/[^\d.]/g, "") : raw;
         const num = Number(cleaned);
-        if (isNaN(num)) {
+        if (cleaned === "" || isNaN(num)) {
           setFormError(`${col.header} must be a valid number.`);
           return;
         }
-        if (num < 0) {
-          setFormError(`${col.header} cannot be negative.`);
+        if (!isCurrency && !/^\d+(\.\d+)?$/.test(cleaned.trim())) {
+          setFormError(`${col.header} must be a numeric value only.`);
+          return;
+        }
+        if (!isCurrency && col.step !== "any" && !Number.isInteger(num)) {
+          setFormError(`${col.header} must be a whole number.`);
+          return;
+        }
+        if (num < (col.min ?? 0)) {
+          setFormError(`${col.header} must be at least ${col.min ?? 0}.`);
+          return;
+        }
+        if (col.max !== undefined && num > col.max) {
+          setFormError(`${col.header} cannot exceed ${col.max}.`);
           return;
         }
       }
     }
 
     const payload = buildRowFromForm(editingRow ?? undefined);
+    if (tableNoInUseMessage) {
+      setFormError(tableNoInUseMessage);
+      return;
+    }
     setSaving(true);
     try {
       if (editingRow && definition.crud?.update) {
@@ -405,20 +487,20 @@ export function ModuleListPage({
     }
   };
 
-  const submitMerge = () => {
+  const submitMerge = async () => {
     setFormError(null);
     if (!selectA || !selectB || selectA === selectB) {
       setFormError("Select two different tables to merge.");
       return;
     }
-    const a = scopedRows.find((r) => r.id === selectA);
-    const b = scopedRows.find((r) => r.id === selectB);
+    const a = tableOpsRows.find((r) => r.id === selectA);
+    const b = tableOpsRows.find((r) => r.id === selectB);
     if (!a || !b) return;
 
     const mergedCapacity = Number(a.capacity ?? 0) + Number(b.capacity ?? 0);
     const merged: ModuleRow = {
       ...a,
-      id: `M-${Date.now().toString().slice(-5)}`,
+      id: crypto.randomUUID(),
       tableNo: `${a.tableNo}+${b.tableNo}`,
       capacity: mergedCapacity || a.capacity,
       shape: "Merged",
@@ -428,26 +510,41 @@ export function ModuleListPage({
       outletId: a.outletId ?? outletId,
     };
 
-    setRows((prev) => [
-      merged,
-      ...prev.filter((r) => r.id !== selectA && r.id !== selectB),
-    ]);
-    setActionLabel(null);
-    setFormError(null);
-    setToast(`Merged ${a.tableNo} + ${b.tableNo} into ${merged.tableNo}.`);
+    const persist = definition.tableCrud ?? definition.crud;
+    setSaving(true);
+    try {
+      if (persist?.create) await persist.create(merged);
+      if (persist?.remove) {
+        await persist.remove(selectA);
+        await persist.remove(selectB);
+      }
+      if (!definition.tableInventory) {
+        setRows((prev) => [
+          merged,
+          ...prev.filter((r) => r.id !== selectA && r.id !== selectB),
+        ]);
+      }
+      setActionLabel(null);
+      setFormError(null);
+      setToast(`Merged ${a.tableNo} + ${b.tableNo} into ${merged.tableNo}.`);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : "Merge failed");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const submitSplit = () => {
+  const submitSplit = async () => {
     setFormError(null);
     if (!selectA) {
       setFormError("Select a table to split.");
       return;
     }
-    const source = scopedRows.find((r) => r.id === selectA);
+    const source = tableOpsRows.find((r) => r.id === selectA);
     if (!source) return;
     const capacity = Number(source.capacity ?? 4);
     if (capacity < 4) {
-      setFormError("Only tables with capacity 4+ can be split in this demo.");
+      setFormError("Only tables with capacity 4+ can be split.");
       return;
     }
 
@@ -455,7 +552,7 @@ export function ModuleListPage({
     const base = String(source.tableNo ?? "T");
     const left: ModuleRow = {
       ...source,
-      id: `S-${Date.now().toString().slice(-5)}a`,
+      id: crypto.randomUUID(),
       tableNo: `${base}A`,
       capacity: half,
       shape: "Square",
@@ -464,7 +561,7 @@ export function ModuleListPage({
     };
     const right: ModuleRow = {
       ...source,
-      id: `S-${Date.now().toString().slice(-5)}b`,
+      id: crypto.randomUUID(),
       tableNo: `${base}B`,
       capacity: capacity - half,
       shape: "Square",
@@ -472,10 +569,25 @@ export function ModuleListPage({
       qr: "Pending",
     };
 
-    setRows((prev) => [left, right, ...prev.filter((r) => r.id !== selectA)]);
-    setActionLabel(null);
-    setFormError(null);
-    setToast(`Split ${source.tableNo} into ${left.tableNo} and ${right.tableNo}.`);
+    const persist = definition.tableCrud ?? definition.crud;
+    setSaving(true);
+    try {
+      if (persist?.create) {
+        await persist.create(left);
+        await persist.create(right);
+      }
+      if (persist?.remove) await persist.remove(selectA);
+      if (!definition.tableInventory) {
+        setRows((prev) => [left, right, ...prev.filter((r) => r.id !== selectA)]);
+      }
+      setActionLabel(null);
+      setFormError(null);
+      setToast(`Split ${source.tableNo} into ${left.tableNo} and ${right.tableNo}.`);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : "Split failed");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const markAllQrLinked = () => {
@@ -522,7 +634,7 @@ export function ModuleListPage({
   };
 
   const openNewShift = () => {
-    const nextId = `C-${Date.now().toString().slice(-4)}`;
+    const nextId = crypto.randomUUID();
     const shift: ModuleRow = {
       id: nextId,
       cashier: "Front Cashier",
@@ -843,6 +955,7 @@ export function ModuleListPage({
                 col.inputType === "select" ||
                 col.key === "status" ||
                 col.key === "type" ||
+                col.key === "outletId" ||
                 (col.options && col.options.length > 0);
 
               const isNumber =
@@ -856,7 +969,9 @@ export function ModuleListPage({
 
               let selectOptions: { value: string; label: string }[] = [];
               if (isSelect) {
-                if (col.options && col.options.length > 0) {
+                if (col.key === "outletId" && outlets.length > 0) {
+                  selectOptions = outlets.map((o) => ({ value: o.id, label: o.name }));
+                } else if (col.options && col.options.length > 0) {
                   selectOptions = col.options.map((opt) =>
                     typeof opt === "string" ? { value: opt, label: opt } : opt,
                   );
@@ -905,12 +1020,18 @@ export function ModuleListPage({
               const defaultValue = isSelect ? (selectOptions[0]?.value ?? "") : "";
               const currentValue = form[col.key] !== undefined ? form[col.key] : defaultValue;
 
+              const fieldError =
+                col.key === "tableNo" && tableNoInUseMessage
+                  ? tableNoInUseMessage
+                  : undefined;
+
               return (
                 <FormField
                   key={col.key}
                   label={col.header}
                   required={isRequired}
-                  helperText={helperText}
+                  error={fieldError}
+                  helperText={fieldError ? undefined : helperText}
                 >
                   {isSelect ? (
                     <SelectInput
@@ -918,6 +1039,7 @@ export function ModuleListPage({
                       onChange={(e) =>
                         setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
                       }
+                      className={fieldError ? "border-red-400 focus:border-red-500 focus:ring-red-400" : undefined}
                     >
                       {selectOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -929,12 +1051,24 @@ export function ModuleListPage({
                     <TextInput
                       type={isNumber ? "number" : "text"}
                       min={isNumber ? (col.min ?? 0) : undefined}
+                      max={isNumber ? col.max : undefined}
                       step={isNumber ? (col.step ?? (isCurrency ? "any" : "1")) : undefined}
+                      inputMode={isNumber ? (isCurrency ? "decimal" : "numeric") : undefined}
                       value={form[col.key] ?? ""}
                       placeholder={placeholder}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
-                      }
+                      className={fieldError ? "border-red-400 focus:border-red-500 focus:ring-red-400" : undefined}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (
+                          isNumber &&
+                          !isCurrency &&
+                          next !== "" &&
+                          !/^\d*\.?\d*$/.test(next)
+                        ) {
+                          return;
+                        }
+                        setForm((prev) => ({ ...prev, [col.key]: next }));
+                      }}
                     />
                   )}
                 </FormField>
@@ -953,10 +1087,11 @@ export function ModuleListPage({
               <FormField label="Table A">
                 <SelectInput value={selectA} onChange={(e) => setSelectA(e.target.value)}>
                   <option value="">Select table</option>
-                  {scopedRows.map((row) => (
+                  {tableOpsRows.map((row) => (
                     <option key={row.id} value={row.id}>
-                      {String(row.tableNo ?? row.id)} · {row.section ?? "—"} · cap{" "}
-                      {row.capacity ?? "—"}
+                      {String(row.tableNo ?? row.id)} ·{" "}
+                      {outlets.find((o) => o.id === row.outletId)?.name ?? row.section ?? "—"} ·
+                      cap {row.capacity ?? "—"}
                     </option>
                   ))}
                 </SelectInput>
@@ -964,10 +1099,11 @@ export function ModuleListPage({
               <FormField label="Table B">
                 <SelectInput value={selectB} onChange={(e) => setSelectB(e.target.value)}>
                   <option value="">Select table</option>
-                  {scopedRows.map((row) => (
+                  {tableOpsRows.map((row) => (
                     <option key={row.id} value={row.id}>
-                      {String(row.tableNo ?? row.id)} · {row.section ?? "—"} · cap{" "}
-                      {row.capacity ?? "—"}
+                      {String(row.tableNo ?? row.id)} ·{" "}
+                      {outlets.find((o) => o.id === row.outletId)?.name ?? row.section ?? "—"} ·
+                      cap {row.capacity ?? "—"}
                     </option>
                   ))}
                 </SelectInput>
@@ -979,12 +1115,12 @@ export function ModuleListPage({
         {actionKind === "split" ? (
           <div className="space-y-4">
             <p className="text-sm text-slate-600">
-              Split one larger table into two smaller covers (demo rule: capacity 4+).
+              Split one larger table into two smaller covers (capacity 4+).
             </p>
             <FormField label="Table to split">
               <SelectInput value={selectA} onChange={(e) => setSelectA(e.target.value)}>
                 <option value="">Select table</option>
-                {scopedRows
+                {tableOpsRows
                   .filter((r) => Number(r.capacity ?? 0) >= 4)
                   .map((row) => (
                     <option key={row.id} value={row.id}>

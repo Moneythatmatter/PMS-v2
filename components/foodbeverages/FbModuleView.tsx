@@ -136,6 +136,27 @@ function normalizeRow(path: string, row: Record<string, unknown>): ModuleRow {
     base.type = titleCaseType(base.type);
   }
 
+  // Outlets: keep operational status separate from booking availability
+  if (path.includes("/outlets") || path.includes("/banquet/venues")) {
+    const bookingValues = new Set(["available", "occupied", "booked", "reserved"]);
+    const statusVal = String(base.status ?? "").trim();
+    if (bookingValues.has(statusVal.toLowerCase()) && !base.bookingStatus) {
+      const lower = statusVal.toLowerCase();
+      base.bookingStatus =
+        lower === "available" ? "Available" : "Booked";
+      base.status = "Active";
+    }
+    const booking = String(base.bookingStatus ?? "").toLowerCase();
+    if (booking === "occupied" || booking === "reserved") {
+      base.bookingStatus = "Booked";
+    }
+    if (!base.bookingStatus) base.bookingStatus = "Available";
+    if (!base.status) base.status = "Active";
+    // Drop sales/covers from list UI payloads
+    delete base.sales;
+    delete base.covers;
+  }
+
   return base;
 }
 
@@ -147,6 +168,10 @@ function toApiPayload(path: string, row: ModuleRow): Record<string, unknown> {
   ) {
     payload.type = String(payload.type).toLowerCase();
   }
+  if (path.includes("/outlets")) {
+    delete payload.sales;
+    delete payload.covers;
+  }
   return payload;
 }
 
@@ -155,9 +180,11 @@ function toModuleDefinition(
   rows: ModuleRow[],
   outlets: FbOutlet[],
   crud?: ModuleCrudHandlers,
+  tableInventory?: ModuleRow[],
+  tableCrud?: ModuleCrudHandlers,
 ): ModuleListDefinition {
+  const types = scopeTypes(definition.outletScope);
   const scoped = (() => {
-    const types = scopeTypes(definition.outletScope);
     if (types.includes("all") || definition.outletScope === "none") return [];
     return outlets
       .filter((o) => types.includes(o.type as (typeof types)[number]))
@@ -198,7 +225,18 @@ function toModuleDefinition(
     description: definition.description,
     eyebrow: scoped.length ? undefined : "Food & Beverages",
     stats: calculatedStats,
-    columns: definition.columns,
+    columns: definition.columns.map((col) => {
+      if (col.key !== "outletId") return col;
+      return {
+        ...col,
+        inputType: "select" as const,
+        options: scoped.map((o) => ({ value: o.id, label: o.name })),
+        render: (row: ModuleRow) => {
+          const match = scoped.find((o) => o.id === row.outletId);
+          return match?.name ?? String(row.outletId ?? "—");
+        },
+      };
+    }),
     rows,
     searchPlaceholder: definition.searchPlaceholder,
     filterOptions: definition.filterOptions,
@@ -213,6 +251,8 @@ function toModuleDefinition(
           ? "Kitchen"
           : "Outlet",
     crud,
+    tableInventory,
+    tableCrud,
   };
 }
 
@@ -230,8 +270,13 @@ export function FbModuleView({
   const { outlets } = useFbOutlets(scopeTypes(definition.outletScope));
 
   const [rows, setRows] = useState<ModuleRow[]>([]);
+  const [tableInventory, setTableInventory] = useState<ModuleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const needsTableOps = (definition.secondaryActions ?? []).some((a) =>
+    /merge|split/i.test(a),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -272,6 +317,27 @@ export function FbModuleView({
     };
   }, [path, service]);
 
+  useEffect(() => {
+    if (!needsTableOps || path.includes("/tables")) {
+      setTableInventory([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await tableService.list();
+        if (!cancelled) {
+          setTableInventory(data.map((row) => normalizeRow("/food-beverages/restaurants/tables", row)));
+        }
+      } catch {
+        if (!cancelled) setTableInventory([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [needsTableOps, path]);
+
   const crud = useMemo<ModuleCrudHandlers | undefined>(() => {
     if (!service) return undefined;
     return {
@@ -294,6 +360,31 @@ export function FbModuleView({
     };
   }, [path, service]);
 
+  const tableCrud = useMemo<ModuleCrudHandlers | undefined>(() => {
+    if (!needsTableOps) return undefined;
+    return {
+      create: async (row) => {
+        const saved = await tableService.create(toApiPayload("/food-beverages/restaurants/tables", row));
+        const normalized = normalizeRow("/food-beverages/restaurants/tables", saved);
+        setTableInventory((prev) => [normalized, ...prev]);
+        return normalized;
+      },
+      update: async (id, row) => {
+        const saved = await tableService.update(
+          id,
+          toApiPayload("/food-beverages/restaurants/tables", row as ModuleRow),
+        );
+        const normalized = normalizeRow("/food-beverages/restaurants/tables", saved);
+        setTableInventory((prev) => prev.map((r) => (r.id === id ? normalized : r)));
+        return normalized;
+      },
+      remove: async (id) => {
+        await tableService.remove(id);
+        setTableInventory((prev) => prev.filter((r) => r.id !== id));
+      },
+    };
+  }, [needsTableOps]);
+
   if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
 
   if (error) {
@@ -311,7 +402,14 @@ export function FbModuleView({
 
   return (
     <ModuleListPage
-      definition={toModuleDefinition(definition, rows, outlets, crud)}
+      definition={toModuleDefinition(
+        definition,
+        rows,
+        outlets,
+        crud,
+        needsTableOps && !path.includes("/tables") ? tableInventory : undefined,
+        needsTableOps && !path.includes("/tables") ? tableCrud : undefined,
+      )}
     />
   );
 }

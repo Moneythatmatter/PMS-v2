@@ -20,6 +20,7 @@ export type FbOutlet = {
   name: string;
   type: string;
   status?: string;
+  bookingStatus?: string;
   tables?: number;
   covers?: number;
   sales?: string;
