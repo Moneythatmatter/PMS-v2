@@ -170,14 +170,34 @@ function toModuleDefinition(
       .map((o) => ({ id: o.id, name: o.name }));
   })();
 
+  const calculatedStats = definition.stats.map((stat) => {
+    if (stat.label === "Outlets" || stat.label === "Venues") {
+      return { ...stat, value: rows.length };
+    }
+    if (stat.label === "Active") {
+      const activeCount = rows.filter(
+        (r) =>
+          String(r.status ?? "").toLowerCase() === "active" ||
+          String(r.status ?? "").toLowerCase() === "open",
+      ).length;
+      return { ...stat, value: activeCount };
+    }
+    if (stat.label === "Tables") {
+      const totalTables = rows.reduce((sum, r) => sum + (Number(r.tables) || 0), 0);
+      return { ...stat, value: totalTables };
+    }
+    if (stat.label === "Covers Today" || stat.label === "Covers") {
+      const totalCovers = rows.reduce((sum, r) => sum + (Number(r.covers) || 0), 0);
+      return { ...stat, value: totalCovers };
+    }
+    return { ...stat, value: rows.length };
+  });
+
   return {
     title: definition.title,
     description: definition.description,
     eyebrow: scoped.length ? undefined : "Food & Beverages",
-    stats: definition.stats.map((stat) => ({
-      ...stat,
-      value: 0,
-    })),
+    stats: calculatedStats,
     columns: definition.columns,
     rows,
     searchPlaceholder: definition.searchPlaceholder,
@@ -233,11 +253,6 @@ export function FbModuleView({
           let mapped = data.map((row) => normalizeRow(path, row));
           if (path.includes("/banquet/venues")) {
             mapped = mapped.filter((r) => String(r.type).toLowerCase() === "banquet");
-          }
-          if (path.includes("/restaurants/outlets")) {
-            mapped = mapped.filter((r) =>
-              ["restaurant", "cafe"].includes(String(r.type).toLowerCase()),
-            );
           }
           setRows(mapped);
           setError(null);

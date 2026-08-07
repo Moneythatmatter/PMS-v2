@@ -5,6 +5,7 @@ import { Download, Map, Pencil, Table2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import {
+  AlertBanner,
   ConfirmModal,
   FormField,
   SelectInput,
@@ -43,6 +44,9 @@ function previewTitle(row: ModuleRow, fallback: string) {
       row.cashier ??
       row.recipe ??
       row.outlet ??
+      row.requisitionNo ??
+      row.poNo ??
+      row.id ??
       fallback,
   );
 }
@@ -141,6 +145,7 @@ export function ModuleListPage({
   const [rows, setRows] = useState<ModuleRow[]>(definition.rows);
   const [preview, setPreview] = useState<ModuleRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [actionLabel, setActionLabel] = useState<string | null>(null);
   const [editingRow, setEditingRow] = useState<ModuleRow | null>(null);
   const [deleteRow, setDeleteRow] = useState<ModuleRow | null>(null);
@@ -247,6 +252,7 @@ export function ModuleListPage({
   const openAction = (label: string) => {
     setEditingRow(null);
     setActionLabel(label);
+    setFormError(null);
     setForm(blankForm(definition.columns));
     setSelectA("");
     setSelectB("");
@@ -255,6 +261,7 @@ export function ModuleListPage({
   const closeFormDrawer = () => {
     setActionLabel(null);
     setEditingRow(null);
+    setFormError(null);
   };
 
   const handleExport = () => {
@@ -282,11 +289,22 @@ export function ModuleListPage({
 
     for (const col of editableColumns(definition.columns)) {
       const raw = form[col.key]?.trim() ?? "";
-      if (col.format === "currency" || col.key === "capacity" || col.key === "covers") {
+      const isCurrency =
+        col.inputType === "currency" || col.format === "currency" || col.key === "sales";
+      const isNumber =
+        col.inputType === "number" ||
+        ["tables", "covers", "capacity", "count", "quantity"].includes(col.key);
+
+      if (isCurrency) {
+        const cleaned = raw.replace(/[^\d.]/g, "");
+        const num = Number(cleaned);
+        newRow[col.key] =
+          !isNaN(num) && cleaned !== "" ? `₹${num.toLocaleString("en-IN")}` : raw || "₹0";
+      } else if (isNumber) {
         const num = Number(raw);
-        newRow[col.key] = Number.isFinite(num) && raw !== "" ? num : raw || "—";
+        newRow[col.key] = Number.isFinite(num) && raw !== "" ? num : 0;
       } else {
-        newRow[col.key] = raw || (col.key === "status" ? "Available" : "—");
+        newRow[col.key] = raw || (col.key === "status" ? "Active" : "—");
       }
     }
     return newRow;
@@ -300,15 +318,43 @@ export function ModuleListPage({
     setForm(nextForm);
     setEditingRow(row);
     setPreview(null);
+    setFormError(null);
     setActionLabel(`Edit ${definition.title.replace(/s$/, "")}`);
   };
 
   const submitAdd = async () => {
-    const required = editableColumns(definition.columns).filter((c) => c.key !== "status");
-    const missing = required.find((c) => !String(form[c.key] ?? "").trim());
-    if (missing) {
-      setToast(`Please fill ${missing.header}.`);
-      return;
+    setFormError(null);
+    const cols = editableColumns(definition.columns);
+
+    for (const col of cols) {
+      const isRequired =
+        col.required ?? (col.key !== "status" && col.key !== "covers" && col.key !== "sales");
+      const raw = String(form[col.key] ?? "").trim();
+      if (isRequired && !raw) {
+        setFormError(`Please fill in ${col.header}.`);
+        return;
+      }
+
+      const isNumber =
+        col.inputType === "number" ||
+        col.inputType === "currency" ||
+        col.format === "currency" ||
+        ["tables", "covers", "capacity", "count", "quantity"].includes(col.key);
+
+      if (isNumber && raw !== "") {
+        const cleaned = col.inputType === "currency" || col.format === "currency" || col.key === "sales"
+          ? raw.replace(/[^\d.]/g, "")
+          : raw;
+        const num = Number(cleaned);
+        if (isNaN(num)) {
+          setFormError(`${col.header} must be a valid number.`);
+          return;
+        }
+        if (num < 0) {
+          setFormError(`${col.header} cannot be negative.`);
+          return;
+        }
+      }
     }
 
     const payload = buildRowFromForm(editingRow ?? undefined);
@@ -333,8 +379,9 @@ export function ModuleListPage({
       }
       setActionLabel(null);
       setEditingRow(null);
+      setFormError(null);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Save failed");
+      setFormError(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
@@ -359,8 +406,9 @@ export function ModuleListPage({
   };
 
   const submitMerge = () => {
+    setFormError(null);
     if (!selectA || !selectB || selectA === selectB) {
-      setToast("Select two different tables to merge.");
+      setFormError("Select two different tables to merge.");
       return;
     }
     const a = scopedRows.find((r) => r.id === selectA);
@@ -385,19 +433,21 @@ export function ModuleListPage({
       ...prev.filter((r) => r.id !== selectA && r.id !== selectB),
     ]);
     setActionLabel(null);
+    setFormError(null);
     setToast(`Merged ${a.tableNo} + ${b.tableNo} into ${merged.tableNo}.`);
   };
 
   const submitSplit = () => {
+    setFormError(null);
     if (!selectA) {
-      setToast("Select a table to split.");
+      setFormError("Select a table to split.");
       return;
     }
     const source = scopedRows.find((r) => r.id === selectA);
     if (!source) return;
     const capacity = Number(source.capacity ?? 4);
     if (capacity < 4) {
-      setToast("Only tables with capacity 4+ can be split in this demo.");
+      setFormError("Only tables with capacity 4+ can be split in this demo.");
       return;
     }
 
@@ -424,6 +474,7 @@ export function ModuleListPage({
 
     setRows((prev) => [left, right, ...prev.filter((r) => r.id !== selectA)]);
     setActionLabel(null);
+    setFormError(null);
     setToast(`Split ${source.tableNo} into ${left.tableNo} and ${right.tableNo}.`);
   };
 
@@ -776,32 +827,119 @@ export function ModuleListPage({
           )
         }
       >
+        {formError && (
+          <div className="mb-4">
+            <AlertBanner
+              variant="error"
+              message={formError}
+              onDismiss={() => setFormError(null)}
+            />
+          </div>
+        )}
         {actionKind === "add" || actionKind === "generic" ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            {editableColumns(definition.columns).map((col) => (
-              <FormField key={col.key} label={col.header}>
-                {col.key === "status" && definition.filterOptions?.length ? (
-                  <SelectInput
-                    value={form[col.key] ?? "Available"}
-                    onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
-                  >
-                    {definition.filterOptions
-                      .filter((o) => o.id !== "all")
-                      .map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.label}
+            {editableColumns(definition.columns).map((col) => {
+              const isSelect =
+                col.inputType === "select" ||
+                col.key === "status" ||
+                col.key === "type" ||
+                (col.options && col.options.length > 0);
+
+              const isNumber =
+                col.inputType === "number" ||
+                col.inputType === "currency" ||
+                col.format === "currency" ||
+                ["tables", "covers", "capacity", "count", "quantity"].includes(col.key);
+
+              const isCurrency =
+                col.inputType === "currency" || col.format === "currency" || col.key === "sales";
+
+              let selectOptions: { value: string; label: string }[] = [];
+              if (isSelect) {
+                if (col.options && col.options.length > 0) {
+                  selectOptions = col.options.map((opt) =>
+                    typeof opt === "string" ? { value: opt, label: opt } : opt,
+                  );
+                } else if (col.key === "status" && definition.filterOptions?.length) {
+                  selectOptions = definition.filterOptions
+                    .filter((o) => o.id !== "all")
+                    .map((o) => ({ value: o.id, label: o.label }));
+                } else if (col.key === "type") {
+                  selectOptions = [
+                    { value: "Restaurant", label: "Restaurant" },
+                    { value: "Cafe", label: "Cafe" },
+                    { value: "Kitchen", label: "Kitchen" },
+                    { value: "Banquet", label: "Banquet" },
+                    { value: "Bar", label: "Bar" },
+                  ];
+                } else if (col.key === "status") {
+                  selectOptions = [
+                    { value: "Active", label: "Active" },
+                    { value: "Inactive", label: "Inactive" },
+                  ];
+                }
+              }
+
+              const isRequired =
+                col.required ??
+                (col.key !== "status" && col.key !== "covers" && col.key !== "sales");
+
+              const placeholder =
+                col.placeholder ??
+                (isCurrency
+                  ? "e.g. 0"
+                  : isNumber
+                    ? "e.g. 10"
+                    : isSelect
+                      ? `Select ${col.header.toLowerCase()}`
+                      : `Enter ${col.header.toLowerCase()}`);
+
+              const helperText =
+                col.helperText ??
+                (isCurrency
+                  ? "Amount in ₹"
+                  : isNumber
+                    ? "Numeric value only"
+                    : undefined);
+
+              const defaultValue = isSelect ? (selectOptions[0]?.value ?? "") : "";
+              const currentValue = form[col.key] !== undefined ? form[col.key] : defaultValue;
+
+              return (
+                <FormField
+                  key={col.key}
+                  label={col.header}
+                  required={isRequired}
+                  helperText={helperText}
+                >
+                  {isSelect ? (
+                    <SelectInput
+                      value={currentValue}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
+                      }
+                    >
+                      {selectOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
                         </option>
                       ))}
-                  </SelectInput>
-                ) : (
-                  <TextInput
-                    value={form[col.key] ?? ""}
-                    placeholder={col.header}
-                    onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
-                  />
-                )}
-              </FormField>
-            ))}
+                    </SelectInput>
+                  ) : (
+                    <TextInput
+                      type={isNumber ? "number" : "text"}
+                      min={isNumber ? (col.min ?? 0) : undefined}
+                      step={isNumber ? (col.step ?? (isCurrency ? "any" : "1")) : undefined}
+                      value={form[col.key] ?? ""}
+                      placeholder={placeholder}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
+                      }
+                    />
+                  )}
+                </FormField>
+              );
+            })}
           </div>
         ) : null}
 

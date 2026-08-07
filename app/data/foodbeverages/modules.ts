@@ -43,6 +43,16 @@ export interface FbStat {
 export interface FbColumn {
   key: string;
   header: string;
+  format?: "currency" | "percent";
+  align?: "left" | "center" | "right";
+  inputType?: "text" | "number" | "select" | "currency";
+  options?: { value: string; label: string }[] | string[];
+  placeholder?: string;
+  helperText?: string;
+  required?: boolean;
+  min?: number;
+  max?: number;
+  step?: number | string;
 }
 
 export interface FbRow {
@@ -137,12 +147,64 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
       { label: "Covers Today", value: 186, accent: "#15803d", sublabel: "All outlets" },
     ],
     columns: [
-      { key: "name", header: "Outlet" },
-      { key: "type", header: "Type" },
-      { key: "tables", header: "Tables" },
-      { key: "covers", header: "Covers Today" },
-      { key: "sales", header: "Sales" },
-      { key: "status", header: "Status" },
+      {
+        key: "name",
+        header: "Outlet Name",
+        inputType: "text",
+        placeholder: "e.g. Grand Dining Room",
+        helperText: "Unique display name for the restaurant, cafe or bar",
+        required: true,
+      },
+      {
+        key: "type",
+        header: "Outlet Type",
+        inputType: "select",
+        options: [
+          { value: "Restaurant", label: "Restaurant" },
+          { value: "Cafe", label: "Cafe" },
+          { value: "Kitchen", label: "Kitchen" },
+          { value: "Banquet", label: "Banquet" },
+          { value: "Bar", label: "Bar" },
+        ],
+        placeholder: "Select outlet type",
+        helperText: "Operational category of this outlet",
+        required: true,
+      },
+      {
+        key: "tables",
+        header: "Number of Tables",
+        inputType: "number",
+        min: 0,
+        placeholder: "e.g. 15",
+        helperText: "Total seating tables available (digits only)",
+        required: true,
+      },
+      {
+        key: "covers",
+        header: "Covers Today",
+        inputType: "number",
+        min: 0,
+        placeholder: "e.g. 0",
+        helperText: "Initial count of guest covers served today",
+      },
+      {
+        key: "sales",
+        header: "Sales Today (₹)",
+        inputType: "currency",
+        format: "currency",
+        placeholder: "e.g. 0",
+        helperText: "Opening sales value in ₹",
+      },
+      {
+        key: "status",
+        header: "Status",
+        inputType: "select",
+        options: [
+          { value: "Active", label: "Active" },
+          { value: "Inactive", label: "Inactive" },
+        ],
+        helperText: "Current operational status",
+      },
     ],
     rows: [
       { id: "O1", name: "Restaurant #1", type: "Restaurant", tables: 16, covers: 72, sales: "₹48,620", status: "Active", outletId: "rest-1" },
