@@ -197,13 +197,29 @@ export const orderTypeService = crud("/settings/order-types");
 export const dayCloseService = crud("/day-close");
 export const fbReservationService = crud("/reservations");
 
+export const recipeService = crud("/menu/recipes");
+export const serviceChargeService = crud("/settings/service-charge");
+export const kitchenPrinterService = crud("/settings/kitchen-printers");
+export const tableTypeService = crud("/settings/table-types");
+export const reasonMasterService = crud("/settings/reason-masters");
+
 export const fbReportService = {
-  get: (type: string) =>
-    api.get<{
+  get: (
+    type: string,
+    params?: { outletId?: string; range?: string; from?: string; to?: string },
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.outletId) q.set("outletId", params.outletId);
+    if (params?.range) q.set("range", params.range);
+    if (params?.from) q.set("from", params.from);
+    if (params?.to) q.set("to", params.to);
+    const qs = q.toString();
+    return api.get<{
       type: string;
       title: string;
       summary: Record<string, unknown>;
       rows: unknown[];
       generatedAt: string;
-    }>(fbPath(`/reports/${type}`)),
+    }>(fbPath(`/reports/${type}${qs ? `?${qs}` : ""}`));
+  },
 };

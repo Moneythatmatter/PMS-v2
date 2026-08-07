@@ -162,6 +162,7 @@ export function ModuleListPage({
   const [form, setForm] = useState<Record<string, string>>(() => blankForm(definition.columns));
   const [selectA, setSelectA] = useState("");
   const [selectB, setSelectB] = useState("");
+  const [mergeTableNo, setMergeTableNo] = useState("");
 
   useEffect(() => {
     setRows(definition.rows);
@@ -240,6 +241,43 @@ export function ModuleListPage({
     );
   }, [definition.tableInventory, scopedRows, showOutlet, outletId]);
 
+  const formTableInventory = useMemo(() => {
+    if (definition.tableInventory && definition.tableInventory.length > 0) {
+      return definition.tableInventory;
+    }
+    return tableOpsRows;
+  }, [definition.tableInventory, tableOpsRows]);
+
+  const reservationCapacityCheck = useMemo(() => {
+    const covers = Number(form.covers ?? 0);
+    const primaryNo = String(form.tableNo ?? "").trim();
+    if (!covers || !primaryNo || !Number.isFinite(covers)) {
+      return {
+        needsMerge: false,
+        primaryCap: 0,
+        combinedCap: 0,
+        covers: 0,
+        tables: [] as ModuleRow[],
+      };
+    }
+    const formOutlet = String(form.outletId ?? outletId ?? "").trim();
+    const tables = formTableInventory.filter(
+      (t) => !formOutlet || !t.outletId || String(t.outletId) === formOutlet,
+    );
+    const primary = tables.find((t) => String(t.tableNo) === primaryNo);
+    const primaryCap = Number(primary?.capacity ?? 0);
+    const merge = tables.find((t) => String(t.tableNo) === mergeTableNo);
+    const mergeCap = Number(merge?.capacity ?? 0);
+    const combinedCap = primaryCap + (mergeTableNo ? mergeCap : 0);
+    return {
+      needsMerge: primaryCap > 0 && covers > primaryCap,
+      primaryCap,
+      combinedCap,
+      covers,
+      tables,
+    };
+  }, [form.covers, form.tableNo, form.outletId, outletId, formTableInventory, mergeTableNo]);
+
   const tableNoInUseMessage = useMemo(() => {
     const typed = String(form.tableNo ?? "").trim().toLowerCase();
     if (!typed) return null;
@@ -290,9 +328,17 @@ export function ModuleListPage({
     if (showOutlet && outletId) {
       next.outletId = outletId;
     }
+    if (!next.resNo && definition.columns.some((c) => c.key === "resNo")) {
+      next.resNo = `TR-${Date.now().toString().slice(-4)}`;
+    }
+    if (!next.status && definition.filterOptions?.length) {
+      const first = definition.filterOptions.find((o) => o.id !== "all");
+      if (first) next.status = first.id;
+    }
     setForm(next);
     setSelectA("");
     setSelectB("");
+    setMergeTableNo("");
   };
 
   const closeFormDrawer = () => {
@@ -391,6 +437,19 @@ export function ModuleListPage({
           setFormError("Please select a valid outlet.");
           return;
         }
+      } else if (isSelect && raw !== "" && col.key === "tableNo") {
+        const inventory =
+          definition.tableInventory && definition.tableInventory.length > 0
+            ? definition.tableInventory
+            : tableOpsRows;
+        const formOutlet = String(form.outletId ?? outletId ?? "").trim();
+        const allowed = inventory.filter(
+          (t) => !formOutlet || !t.outletId || String(t.outletId) === formOutlet,
+        );
+        if (allowed.length > 0 && !allowed.some((t) => String(t.tableNo) === raw)) {
+          setFormError("Please select a valid table for the chosen outlet.");
+          return;
+        }
       } else if (isSelect && raw !== "" && col.options?.length) {
         const allowed = col.options.map((opt) =>
           typeof opt === "string" ? opt : opt.value,
@@ -399,6 +458,32 @@ export function ModuleListPage({
           setFormError(`${col.header} must be one of: ${allowed.join(", ")}.`);
           return;
         }
+      }
+
+      if (col.pattern && raw !== "") {
+        try {
+          const re = new RegExp(col.pattern);
+          if (!re.test(raw.replace(/\s+/g, ""))) {
+            setFormError(col.patternMessage ?? `${col.header} format is invalid.`);
+            return;
+          }
+        } catch {
+          /* ignore bad pattern */
+        }
+      }
+
+      if (
+        (col.inputType === "tel" || col.key === "phone") &&
+        raw !== "" &&
+        !/^(\+91[\s-]?)?[6-9]\d{9}$/.test(raw.replace(/\s+/g, ""))
+      ) {
+        setFormError(col.patternMessage ?? "Enter a valid 10-digit mobile number.");
+        return;
+      }
+
+      if (col.inputType === "time" && raw !== "" && !/^\d{2}:\d{2}$/.test(raw)) {
+        setFormError(`${col.header} must be a valid time.`);
+        return;
       }
 
       const isNumber =
@@ -440,6 +525,24 @@ export function ModuleListPage({
       setFormError(tableNoInUseMessage);
       return;
     }
+
+    if (reservationCapacityCheck.needsMerge) {
+      if (!mergeTableNo) {
+        setFormError(
+          `Covers (${reservationCapacityCheck.covers}) exceed table capacity (${reservationCapacityCheck.primaryCap}). Select a table to merge.`,
+        );
+        return;
+      }
+      if (reservationCapacityCheck.combinedCap < reservationCapacityCheck.covers) {
+        setFormError(
+          `Merged capacity (${reservationCapacityCheck.combinedCap}) is still less than covers (${reservationCapacityCheck.covers}). Pick a larger table.`,
+        );
+        return;
+      }
+      const primary = String(form.tableNo ?? "").trim();
+      payload.tableNo = `${primary}+${mergeTableNo}`;
+    }
+
     setSaving(true);
     try {
       if (editingRow && definition.crud?.update) {
@@ -956,6 +1059,11 @@ export function ModuleListPage({
                 col.key === "status" ||
                 col.key === "type" ||
                 col.key === "outletId" ||
+                col.key === "bookingStatus" ||
+                (col.key === "tableNo" &&
+                  ((definition.tableInventory && definition.tableInventory.length > 0) ||
+                    tableOpsRows.length > 0 ||
+                    (col.options && col.options.length > 0))) ||
                 (col.options && col.options.length > 0);
 
               const isNumber =
@@ -967,10 +1075,27 @@ export function ModuleListPage({
               const isCurrency =
                 col.inputType === "currency" || col.format === "currency" || col.key === "sales";
 
+              const isTel = col.inputType === "tel" || col.key === "phone";
+              const isTime = col.inputType === "time" || col.key === "time";
+
               let selectOptions: { value: string; label: string }[] = [];
               if (isSelect) {
                 if (col.key === "outletId" && outlets.length > 0) {
                   selectOptions = outlets.map((o) => ({ value: o.id, label: o.name }));
+                } else if (col.key === "tableNo") {
+                  const inventory =
+                    definition.tableInventory && definition.tableInventory.length > 0
+                      ? definition.tableInventory
+                      : tableOpsRows;
+                  const formOutlet = String(form.outletId ?? outletId ?? "").trim();
+                  selectOptions = inventory
+                    .filter((t) => !formOutlet || !t.outletId || String(t.outletId) === formOutlet)
+                    .map((t) => ({
+                      value: String(t.tableNo),
+                      label: `Table ${t.tableNo}${t.capacity ? ` · ${t.capacity} seats` : ""}${
+                        t.status ? ` · ${t.status}` : ""
+                      }`,
+                    }));
                 } else if (col.options && col.options.length > 0) {
                   selectOptions = col.options.map((opt) =>
                     typeof opt === "string" ? { value: opt, label: opt } : opt,
@@ -1020,10 +1145,28 @@ export function ModuleListPage({
               const defaultValue = isSelect ? (selectOptions[0]?.value ?? "") : "";
               const currentValue = form[col.key] !== undefined ? form[col.key] : defaultValue;
 
+              const phoneRaw = String(form.phone ?? "").trim();
+              const phoneInvalid =
+                isTel &&
+                phoneRaw !== "" &&
+                !/^(\+91[\s-]?)?[6-9]\d{9}$/.test(phoneRaw.replace(/\s+/g, ""));
+
               const fieldError =
-                col.key === "tableNo" && tableNoInUseMessage
+                col.key === "tableNo" &&
+                definition.title === "Tables" &&
+                tableNoInUseMessage
                   ? tableNoInUseMessage
-                  : undefined;
+                  : phoneInvalid
+                    ? col.patternMessage ?? "Enter a valid 10-digit mobile number"
+                    : undefined;
+
+              const inputTypeAttr = isNumber
+                ? "number"
+                : isTel
+                  ? "tel"
+                  : isTime
+                    ? "time"
+                    : "text";
 
               return (
                 <FormField
@@ -1036,11 +1179,23 @@ export function ModuleListPage({
                   {isSelect ? (
                     <SelectInput
                       value={currentValue}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setForm((prev) => {
+                          const next = { ...prev, [col.key]: value };
+                          // Changing outlet clears table so user picks from the new list
+                          if (col.key === "outletId" && prev.tableNo) {
+                            next.tableNo = "";
+                          }
+                          return next;
+                        });
+                        if (col.key === "outletId" || col.key === "tableNo") {
+                          setMergeTableNo("");
+                        }
+                      }}
                       className={fieldError ? "border-red-400 focus:border-red-500 focus:ring-red-400" : undefined}
                     >
+                      <option value="">{placeholder}</option>
                       {selectOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
@@ -1049,11 +1204,19 @@ export function ModuleListPage({
                     </SelectInput>
                   ) : (
                     <TextInput
-                      type={isNumber ? "number" : "text"}
+                      type={inputTypeAttr}
                       min={isNumber ? (col.min ?? 0) : undefined}
                       max={isNumber ? col.max : undefined}
                       step={isNumber ? (col.step ?? (isCurrency ? "any" : "1")) : undefined}
-                      inputMode={isNumber ? (isCurrency ? "decimal" : "numeric") : undefined}
+                      inputMode={
+                        isNumber
+                          ? isCurrency
+                            ? "decimal"
+                            : "numeric"
+                          : isTel
+                            ? "tel"
+                            : undefined
+                      }
                       value={form[col.key] ?? ""}
                       placeholder={placeholder}
                       className={fieldError ? "border-red-400 focus:border-red-500 focus:ring-red-400" : undefined}
@@ -1067,6 +1230,9 @@ export function ModuleListPage({
                         ) {
                           return;
                         }
+                        if (isTel && next !== "" && !/^[\d+\s-]*$/.test(next)) {
+                          return;
+                        }
                         setForm((prev) => ({ ...prev, [col.key]: next }));
                       }}
                     />
@@ -1074,6 +1240,47 @@ export function ModuleListPage({
                 </FormField>
               );
             })}
+            {reservationCapacityCheck.needsMerge && (
+              <div className="sm:col-span-2 space-y-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                <AlertBanner
+                  variant="info"
+                  message={`Covers (${reservationCapacityCheck.covers}) exceed table capacity (${reservationCapacityCheck.primaryCap}). Merge with another table to continue.`}
+                />
+                <FormField
+                  label="Merge with table"
+                  required
+                  helperText={
+                    mergeTableNo
+                      ? `Combined capacity: ${reservationCapacityCheck.combinedCap} seats`
+                      : "Select a second table to combine capacity"
+                  }
+                  error={
+                    mergeTableNo &&
+                    reservationCapacityCheck.combinedCap < reservationCapacityCheck.covers
+                      ? `Still short by ${
+                          reservationCapacityCheck.covers - reservationCapacityCheck.combinedCap
+                        } seats`
+                      : undefined
+                  }
+                >
+                  <SelectInput
+                    value={mergeTableNo}
+                    onChange={(e) => setMergeTableNo(e.target.value)}
+                  >
+                    <option value="">Select table to merge</option>
+                    {reservationCapacityCheck.tables
+                      .filter((t) => String(t.tableNo) !== String(form.tableNo ?? "").trim())
+                      .map((t) => (
+                        <option key={String(t.id ?? t.tableNo)} value={String(t.tableNo)}>
+                          Table {t.tableNo}
+                          {t.capacity ? ` · ${t.capacity} seats` : ""}
+                          {t.status ? ` · ${t.status}` : ""}
+                        </option>
+                      ))}
+                  </SelectInput>
+                </FormField>
+              </div>
+            )}
           </div>
         ) : null}
 

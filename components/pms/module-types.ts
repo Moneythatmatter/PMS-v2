@@ -23,7 +23,7 @@ export interface ModuleColumn {
   align?: "left" | "center" | "right";
   sortable?: boolean;
   className?: string;
-  inputType?: "text" | "number" | "select" | "currency";
+  inputType?: "text" | "number" | "select" | "currency" | "tel" | "time";
   options?: { value: string; label: string }[] | string[];
   placeholder?: string;
   helperText?: string;
@@ -31,6 +31,8 @@ export interface ModuleColumn {
   min?: number;
   max?: number;
   step?: number | string;
+  pattern?: string;
+  patternMessage?: string;
 }
 
 export interface ModuleRow {
