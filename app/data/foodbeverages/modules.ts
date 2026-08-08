@@ -1699,39 +1699,6 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
   }),
 
   /* ——— Kitchen ——— */
-  "/food-beverages/kitchen/kds": page({
-    title: "KDS",
-    description: "Kitchen display system — live tickets by station.",
-    outletScope: "kitchen",
-    searchPlaceholder: "Search ticket or item…",
-    filterOptions: [
-      { id: "all", label: "All" },
-      { id: "Pending", label: "Pending" },
-      { id: "Preparing", label: "Preparing" },
-      { id: "Ready", label: "Ready" },
-    ],
-    stats: [
-      { label: "Open Tickets", value: 8, accent: "#f59e0b", sublabel: "On screen" },
-      { label: "Avg Prep", value: "11 min", sublabel: "Today" },
-      { label: "Over SLA", value: 2, accent: "#ef4444", sublabel: "> 15 min" },
-      { label: "Ready", value: 3, accent: "#10b981", sublabel: "Awaiting pickup" },
-    ],
-    columns: [
-      { key: "ticket", header: "Ticket" },
-      { key: "station", header: "Station" },
-      { key: "items", header: "Items" },
-      { key: "table", header: "Table" },
-      { key: "elapsed", header: "Elapsed" },
-      { key: "status", header: "Status" },
-    ],
-    rows: [
-      { id: "K1", ticket: "KDS-88", station: "Hot", items: "Butter Chicken ×2", table: "T-04", elapsed: "8 min", status: "Preparing", outletId: "indian-kitchen" },
-      { id: "K2", ticket: "KDS-89", station: "Tandoor", items: "Paneer Tikka ×1", table: "T-02", elapsed: "4 min", status: "Pending", outletId: "indian-kitchen" },
-      { id: "K3", ticket: "KDS-90", station: "Pastry", items: "Gulab Jamun ×2", table: "T-12", elapsed: "12 min", status: "Ready", outletId: "main-kitchen" },
-      { id: "K4", ticket: "KDS-91", station: "Grill", items: "Steak Medium ×1", table: "T-03", elapsed: "16 min", status: "Preparing", outletId: "continental-kitchen" },
-    ],
-  }),
-
   "/food-beverages/kitchen/orders": page({
     title: "Kitchen Orders",
     description: "All kitchen tickets routed from restaurant and room service.",
@@ -1758,44 +1725,7 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
       { key: "time", header: "Fired" },
       { key: "status", header: "Status" },
     ],
-    rows: [
-      { id: "KO1", orderNo: "ORD-501", source: "Restaurant #1", items: 5, priority: "Normal", time: "1:12 PM", status: "Preparing", outletId: "indian-kitchen" },
-      { id: "KO2", orderNo: "ORD-502", source: "Room 501", items: 3, priority: "High", time: "1:18 PM", status: "Ready", outletId: "main-kitchen" },
-      { id: "KO3", orderNo: "ORD-504", source: "Online", items: 4, priority: "Normal", time: "1:22 PM", status: "Pending", outletId: "indian-kitchen" },
-    ],
-  }),
-
-  "/food-beverages/kitchen/preparation-queue": page({
-    title: "Preparation Queue",
-    description: "Sequenced prep list by start time and course.",
-    outletScope: "kitchen",
-    searchPlaceholder: "Search item or ticket…",
-    filterOptions: [
-      { id: "all", label: "All" },
-      { id: "Queued", label: "Queued" },
-      { id: "Preparing", label: "Preparing" },
-      { id: "Ready", label: "Ready" },
-    ],
-    stats: [
-      { label: "In Queue", value: 14, accent: "#f59e0b", sublabel: "Waiting start" },
-      { label: "Cooking", value: 6, sublabel: "On stove" },
-      { label: "Bump Ready", value: 3, accent: "#10b981", sublabel: "Pass" },
-      { label: "Avg Wait", value: "6 min", sublabel: "Queue time" },
-    ],
-    columns: [
-      { key: "seq", header: "#" },
-      { key: "item", header: "Item" },
-      { key: "course", header: "Course" },
-      { key: "table", header: "Table" },
-      { key: "start", header: "Start" },
-      { key: "status", header: "Status" },
-    ],
-    rows: [
-      { id: "PQ1", seq: 1, item: "Tomato Soup ×2", course: "Starter", table: "T-04", start: "Now", status: "Preparing", outletId: "main-kitchen" },
-      { id: "PQ2", seq: 2, item: "Butter Chicken ×2", course: "Main", table: "T-04", start: "+8 min", status: "Queued", outletId: "indian-kitchen" },
-      { id: "PQ3", seq: 3, item: "Pasta Alfredo ×1", course: "Main", table: "T-08", start: "Now", status: "Preparing", outletId: "italian-kitchen" },
-      { id: "PQ4", seq: 4, item: "Chocolate Mousse ×2", course: "Dessert", table: "T-12", start: "Ready", status: "Ready", outletId: "main-kitchen" },
-    ],
+    rows: [],
   }),
 
   /* ——— Inventory ——— */

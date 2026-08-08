@@ -52,6 +52,13 @@ export type FbOrder = {
   status: string;
   placedAt: string;
   server: string;
+  /** Chef ETA in minutes after accept */
+  prepMinutes?: number | null;
+  /** Set when kitchen rejects */
+  rejectReason?: string | null;
+  paymentMode?: string | null;
+  paidAt?: string | null;
+  createdAt?: string;
 };
 
 export type KdsTicket = {
@@ -128,6 +135,12 @@ export const fbOrderService = {
   remove: (id: string) => api.delete<{ id: string }>(fbPath(`/orders/${id}`)),
   advance: (id: string) =>
     api.post<FbOrder>(fbPath(`/orders/${id}/advance`), {}),
+  accept: (id: string, body?: { prepMinutes?: number }) =>
+    api.post<FbOrder>(fbPath(`/orders/${id}/accept`), body ?? {}),
+  reject: (id: string, body: { reason: string }) =>
+    api.post<FbOrder>(fbPath(`/orders/${id}/reject`), body),
+  pay: (id: string, body?: { paymentMode?: string }) =>
+    api.post<FbOrder>(fbPath(`/orders/${id}/pay`), body ?? {}),
 };
 
 export const kdsService = {

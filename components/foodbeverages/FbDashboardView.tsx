@@ -48,10 +48,10 @@ const quickLinks = [
     hint: "Shift close",
   },
   {
-    label: "Kitchen KDS",
-    href: "/food-beverages/kitchen/kds",
+    label: "Kitchen",
+    href: "/food-beverages/kitchen/orders",
     icon: ChefHat,
-    hint: "Tickets",
+    hint: "Accept / prep",
   },
   {
     label: "Banquet",

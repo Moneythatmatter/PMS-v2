@@ -42,16 +42,7 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
       { label: "Pricing", href: "/food-beverages/menu/pricing", icon: "tag" },
     ],
   },
-  {
-    label: "Kitchen",
-    href: "/food-beverages/kitchen",
-    icon: "chef-hat",
-    children: [
-      { label: "KDS", href: "/food-beverages/kitchen/kds", icon: "layout-grid" },
-      { label: "Kitchen Orders", href: "/food-beverages/kitchen/orders", icon: "clipboard-list" },
-      { label: "Preparation Queue", href: "/food-beverages/kitchen/preparation-queue", icon: "clock" },
-    ],
-  },
+  { label: "Kitchen", href: "/food-beverages/kitchen/orders", icon: "chef-hat" },
   {
     label: "Inventory",
     href: "/food-beverages/inventory",

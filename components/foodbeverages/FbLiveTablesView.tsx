@@ -88,7 +88,7 @@ export function FbLiveTablesView() {
         t.tableNo.toLowerCase().includes(q) ||
         t.guest.toLowerCase().includes(q) ||
         t.server.toLowerCase().includes(q) ||
-        t.section.toLowerCase().includes(q)
+        String(t.section ?? "").toLowerCase().includes(q)
       );
     });
   }, [outletTables, filter, search]);
@@ -96,9 +96,10 @@ export function FbLiveTablesView() {
   const sections = useMemo(() => {
     const map = new Map<string, LiveTable[]>();
     for (const t of visible) {
-      const list = map.get(t.section) ?? [];
+      const section = String(t.section ?? "").trim() || "Floor";
+      const list = map.get(section) ?? [];
       list.push(t);
-      map.set(t.section, list);
+      map.set(section, list);
     }
     return [...map.entries()];
   }, [visible]);
@@ -223,6 +224,7 @@ export function FbLiveTablesView() {
         { label: "Reserved", value: counts.Reserved ?? 0, accent: "#d97706", sublabel: "Upcoming" },
       ]}
     >
+      <>
       <div className="space-y-4">
         {sections.map(([section, sectionTables]) => (
           <section key={section} className="rounded-xl border border-slate-200 bg-white p-3">
@@ -235,7 +237,7 @@ export function FbLiveTablesView() {
                 const style = tableStatusStyles[table.status as LiveTableStatus] ?? tableStatusStyles.Available;
                 return (
                   <button
-                    key={table.id}
+                    key={table.id || table.tableNo}
                     type="button"
                     onClick={() => openSelected(table)}
                     className={cn(
@@ -284,7 +286,7 @@ export function FbLiveTablesView() {
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected ? `Table ${selected.tableNo}` : "Table"}
-        description={selected ? `${selected.section} · ${selected.status}` : undefined}
+        description={selected ? `${selected.section || "Floor"} · ${selected.status}` : undefined}
       >
         {selected && (
           <div className="space-y-4">
@@ -370,6 +372,7 @@ export function FbLiveTablesView() {
           </div>
         )}
       </Drawer>
+      </>
     </ModulePageShell>
   );
 }
