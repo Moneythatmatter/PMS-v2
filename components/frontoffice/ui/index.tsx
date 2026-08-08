@@ -131,7 +131,7 @@ export function StatMiniCard({
   icon: Icon,
 }: StatMiniCardProps) {
   return (
-    <div className="group relative h-full min-w-0 overflow-hidden rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md sm:p-5">
+    <div className="group relative h-full min-w-0 overflow-hidden rounded-lg border border-slate-200/80 bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md sm:p-5">
       <div
         className="absolute inset-0 opacity-30 transition-opacity group-hover:opacity-50"
         style={{ background: `linear-gradient(135deg, ${accent}18, transparent)` }}
