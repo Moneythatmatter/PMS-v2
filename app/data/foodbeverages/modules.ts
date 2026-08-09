@@ -73,6 +73,7 @@ export interface FbPageDefinition {
   rows: FbRow[];
   searchPlaceholder: string;
   filterOptions?: { id: string; label: string }[];
+  filterKeys?: string[];
   actionLabel?: string;
   secondaryActions?: string[];
   statusStyle?: "pill" | "live";
@@ -799,13 +800,6 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
         placeholder: "Select area",
         helperText: "Indoor or outdoor space",
         required: true,
-      },
-      {
-        key: "todayEvent",
-        header: "Today",
-        inputType: "text",
-        placeholder: "e.g. Board Meeting",
-        helperText: "Optional — today's event name",
       },
       {
         key: "status",
@@ -2454,7 +2448,26 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
     outletScope: "bar",
     actionLabel: "Add Drink",
     searchPlaceholder: "Search drink…",
-    filterOptions: [{ id: "all", label: "All" }, { id: "Active", label: "Active" }, { id: "Draft", label: "Draft" }, { id: "86'd", label: "86'd" }],
+    filterOptions: [
+      { id: "all", label: "All" },
+      { id: "Spirits", label: "Spirits" },
+      { id: "Beer", label: "Beer" },
+      { id: "Wine", label: "Wine" },
+      { id: "Cocktails", label: "Cocktails" },
+      { id: "Gin", label: "Gin" },
+      { id: "Vodka", label: "Vodka" },
+      { id: "Scotch", label: "Scotch" },
+      { id: "Bourbon", label: "Bourbon" },
+      { id: "Liqueur", label: "Liqueur" },
+      { id: "Tequila", label: "Tequila" },
+      { id: "Rum", label: "Rum" },
+      { id: "Whiskey", label: "Whiskey" },
+      { id: "Soft Drinks", label: "Soft Drinks" },
+      { id: "Active", label: "Active" },
+      { id: "Draft", label: "Draft" },
+      // { id: "86'd", label: "86'd" },
+    ],
+    filterKeys: ["status", "category", "type"],
     stats: [
       { label: "Drinks", value: 64, sublabel: "Catalogue" },
       { label: "Active", value: 60, accent: "#10b981", sublabel: "Sellable" },
@@ -2496,6 +2509,15 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
           { value: "Beer", label: "Beer" },
           { value: "Wine", label: "Wine" },
           { value: "Cocktails", label: "Cocktails" },
+          { value: "Gin", label: "Gin" },
+          { value: "Vodka", label: "Vodka" },
+          { value: "Scotch", label: "Scotch" },
+          { value: "Bourbon", label: "Bourbon" },
+          { value: "Liqueur", label: "Liqueur" },
+          { value: "Tequila", label: "Tequila" },
+          { value: "Rum", label: "Rum" },
+          { value: "Whiskey", label: "Whiskey" },
+          { value: "Soft Drinks", label: "Soft Drinks" },
         ],
         placeholder: "Select category",
         helperText: "Drink category",

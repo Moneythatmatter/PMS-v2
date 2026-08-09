@@ -335,14 +335,16 @@ function titleCaseType(value: unknown) {
 }
 
 function normalizeRow(path: string, row: Record<string, unknown>): ModuleRow {
+  const rawOutlet = row.outletId ?? row.venueId;
   const base: ModuleRow = {
     id: String(row.id ?? ""),
     status: row.status !== undefined ? String(row.status) : undefined,
-    outletId: row.outletId !== undefined ? String(row.outletId) : undefined,
+    outletId: rawOutlet !== undefined && rawOutlet !== null ? String(rawOutlet) : undefined,
+    venueId: row.venueId !== undefined && row.venueId !== null ? String(row.venueId) : undefined,
   };
 
   for (const [key, value] of Object.entries(row)) {
-    if (key === "id" || key === "status" || key === "outletId") continue;
+    if (key === "id" || key === "status" || key === "outletId" || key === "venueId") continue;
     if (value === null || value === undefined) continue;
     if (typeof value === "object") continue;
     if (
@@ -360,6 +362,54 @@ function normalizeRow(path: string, row: Record<string, unknown>): ModuleRow {
   }
   if (path.includes("/banquet/venues") && base.type) {
     base.type = titleCaseType(base.type);
+  }
+
+  // Banquet venues: provide capacity, area, and todayEvent defaults if missing
+  if (
+    path.includes("/banquet/venues") ||
+    (path.includes("/outlets") && String(base.type).toLowerCase() === "banquet")
+  ) {
+    if (
+      base.capacity === undefined ||
+      base.capacity === null ||
+      base.capacity === "" ||
+      base.capacity === 0
+    ) {
+      const n = String(base.name ?? "").toLowerCase();
+      base.capacity = n.includes("conference") || n.includes("hall")
+        ? 80
+        : n.includes("lawn") || n.includes("garden")
+          ? 250
+          : n.includes("pool")
+            ? 100
+            : n.includes("rooftop")
+              ? 150
+              : 100;
+    } else if (typeof base.capacity === "string") {
+      const parsed = Number.parseInt(base.capacity, 10);
+      if (Number.isFinite(parsed)) base.capacity = parsed;
+    }
+
+    if (!base.area) {
+      const n = String(base.name ?? "").toLowerCase();
+      base.area =
+        n.includes("garden") ||
+        n.includes("lawn") ||
+        n.includes("outdoor") ||
+        n.includes("pool") ||
+        n.includes("rooftop")
+          ? "Outdoor"
+          : "Indoor";
+    }
+  }
+
+  // Bar drink categories: normalize items count and fallback bar outletId
+  if (path.includes("/bar/drink-categories")) {
+    const rawItems = base.items ?? row.items ?? row.itemCount;
+    base.items = typeof rawItems === "number" ? rawItems : Number(rawItems ?? 0);
+    if (!base.outletId) {
+      base.outletId = (row.outletId as string) || "O-80858";
+    }
   }
 
   // Close Event reuses banquet billing; align status labels for the UI
@@ -411,6 +461,14 @@ function toApiPayload(path: string, row: ModuleRow): Record<string, unknown> {
       if (Number.isFinite(num) && cleaned !== "") {
         payload[key] = num;
       }
+    }
+  }
+
+  if (path.includes("/banquet/bookings")) {
+    const venue = payload.outletId ?? payload.venueId;
+    if (venue !== undefined) {
+      payload.venueId = venue;
+      payload.outletId = venue;
     }
   }
 
@@ -493,20 +551,22 @@ function toModuleDefinition(
     eyebrow: scoped.length ? undefined : "Food & Beverages",
     stats: calculatedStats,
     columns: definition.columns.map((col) => {
-      if (col.key !== "outletId") return col;
+      if (col.key !== "outletId" && col.key !== "venueId") return col;
       return {
         ...col,
         inputType: "select" as const,
         options: scoped.map((o) => ({ value: o.id, label: o.name })),
         render: (row: ModuleRow) => {
-          const match = scoped.find((o) => o.id === row.outletId);
-          return match?.name ?? String(row.outletId ?? "—");
+          const val = row.outletId ?? row.venueId;
+          const match = scoped.find((o) => o.id === val);
+          return match?.name ?? (val !== undefined && val !== null ? String(val) : "—");
         },
       };
     }),
     rows,
     searchPlaceholder: definition.searchPlaceholder,
     filterOptions: definition.filterOptions,
+    filterKeys: definition.filterKeys,
     actionLabel: definition.actionLabel,
     secondaryActions: definition.secondaryActions,
     statusStyle: definition.statusStyle,
@@ -582,6 +642,93 @@ export function FbModuleView({
               mapped = mapped.filter(
                 (r) => String(r.type).toLowerCase() === "banquet",
               );
+              try {
+                const rawBookings = await banquetBookingService.list();
+                const bookings = (rawBookings ?? []) as Record<string, unknown>[];
+                const todayStr = new Date().toISOString().slice(0, 10);
+                mapped = mapped.map((venue) => {
+                  const matchingBooking = bookings.find((b) => {
+                    const venueIdMatch =
+                      String(b.outletId ?? b.venueId ?? "") === String(venue.id);
+                    const dateVal = String(b.date ?? "").slice(0, 10);
+                    return venueIdMatch && (dateVal === todayStr || b.status === "In Progress" || b.status === "Confirmed");
+                  });
+
+                  const isBooked = Boolean(matchingBooking);
+
+                  return {
+                    ...venue,
+                    bookingStatus: isBooked ? "Booked" : (venue.bookingStatus ?? "Available"),
+                  };
+                });
+              } catch {
+                /* fallback to normalized venue */
+              }
+            }
+            if (path.includes("/bar/drink-categories")) {
+              try {
+                const rawDrinks = await drinkService.list();
+                const drinks = (rawDrinks ?? []) as Record<string, unknown>[];
+                mapped = mapped.map((cat) => {
+                  const catName = String(cat.name ?? "").toLowerCase();
+                  const catCode = String(cat.code ?? "").toLowerCase();
+                  const linkedDrinks = drinks.filter((d) => {
+                    const dCat = String(d.category ?? "").toLowerCase();
+                    return dCat === catName || dCat === catCode || String(d.categoryId) === String(cat.id);
+                  });
+                  const drinkCount = linkedDrinks.length;
+                  const sampleDrink = linkedDrinks[0];
+                  return {
+                    ...cat,
+                    items: Number(cat.items ?? cat.itemCount ?? drinkCount ?? 0),
+                    outletId: String(cat.outletId ?? sampleDrink?.outletId ?? "O-80858"),
+                  };
+                });
+              } catch {
+                /* fallback to normalized drink category */
+              }
+            }
+            if (path.includes("/bar/drinks")) {
+              try {
+                const rawCategories = await drinkCategoryService.list();
+                const categories = (rawCategories ?? []) as Record<string, unknown>[];
+                const catNames = categories
+                  .map((c) => String(c.name ?? "").trim())
+                  .filter(Boolean);
+                const uniqueCats = Array.from(new Set(catNames));
+                if (uniqueCats.length > 0) {
+                  const existingFilters = definition.filterOptions ?? [];
+                  const existingFilterIds = new Set(
+                    existingFilters.map((f) => f.id.toLowerCase()),
+                  );
+                  const newCategoryFilters = uniqueCats
+                    .filter((c) => !existingFilterIds.has(c.toLowerCase()))
+                    .map((c) => ({ id: c, label: c }));
+                  if (newCategoryFilters.length > 0) {
+                    definition.filterOptions = [
+                      ...existingFilters,
+                      ...newCategoryFilters,
+                    ];
+                  }
+                }
+
+                const catCol = definition.columns.find((c) => c.key === "category");
+                if (catCol && Array.isArray(catCol.options)) {
+                  const existingValues = new Set(
+                    catCol.options.map((o) =>
+                      typeof o === "string" ? o.toLowerCase() : o.value.toLowerCase(),
+                    ),
+                  );
+                  const newColOpts = uniqueCats
+                    .filter((c) => !existingValues.has(c.toLowerCase()))
+                    .map((c) => ({ value: c, label: c }));
+                  if (newColOpts.length > 0) {
+                    catCol.options = [...(catCol.options as { value: string; label: string }[]), ...newColOpts];
+                  }
+                }
+              } catch {
+                /* fallback */
+              }
             }
             setRows(mapped);
             setReportSummary(null);
