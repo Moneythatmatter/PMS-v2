@@ -45,7 +45,7 @@ export interface FbColumn {
   header: string;
   format?: "currency" | "percent";
   align?: "left" | "center" | "right";
-  inputType?: "text" | "number" | "select" | "currency" | "tel" | "time";
+  inputType?: "text" | "number" | "select" | "currency" | "tel" | "time" | "date";
   options?: { value: string; label: string }[] | string[];
   placeholder?: string;
   helperText?: string;
@@ -886,9 +886,9 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
       {
         key: "date",
         header: "Date",
-        inputType: "text",
-        placeholder: "e.g. 13 Jul",
-        helperText: "Event date",
+        inputType: "date",
+        placeholder: "Select event date",
+        helperText: "Event date (today or future)",
         required: true,
       },
       {
