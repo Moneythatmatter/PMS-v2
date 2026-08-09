@@ -18,7 +18,13 @@ export interface LiveTable {
 }
 
 export type FbOrderType = "Dine In" | "Takeaway" | "Room Service" | "Online";
-export type FbOrderStatus = "Pending" | "Preparing" | "Ready" | "Served" | "Settled";
+export type FbOrderStatus =
+  | "Pending"
+  | "Preparing"
+  | "Ready"
+  | "Served"
+  | "Settled"
+  | "Rejected";
 
 export interface FbOrderLine {
   name: string;

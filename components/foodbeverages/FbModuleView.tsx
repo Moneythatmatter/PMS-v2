@@ -25,7 +25,6 @@ import {
   grnService,
   happyHourService,
   ingredientService,
-  kdsService,
   kitchenPrinterService,
   menuCategoryService,
   menuItemService,
@@ -242,26 +241,29 @@ const PATH_SERVICE: Record<string, CrudLike> = {
       >,
     remove: (id) => fbOrderService.remove(id),
   },
-  "/food-beverages/kitchen/kds": {
-    list: async () =>
-      (await kdsService.list()) as unknown as Record<string, unknown>[],
-    create: async (body) =>
-      (await kdsService.create(body as never)) as unknown as Record<
-        string,
-        unknown
-      >,
-    update: async (id, body) =>
-      (await kdsService.update(id, body as never)) as unknown as Record<
-        string,
-        unknown
-      >,
-    remove: async () => {
-      /* KDS tickets are advanced, not deleted */
-    },
-  },
   "/food-beverages/kitchen/orders": {
-    list: async () =>
-      (await fbOrderService.list()) as unknown as Record<string, unknown>[],
+    list: async () => {
+      const rows = await fbOrderService.list();
+      return rows.map((o) => {
+        const lines = Array.isArray(o.lines) ? o.lines : [];
+        const itemCount = lines.reduce((n, l) => n + Number(l.qty ?? 0), 0);
+        const itemsSummary =
+          lines.length === 0
+            ? "—"
+            : lines
+                .slice(0, 3)
+                .map((l) => `${l.name} ×${l.qty}`)
+                .join(", ") + (lines.length > 3 ? ` +${lines.length - 3}` : "");
+        const sourceParts = [o.type, o.ref].filter(Boolean);
+        return {
+          ...o,
+          source: sourceParts.length ? sourceParts.join(" · ") : "—",
+          items: itemCount > 0 ? itemsSummary : "—",
+          priority: "Normal",
+          time: o.placedAt || "—",
+        } as unknown as Record<string, unknown>;
+      });
+    },
     create: async (body) =>
       (await fbOrderService.create({
         ...body,
@@ -273,21 +275,6 @@ const PATH_SERVICE: Record<string, CrudLike> = {
         unknown
       >,
     remove: (id) => fbOrderService.remove(id),
-  },
-  "/food-beverages/kitchen/preparation-queue": {
-    list: async () =>
-      (await kdsService.list()) as unknown as Record<string, unknown>[],
-    create: async (body) =>
-      (await kdsService.create(body as never)) as unknown as Record<
-        string,
-        unknown
-      >,
-    update: async (id, body) =>
-      (await kdsService.update(id, body as never)) as unknown as Record<
-        string,
-        unknown
-      >,
-    remove: async () => {},
   },
   "/food-beverages/menu/categories": menuCategoryService as CrudLike,
   "/food-beverages/menu/items": menuItemService as CrudLike,

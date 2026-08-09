@@ -26,11 +26,9 @@ import {
   dayCloseService,
   fbCashierService,
   fbOrderService,
-  kdsService,
   liveTableService,
   type FbCashierShift,
   type FbOrder,
-  type KdsTicket,
   type LiveTable,
 } from "@/services/food-beverages";
 import { useFbOutlets } from "@/services/food-beverages/useFbOutlets";
@@ -61,12 +59,12 @@ function isOpenTable(status: string) {
 
 function isOpenOrder(status: string) {
   const s = status.toLowerCase();
-  return !["settled", "served", "closed", "cancelled", "void", "voided"].includes(s);
+  return !["settled", "served", "closed", "cancelled", "void", "voided", "rejected"].includes(s);
 }
 
-function isActiveKds(status: string) {
+function isActiveKitchenOrder(status: string) {
   const s = status.toLowerCase();
-  return !["ready", "served", "completed", "done", "bumped"].includes(s);
+  return ["pending", "preparing", "ready"].includes(s);
 }
 
 export function FbDayCloseView() {
@@ -75,7 +73,6 @@ export function FbDayCloseView() {
   const [tables, setTables] = useState<LiveTable[]>([]);
   const [orders, setOrders] = useState<FbOrder[]>([]);
   const [shifts, setShifts] = useState<FbCashierShift[]>([]);
-  const [tickets, setTickets] = useState<KdsTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -94,16 +91,14 @@ export function FbDayCloseView() {
     if (!outletId) return;
     setLoading(true);
     try {
-      const [t, o, s, k] = await Promise.all([
+      const [t, o, s] = await Promise.all([
         liveTableService.list(outletId),
         fbOrderService.list(outletId),
         fbCashierService.list(outletId),
-        kdsService.list(outletId),
       ]);
       setTables(t);
       setOrders(o);
       setShifts(s);
-      setTickets(k);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load day close data");
@@ -128,9 +123,9 @@ export function FbDayCloseView() {
     () => shifts.filter((s) => String(s.status).toLowerCase() === "open"),
     [shifts],
   );
-  const activeTickets = useMemo(
-    () => tickets.filter((t) => isActiveKds(String(t.status ?? ""))),
-    [tickets],
+  const activeKitchenOrders = useMemo(
+    () => orders.filter((o) => isActiveKitchenOrder(String(o.status ?? ""))),
+    [orders],
   );
   const settledOrders = useMemo(
     () =>
@@ -179,14 +174,14 @@ export function FbDayCloseView() {
       },
       {
         id: "kitchen",
-        label: "Kitchen tickets cleared",
-        status: activeTickets.length === 0 ? "done" : "warning",
+        label: "Kitchen orders cleared",
+        status: activeKitchenOrders.length === 0 ? "done" : "warning",
         detail:
-          activeTickets.length === 0
-            ? "No pending KDS tickets"
-            : `${activeTickets.length} ticket${activeTickets.length === 1 ? "" : "s"} in kitchen`,
+          activeKitchenOrders.length === 0
+            ? "No pending kitchen orders"
+            : `${activeKitchenOrders.length} order${activeKitchenOrders.length === 1 ? "" : "s"} still in kitchen`,
         mandatory: true,
-        href: "/food-beverages/kitchen/kds",
+        href: "/food-beverages/kitchen/orders",
       },
       {
         id: "close",
@@ -202,7 +197,7 @@ export function FbDayCloseView() {
       openTables.length,
       openOrders.length,
       openShifts.length,
-      activeTickets.length,
+      activeKitchenOrders.length,
       outletClosed,
       bizDate,
     ],
@@ -217,7 +212,7 @@ export function FbDayCloseView() {
     "Checking open tables…",
     "Verifying open orders…",
     "Confirming cashier shifts…",
-    "Clearing kitchen tickets…",
+    "Clearing kitchen orders…",
     "Posting day sales…",
     "Locking outlet business day…",
     "Day close completed.",
@@ -584,8 +579,8 @@ export function FbDayCloseView() {
               />
               <SummaryLine
                 icon={ClipboardList}
-                label="Kitchen tickets"
-                value={String(activeTickets.length)}
+                label="Kitchen orders"
+                value={String(activeKitchenOrders.length)}
               />
               <SummaryLine
                 icon={IndianRupee}
@@ -603,7 +598,7 @@ export function FbDayCloseView() {
             <ul className="space-y-2 text-xs text-slate-600">
               <li>Settle or transfer all open covers and orders.</li>
               <li>Close and reconcile every cashier shift.</li>
-              <li>Clear pending kitchen tickets on KDS.</li>
+              <li>Clear pending kitchen orders (Pending / Preparing / Ready).</li>
               <li>Run day close once readiness reaches 100%.</li>
             </ul>
           </div>
