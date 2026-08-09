@@ -345,7 +345,14 @@ function normalizeRow(path: string, row: Record<string, unknown>): ModuleRow {
     if (key === "id" || key === "status" || key === "outletId") continue;
     if (value === null || value === undefined) continue;
     if (typeof value === "object") continue;
-    base[key] = value as string | number;
+    if (
+      (key === "amount" || key === "sales" || key === "revenue" || key === "rate" || key === "price" || key === "balance") &&
+      typeof value === "number"
+    ) {
+      base[key] = `₹${value.toLocaleString("en-IN")}`;
+    } else {
+      base[key] = value as string | number;
+    }
   }
 
   if (path.includes("/outlets") && base.type) {
@@ -392,10 +399,24 @@ function normalizeRow(path: string, row: Record<string, unknown>): ModuleRow {
 
 function toApiPayload(path: string, row: ModuleRow): Record<string, unknown> {
   const payload: Record<string, unknown> = { ...row };
-  if (
-    (path.includes("/outlets") || path.includes("/banquet/venues")) &&
-    payload.type
-  ) {
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (
+      typeof value === "string" &&
+      (value.includes("₹") ||
+        ["amount", "price", "rate", "cost", "balance", "sales", "revenue", "total", "tax", "discount"].includes(key))
+    ) {
+      const cleaned = value.replace(/₹/g, "").replace(/,/g, "").replace(/\s/g, "").trim();
+      const num = Number(cleaned);
+      if (Number.isFinite(num) && cleaned !== "") {
+        payload[key] = num;
+      }
+    }
+  }
+
+  if (path.includes("/banquet/venues")) {
+    payload.type = "banquet";
+  } else if (path.includes("/outlets") && payload.type) {
     payload.type = String(payload.type).toLowerCase();
   }
   if (path.includes("/outlets")) {

@@ -23,7 +23,7 @@ export interface ModuleColumn {
   align?: "left" | "center" | "right";
   sortable?: boolean;
   className?: string;
-  inputType?: "text" | "number" | "select" | "currency" | "tel" | "time";
+  inputType?: "text" | "number" | "select" | "currency" | "tel" | "time" | "date";
   options?: { value: string; label: string }[] | string[];
   placeholder?: string;
   helperText?: string;

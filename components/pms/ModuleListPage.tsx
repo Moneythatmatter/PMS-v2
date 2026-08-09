@@ -486,6 +486,18 @@ export function ModuleListPage({
         return;
       }
 
+      const isDate =
+        col.inputType === "date" ||
+        (col.key === "date" && definition.title === "Bookings") ||
+        col.key === "eventDate";
+      if (isDate && raw !== "") {
+        const todayISO = new Date().toLocaleDateString("sv-SE");
+        if (raw < todayISO) {
+          setFormError(`${col.header} cannot be a past date.`);
+          return;
+        }
+      }
+
       const isNumber =
         col.inputType === "number" ||
         col.inputType === "currency" ||
@@ -1077,6 +1089,10 @@ export function ModuleListPage({
 
               const isTel = col.inputType === "tel" || col.key === "phone";
               const isTime = col.inputType === "time" || col.key === "time";
+              const isDate =
+                col.inputType === "date" ||
+                (col.key === "date" && definition.title === "Bookings") ||
+                col.key === "eventDate";
 
               let selectOptions: { value: string; label: string }[] = [];
               if (isSelect) {
@@ -1166,7 +1182,10 @@ export function ModuleListPage({
                   ? "tel"
                   : isTime
                     ? "time"
-                    : "text";
+                    : isDate
+                      ? "date"
+                      : "text";
+              const todayISO = new Date().toLocaleDateString("sv-SE");
 
               return (
                 <FormField
@@ -1205,7 +1224,7 @@ export function ModuleListPage({
                   ) : (
                     <TextInput
                       type={inputTypeAttr}
-                      min={isNumber ? (col.min ?? 0) : undefined}
+                      min={isNumber ? (col.min ?? 0) : isDate ? todayISO : undefined}
                       max={isNumber ? col.max : undefined}
                       step={isNumber ? (col.step ?? (isCurrency ? "any" : "1")) : undefined}
                       inputMode={

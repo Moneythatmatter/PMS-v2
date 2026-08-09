@@ -125,7 +125,7 @@ function buildAlerts(data: DashboardData): AlertItem[] {
         .slice(0, 3)
         .map((t) => t.tableNo)
         .join(", "),
-      href: "/food-beverages/restaurants/live-status",
+      href: "/food-beverages/restaurants/live-table-status",
       action: "Open tables",
     });
   }
@@ -171,7 +171,7 @@ function buildAlerts(data: DashboardData): AlertItem[] {
       tone: "info",
       title: `${occupied} tables on floor`,
       detail: "Occupied or reserved right now",
-      href: "/food-beverages/restaurants/live-status",
+      href: "/food-beverages/restaurants/live-table-status",
       action: "Live status",
     });
   }
