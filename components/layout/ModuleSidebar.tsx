@@ -459,7 +459,7 @@ function SidebarNav({
                               href={child.href}
                               onClick={onNavigate}
                               className={cn(
-                                "flex min-w-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
+                                "flex min-w-0 items-center gap-2.5 rounded-full px-3 py-2 text-sm transition-colors",
                                 childActive
                                   ? "bg-emerald-700 text-white"
                                   : "text-slate-400 hover:bg-white/5 hover:text-white",
@@ -485,7 +485,7 @@ function SidebarNav({
                   href={item.href}
                   onClick={onNavigate}
                   className={cn(
-                    "group/item relative flex min-w-0 items-center rounded-lg py-2.5 text-sm font-medium transition-colors",
+                    "group/item relative flex min-w-0 items-center rounded-full py-2.5 text-sm font-medium transition-colors",
                     active
                       ? "bg-emerald-700 text-white"
                       : "text-slate-400 hover:bg-white/5 hover:text-white",

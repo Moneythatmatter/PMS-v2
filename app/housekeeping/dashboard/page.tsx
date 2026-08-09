@@ -315,21 +315,21 @@ export default function HousekeepingDashboard() {
 
           <Card className="min-w-0">
             <CardHeader title="Quick actions" subtitle="Housekeeping shortcuts" />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               {quickLinks.map((link) => {
                 const Icon = link.icon;
                 return (
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/60 p-3 transition hover:border-emerald-300 hover:bg-emerald-50/60"
+                    className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/60 p-3.5 transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/60 hover:shadow-sm"
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-emerald-700 ring-1 ring-slate-200">
-                      <Icon className="h-4 w-4" />
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-emerald-700 ring-1 ring-slate-200">
+                      <Icon className="h-4.5 w-4.5 text-emerald-700" />
                     </span>
-                    <span className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{link.label}</p>
-                      <p className="truncate text-xs text-slate-500">{link.hint}</p>
+                    <span className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-900 leading-snug">{link.label}</p>
+                      <p className="text-xs text-slate-500 leading-normal">{link.hint}</p>
                     </span>
                   </Link>
                 );

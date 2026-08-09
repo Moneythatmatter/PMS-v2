@@ -73,7 +73,7 @@ export default function RoomCleaningOperations() {
     if (!rm) return;
     setSelectedRoomNo(roomNo);
     setAssignee(rm.assignedStaff || (housekeepers[0]?.name ?? ""));
-    
+
     // Choose appropriate checklist based on occupancy
     const preferredChecklist = checklists.find((c) =>
       rm.status.includes("Occupied")
@@ -94,7 +94,7 @@ export default function RoomCleaningOperations() {
         (r.assignedStaff && r.assignedStaff.toLowerCase().includes(search.toLowerCase()));
 
       const matchFloor = floorFilter === "all" || r.floor === floorFilter;
-      
+
       let matchStatus = true;
       if (statusFilter === "dirty") {
         matchStatus = r.status.includes("Dirty");
@@ -285,16 +285,16 @@ export default function RoomCleaningOperations() {
                 key={room.roomNo}
                 onClick={() => handleRoomClick(room.roomNo)}
                 className={cn(
-                  "cursor-pointer rounded-2xl border bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-md",
+                  "cursor-pointer rounded-md border bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-md",
                   isCleaning
                     ? "border-amber-200 ring-2 ring-amber-100/50 bg-amber-50/5"
                     : isPendingInspect
-                    ? "border-blue-200 bg-blue-50/5"
-                    : isDirty
-                    ? "border-red-200"
-                    : isReady
-                    ? "border-emerald-200"
-                    : "border-slate-200"
+                      ? "border-blue-200 bg-blue-50/5"
+                      : isDirty
+                        ? "border-red-200"
+                        : isReady
+                          ? "border-emerald-200"
+                          : "border-slate-200"
                 )}
               >
                 <div className="flex items-start justify-between">
@@ -308,12 +308,12 @@ export default function RoomCleaningOperations() {
                       isReady
                         ? "bg-emerald-50 text-emerald-700"
                         : isDirty
-                        ? "bg-red-50 text-red-700"
-                        : isCleaning
-                        ? "bg-amber-50 text-amber-700 animate-pulse"
-                        : isPendingInspect
-                        ? "bg-blue-50 text-blue-700"
-                        : "bg-slate-100 text-slate-700"
+                          ? "bg-red-50 text-red-700"
+                          : isCleaning
+                            ? "bg-amber-50 text-amber-700 animate-pulse"
+                            : isPendingInspect
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-slate-100 text-slate-700"
                     )}
                   >
                     {room.status}
@@ -394,10 +394,10 @@ export default function RoomCleaningOperations() {
                       room.status === "Vacant Ready"
                         ? "bg-emerald-50 text-emerald-700"
                         : room.status.includes("Dirty")
-                        ? "bg-red-50 text-red-700"
-                        : room.status === "Cleaning"
-                        ? "bg-amber-50 text-amber-700"
-                        : "bg-blue-50 text-blue-700"
+                          ? "bg-red-50 text-red-700"
+                          : room.status === "Cleaning"
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-blue-50 text-blue-700"
                     )}
                   >
                     {room.status}
@@ -416,90 +416,90 @@ export default function RoomCleaningOperations() {
           </div>
 
           <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
-              <tr>
-                <th className="w-10 px-5 py-3">
-                  <input
-                    type="checkbox"
-                    checked={
-                      filteredRooms.length > 0 &&
-                      filteredRooms.every((room) => selectedIds.has(room.roomNo))
-                    }
-                    onChange={() => {
-                      const allIds = filteredRooms.map((room) => room.roomNo);
-                      const allSelected = allIds.every((id) => selectedIds.has(id));
-                      setSelectedIds(allSelected ? new Set() : new Set(allIds));
-                    }}
-                    className="rounded border-slate-300"
-                    aria-label="Select all"
-                  />
-                </th>
-                <th className="px-5 py-3">Room</th>
-                <th className="px-5 py-3">Category</th>
-                <th className="px-5 py-3">Floor</th>
-                <th className="px-5 py-3">Housekeeper</th>
-                <th className="px-5 py-3">PMS Status</th>
-                <th className="px-5 py-3">Active timer</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredRooms.map((room) => (
-                <tr
-                  key={room.roomNo}
-                  onClick={() => handleRoomClick(room.roomNo)}
-                  className={cn(
-                    "hover:bg-slate-50/50 cursor-pointer",
-                    selectedIds.has(room.roomNo) && "bg-emerald-50/40",
-                  )}
-                >
-                  <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
+                <tr>
+                  <th className="w-10 px-5 py-3">
                     <input
                       type="checkbox"
-                      checked={selectedIds.has(room.roomNo)}
+                      checked={
+                        filteredRooms.length > 0 &&
+                        filteredRooms.every((room) => selectedIds.has(room.roomNo))
+                      }
                       onChange={() => {
-                        const next = new Set(selectedIds);
-                        if (next.has(room.roomNo)) next.delete(room.roomNo);
-                        else next.add(room.roomNo);
-                        setSelectedIds(next);
+                        const allIds = filteredRooms.map((room) => room.roomNo);
+                        const allSelected = allIds.every((id) => selectedIds.has(id));
+                        setSelectedIds(allSelected ? new Set() : new Set(allIds));
                       }}
                       className="rounded border-slate-300"
-                      aria-label={`Select room ${room.roomNo}`}
+                      aria-label="Select all"
                     />
-                  </td>
-                  <td className="px-5 py-3.5 font-bold text-slate-800">Room {room.roomNo}</td>
-                  <td className="px-5 py-3.5 text-slate-500">{room.category}</td>
-                  <td className="px-5 py-3.5 text-slate-500">{room.floor}</td>
-                  <td className="px-5 py-3.5 text-slate-600 font-medium">{room.assignedStaff || "—"}</td>
-                  <td className="px-5 py-3.5">
-                    <span
-                      className={cn(
-                        "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase",
-                        room.status === "Vacant Ready"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : room.status.includes("Dirty")
-                          ? "bg-red-50 text-red-700"
-                          : room.status === "Cleaning"
-                          ? "bg-amber-50 text-amber-700"
-                          : "bg-blue-50 text-blue-700"
-                      )}
-                    >
-                      {room.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5 text-slate-500">
-                    {room.status === "Cleaning" && room.cleaningTimer ? (
-                      <span className="font-semibold text-amber-700">
-                        {formatTime(room.cleaningTimer.elapsedSeconds)}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
+                  </th>
+                  <th className="px-5 py-3">Room</th>
+                  <th className="px-5 py-3">Category</th>
+                  <th className="px-5 py-3">Floor</th>
+                  <th className="px-5 py-3">Housekeeper</th>
+                  <th className="px-5 py-3">PMS Status</th>
+                  <th className="px-5 py-3">Active timer</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredRooms.map((room) => (
+                  <tr
+                    key={room.roomNo}
+                    onClick={() => handleRoomClick(room.roomNo)}
+                    className={cn(
+                      "hover:bg-slate-50/50 cursor-pointer",
+                      selectedIds.has(room.roomNo) && "bg-emerald-50/40",
+                    )}
+                  >
+                    <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(room.roomNo)}
+                        onChange={() => {
+                          const next = new Set(selectedIds);
+                          if (next.has(room.roomNo)) next.delete(room.roomNo);
+                          else next.add(room.roomNo);
+                          setSelectedIds(next);
+                        }}
+                        className="rounded border-slate-300"
+                        aria-label={`Select room ${room.roomNo}`}
+                      />
+                    </td>
+                    <td className="px-5 py-3.5 font-bold text-slate-800">Room {room.roomNo}</td>
+                    <td className="px-5 py-3.5 text-slate-500">{room.category}</td>
+                    <td className="px-5 py-3.5 text-slate-500">{room.floor}</td>
+                    <td className="px-5 py-3.5 text-slate-600 font-medium">{room.assignedStaff || "—"}</td>
+                    <td className="px-5 py-3.5">
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase",
+                          room.status === "Vacant Ready"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : room.status.includes("Dirty")
+                              ? "bg-red-50 text-red-700"
+                              : room.status === "Cleaning"
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-blue-50 text-blue-700"
+                        )}
+                      >
+                        {room.status}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-500">
+                      {room.status === "Cleaning" && room.cleaningTimer ? (
+                        <span className="font-semibold text-amber-700">
+                          {formatTime(room.cleaningTimer.elapsedSeconds)}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </>
       )}
@@ -512,7 +512,7 @@ export default function RoomCleaningOperations() {
       >
         {selectedRoom && (
           <div className="space-y-6">
-            
+
             {/* Room Metadata Box */}
             <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 text-xs space-y-2">
               <div className="flex justify-between">

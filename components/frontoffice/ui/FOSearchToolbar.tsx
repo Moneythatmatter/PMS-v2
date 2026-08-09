@@ -40,9 +40,9 @@ export function FOSearchToolbar({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-        <div className="relative min-w-0 flex-1 basis-full sm:basis-auto">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+        <div className="relative h-10 min-w-0 flex-1 basis-full sm:basis-auto">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
             value={search}

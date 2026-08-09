@@ -91,7 +91,7 @@ export function SearchInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+        className="h-10 w-full rounded-full border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
       />
     </div>
   );
@@ -131,7 +131,7 @@ export function StatMiniCard({
   icon: Icon,
 }: StatMiniCardProps) {
   return (
-    <div className="group relative h-full min-w-0 overflow-hidden rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md sm:p-5">
+    <div className="group relative h-full min-w-0 overflow-hidden rounded-lg border border-slate-200/80 bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md sm:p-5">
       <div
         className="absolute inset-0 opacity-30 transition-opacity group-hover:opacity-50"
         style={{ background: `linear-gradient(135deg, ${accent}18, transparent)` }}
