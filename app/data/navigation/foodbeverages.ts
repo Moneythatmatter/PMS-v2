@@ -65,7 +65,6 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
     children: [
       { label: "Drink Categories", href: "/food-beverages/bar/drink-categories", icon: "tag" },
       { label: "Drinks", href: "/food-beverages/bar/drinks", icon: "wine" },
-      { label: "Cocktails", href: "/food-beverages/bar/cocktails", icon: "wine" },
       { label: "Happy Hour", href: "/food-beverages/bar/happy-hour", icon: "clock" },
       { label: "Bar Orders", href: "/food-beverages/bar/orders", icon: "clipboard-list" },
       { label: "Stock", href: "/food-beverages/bar/stock", icon: "package-search" },
