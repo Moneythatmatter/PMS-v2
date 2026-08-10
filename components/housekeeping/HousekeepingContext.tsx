@@ -248,7 +248,13 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
       );
       setPublicAreas(value(2, initialHKPublicAreas));
       setInventory(value(3, initialHKInventory));
-      setLaundryJobs(value(4, initialHKLaundry));
+      const apiLaundry = value<HKLaundryJob[]>(4, []);
+      if (Array.isArray(apiLaundry) && apiLaundry.length > 0) {
+        setLaundryJobs(apiLaundry);
+      } else {
+        const stored = localStorage.getItem("hk_laundry");
+        setLaundryJobs(stored ? JSON.parse(stored) : initialHKLaundry);
+      }
       setDamageReports(value(5, initialHKDamageReports));
       setRequisitions(value(6, initialHKRequisitions));
       setHistory(value(7, initialHKHistory));
@@ -260,7 +266,13 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         const stored = localStorage.getItem("hk_requests");
         setRequests(stored ? JSON.parse(stored) : initialHKRequests);
       }
-      setMaintenance(value(10, initialMaintenanceRequests) as MaintenanceRequest[]);
+      const apiMaintenance = value<MaintenanceRequest[]>(10, []);
+      if (Array.isArray(apiMaintenance) && apiMaintenance.length > 0) {
+        setMaintenance(apiMaintenance);
+      } else {
+        const stored = localStorage.getItem("hk_maintenance");
+        setMaintenance(stored ? JSON.parse(stored) : initialMaintenanceRequests);
+      }
       setLostFound(value(11, initialLostFoundItems) as LostFoundItem[]);
       setStaff(value(12, initialHKStaff));
       setChecklists(value(13, initialHKChecklistTemplates));

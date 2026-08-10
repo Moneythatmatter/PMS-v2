@@ -2,6 +2,7 @@ import { logAudit } from "../common/audit";
 import { changeRoomStatus } from "../room/roomStatus";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { MaintenanceRequest, HKRoom } from "../../HousekeepingTypes";
+import { hkMaintenanceService } from "@/services/housekeeping";
 
 export const startMaintenanceRepair = (
   id: string,
@@ -16,26 +17,36 @@ export const startMaintenanceRepair = (
     hour12: true,
   });
 
+  const req = currentMaintenance.find((r) => r.id === id);
+  const history = req?.assignmentHistory || [];
+  const newLog = {
+    timestamp: nowStr,
+    action: "Repair Started",
+    by: req?.engineer || "Engineer",
+  };
+  const updatedHistory = [...history, newLog];
+
   dispatchers.setMaintenance((prev) =>
     prev.map((r) => {
       if (r.id !== id) return r;
-      const history = r.assignmentHistory || [];
-      const newLog = {
-        timestamp: nowStr,
-        action: "Repair Started",
-        by: r.engineer || "Engineer",
-      };
       return {
         ...r,
         status: "In Progress",
         startedAt: nowStr,
-        assignmentHistory: [...history, newLog],
+        assignmentHistory: updatedHistory,
       };
     })
   );
 
-  const req = currentMaintenance.find((r) => r.id === id);
   logAudit("Maintenance", "Repair Started", `Engineer started repair on request #${id} in Room ${req?.room}.`, req?.room, dispatchers.currentUsername, dispatchers.setHistory);
+
+  void hkMaintenanceService.update(id, {
+    status: "In Progress",
+    startedAt: nowStr,
+    assignmentHistory: updatedHistory,
+  }).catch((err) => {
+    console.error("[HK] Failed to sync start repair to API", err);
+  });
 };
 
 export const completeMaintenanceRequest = (
@@ -51,26 +62,36 @@ export const completeMaintenanceRequest = (
     hour12: true,
   });
 
+  const req = currentMaintenance.find((r) => r.id === id);
+  const history = req?.assignmentHistory || [];
+  const newLog = {
+    timestamp: nowStr,
+    action: "Repair Completed",
+    by: req?.engineer || "Engineer",
+  };
+  const updatedHistory = [...history, newLog];
+
   dispatchers.setMaintenance((prev) =>
     prev.map((r) => {
       if (r.id !== id) return r;
-      const history = r.assignmentHistory || [];
-      const newLog = {
-        timestamp: nowStr,
-        action: "Repair Completed",
-        by: r.engineer || "Engineer",
-      };
       return {
         ...r,
         status: "Awaiting Verification",
         completedAt: nowStr,
-        assignmentHistory: [...history, newLog],
+        assignmentHistory: updatedHistory,
       };
     })
   );
 
-  const req = currentMaintenance.find((r) => r.id === id);
   logAudit("Maintenance", "Repair Completed", `Engineer completed repair on request #${id} in Room ${req?.room}. Awaiting supervisor verification.`, req?.room, dispatchers.currentUsername, dispatchers.setHistory);
+
+  void hkMaintenanceService.update(id, {
+    status: "Awaiting Verification",
+    completedAt: nowStr,
+    assignmentHistory: updatedHistory,
+  }).catch((err) => {
+    console.error("[HK] Failed to sync complete repair to API", err);
+  });
 };
 
 export const verifyMaintenanceRequest = (
@@ -90,21 +111,22 @@ export const verifyMaintenanceRequest = (
   if (!req) return;
 
   const engineerName = req.engineer;
+  const history = req.assignmentHistory || [];
+  const newLog = {
+    timestamp: nowStr,
+    action: "Verified by Supervisor",
+    by: dispatchers.currentUsername,
+  };
+  const updatedHistory = [...history, newLog];
 
   dispatchers.setMaintenance((prev) =>
     prev.map((r) => {
       if (r.id !== id) return r;
-      const history = r.assignmentHistory || [];
-      const newLog = {
-        timestamp: nowStr,
-        action: "Verified by Supervisor",
-        by: dispatchers.currentUsername,
-      };
       return {
         ...r,
         status: "Closed",
         actualCompletion: nowStr,
-        assignmentHistory: [...history, newLog],
+        assignmentHistory: updatedHistory,
       };
     })
   );
@@ -138,4 +160,12 @@ export const verifyMaintenanceRequest = (
   changeRoomStatus(req.room, finalRoomStatus as any, dispatchers);
 
   logAudit("Maintenance", "Issue Closed", `Verified and closed maintenance request #${id} in Room ${req.room}. Room released back to cleaning/occupancy.`, req.room, dispatchers.currentUsername, dispatchers.setHistory);
+
+  void hkMaintenanceService.update(id, {
+    status: "Closed",
+    actualCompletion: nowStr,
+    assignmentHistory: updatedHistory,
+  }).catch((err) => {
+    console.error("[HK] Failed to sync verify/close repair to API", err);
+  });
 };

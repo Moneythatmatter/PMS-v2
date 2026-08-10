@@ -1,6 +1,7 @@
 import { logAudit } from "../common/audit";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { HKLaundryJob } from "../../HousekeepingTypes";
+import { hkLaundryService } from "@/services/housekeeping";
 
 export const updateLaundryStatus = (id: string, newStatus: HKLaundryJob["status"], currentLaundryJobs: HKLaundryJob[], dispatchers: HousekeepingDispatchers) => {
   const nowStr = new Date().toLocaleString("en-IN", {
@@ -11,6 +12,8 @@ export const updateLaundryStatus = (id: string, newStatus: HKLaundryJob["status"
     hour12: true,
   });
 
+  let updatedTimeline: HKLaundryJob["timeline"] | undefined;
+
   dispatchers.setLaundryJobs((prev) =>
     prev.map((job) => {
       if (job.id !== id) return job;
@@ -18,6 +21,7 @@ export const updateLaundryStatus = (id: string, newStatus: HKLaundryJob["status"
       if (newStatus === "Washing") tl.washedAt = nowStr;
       if (newStatus === "Ready") tl.readyAt = nowStr;
       if (newStatus === "Delivered") tl.deliveredAt = nowStr;
+      updatedTimeline = tl;
 
       return {
         ...job,
@@ -48,4 +52,13 @@ export const updateLaundryStatus = (id: string, newStatus: HKLaundryJob["status"
   }
 
   logAudit("Laundry", "Laundry Updated", `Laundry job #${id} (${job.item}) status updated to ${newStatus}.`, job.room, dispatchers.currentUsername, dispatchers.setHistory);
+
+  if (updatedTimeline) {
+    void hkLaundryService.update(id, {
+      status: newStatus,
+      timeline: updatedTimeline,
+    }).catch((err) => {
+      console.error("[HK] Failed to sync laundry job status to API", err);
+    });
+  }
 };

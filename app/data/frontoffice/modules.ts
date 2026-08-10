@@ -202,6 +202,7 @@ export interface MaintenanceRequest {
   status: "Open" | "Assigned" | "In Progress" | "Awaiting Verification" | "Closed" | "Cancelled";
   reportedBy?: string;
   createdAt: string;
+  createdAtLabel?: string;
   assignedAt?: string;
   startedAt?: string;
   completedAt?: string;

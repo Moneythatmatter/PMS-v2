@@ -58,6 +58,37 @@ export function MaintenanceRequestsView() {
   const [estimatedCompletion, setEstimatedCompletion] = useState("2 Hours");
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; type: "image" | "pdf" | "video"; url: string }[]>([]);
 
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [fileAccept, setFileAccept] = useState<string>("image/*");
+
+  const triggerFileUpload = (acceptType: string) => {
+    setFileAccept(acceptType);
+    setTimeout(() => {
+      fileInputRef.current?.click();
+    }, 50);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const url = event.target?.result as string;
+      const fileType = file.type.startsWith("image/")
+        ? "image"
+        : file.type.startsWith("video/")
+        ? "video"
+        : "pdf";
+      setUploadedFiles((prev) => [
+        ...prev,
+        { name: file.name, type: fileType, url },
+      ]);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   const formatTimeAgo = (timeStr?: string): string => {
     if (!timeStr) return "Never";
     const diffMs = Date.now() - new Date(timeStr).getTime();
@@ -67,6 +98,25 @@ export function MaintenanceRequestsView() {
     const diffHours = Math.floor(diffMins / 60);
     if (diffHours < 24) return `${diffHours} hours ago`;
     return new Date(timeStr).toLocaleDateString();
+  };
+
+  const formatDisplayDate = (item: { createdAt: string; createdAtLabel?: string }) => {
+    if (item.createdAtLabel) return item.createdAtLabel;
+    if (!item.createdAt) return "—";
+    if (item.createdAt.includes("T")) {
+      try {
+        return new Date(item.createdAt).toLocaleString("en-IN", {
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        });
+      } catch {
+        return item.createdAt;
+      }
+    }
+    return item.createdAt;
   };
 
   const filteredMaint = useMemo(() => {
@@ -677,14 +727,19 @@ export function MaintenanceRequestsView() {
 
           {/* Photo/File Attachment Upload Section */}
           <div className="space-y-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept={fileAccept}
+              onChange={handleFileUpload}
+              className="hidden"
+            />
             <label className="text-[10px] text-slate-400 font-bold uppercase block">Attachments (Images, PDF, Videos)</label>
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setUploadedFiles(prev => [...prev, { name: "defect_photo.png", type: "image", url: "/defect_photo.png" }]);
-                }}
+                onClick={() => triggerFileUpload("image/*")}
                 className="text-xs h-8.5 font-semibold py-1.5"
               >
                 + Upload Image
@@ -692,9 +747,7 @@ export function MaintenanceRequestsView() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setUploadedFiles(prev => [...prev, { name: "leak_video.mp4", type: "video", url: "/leak_video.mp4" }]);
-                }}
+                onClick={() => triggerFileUpload("video/*")}
                 className="text-xs h-8.5 font-semibold py-1.5"
               >
                 + Upload Video
@@ -702,9 +755,7 @@ export function MaintenanceRequestsView() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setUploadedFiles(prev => [...prev, { name: "wiring_spec.pdf", type: "pdf", url: "/wiring_spec.pdf" }]);
-                }}
+                onClick={() => triggerFileUpload("application/pdf")}
                 className="text-xs h-8.5 font-semibold py-1.5"
               >
                 + Upload PDF
@@ -714,7 +765,12 @@ export function MaintenanceRequestsView() {
               <div className="space-y-1.5 mt-1 text-xs">
                 {uploadedFiles.map((file, i) => (
                   <div key={i} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200">
-                    <span className="font-semibold text-slate-700">{file.name} ({file.type.toUpperCase()})</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {file.type === "image" && file.url && (
+                        <img src={file.url} alt={file.name} className="h-7 w-7 object-cover rounded border border-slate-200" />
+                      )}
+                      <span className="font-semibold text-slate-700 truncate max-w-[180px]">{file.name} ({file.type.toUpperCase()})</span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))}

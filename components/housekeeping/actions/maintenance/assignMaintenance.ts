@@ -1,6 +1,7 @@
 import { logAudit } from "../common/audit";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { MaintenanceRequest } from "../../HousekeepingTypes";
+import { hkMaintenanceService } from "@/services/housekeeping";
 
 export const assignMaintenanceRequest = (
   id: string,
@@ -20,26 +21,27 @@ export const assignMaintenanceRequest = (
 
   const req = currentMaintenance.find((r) => r.id === id);
   const oldEngineer = req?.engineer;
+  const history = req?.assignmentHistory || [];
+  const newLog = {
+    timestamp: nowStr,
+    action: oldEngineer && oldEngineer !== "—"
+      ? `Reassigned → ${engineerName}`
+      : `${assignmentType === "Auto" ? "Auto Assigned" : "Manually Assigned"} → ${engineerName}`,
+    by: oldEngineer && oldEngineer !== "—" ? "Supervisor" : "System",
+    reason: reason || undefined,
+  };
+  const updatedHistory = [...history, newLog];
 
   dispatchers.setMaintenance((prev) =>
     prev.map((r) => {
       if (r.id !== id) return r;
-      const history = r.assignmentHistory || [];
-      const newLog = {
-        timestamp: nowStr,
-        action: oldEngineer && oldEngineer !== "—"
-          ? `Reassigned → ${engineerName}`
-          : `${assignmentType === "Auto" ? "Auto Assigned" : "Manually Assigned"} → ${engineerName}`,
-        by: oldEngineer && oldEngineer !== "—" ? "Supervisor" : "System",
-        reason: reason || undefined,
-      };
       return {
         ...r,
         status: "Assigned",
         engineer: engineerName,
         assignedAt: nowStr,
         assignmentType,
-        assignmentHistory: [...history, newLog],
+        assignmentHistory: updatedHistory,
       };
     })
   );
@@ -61,4 +63,14 @@ export const assignMaintenanceRequest = (
   );
 
   logAudit("Maintenance", "Issue Assigned", `Assigned maintenance request #${id} to engineer ${engineerName}.`, req?.room, dispatchers.currentUsername, dispatchers.setHistory);
+
+  void hkMaintenanceService.update(id, {
+    status: "Assigned",
+    engineer: engineerName,
+    assignedAt: nowStr,
+    assignmentType,
+    assignmentHistory: updatedHistory,
+  }).catch((err) => {
+    console.error("[HK] Failed to sync assign maintenance request to API", err);
+  });
 };
