@@ -258,7 +258,13 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
       setDamageReports(value(5, initialHKDamageReports));
       setRequisitions(value(6, initialHKRequisitions));
       setHistory(value(7, initialHKHistory));
-      setLuggageJobs(value(8, initialHKLuggageJobs));
+      const apiLuggage = value<HKLuggageJob[]>(8, []);
+      if (Array.isArray(apiLuggage) && apiLuggage.length > 0) {
+        setLuggageJobs(apiLuggage);
+      } else {
+        const stored = localStorage.getItem("hk_luggage");
+        setLuggageJobs(stored ? JSON.parse(stored) : initialHKLuggageJobs);
+      }
       const apiRequests = value<HousekeepingRequest[]>(9, []);
       if (Array.isArray(apiRequests) && apiRequests.length > 0) {
         setRequests(apiRequests);
