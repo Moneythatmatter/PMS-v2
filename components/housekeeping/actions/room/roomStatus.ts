@@ -1,7 +1,7 @@
 import { logAudit } from "../common/audit";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { HKRoom, HKPublicArea, HousekeepingRequest } from "../../HousekeepingTypes";
-import { hkRoomService } from "@/services/housekeeping";
+import { hkRoomService, hkGuestRequestService } from "@/services/housekeeping";
 
 export const changeRoomStatus = (roomNo: string, status: HKRoom["status"], dispatchers: HousekeepingDispatchers) => {
   let hkSt: HKRoom["hkStatus"] = "Clean";
@@ -71,7 +71,8 @@ export const addHKRequest = (
   requestsLength: number,
   dispatchers: HousekeepingDispatchers
 ) => {
-  const nowStr = new Date().toLocaleString("en-IN", {
+  const isoStr = new Date().toISOString();
+  const labelStr = new Date().toLocaleString("en-IN", {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -87,11 +88,12 @@ export const addHKRequest = (
     priority: req.priority,
     status: req.assignedStaff && req.assignedStaff !== "—" ? "In Progress" : "Open",
     assignedStaff: req.assignedStaff || "—",
-    createdAt: nowStr,
+    createdAt: isoStr,
+    createdAtLabel: labelStr,
     assignmentType: req.assignmentType,
     assignmentHistory: req.assignedStaff && req.assignedStaff !== "—" ? [
       {
-        timestamp: nowStr,
+        timestamp: labelStr,
         action: `${req.assignmentType === "Auto" ? "Auto Assigned" : "Manually Assigned"} → ${req.assignedStaff}`,
         by: "System",
       }
@@ -124,6 +126,10 @@ export const addHKRequest = (
     dispatchers.currentUsername,
     dispatchers.setHistory
   );
+
+  void hkGuestRequestService.create(record).catch((err) => {
+    console.error("[HK] Failed to sync new HK request to API", err);
+  });
 };
 
 export const assignHKRequest = (
@@ -144,25 +150,26 @@ export const assignHKRequest = (
 
   const req = currentRequests.find((r) => r.id === id);
   const oldStaff = req?.assignedStaff;
+  const history = req?.assignmentHistory || [];
+  const newLog = {
+    timestamp: nowStr,
+    action: oldStaff && oldStaff !== "—"
+      ? `Reassigned → ${staffName}`
+      : `${assignmentType === "Auto" ? "Auto Assigned" : "Manually Assigned"} → ${staffName}`,
+    by: oldStaff && oldStaff !== "—" ? "Supervisor" : "System",
+    reason: reason || undefined,
+  };
+  const updatedHistory = [...history, newLog];
 
   dispatchers.setRequests((prev) =>
     prev.map((r) => {
       if (r.id !== id) return r;
-      const history = r.assignmentHistory || [];
-      const newLog = {
-        timestamp: nowStr,
-        action: oldStaff && oldStaff !== "—"
-          ? `Reassigned → ${staffName}`
-          : `${assignmentType === "Auto" ? "Auto Assigned" : "Manually Assigned"} → ${staffName}`,
-        by: oldStaff && oldStaff !== "—" ? "Supervisor" : "System",
-        reason: reason || undefined,
-      };
       return {
         ...r,
         status: "In Progress",
         assignedStaff: staffName,
         assignmentType,
-        assignmentHistory: [...history, newLog],
+        assignmentHistory: updatedHistory,
       };
     })
   );
@@ -190,6 +197,15 @@ export const assignHKRequest = (
     dispatchers.currentUsername,
     dispatchers.setHistory
   );
+
+  void hkGuestRequestService.update(id, {
+    status: "In Progress",
+    assignedStaff: staffName,
+    assignmentType,
+    assignmentHistory: updatedHistory,
+  }).catch((err) => {
+    console.error("[HK] Failed to sync assign HK request to API", err);
+  });
 };
 
 export const completeHKRequest = (
@@ -234,6 +250,10 @@ export const completeHKRequest = (
   );
 
   logAudit("Room Status", "Request Completed", `Completed request "${req?.issue}" for Room ${req?.room}. Stock adjusted.`, req?.room, dispatchers.currentUsername, dispatchers.setHistory);
+
+  void hkGuestRequestService.update(id, { status: "Completed" }).catch((err) => {
+    console.error("[HK] Failed to sync complete HK request to API", err);
+  });
 };
 
 export const cleanPublicArea = (id: string, completed: boolean, currentPublicAreas: HKPublicArea[], dispatchers: HousekeepingDispatchers) => {

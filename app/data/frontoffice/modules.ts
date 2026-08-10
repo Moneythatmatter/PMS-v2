@@ -183,6 +183,7 @@ export interface HousekeepingRequest {
   status: "Open" | "In Progress" | "Completed";
   assignedStaff: string;
   createdAt: string;
+  createdAtLabel?: string;
   assignmentType?: "Auto" | "Manual";
   assignmentHistory?: {
     timestamp: string;
