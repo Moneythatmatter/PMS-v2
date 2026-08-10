@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
+import { hkRoomService } from "@/services/housekeeping";
 
 const ROOM_CATEGORIES = ["Standard", "Deluxe", "Executive Suite", "Presidential Suite"];
 const BED_TYPES = ["King", "Queen", "Twin", "Single"];
@@ -24,6 +25,7 @@ export default function RoomMasterConfig() {
   const [selectedRoomNo, setSelectedRoomNo] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Form Fields: New Room
   const [newRoomNo, setNewRoomNo] = useState("");
@@ -51,13 +53,29 @@ export default function RoomMasterConfig() {
   }, [rooms]);
 
   const handleCreateRoom = () => {
-    if (!newRoomNo.trim()) return;
+    const trimmedRoomNo = newRoomNo.trim();
+    if (!trimmedRoomNo) {
+      setCreateError("Please enter a valid room number.");
+      return;
+    }
+
+    const duplicate = rooms.find(
+      (r) => r.roomNo.trim().toLowerCase() === trimmedRoomNo.toLowerCase()
+    );
+    if (duplicate) {
+      setCreateError(`Room "${trimmedRoomNo}" already exists in the master plan.`);
+      return;
+    }
+
+    setCreateError(null);
     const occ = parseInt(newOccupancy, 10) || 2;
     const facs = facilities.split(",").map((f) => f.trim()).filter(Boolean);
 
     const newRecord: any = {
-      roomNo: newRoomNo,
+      id: trimmedRoomNo,
+      roomNo: trimmedRoomNo,
       category: newCategory,
+      type: newCategory,
       bedType: newBed,
       floor: newFloor,
       wing: newWing,
@@ -75,32 +93,46 @@ export default function RoomMasterConfig() {
     };
 
     setRooms((prev: any) => [...prev, newRecord].sort((a, b) => a.roomNo.localeCompare(b.roomNo)));
-    logAudit("Room Status", "Room Added", `Created new Room ${newRoomNo} in master plan.`);
+    logAudit("Room Status", "Room Added", `Created new Room ${trimmedRoomNo} in master plan.`);
     setCreateOpen(false);
     setNewRoomNo("");
     setRemarks("");
+
+    void hkRoomService.create(newRecord).catch((err) => {
+      console.error(`[HK] Failed to sync new room ${trimmedRoomNo} to API`, err);
+    });
   };
 
   const handleToggleDnd = (roomNo: string) => {
+    let nextState = false;
     setRooms((prev) =>
       prev.map((r) => {
         if (r.roomNo !== roomNo) return r;
-        const next = !r.dnd;
-        logAudit("Room Status", "DND Toggled", `Toggled DND state for room ${roomNo} to ${next ? "ON" : "OFF"}.`, roomNo);
-        return { ...r, dnd: next };
+        nextState = !r.dnd;
+        logAudit("Room Status", "DND Toggled", `Toggled DND state for room ${roomNo} to ${nextState ? "ON" : "OFF"}.`, roomNo);
+        return { ...r, dnd: nextState };
       })
     );
+
+    void hkRoomService.update(roomNo, { dnd: nextState }).catch((err) => {
+      console.error(`[HK] Failed to sync DND toggle for room ${roomNo}`, err);
+    });
   };
 
   const handleToggleSleepOut = (roomNo: string) => {
+    let nextState = false;
     setRooms((prev) =>
       prev.map((r) => {
         if (r.roomNo !== roomNo) return r;
-        const next = !r.sleepOut;
-        logAudit("Room Status", "Sleep Out Toggled", `Toggled Sleep Out state for room ${roomNo} to ${next ? "ON" : "OFF"}.`, roomNo);
-        return { ...r, sleepOut: next };
+        nextState = !r.sleepOut;
+        logAudit("Room Status", "Sleep Out Toggled", `Toggled Sleep Out state for room ${roomNo} to ${nextState ? "ON" : "OFF"}.`, roomNo);
+        return { ...r, sleepOut: nextState };
       })
     );
+
+    void hkRoomService.update(roomNo, { sleepOut: nextState }).catch((err) => {
+      console.error(`[HK] Failed to sync Sleep Out toggle for room ${roomNo}`, err);
+    });
   };
 
   const handleStatusChange = (roomNo: string, val: any) => {
@@ -395,11 +427,32 @@ export default function RoomMasterConfig() {
       </Drawer>
 
       {/* Drawer: Add New Room */}
-      <Drawer open={createOpen} onClose={() => setCreateOpen(false)} title="Create New Hotel Room Master">
+      <Drawer
+        open={createOpen}
+        onClose={() => {
+          setCreateOpen(false);
+          setCreateError(null);
+        }}
+        title="Create New Hotel Room Master"
+      >
         <div className="space-y-4">
+          {createError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700 flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 shrink-0" />
+              <span>{createError}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Room Number" required>
-              <TextInput placeholder="e.g. 105" value={newRoomNo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewRoomNo(e.target.value)} />
+              <TextInput
+                placeholder="e.g. 105"
+                value={newRoomNo}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setNewRoomNo(e.target.value);
+                  setCreateError(null);
+                }}
+              />
             </FormField>
             <FormField label="Room Category">
               <SelectInput value={newCategory} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewCategory(e.target.value)}>
