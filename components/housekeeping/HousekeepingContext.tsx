@@ -279,7 +279,13 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         const stored = localStorage.getItem("hk_maintenance");
         setMaintenance(stored ? JSON.parse(stored) : initialMaintenanceRequests);
       }
-      setLostFound(value(11, initialLostFoundItems) as LostFoundItem[]);
+      const apiLostFound = value<LostFoundItem[]>(11, []);
+      if (Array.isArray(apiLostFound) && apiLostFound.length > 0) {
+        setLostFound(apiLostFound);
+      } else {
+        const stored = localStorage.getItem("hk_lostfound");
+        setLostFound(stored ? JSON.parse(stored) : initialLostFoundItems);
+      }
       setStaff(value(12, initialHKStaff));
       setChecklists(value(13, initialHKChecklistTemplates));
       setShifts(value(14, initialHKShifts));
