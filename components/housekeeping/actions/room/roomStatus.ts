@@ -1,43 +1,44 @@
 import { logAudit } from "../common/audit";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { HKRoom, HKPublicArea, HousekeepingRequest } from "../../HousekeepingTypes";
+import { hkRoomService } from "@/services/housekeeping";
 
 export const changeRoomStatus = (roomNo: string, status: HKRoom["status"], dispatchers: HousekeepingDispatchers) => {
+  let hkSt: HKRoom["hkStatus"] = "Clean";
+  let foSt: HKRoom["foStatus"] = "Vacant";
+
+  if (status === "Vacant Ready") {
+    hkSt = "Inspected";
+    foSt = "Vacant";
+  } else if (status === "Vacant Dirty") {
+    hkSt = "Dirty";
+    foSt = "Vacant";
+  } else if (status === "Occupied") {
+    hkSt = "Clean";
+    foSt = "Occupied";
+  } else if (status === "Occupied Dirty") {
+    hkSt = "Dirty";
+    foSt = "Occupied";
+  } else if (status === "Blocked") {
+    hkSt = "Clean";
+    foSt = "Blocked";
+  } else if (status === "Out of Order") {
+    hkSt = "OOO";
+    foSt = "Blocked";
+  } else if (status === "Out of Service") {
+    hkSt = "OOS";
+    foSt = "Vacant";
+  } else if (status === "Cleaning") {
+    hkSt = "Cleaning";
+    foSt = "Vacant";
+  } else if (status === "Inspection Pending") {
+    hkSt = "Cleaning";
+    foSt = "Vacant";
+  }
+
   dispatchers.setRooms((prev) =>
     prev.map((r) => {
       if (r.roomNo !== roomNo) return r;
-      let hkSt: HKRoom["hkStatus"] = "Clean";
-      let foSt: HKRoom["foStatus"] = "Vacant";
-
-      if (status === "Vacant Ready") {
-        hkSt = "Inspected";
-        foSt = "Vacant";
-      } else if (status === "Vacant Dirty") {
-        hkSt = "Dirty";
-        foSt = "Vacant";
-      } else if (status === "Occupied") {
-        hkSt = "Clean";
-        foSt = "Occupied";
-      } else if (status === "Occupied Dirty") {
-        hkSt = "Dirty";
-        foSt = "Occupied";
-      } else if (status === "Blocked") {
-        hkSt = "Clean";
-        foSt = "Blocked";
-      } else if (status === "Out of Order") {
-        hkSt = "OOO";
-        foSt = "Blocked";
-      } else if (status === "Out of Service") {
-        hkSt = "OOS";
-        foSt = "Vacant";
-      } else if (status === "Cleaning") {
-        hkSt = "Cleaning";
-        foSt = "Vacant";
-      } else if (status === "Inspection Pending") {
-        hkSt = "Cleaning";
-        foSt = "Vacant";
-      }
-
       return {
         ...r,
         status,
@@ -47,7 +48,16 @@ export const changeRoomStatus = (roomNo: string, status: HKRoom["status"], dispa
     })
   );
   logAudit("Room Status", "Status Override", `Overwrote status of Room ${roomNo} to ${status}.`, roomNo, dispatchers.currentUsername, dispatchers.setHistory);
+
+  void hkRoomService.update(roomNo, {
+    status,
+    hkStatus: hkSt,
+    foStatus: foSt,
+  }).catch((err) => {
+    console.error(`[HK] Failed to sync changeRoomStatus for room ${roomNo} to API`, err);
+  });
 };
+
 
 export const addHKRequest = (
   req: {

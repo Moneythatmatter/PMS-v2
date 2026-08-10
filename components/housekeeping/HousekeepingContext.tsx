@@ -84,7 +84,7 @@ interface HousekeepingContextType {
   startCleaning: (roomNo: string, staffName: string) => void;
   pauseCleaning: (roomNo: string) => void;
   resumeCleaning: (roomNo: string) => void;
-  completeCleaning: (roomNo: string, progressItems: string[]) => void;
+  completeCleaning: (roomNo: string, progressItems: string[], photos?: string[]) => void;
   inspectRoom: (roomNo: string, passed: boolean, signature: string, remarks: string, qualityScore: number) => void;
   changeRoomStatus: (roomNo: string, status: HKRoom["status"]) => void;
   addLostFoundItem: (item: Omit<LostFoundItem, "id" | "foundDate" | "status">) => void;
@@ -417,8 +417,8 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
     actions.resumeCleaning(roomNo, dispatchers);
   };
 
-  const completeCleaning = (roomNo: string, progressItems: string[]) => {
-    actions.completeCleaning(roomNo, progressItems, dispatchers);
+  const completeCleaning = (roomNo: string, progressItems: string[], photos?: string[]) => {
+    actions.completeCleaning(roomNo, progressItems, dispatchers, photos);
   };
 
   const inspectRoom = (roomNo: string, passed: boolean, signature: string, remarks: string, qualityScore: number) => {

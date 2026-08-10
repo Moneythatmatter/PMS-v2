@@ -1,5 +1,6 @@
 import { logAudit } from "../common/audit";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
+import { hkRoomService } from "@/services/housekeeping";
 
 export const startCleaning = (
   roomNo: string,
@@ -25,6 +26,10 @@ export const startCleaning = (
     })
   );
   logAudit("Cleaning", "Started Cleaning", `Housekeeper ${housekeeper} started cleaning room ${roomNo}.`, roomNo, dispatchers.currentUsername, dispatchers.setHistory);
+
+  void hkRoomService.startClean(roomNo, housekeeper).catch((err) => {
+    console.error(`[HK] Failed to sync startClean for room ${roomNo} to API`, err);
+  });
 };
 
 export const pauseCleaning = (roomNo: string, dispatchers: HousekeepingDispatchers) => {
@@ -42,6 +47,10 @@ export const pauseCleaning = (roomNo: string, dispatchers: HousekeepingDispatche
     })
   );
   logAudit("Cleaning", "Paused Cleaning", `Cleaning paused for room ${roomNo}.`, roomNo, dispatchers.currentUsername, dispatchers.setHistory);
+
+  void hkRoomService.pauseClean(roomNo, true).catch((err) => {
+    console.error(`[HK] Failed to sync pauseClean for room ${roomNo} to API`, err);
+  });
 };
 
 export const resumeCleaning = (roomNo: string, dispatchers: HousekeepingDispatchers) => {
@@ -59,9 +68,18 @@ export const resumeCleaning = (roomNo: string, dispatchers: HousekeepingDispatch
     })
   );
   logAudit("Cleaning", "Resumed Cleaning", `Cleaning resumed for room ${roomNo}.`, roomNo, dispatchers.currentUsername, dispatchers.setHistory);
+
+  void hkRoomService.pauseClean(roomNo, false).catch((err) => {
+    console.error(`[HK] Failed to sync resumeClean for room ${roomNo} to API`, err);
+  });
 };
 
-export const completeCleaning = (roomNo: string, progressItems: string[], dispatchers: HousekeepingDispatchers) => {
+export const completeCleaning = (
+  roomNo: string,
+  progressItems: string[],
+  dispatchers: HousekeepingDispatchers,
+  photos?: string[]
+) => {
   dispatchers.setRooms((prev) =>
     prev.map((r) => {
       if (r.roomNo !== roomNo) return r;
@@ -71,6 +89,7 @@ export const completeCleaning = (roomNo: string, progressItems: string[], dispat
         hkStatus: "Dirty", // Still dirty until inspection passes!
         cleaningProgress: 100,
         cleaningTimer: undefined, // clear timer
+        photos: photos && photos.length > 0 ? photos : r.photos,
       };
     })
   );
@@ -99,4 +118,12 @@ export const completeCleaning = (roomNo: string, progressItems: string[], dispat
     dispatchers.currentUsername,
     dispatchers.setHistory
   );
+
+  void hkRoomService.completeClean(roomNo, {
+    photos,
+    remarks: `Items checked: ${progressItems.length}`,
+  }).catch((err) => {
+    console.error(`[HK] Failed to sync completeClean for room ${roomNo} to API`, err);
+  });
 };
+
