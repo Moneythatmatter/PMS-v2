@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { TextInput, FormField } from "@/components/frontoffice/ui";
 
+import { hkChecklistService } from "@/services/housekeeping";
+
 export default function ChecklistMasters() {
   const {
     checklists,
@@ -24,10 +26,12 @@ export default function ChecklistMasters() {
   const handleAddItem = () => {
     if (!newItemText.trim() || !activeChecklistId) return;
 
+    let updatedItems: string[] = [];
+
     setChecklists((prev) =>
       prev.map((c) => {
         if (c.id !== activeChecklistId) return c;
-        const nextItems = [...c.items, newItemText.trim()];
+        updatedItems = [...c.items, newItemText.trim()];
         logAudit(
           "Inspection",
           "Checklist Item Added",
@@ -35,22 +39,30 @@ export default function ChecklistMasters() {
         );
         return {
           ...c,
-          items: nextItems,
+          items: updatedItems,
         };
       })
     );
 
     setNewItemText("");
+
+    void hkChecklistService.update(activeChecklistId, {
+      items: updatedItems,
+    }).catch((err) => {
+      console.error(`[HK] Failed to sync added checklist item for ${activeChecklistId}`, err);
+    });
   };
 
   const handleDeleteItem = (index: number) => {
     if (!activeChecklistId) return;
 
+    let updatedItems: string[] = [];
+
     setChecklists((prev) =>
       prev.map((c) => {
         if (c.id !== activeChecklistId) return c;
         const deleted = c.items[index];
-        const nextItems = c.items.filter((_, i) => i !== index);
+        updatedItems = c.items.filter((_, i) => i !== index);
         logAudit(
           "Inspection",
           "Checklist Item Removed",
@@ -58,10 +70,16 @@ export default function ChecklistMasters() {
         );
         return {
           ...c,
-          items: nextItems,
+          items: updatedItems,
         };
       })
     );
+
+    void hkChecklistService.update(activeChecklistId, {
+      items: updatedItems,
+    }).catch((err) => {
+      console.error(`[HK] Failed to sync deleted checklist item for ${activeChecklistId}`, err);
+    });
   };
 
   return (

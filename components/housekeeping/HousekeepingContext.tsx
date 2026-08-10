@@ -287,7 +287,13 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         setLostFound(stored ? JSON.parse(stored) : initialLostFoundItems);
       }
       setStaff(value(12, initialHKStaff));
-      setChecklists(value(13, initialHKChecklistTemplates));
+      const apiChecklists = value<HKChecklistTemplate[]>(13, []);
+      if (Array.isArray(apiChecklists) && apiChecklists.length > 0) {
+        setChecklists(apiChecklists);
+      } else {
+        const stored = localStorage.getItem("hk_checklists");
+        setChecklists(stored ? JSON.parse(stored) : initialHKChecklistTemplates);
+      }
       setShifts(value(14, initialHKShifts));
       setApiConnected(true);
     } catch (e) {
