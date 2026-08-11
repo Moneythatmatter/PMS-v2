@@ -454,7 +454,7 @@ function SidebarNav({
                         const childActive = isItemActive(pathname, child.href);
 
                         return (
-                          <li key={child.href}>
+                          <li key={`${child.label}-${child.href}`}>
                             <Link
                               href={child.href}
                               onClick={onNavigate}

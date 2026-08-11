@@ -75,10 +75,38 @@ export function BankReconciliationView() {
   // Search Filter Query
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Loading & Toast Notification State
+  // Loading, Confirmation Modal, & Toast Notification State
   const [isDisplayLoading, setIsDisplayLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Count selected/reconciled transactions
+  const reconciledCount = useMemo(() => {
+    return entries.filter((e) => e.reconciled).length;
+  }, [entries]);
+
+  // Initiate Save Reconciliation Confirmation Modal
+  const initiateSaveReconciliation = () => {
+    if (reconciledCount === 0) {
+      setToastMessage("Please select at least one transaction to reconcile.");
+      return;
+    }
+    setShowSaveConfirmModal(true);
+  };
+
+  // Execution of Save Reconciliation
+  const handleExecuteSaveReconciliation = () => {
+    const countToReport = reconciledCount;
+    setShowSaveConfirmModal(false);
+    setIsSaving(true);
+    setTimeout(() => {
+      setIsSaving(false);
+      setToastMessage(
+        `✓ ${countToReport} transaction(s) reconciled successfully.`
+      );
+    }, 400);
+  };
 
   // Helper to parse DD/MM/YYYY into YYYY-MM-DD for date comparisons
   const parseFormattedDate = (dateStr: string): string => {
@@ -91,22 +119,6 @@ export function BankReconciliationView() {
     return dateStr;
   };
 
-  // Toggle Single Item Reconciled Status
-  const handleToggleReconciled = (id: string) => {
-    setEntries(
-      entries.map((item) => {
-        if (item.id === id) {
-          const nextState = !item.reconciled;
-          return {
-            ...item,
-            reconciled: nextState,
-            reconDate: nextState ? "28/04/2026" : "",
-          };
-        }
-        return item;
-      })
-    );
-  };
 
   // Update Item Recon Date
   const handleUpdateReconDate = (id: string, dateVal: string) => {
@@ -176,21 +188,52 @@ export function BankReconciliationView() {
   };
 
   // Filtered Entries by Applied Bank Account, Date Range, & User Preferences
+  const activeBank = autoSearch ? selectedBank : appliedBank;
+  const activeFromDate = autoSearch ? fromDate : appliedFromDate;
+  const activeToDate = autoSearch ? toDate : appliedToDate;
+
+  // Toggle Single Item Reconciled Status
+  const handleToggleReconciled = (id: string) => {
+    setEntries((prev) =>
+      prev.map((item) => {
+        if (item.id === id) {
+          const nextState = !item.reconciled;
+          const defaultDate = systemDtAsReconcileDt
+            ? "05/08/2026"
+            : item.vouchDt || "28/04/2026";
+          return {
+            ...item,
+            reconciled: nextState,
+            reconDate: nextState ? defaultDate : "",
+          };
+        }
+        return item;
+      })
+    );
+  };
+
   const filteredData = useMemo(() => {
     let result = entries.filter((item) => {
       // 1. Bank Account Filter (<ALL Banks> or specific selected bank)
       if (
-        appliedBank &&
-        appliedBank !== "<ALL Banks>" &&
-        item.bankName !== appliedBank
+        activeBank &&
+        activeBank !== "<ALL Banks>" &&
+        item.bankName !== activeBank
       ) {
         return false;
       }
 
-      // 2. Date Range Filter (Applied From & To Dates)
+      // 2. Date Range Filter & Prior Unreconciled Handling
       const itemDate = parseFormattedDate(item.vouchDt);
-      if (appliedFromDate && itemDate < appliedFromDate) return false;
-      if (appliedToDate && itemDate > appliedToDate) return false;
+      if (activeFromDate && itemDate < activeFromDate) {
+        // If prior to from date, keep only if considerPriorUnreconciled is true AND item is NOT yet reconciled
+        if (!considerPriorUnreconciled || item.reconciled) {
+          return false;
+        }
+      }
+      if (activeToDate && itemDate > activeToDate) {
+        return false;
+      }
 
       // 3. Debit/Credit Toggles
       if (!showDebit && item.drAmt > 0) return false;
@@ -199,7 +242,13 @@ export function BankReconciliationView() {
       // 4. Consider Reconciled Filter
       if (!considerReconciled && item.reconciled) return false;
 
-      // 5. Search Query Filter
+      // 5. Recon After To Date Filter
+      if (!reconAfterToDt && item.reconciled && item.reconDate) {
+        const rDate = parseFormattedDate(item.reconDate);
+        if (activeToDate && rDate > activeToDate) return false;
+      }
+
+      // 6. Search Query Filter
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         return (
@@ -214,18 +263,22 @@ export function BankReconciliationView() {
     });
 
     if (sortOnChqNo) {
-      result = [...result].sort((a, b) => (a.chqNo || "").localeCompare(b.chqNo || ""));
+      result = [...result].sort((a, b) =>
+        (a.chqNo || "").localeCompare(b.chqNo || "")
+      );
     }
 
     return result;
   }, [
     entries,
-    appliedBank,
-    appliedFromDate,
-    appliedToDate,
+    activeBank,
+    activeFromDate,
+    activeToDate,
     showDebit,
     showCredit,
     considerReconciled,
+    considerPriorUnreconciled,
+    reconAfterToDt,
     searchQuery,
     sortOnChqNo,
   ]);
@@ -482,16 +535,19 @@ export function BankReconciliationView() {
           <Button
             type="button"
             size="sm"
-            onClick={handleSaveReconciliation}
-            disabled={isSaving}
-            className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs"
+            onClick={initiateSaveReconciliation}
+            disabled={reconciledCount === 0 || isSaving}
+            className={cn(
+              "rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs transition-all cursor-pointer",
+              (reconciledCount === 0 || isSaving) && "opacity-50 cursor-not-allowed"
+            )}
           >
             {isSaving ? (
               <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
             ) : (
               <Save className="h-3.5 w-3.5 mr-1" />
             )}
-            Save Reconciliation
+            Save Reconciliation ({reconciledCount})
           </Button>
 
           <a href="/accounts/transactions/bank-reconciliation-reversing">
@@ -704,118 +760,212 @@ export function BankReconciliationView() {
         </div>
 
         {/* Desktop Table (hidden md:block) */}
-        <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
+        <div className="hidden md:block max-h-[540px] overflow-y-auto overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+            <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+              <tr>
                 <th className="px-3 py-2.5 w-24">VouchDt</th>
                 <th className="px-3.5 py-2.5 w-28">Vouch#</th>
                 <th className="px-2.5 py-2.5 text-center w-20">TrnType</th>
                 <th className="px-3.5 py-2.5 w-32">Chq No</th>
                 <th className="px-3 py-2.5 w-24">Chq Dt</th>
                 <th className="px-4 py-2.5 min-w-[200px]">Narration</th>
-                <th className="px-3 py-2.5 text-right w-28">Dr Amt (₹)</th>
-                <th className="px-3 py-2.5 text-right w-28">Cr Amt (₹)</th>
+                <th className="px-3 py-2.5 text-right w-28">
+                  Dr Amt {foreignCurrency ? "(INR ₹)" : "(₹)"}
+                </th>
+                <th className="px-3 py-2.5 text-right w-28">
+                  Cr Amt {foreignCurrency ? "(INR ₹)" : "(₹)"}
+                </th>
                 <th className="px-3 py-2.5 text-center w-24">Reconciled</th>
-                <th className="px-3 py-2.5 text-center w-28">Recon Date</th>
+                <th className="px-3 py-2.5 text-center w-28">
+                  Recon Date {printReconcileDt && <span className="text-[8px] text-emerald-700 block font-normal">(Print)</span>}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredData.map((row) => (
-                <tr
-                  key={row.id}
-                  className={cn(
-                    "hover:bg-slate-50 transition-colors",
-                    row.reconciled && "bg-emerald-50/30"
-                  )}
-                >
-                  <td className="px-3 py-2.5 text-slate-600 font-medium">{row.vouchDt}</td>
-                  <td className="px-3.5 py-2.5 font-bold text-slate-900">{row.vouchNo}</td>
-                  <td className="px-2.5 py-2.5 text-center">
-                    <span
-                      className={cn(
-                        "inline-block px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider",
-                        row.trnType === "Receipt"
-                          ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                          : row.trnType === "Payment"
-                          ? "bg-rose-100 text-rose-800 border-rose-300"
-                          : "bg-blue-100 text-blue-800 border-blue-300"
-                      )}
-                    >
-                      {row.trnType}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 font-bold text-slate-800">{row.chqNo}</td>
-                  <td className="px-3 py-2.5 text-slate-600 font-medium">{row.chqDt}</td>
-                  <td className="px-4 py-2.5 text-slate-800 font-medium">{row.narration}</td>
-                  <td className="px-3 py-2.5 text-right font-bold text-slate-900">
-                    {row.drAmt > 0 ? formatINR(row.drAmt) : "-"}
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-bold text-slate-900">
-                    {row.crAmt > 0 ? formatINR(row.crAmt) : "-"}
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <input
-                      type="checkbox"
-                      checked={row.reconciled}
-                      onChange={() => handleToggleReconciled(row.id)}
-                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
-                    />
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    {row.reconciled ? (
-                      <input
-                        type="text"
-                        value={row.reconDate || "28/04/2026"}
-                        onChange={(e) => handleUpdateReconDate(row.id, e.target.value)}
-                        className="h-6 w-24 rounded border border-slate-200 px-1.5 text-center text-xs font-bold text-emerald-800 focus:border-emerald-500 focus:outline-none"
-                      />
-                    ) : (
-                      <span className="text-[10px] text-slate-400 font-medium">-</span>
-                    )}
+              {filteredData.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="py-8 text-center text-slate-400 font-medium">
+                    No bank transaction entries found matching the filter criteria.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredData.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={cn(
+                      "even:bg-slate-50/50 hover:bg-slate-100/80 transition-colors",
+                      row.reconciled && "bg-emerald-50/60 hover:bg-emerald-100/60 border-l-2 border-l-emerald-600"
+                    )}
+                  >
+                    <td className="px-3 py-2.5 text-slate-600 font-medium">{row.vouchDt}</td>
+                    <td className="px-3.5 py-2.5 font-bold text-slate-900">{row.vouchNo}</td>
+                    <td className="px-2.5 py-2.5 text-center">
+                      <span
+                        className={cn(
+                          "inline-block px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider",
+                          row.trnType === "Receipt"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                            : row.trnType === "Payment"
+                            ? "bg-rose-100 text-rose-800 border-rose-300"
+                            : "bg-blue-100 text-blue-800 border-blue-300"
+                        )}
+                      >
+                        {row.trnType}
+                      </span>
+                    </td>
+                    <td className="px-3.5 py-2.5 font-bold text-slate-800">{row.chqNo}</td>
+                    <td className="px-3 py-2.5 text-slate-600 font-medium">{row.chqDt}</td>
+                    <td className="px-4 py-2.5 text-slate-800 font-medium">
+                      {fullNarration
+                        ? row.narration
+                        : row.narration.length > 25
+                        ? `${row.narration.slice(0, 25)}...`
+                        : row.narration}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-bold text-slate-900">
+                      {row.drAmt > 0
+                        ? foreignCurrency
+                          ? `INR ${formatINR(row.drAmt)}`
+                          : formatINR(row.drAmt)
+                        : "-"}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-bold text-slate-900">
+                      {row.crAmt > 0
+                        ? foreignCurrency
+                          ? `INR ${formatINR(row.crAmt)}`
+                          : formatINR(row.crAmt)
+                        : "-"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={row.reconciled}
+                        onChange={() => handleToggleReconciled(row.id)}
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
+                      />
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {row.reconciled ? (
+                        <input
+                          type="text"
+                          value={row.reconDate || "28/04/2026"}
+                          onChange={(e) => handleUpdateReconDate(row.id, e.target.value)}
+                          className="h-6 w-24 rounded border border-slate-200 px-1.5 text-center text-xs font-bold text-emerald-800 focus:border-emerald-500 focus:outline-none"
+                        />
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium">-</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
 
         {/* Mobile Stacked Card View (md:hidden) */}
         <div className="md:hidden space-y-2.5">
-          {filteredData.map((row) => (
-            <div
-              key={row.id}
-              className={cn(
-                "rounded-xl border border-slate-200 bg-white p-3.5 space-y-2",
-                row.reconciled && "border-emerald-300 bg-emerald-50/20"
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-slate-900">{row.vouchNo}</span>
-                <label className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={row.reconciled}
-                    onChange={() => handleToggleReconciled(row.id)}
-                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
-                  />
-                  <span>{row.reconciled ? "Reconciled" : "Pending"}</span>
-                </label>
-              </div>
-
-              <p className="text-xs font-semibold text-slate-800">{row.narration}</p>
-              <p className="text-[11px] text-slate-500">Chq #: {row.chqNo} • Date: {row.chqDt}</p>
-
-              <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
-                <span className="text-slate-500 font-medium">Voucher Dt: {row.vouchDt}</span>
-                <span className="font-bold text-slate-900">
-                  {row.drAmt > 0 ? `Dr ${formatINR(row.drAmt)}` : `Cr ${formatINR(row.crAmt)}`}
-                </span>
-              </div>
+          {filteredData.length === 0 ? (
+            <div className="p-6 text-center text-slate-400 font-medium text-xs rounded-xl border border-slate-200 bg-white">
+              No bank transaction entries found.
             </div>
-          ))}
+          ) : (
+            filteredData.map((row) => (
+              <div
+                key={row.id}
+                className={cn(
+                  "rounded-xl border border-slate-200 bg-white p-3.5 space-y-2",
+                  row.reconciled && "border-emerald-300 bg-emerald-50/20"
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-900">{row.vouchNo}</span>
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={row.reconciled}
+                      onChange={() => handleToggleReconciled(row.id)}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                    />
+                    <span>{row.reconciled ? "Reconciled" : "Pending"}</span>
+                  </label>
+                </div>
+
+                <p className="text-xs font-semibold text-slate-800">{row.narration}</p>
+                <p className="text-[11px] text-slate-500">Chq #: {row.chqNo} • Date: {row.chqDt}</p>
+
+                <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
+                  <span className="text-slate-500 font-medium">Voucher Dt: {row.vouchDt}</span>
+                  <span className="font-bold text-slate-900">
+                    {row.drAmt > 0 ? `Dr ${formatINR(row.drAmt)}` : `Cr ${formatINR(row.crAmt)}`}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </section>
+
+      {/* 🔐 SAVE RECONCILIATION CONFIRMATION MODAL */}
+      {showSaveConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 font-bold">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Confirm Reconciliation
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Bank Audit Confirmation
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSaveConfirmModal(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs space-y-1.5">
+              <p className="text-slate-700 leading-relaxed">
+                You are about to reconcile <strong className="text-slate-900">{reconciledCount} selected transaction(s)</strong>.
+              </p>
+              <p className="text-[11px] text-emerald-800 font-semibold">
+                This action will update the reconciliation records.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSaveConfirmModal(false)}
+                className="rounded-xl text-xs font-semibold bg-white cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleExecuteSaveReconciliation}
+                className="rounded-xl font-bold text-xs px-4 text-white bg-emerald-700 hover:bg-emerald-800 cursor-pointer"
+              >
+                <Check className="h-3.5 w-3.5 mr-1" />
+                Confirm
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </ModulePageShell>
   );
 }
