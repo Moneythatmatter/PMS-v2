@@ -5,7 +5,7 @@ import { myIncomeRecords, formatInr } from "@/app/data/myIncome";
 import { AppShell } from "@/components/layout/AppShell";
 
 export function MyIncomeView() {
-  const totalIncome = myIncomeRecords.reduce((sum, row) => sum + row.amount, 0);
+  const totalIncome = myIncomeRecords.reduce((sum: number, row: { amount: number }) => sum + row.amount, 0);
 
   return (
     <AppShell navItems={navItems} user={currentUser}>
