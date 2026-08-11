@@ -86,19 +86,57 @@ export function FiscalPeriodClosingView() {
   const openCount = useMemo(() => periods.filter((p) => p.status === "Open").length, [periods]);
   const pendingAuditCount = useMemo(() => periods.filter((p) => p.status === "Pending Audit").length, [periods]);
 
-  // Initiation of Closing Process
-  const handleInitiateClosing = (period: FiscalPeriodItem) => {
+  // Current Business Date & Logged in User (System Context)
+  const currentBusinessDateIso = "2026-08-05";
+  const currentBusinessDateFormatted = "05/08/2026";
+  const loggedInUser = "Rajesh Kumar (Chief Accountant)";
+
+  // Find index of the first non-closed period in chronological order
+  const firstUnclosedPeriodIndex = useMemo(() => {
+    return periods.findIndex((p) => p.status !== "Closed");
+  }, [periods]);
+
+  // Initiation of Closing Process with Strict ERP Audit & Sequential Validation
+  const handleInitiateClosing = (period: FiscalPeriodItem, periodIndex?: number) => {
+    const idx = periodIndex ?? periods.findIndex((p) => p.id === period.id);
+
+    // Rule 1: Sequential Period Closure Rule
+    if (idx > firstUnclosedPeriodIndex && firstUnclosedPeriodIndex !== -1) {
+      setToastMessage("Previous fiscal periods must be closed first.");
+      return;
+    }
+
+    // Rule 2: Cannot close period before its Start Date
+    if (period.startDate > currentBusinessDateIso) {
+      setToastMessage(`Cannot close ${period.periodName} before its Start Date (${period.startDate}).`);
+      return;
+    }
+
+    // Rule 3: Unposted Draft Vouchers Check
+    if (period.unpostedVouchersCount > 0) {
+      setToastMessage(`Cannot close ${period.periodName}: ${period.unpostedVouchersCount} unposted draft voucher(s) remain.`);
+      return;
+    }
+
+    // Rule 4: Bank Reconciliation Check
+    if (!period.bankReconciled) {
+      setToastMessage(`Cannot close ${period.periodName}: Bank statement reconciliation entries are pending.`);
+      return;
+    }
+
+    // Rule 5: Closing Stock Entry Check
+    if (!period.closingStockPosted) {
+      setToastMessage(`Cannot close ${period.periodName}: Period-end closing stock valuation has not been posted.`);
+      return;
+    }
+
     setTargetPeriod(period);
-    setAuthorizationConfirmed(false);
     setShowCloseModal(true);
   };
 
-  // Execution of Period Closing
+  // Execution of Period Closing (Automatically assigns current business date and user)
   const handleExecuteClosing = () => {
-    if (!authorizationConfirmed || !targetPeriod) {
-      setToastMessage("Please verify authorization checkbox to proceed.");
-      return;
-    }
+    if (!targetPeriod) return;
 
     setIsClosing(true);
     setTimeout(() => {
@@ -108,18 +146,28 @@ export function FiscalPeriodClosingView() {
             return {
               ...item,
               status: "Closed",
-              closedDate: "29/07/2026",
-              closedBy: "Rajesh Kumar (Chief Accountant)",
+              closedDate: currentBusinessDateFormatted,
+              closedBy: loggedInUser,
             };
           }
           return item;
         })
       );
-      setToastMessage(`Successfully closed and locked ${targetPeriod.periodName}.`);
+      setToastMessage(`✓ ${targetPeriod.periodName} closed successfully.`);
       setShowCloseModal(false);
       setTargetPeriod(null);
       setIsClosing(false);
     }, 500);
+  };
+
+  // Primary Action execution for next eligible period
+  const handleExecutePrimaryClosing = () => {
+    if (firstUnclosedPeriodIndex === -1) {
+      setToastMessage("All fiscal periods for the selected financial year are already closed.");
+      return;
+    }
+    const eligiblePeriod = periods[firstUnclosedPeriodIndex];
+    handleInitiateClosing(eligiblePeriod, firstUnclosedPeriodIndex);
   };
 
   // Shared Filter Form Content
@@ -236,6 +284,16 @@ export function FiscalPeriodClosingView() {
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleExecutePrimaryClosing}
+            className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs cursor-pointer"
+          >
+            <Lock className="mr-1.5 h-3.5 w-3.5" />
+            Execute Period Closing
+          </Button>
+
           <a href="/accounts/transactions/fiscal-period-closing-reversing">
             <Button
               type="button"
@@ -460,11 +518,11 @@ export function FiscalPeriodClosingView() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        {/* Desktop Table View */}
+        <div className="hidden md:block max-h-[540px] overflow-y-auto overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+            <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+              <tr>
                 <th className="px-3 py-2.5 w-20">Code</th>
                 <th className="px-3.5 py-2.5 min-w-[180px]">Period Name</th>
                 <th className="px-3 py-2.5 w-24">Start Date</th>
@@ -479,148 +537,182 @@ export function FiscalPeriodClosingView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredPeriods.map((row) => {
-                const isClosed = row.status === "Closed";
-                const isPending = row.status === "Pending Audit";
+              {filteredPeriods.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="py-8 text-center text-slate-400 font-medium">
+                    No fiscal periods found.
+                  </td>
+                </tr>
+              ) : (
+                filteredPeriods.map((row) => {
+                  const periodOriginalIndex = periods.findIndex((p) => p.id === row.id);
+                  const isClosed = row.status === "Closed";
+                  const isPending = row.status === "Pending Audit";
+                  const isEligibleForClosing = periodOriginalIndex === firstUnclosedPeriodIndex;
 
-                return (
-                  <tr
-                    key={row.id}
-                    className={cn(
-                      "hover:bg-slate-50 transition-colors",
-                      isClosed && "bg-slate-50/50"
-                    )}
-                  >
-                    <td className="px-3 py-2.5 font-bold text-slate-900">{row.periodCode}</td>
-                    <td className="px-3.5 py-2.5 font-bold text-slate-800">{row.periodName}</td>
-                    <td className="px-3 py-2.5 text-slate-600 font-medium">{row.startDate}</td>
-                    <td className="px-3 py-2.5 text-slate-600 font-medium">{row.endDate}</td>
-                    <td className="px-3 py-2.5 text-center">
-                      <span
-                        className={cn(
-                          "inline-block px-2 py-0.5 rounded text-[10px] font-bold",
-                          row.unpostedVouchersCount === 0
-                            ? "bg-emerald-100 text-emerald-800"
-                            : "bg-rose-100 text-rose-800"
-                        )}
-                      >
-                        {row.unpostedVouchersCount} Drafts
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {row.bankReconciled ? (
-                        <span className="text-emerald-700 font-bold text-[10px] flex items-center justify-center gap-1">
-                          <CheckCircle2 className="h-3 w-3" /> Cleared
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 font-medium text-[10px]">Pending</span>
+                  return (
+                    <tr
+                      key={row.id}
+                      className={cn(
+                        "even:bg-slate-50/50 hover:bg-slate-100/80 transition-colors",
+                        isClosed && "bg-slate-50/50"
                       )}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {row.closingStockPosted ? (
-                        <span className="text-emerald-700 font-bold text-[10px] flex items-center justify-center gap-1">
-                          <CheckCircle2 className="h-3 w-3" /> Posted
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 font-medium text-[10px]">Pending</span>
-                      )}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-slate-600 font-medium">
-                      {row.closedDate || "-"}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-slate-700 text-[11px] font-medium truncate">
-                      {row.closedBy || "-"}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <span
-                        className={cn(
-                          "inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border",
-                          isClosed
-                            ? "bg-slate-100 text-slate-700 border-slate-300"
-                            : isPending
-                            ? "bg-amber-100 text-amber-800 border-amber-300"
-                            : "bg-emerald-100 text-emerald-800 border-emerald-300"
-                        )}
-                      >
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {isClosed ? (
-                        <span className="text-[10px] text-slate-400 font-medium flex items-center justify-center gap-1">
-                          <Lock className="h-3 w-3" /> Locked
-                        </span>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => handleInitiateClosing(row)}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-bold shadow-xs cursor-pointer"
+                    >
+                      <td className="px-3 py-2.5 font-bold text-slate-900">{row.periodCode}</td>
+                      <td className="px-3.5 py-2.5 font-bold text-slate-800">{row.periodName}</td>
+                      <td className="px-3 py-2.5 text-slate-600 font-medium">{row.startDate}</td>
+                      <td className="px-3 py-2.5 text-slate-600 font-medium">{row.endDate}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span
+                          className={cn(
+                            "inline-block px-2 py-0.5 rounded text-[10px] font-bold",
+                            row.unpostedVouchersCount === 0
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-rose-100 text-rose-800"
+                          )}
                         >
-                          Lock & Close
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                          {row.unpostedVouchersCount} Drafts
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {row.bankReconciled ? (
+                          <span className="text-emerald-700 font-bold text-[10px] flex items-center justify-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Cleared
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium text-[10px]">Pending</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {row.closingStockPosted ? (
+                          <span className="text-emerald-700 font-bold text-[10px] flex items-center justify-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Posted
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium text-[10px]">Pending</span>
+                        )}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-slate-600 font-medium">
+                        {row.closedDate || "-"}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-slate-700 text-[11px] font-medium truncate">
+                        {row.closedBy || "-"}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span
+                          className={cn(
+                            "inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border",
+                            isClosed
+                              ? "bg-slate-100 text-slate-700 border-slate-300"
+                              : isPending
+                              ? "bg-amber-100 text-amber-800 border-amber-300"
+                              : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                          )}
+                        >
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {isClosed ? (
+                          <span className="text-[10px] text-slate-400 font-medium flex items-center justify-center gap-1">
+                            <Lock className="h-3 w-3" /> Locked
+                          </span>
+                        ) : isEligibleForClosing ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => handleInitiateClosing(row, periodOriginalIndex)}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-bold shadow-xs cursor-pointer"
+                          >
+                            Lock &amp; Close
+                          </Button>
+                        ) : (
+                          <span title="Previous fiscal periods must be closed first.">
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-400 text-[10px] font-medium border border-slate-200 cursor-not-allowed opacity-60"
+                            >
+                              Lock &amp; Close
+                            </Button>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Stacked View (md:hidden) */}
+        <div className="md:hidden space-y-2.5">
+          {filteredPeriods.length === 0 ? (
+            <div className="p-6 text-center text-slate-400 font-medium text-xs rounded-xl border border-slate-200 bg-white">
+              No fiscal periods found.
+            </div>
+          ) : (
+            filteredPeriods.map((row) => (
+              <div key={row.id} className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-900">{row.periodCode} - {row.periodName}</span>
+                  <span
+                    className={cn(
+                      "px-2 py-0.5 rounded text-[9px] font-bold uppercase border",
+                      row.status === "Closed"
+                        ? "bg-slate-100 text-slate-700 border-slate-300"
+                        : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                    )}
+                  >
+                    {row.status}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 font-medium">{row.startDate} to {row.endDate}</p>
+              </div>
+            ))
+          )}
+        </div>
       </section>
 
-      {/* Single-Step Closing Verification Modal */}
+      {/* Confirmation Closing Modal */}
       {targetPeriod && (
         <Modal
           isOpen={showCloseModal}
           onClose={() => setShowCloseModal(false)}
-          title="Fiscal Period Closing Security Lock Check"
+          title="Confirm Fiscal Period Closing"
           description="WINHMS Financial Period Audit Confirmation"
-          maxWidth="lg"
+          maxWidth="md"
         >
           <div className="space-y-4 font-sans">
-            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs space-y-1.5">
-              <div className="flex items-center gap-1.5 font-bold text-amber-900">
-                <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0" />
-                <span>Audit Review & Closing Impact</span>
-              </div>
-              <p className="text-slate-700 leading-relaxed text-[11px]">
-                You are about to lock and close{" "}
-                <strong className="text-slate-900">{targetPeriod.periodName}</strong> for{" "}
-                <strong>{selectedCompany}</strong>. Once closed, new voucher entries and backdated edits for this period will be locked.
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs space-y-1.5">
+              <p className="text-slate-800 leading-relaxed font-semibold">
+                You are about to close the selected fiscal period.
+              </p>
+              <p className="text-[11px] text-emerald-800 font-medium">
+                This action will lock accounting transactions for the selected period and post required financial adjustments.
               </p>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1.5 text-xs">
-              <p className="font-bold text-slate-800 uppercase text-[10px] tracking-wider">
-                Period Audit Summary:
-              </p>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-slate-600">Selected Period:</span>
+                <span className="font-bold text-slate-800">{targetPeriod.periodName} ({targetPeriod.periodCode})</span>
+              </div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-slate-600">Period Duration:</span>
                 <span className="font-bold text-slate-800">{targetPeriod.startDate} to {targetPeriod.endDate}</span>
               </div>
               <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600">Unposted Draft Vouchers:</span>
-                <span className="font-bold text-emerald-700">0 Drafts (Passed)</span>
+                <span className="text-slate-600">Period Closing Date:</span>
+                <span className="font-bold text-emerald-800">{currentBusinessDateFormatted} (System Business Date)</span>
               </div>
               <div className="flex justify-between text-[11px]">
-                <span className="text-slate-600">Trial Balance Status:</span>
-                <span className="font-bold text-emerald-700">Balanced (Diff ₹0.00)</span>
+                <span className="text-slate-600">Closed By User:</span>
+                <span className="font-bold text-slate-800">{loggedInUser}</span>
               </div>
             </div>
-
-            {/* Single Step Confirmation Checkbox */}
-            <label className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-200 cursor-pointer hover:border-emerald-300 transition-colors">
-              <input
-                type="checkbox"
-                checked={authorizationConfirmed}
-                onChange={(e) => setAuthorizationConfirmed(e.target.checked)}
-                className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
-              />
-              <span className="text-[11px] text-slate-700 font-medium leading-relaxed">
-                I confirm that I have completed the pre-closing audit and am authorized to lock and close this financial period.
-              </span>
-            </label>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <Button
@@ -628,7 +720,7 @@ export function FiscalPeriodClosingView() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowCloseModal(false)}
-                className="text-xs font-semibold text-slate-600 cursor-pointer"
+                className="rounded-xl text-xs font-semibold text-slate-700 cursor-pointer"
               >
                 Cancel
               </Button>
@@ -636,11 +728,12 @@ export function FiscalPeriodClosingView() {
               <Button
                 type="button"
                 size="sm"
-                disabled={!authorizationConfirmed || isClosing}
+                disabled={isClosing}
                 onClick={handleExecuteClosing}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs disabled:opacity-50 cursor-pointer"
+                className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs cursor-pointer"
               >
-                {isClosing ? "Closing Period..." : "Confirm & Lock Fiscal Period"}
+                <Check className="h-3.5 w-3.5 mr-1" />
+                {isClosing ? "Closing..." : "Confirm"}
               </Button>
             </div>
           </div>
