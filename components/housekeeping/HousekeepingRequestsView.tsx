@@ -66,6 +66,25 @@ export function HousekeepingRequestsView() {
     return new Date(timeStr).toLocaleDateString();
   };
 
+  const formatDisplayDate = (req: { createdAt: string; createdAtLabel?: string }) => {
+    if (req.createdAtLabel) return req.createdAtLabel;
+    if (!req.createdAt) return "";
+    if (req.createdAt.includes("T")) {
+      try {
+        return new Date(req.createdAt).toLocaleString("en-IN", {
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        });
+      } catch {
+        return req.createdAt;
+      }
+    }
+    return req.createdAt;
+  };
+
   const filteredRequests = useMemo(() => {
     return requests.filter((r) => {
       const matchSearch =
@@ -330,7 +349,7 @@ export function HousekeepingRequestsView() {
                   </span>
                   <span>{req.assignedStaff || "Unassigned"}</span>
                   <span>·</span>
-                  <span>{req.createdAt}</span>
+                  <span>{formatDisplayDate(req)}</span>
                 </div>
                 {(isOpen || isProgress) && (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -416,7 +435,7 @@ export function HousekeepingRequestsView() {
                       </span>
                     )}
                   </td>
-                  <td className="px-5 py-4 text-slate-400 font-normal">{req.createdAt}</td>
+                  <td className="px-5 py-4 text-slate-400 font-normal">{formatDisplayDate(req)}</td>
                   <td className="px-5 py-4">
                     <span
                       className={cn(

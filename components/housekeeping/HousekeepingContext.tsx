@@ -84,7 +84,7 @@ interface HousekeepingContextType {
   startCleaning: (roomNo: string, staffName: string) => void;
   pauseCleaning: (roomNo: string) => void;
   resumeCleaning: (roomNo: string) => void;
-  completeCleaning: (roomNo: string, progressItems: string[]) => void;
+  completeCleaning: (roomNo: string, progressItems: string[], photos?: string[]) => void;
   inspectRoom: (roomNo: string, passed: boolean, signature: string, remarks: string, qualityScore: number) => void;
   changeRoomStatus: (roomNo: string, status: HKRoom["status"]) => void;
   addLostFoundItem: (item: Omit<LostFoundItem, "id" | "foundDate" | "status">) => void;
@@ -248,14 +248,44 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
       );
       setPublicAreas(value(2, initialHKPublicAreas));
       setInventory(value(3, initialHKInventory));
-      setLaundryJobs(value(4, initialHKLaundry));
+      const apiLaundry = value<HKLaundryJob[]>(4, []);
+      if (Array.isArray(apiLaundry) && apiLaundry.length > 0) {
+        setLaundryJobs(apiLaundry);
+      } else {
+        const stored = localStorage.getItem("hk_laundry");
+        setLaundryJobs(stored ? JSON.parse(stored) : initialHKLaundry);
+      }
       setDamageReports(value(5, initialHKDamageReports));
       setRequisitions(value(6, initialHKRequisitions));
       setHistory(value(7, initialHKHistory));
-      setLuggageJobs(value(8, initialHKLuggageJobs));
-      setRequests(value(9, initialHKRequests) as HousekeepingRequest[]);
-      setMaintenance(value(10, initialMaintenanceRequests) as MaintenanceRequest[]);
-      setLostFound(value(11, initialLostFoundItems) as LostFoundItem[]);
+      const apiLuggage = value<HKLuggageJob[]>(8, []);
+      if (Array.isArray(apiLuggage) && apiLuggage.length > 0) {
+        setLuggageJobs(apiLuggage);
+      } else {
+        const stored = localStorage.getItem("hk_luggage");
+        setLuggageJobs(stored ? JSON.parse(stored) : initialHKLuggageJobs);
+      }
+      const apiRequests = value<HousekeepingRequest[]>(9, []);
+      if (Array.isArray(apiRequests) && apiRequests.length > 0) {
+        setRequests(apiRequests);
+      } else {
+        const stored = localStorage.getItem("hk_requests");
+        setRequests(stored ? JSON.parse(stored) : initialHKRequests);
+      }
+      const apiMaintenance = value<MaintenanceRequest[]>(10, []);
+      if (Array.isArray(apiMaintenance) && apiMaintenance.length > 0) {
+        setMaintenance(apiMaintenance);
+      } else {
+        const stored = localStorage.getItem("hk_maintenance");
+        setMaintenance(stored ? JSON.parse(stored) : initialMaintenanceRequests);
+      }
+      const apiLostFound = value<LostFoundItem[]>(11, []);
+      if (Array.isArray(apiLostFound) && apiLostFound.length > 0) {
+        setLostFound(apiLostFound);
+      } else {
+        const stored = localStorage.getItem("hk_lostfound");
+        setLostFound(stored ? JSON.parse(stored) : initialLostFoundItems);
+      }
       setStaff(value(12, initialHKStaff));
       setChecklists(value(13, initialHKChecklistTemplates));
       setShifts(value(14, initialHKShifts));
@@ -417,8 +447,8 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
     actions.resumeCleaning(roomNo, dispatchers);
   };
 
-  const completeCleaning = (roomNo: string, progressItems: string[]) => {
-    actions.completeCleaning(roomNo, progressItems, dispatchers);
+  const completeCleaning = (roomNo: string, progressItems: string[], photos?: string[]) => {
+    actions.completeCleaning(roomNo, progressItems, dispatchers, photos);
   };
 
   const inspectRoom = (roomNo: string, passed: boolean, signature: string, remarks: string, qualityScore: number) => {

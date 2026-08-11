@@ -2,6 +2,7 @@ import { logAudit } from "../common/audit";
 import { changeRoomStatus } from "../room/roomStatus";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { HKStaff, MaintenanceRequest } from "../../HousekeepingTypes";
+import { hkMaintenanceService } from "@/services/housekeeping";
 
 export const getSmartEngineerRecommendation = (staffList: HKStaff[], targetFloor: string, category: string): HKStaff | null => {
   const candidateEngineers = staffList.filter((s) => {
@@ -67,6 +68,7 @@ export const addMaintenanceRequest = (
   maintenanceLength: number,
   dispatchers: HousekeepingDispatchers
 ) => {
+  const isoStr = new Date().toISOString();
   const nowStr = new Date().toLocaleString("en-IN", {
     day: "numeric",
     month: "short",
@@ -85,7 +87,8 @@ export const addMaintenanceRequest = (
     status: isAssigned ? "Assigned" : "Open",
     engineer: req.engineer || "—",
     reportedBy: dispatchers.currentUsername,
-    createdAt: nowStr,
+    createdAt: isoStr,
+    createdAtLabel: nowStr,
     assignedAt: isAssigned ? nowStr : undefined,
     estimatedCompletion: req.estimatedCompletion,
     assignmentType: req.assignmentType,
@@ -132,4 +135,9 @@ export const addMaintenanceRequest = (
   }
 
   logAudit("Maintenance", "Issue Raised", `Reported maintenance issue in Room ${req.room}: "${req.problem}".`, req.room, dispatchers.currentUsername, dispatchers.setHistory);
+
+  void hkMaintenanceService.create(record).catch((err) => {
+    console.error("[HK] Failed to sync new maintenance request to API", err);
+  });
 };
+

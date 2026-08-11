@@ -1,5 +1,6 @@
 import { logAudit } from "../common/audit";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
+import { hkRoomService } from "@/services/housekeeping";
 
 export const inspectRoom = (
   roomNo: string,
@@ -79,4 +80,15 @@ export const inspectRoom = (
       dispatchers.setHistory
     );
   }
+
+  void hkRoomService.inspect(roomNo, {
+    result: passed ? "Passed" : "Rejected",
+    qualityScore,
+    remarks: remarks || (passed ? "Passed inspection" : "Failed inspection"),
+    inspector: dispatchers.currentUsername,
+    signature,
+  }).catch((err) => {
+    console.error(`[HK] Failed to sync inspectRoom for room ${roomNo} to API`, err);
+  });
 };
+

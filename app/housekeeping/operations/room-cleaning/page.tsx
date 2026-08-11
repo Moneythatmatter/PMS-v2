@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
+import { hkRoomService } from "@/services/housekeeping";
 import {
   Clock,
   Play,
@@ -145,15 +146,27 @@ export default function RoomCleaningOperations() {
     );
   };
 
-  // Simulated photo upload
-  const triggerPhotoUpload = () => {
-    const urls = [
-      "/evidence-bed.jpg",
-      "/evidence-bathroom.jpg",
-      "/evidence-desk.jpg",
-    ];
-    const randomUrl = urls[Math.floor(Math.random() * urls.length)];
-    setUploadedPhotos((prev) => [...prev, randomUrl]);
+  // Real photo upload via FileReader
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const resultUrl = event.target?.result as string;
+        if (resultUrl) {
+          setUploadedPhotos((prev) => {
+            const next = [...prev, resultUrl];
+            if (selectedRoomNo) {
+              hkRoomService.update(selectedRoomNo, { photos: next }).catch((err) => {
+                console.error("[HK] Failed to sync photo upload to API", err);
+              });
+            }
+            return next;
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Timer Tick Format helper
@@ -216,7 +229,7 @@ export default function RoomCleaningOperations() {
           { id: "cleaning", label: "Cleaning" },
           { id: "inspection", label: "Inspection Pending" },
           { id: "ready", label: "Vacant Ready" },
-          { id: "blocked", label: "Blocked / OOO" },
+          { id: "blocked", label: "Blocked / Out Of Service" },
         ]}
         activeStatusTab={statusFilter}
         onStatusTabChange={setStatusFilter}
@@ -541,8 +554,8 @@ export default function RoomCleaningOperations() {
                 Work Assignment
               </h3>
 
-              {/* Assignment Form (only editable if not cleaning) */}
-              {selectedRoom.status !== "Cleaning" && selectedRoom.status !== "Inspection Pending" ? (
+              {/* Assignment Form (only for Dirty rooms) */}
+              {selectedRoom.status.includes("Dirty") ? (
                 <>
                   <FormField label="Assign Housekeeper">
                     <SelectInput value={assignee} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAssignee(e.target.value)}>
@@ -626,7 +639,7 @@ export default function RoomCleaningOperations() {
                       </Button>
                     )}
                     <Button
-                      onClick={() => completeCleaning(selectedRoom.roomNo, checkedItems)}
+                      onClick={() => completeCleaning(selectedRoom.roomNo, checkedItems, uploadedPhotos)}
                       className="bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center gap-1.5 text-xs"
                       disabled={calculatedProgress < 50} // Requires at least 50% task completion
                     >
@@ -639,8 +652,8 @@ export default function RoomCleaningOperations() {
                     </p>
                   )}
                 </div>
-              ) : (
-                /* Inspection Pending page state */
+              ) : selectedRoom.status === "Inspection Pending" ? (
+                /* Inspection Pending state */
                 <div className="text-center py-6 border border-dashed border-blue-100 rounded-xl bg-blue-50/10 space-y-3">
                   <Layers className="h-8 w-8 text-blue-600 mx-auto" />
                   <div>
@@ -649,6 +662,42 @@ export default function RoomCleaningOperations() {
                       Cleaning has been completed by {selectedRoom.assignedStaff}. Supervisor inspection sign-off is required to release to Vacant Ready.
                     </p>
                   </div>
+                </div>
+              ) : selectedRoom.status === "Vacant Ready" ? (
+                /* Vacant Ready state */
+                <div className="text-center py-6 border border-emerald-100 rounded-xl bg-emerald-50/20 space-y-3">
+                  <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto" />
+                  <div>
+                    <h4 className="font-semibold text-slate-800 text-sm">Room is Vacant & Ready</h4>
+                    <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1">
+                      This room has been cleaned and inspected. It is ready for guest check-in.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => changeRoomStatus(selectedRoom.roomNo, "Vacant Dirty")}
+                    className="text-xs border-slate-200 text-slate-700 hover:bg-slate-50"
+                  >
+                    Mark as Dirty (Request Re-clean)
+                  </Button>
+                </div>
+              ) : (
+                /* Other statuses (Occupied, Blocked, OOO, OOS) */
+                <div className="text-center py-6 border border-slate-200 rounded-xl bg-slate-50/50 space-y-3">
+                  <Building2 className="h-8 w-8 text-slate-400 mx-auto" />
+                  <div>
+                    <h4 className="font-semibold text-slate-800 text-sm">Room Status: {selectedRoom.status}</h4>
+                    <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1">
+                      {selectedRoom.remarks || `Current room status is set to ${selectedRoom.status}.`}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => changeRoomStatus(selectedRoom.roomNo, selectedRoom.status.includes("Occupied") ? "Occupied Dirty" : "Vacant Dirty")}
+                    className="text-xs border-slate-200 text-slate-700 hover:bg-slate-50"
+                  >
+                    Mark as Dirty
+                  </Button>
                 </div>
               )}
             </div>
@@ -699,20 +748,23 @@ export default function RoomCleaningOperations() {
                   {uploadedPhotos.map((url, i) => (
                     <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-slate-200 group bg-slate-50">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src="https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=400&q=80" alt="cleaning preview" className="object-cover h-full w-full" />
+                      <img src={url} alt="cleaning preview" className="object-cover h-full w-full" />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <Eye className="h-4 w-4 text-white" />
                       </div>
                     </div>
                   ))}
                   {selectedRoom.status === "Cleaning" && (
-                    <button
-                      onClick={triggerPhotoUpload}
-                      className="flex flex-col items-center justify-center aspect-video rounded-lg border border-dashed border-slate-300 text-slate-500 hover:text-emerald-700 hover:border-emerald-700 transition-all bg-slate-50/50"
-                    >
+                    <label className="cursor-pointer flex flex-col items-center justify-center aspect-video rounded-lg border border-dashed border-slate-300 text-slate-500 hover:text-emerald-700 hover:border-emerald-700 transition-all bg-slate-50/50">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoUpload}
+                        className="hidden"
+                      />
                       <Camera className="h-4 w-4" />
                       <span className="text-[9px] mt-1 font-medium">Add Photo</span>
-                    </button>
+                    </label>
                   )}
                 </div>
               </div>

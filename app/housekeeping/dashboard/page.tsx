@@ -158,7 +158,7 @@ export default function HousekeepingDashboard() {
     { label: "Inspection", count: stats.pendingInspection, color: "#3b82f6" },
     { label: "Vacant Ready", count: stats.ready, color: "#15803d" },
     { label: "Occupied", count: stats.occupied, color: "#8b5cf6" },
-    { label: "Blocked / OOO", count: stats.blocked, color: "#64748b" },
+    { label: "Blocked / Out of Service", count: stats.blocked, color: "#64748b" },
   ];
 
   const readyPct =

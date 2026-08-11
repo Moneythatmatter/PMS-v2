@@ -1,6 +1,7 @@
 import { logAudit } from "../common/audit";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { HKLaundryJob } from "../../HousekeepingTypes";
+import { hkLaundryService } from "@/services/housekeeping";
 
 export const addLaundryJob = (job: Omit<HKLaundryJob, "id" | "status" | "timeline">, laundryLength: number, dispatchers: HousekeepingDispatchers) => {
   const record: HKLaundryJob = {
@@ -42,4 +43,8 @@ export const addLaundryJob = (job: Omit<HKLaundryJob, "id" | "status" | "timelin
   }
 
   logAudit("Laundry", "Laundry Registered", `Registered laundry job: ${job.quantity}x ${job.item}. Status: Collection.`, job.room, dispatchers.currentUsername, dispatchers.setHistory);
+
+  void hkLaundryService.create(record).catch((err) => {
+    console.error("[HK] Failed to sync new laundry job to API", err);
+  });
 };

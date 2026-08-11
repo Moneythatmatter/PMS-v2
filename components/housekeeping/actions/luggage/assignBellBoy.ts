@@ -1,6 +1,7 @@
 import { logAudit } from "../common/audit";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { HKLuggageJob } from "../../HousekeepingTypes";
+import { hkLuggageService } from "@/services/housekeeping";
 
 export const assignBellBoy = (
   id: string,
@@ -20,4 +21,8 @@ export const assignBellBoy = (
     dispatchers.currentUsername,
     dispatchers.setHistory
   );
+
+  void hkLuggageService.update(id, { bellBoy: bellBoyName }).catch((err) => {
+    console.error("[HK] Failed to sync bell boy assignment to API", err);
+  });
 };

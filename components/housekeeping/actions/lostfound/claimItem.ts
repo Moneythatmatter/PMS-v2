@@ -1,6 +1,7 @@
 import { logAudit } from "../common/audit";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { LostFoundItem } from "../../HousekeepingTypes";
+import { hkLostFoundService } from "@/services/housekeeping";
 
 export const returnLostFound = (id: string, currentLostFound: LostFoundItem[], claimBy?: string, dispatchers?: HousekeepingDispatchers) => {
   const now = new Date().toLocaleDateString("en-IN", {
@@ -21,5 +22,13 @@ export const returnLostFound = (id: string, currentLostFound: LostFoundItem[], c
       dispatchers.currentUsername,
       dispatchers.setHistory
     );
+
+    void hkLostFoundService.update(id, {
+      status: "Returned",
+      returnedDate: now,
+      guest: claimBy || item?.guest || "Guest",
+    }).catch((err) => {
+      console.error("[HK] Failed to sync Lost & Found return to API", err);
+    });
   }
 };
