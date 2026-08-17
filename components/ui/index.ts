@@ -4,3 +4,7 @@ export { Badge } from "./Badge";
 export { Button } from "./Button";
 export { ProgressBar } from "./ProgressBar";
 export { Avatar } from "./Avatar";
+export { Modal } from "./Modal";
+export { Drawer } from "./Drawer";
+export { StatusBadge } from "./StatusBadge";
+export { SearchSelect } from "./SearchSelect";

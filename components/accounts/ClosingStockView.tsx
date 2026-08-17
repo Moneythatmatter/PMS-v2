@@ -82,27 +82,70 @@ export function ClosingStockView() {
     return ["All", ...Array.from(set)];
   }, [items]);
 
+  // Valuation Method multiplier / rate adjustment algorithm
+  const valuationMultiplier = useMemo(() => {
+    if (valuationMethod.includes("FIFO")) return 1.02;
+    if (valuationMethod.includes("LIFO")) return 0.98;
+    if (valuationMethod.includes("Last Purchase")) return 1.04;
+    return 1.0;
+  }, [valuationMethod]);
+
   // Filtered Stock Data
   const filteredData = useMemo(() => {
-    return items.filter((item) => {
-      if (selectedCategory !== "All" && item.category !== selectedCategory) {
-        return false;
-      }
-      if (excludeZeroStock && item.physicalQty <= 0) {
-        return false;
-      }
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return (
-          item.itemCode.toLowerCase().includes(q) ||
-          item.itemName.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q) ||
-          item.glAccountName.toLowerCase().includes(q)
-        );
-      }
-      return true;
-    });
-  }, [items, selectedCategory, excludeZeroStock, searchQuery]);
+    return items
+      .filter((item) => {
+        // Store Department Filter
+        if (selectedStore.includes("F&B") && !item.category.startsWith("F&B")) {
+          return false;
+        }
+        if (
+          selectedStore.includes("Housekeeping") &&
+          !(item.category.includes("Amenities") || item.category.includes("Linen"))
+        ) {
+          return false;
+        }
+        if (
+          selectedStore.includes("Engineering") &&
+          !item.category.includes("Maintenance")
+        ) {
+          return false;
+        }
+
+        // Category Filter
+        if (selectedCategory !== "All" && item.category !== selectedCategory) {
+          return false;
+        }
+
+        // Exclude Zero Qty Items
+        if (excludeZeroStock && item.physicalQty <= 0) {
+          return false;
+        }
+
+        // Search Filter (Code, Description, Category, GL Account)
+        if (searchQuery) {
+          const q = searchQuery.toLowerCase();
+          return (
+            item.itemCode.toLowerCase().includes(q) ||
+            item.itemName.toLowerCase().includes(q) ||
+            item.category.toLowerCase().includes(q) ||
+            item.glAccountName.toLowerCase().includes(q)
+          );
+        }
+
+        return true;
+      })
+      .map((item) => ({
+        ...item,
+        totalValuation: Math.round(item.physicalQty * item.unitRate * valuationMultiplier),
+      }));
+  }, [
+    items,
+    selectedStore,
+    selectedCategory,
+    excludeZeroStock,
+    searchQuery,
+    valuationMultiplier,
+  ]);
 
   // Statistics Summary
   const totalValuation = useMemo(() => {
@@ -110,20 +153,20 @@ export function ClosingStockView() {
   }, [filteredData]);
 
   const totalFbValuation = useMemo(() => {
-    return items
+    return filteredData
       .filter((i) => i.category.startsWith("F&B"))
       .reduce((sum, i) => sum + i.totalValuation, 0);
-  }, [items]);
+  }, [filteredData]);
 
   const totalHkLinenValuation = useMemo(() => {
-    return items
+    return filteredData
       .filter((i) => i.category.includes("Amenities") || i.category.includes("Linen"))
       .reduce((sum, i) => sum + i.totalValuation, 0);
-  }, [items]);
+  }, [filteredData]);
 
   const glPostedCount = useMemo(() => {
-    return items.filter((i) => i.status === "GL Posted").length;
-  }, [items]);
+    return filteredData.filter((i) => i.status === "GL Posted").length;
+  }, [filteredData]);
 
   // Handle Editing Inline Quantity & Rate
   const handleStartEdit = (item: ClosingStockItem) => {
@@ -136,7 +179,7 @@ export function ClosingStockView() {
     setItems((prev) =>
       prev.map((item) => {
         if (item.id === id) {
-          const newValuation = editPhysicalQty * editUnitRate;
+          const newValuation = Math.round(editPhysicalQty * editUnitRate * valuationMultiplier);
           return {
             ...item,
             physicalQty: editPhysicalQty,
@@ -152,22 +195,34 @@ export function ClosingStockView() {
     setToastMessage(`Updated stock quantity & valuation for item.`);
   };
 
+  // Validation before opening Post to GL Confirmation Modal
+  const handleInitiatePostGL = () => {
+    if (filteredData.length === 0) {
+      setToastMessage("Please select a store department with valid stock records to post to General Ledger.");
+      return;
+    }
+    setShowPostModal(true);
+  };
+
   // Bulk Post Stock Valuation to GL
   const handleConfirmPostGL = () => {
     setIsPostingGL(true);
     setTimeout(() => {
       setItems((prev) =>
-        prev.map((item) => ({
-          ...item,
-          status: "GL Posted",
-        }))
+        prev.map((item) => {
+          if (filteredData.some((f) => f.id === item.id)) {
+            return {
+              ...item,
+              status: "GL Posted",
+            };
+          }
+          return item;
+        })
       );
       setIsPostingGL(false);
       setShowPostModal(false);
       setToastMessage(
-        `Successfully posted Closing Stock valuation of ${formatINR(
-          totalValuation
-        )} to General Ledger for period ${valuationDate}.`
+        `✓ Closing stock valuation posted successfully to General Ledger.`
       );
     }, 600);
   };
@@ -340,10 +395,18 @@ export function ClosingStockView() {
           <Button
             type="button"
             size="sm"
-            onClick={() => setShowPostModal(true)}
-            className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs"
+            onClick={handleInitiatePostGL}
+            disabled={filteredData.length === 0 || isPostingGL}
+            className={cn(
+              "rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs transition-all cursor-pointer",
+              (filteredData.length === 0 || isPostingGL) && "opacity-50 cursor-not-allowed"
+            )}
           >
-            <Send className="h-3.5 w-3.5 mr-1" />
+            {isPostingGL ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <Send className="h-3.5 w-3.5 mr-1" />
+            )}
             Post to General Ledger
           </Button>
 
@@ -513,11 +576,11 @@ export function ClosingStockView() {
           </div>
         </div>
 
-        {/* Desktop Table View */}
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        {/* Desktop Table View (hidden md:block) */}
+        <div className="hidden md:block max-h-[540px] overflow-y-auto overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+            <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+              <tr>
                 <th className="px-3 py-2.5 w-28">Item Code</th>
                 <th className="px-3.5 py-2.5 min-w-[180px]">Item Description</th>
                 <th className="px-3 py-2.5 w-36">Category Group</th>
@@ -536,7 +599,7 @@ export function ClosingStockView() {
               {filteredData.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="py-8 text-center text-slate-400 font-medium">
-                    No closing stock items found matching your filters.
+                    No inventory records found.
                   </td>
                 </tr>
               ) : (
@@ -545,7 +608,7 @@ export function ClosingStockView() {
                   const varianceAmt = row.totalValuation - row.prevPeriodValue;
 
                   return (
-                    <tr key={row.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={row.id} className="even:bg-slate-50/50 hover:bg-slate-100/80 transition-colors">
                       <td className="px-3 py-2.5 font-bold text-slate-900">{row.itemCode}</td>
                       <td className="px-3.5 py-2.5 font-semibold text-slate-800">{row.itemName}</td>
                       <td className="px-3 py-2.5 text-slate-600 text-[11px] font-medium">{row.category}</td>
@@ -656,12 +719,51 @@ export function ClosingStockView() {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Stacked Cards View (md:hidden) */}
+        <div className="md:hidden space-y-2.5">
+          {filteredData.length === 0 ? (
+            <div className="p-6 text-center text-slate-400 font-medium text-xs rounded-xl border border-slate-200 bg-white">
+              No inventory records found.
+            </div>
+          ) : (
+            filteredData.map((row) => (
+              <div
+                key={row.id}
+                className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-900">{row.itemCode} - {row.itemName}</span>
+                  <span
+                    className={cn(
+                      "px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider",
+                      row.status === "GL Posted"
+                        ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                        : "bg-slate-100 text-slate-700 border-slate-300"
+                    )}
+                  >
+                    {row.status}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-600 font-medium">Group: {row.category} ({row.uom})</p>
+
+                <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
+                  <span className="text-slate-500">Physical Qty: {row.physicalQty}</span>
+                  <span className="font-bold text-emerald-800">
+                    Valuation: {formatINR(row.totalValuation)}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </section>
 
       {/* Confirmation Post to GL Modal */}
       {showPostModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 font-bold">
@@ -669,10 +771,10 @@ export function ClosingStockView() {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">
-                    Post Closing Stock to General Ledger
+                    Confirm General Ledger Posting
                   </h3>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    WINHMS General Ledger Stock Journal Posting
+                    GL Stock Asset Journal Posting
                   </p>
                 </div>
               </div>
@@ -687,28 +789,24 @@ export function ClosingStockView() {
 
             <div className="space-y-3 text-xs">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 space-y-1.5">
-                <p className="font-bold text-emerald-900 text-xs">
-                  Summary of GL Journal Entry:
+                <p className="text-slate-700 leading-relaxed font-semibold">
+                  You are about to post the selected closing stock valuation to the General Ledger.
                 </p>
-                <div className="flex justify-between text-[11px] text-emerald-800">
+                <p className="text-[11px] text-emerald-800 font-medium">
+                  This action will update accounting records.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1 text-[11px]">
+                <div className="flex justify-between text-slate-600">
                   <span>Store Department:</span>
                   <strong className="text-slate-900">{selectedStore}</strong>
                 </div>
-                <div className="flex justify-between text-[11px] text-emerald-800">
-                  <span>Valuation As On Date:</span>
-                  <strong className="text-slate-900">{valuationDate}</strong>
-                </div>
-                <div className="flex justify-between text-[11px] text-emerald-800">
-                  <span>Total Stock Valuation:</span>
-                  <strong className="text-emerald-900 text-xs font-bold">
-                    {formatINR(totalValuation)}
-                  </strong>
+                <div className="flex justify-between text-slate-600">
+                  <span>Valuation Total:</span>
+                  <strong className="text-emerald-900 font-bold">{formatINR(totalValuation)}</strong>
                 </div>
               </div>
-
-              <p className="text-slate-600 leading-relaxed text-[11px]">
-                This will generate a General Ledger Journal Voucher debiting the respective Stock Asset accounts and crediting Stock Adjustment / Trading Account for period end financial closing.
-              </p>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -717,7 +815,7 @@ export function ClosingStockView() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowPostModal(false)}
-                className="text-xs font-semibold text-slate-600 cursor-pointer"
+                className="rounded-xl text-xs font-semibold text-slate-700 cursor-pointer"
               >
                 Cancel
               </Button>
@@ -727,9 +825,10 @@ export function ClosingStockView() {
                 size="sm"
                 disabled={isPostingGL}
                 onClick={handleConfirmPostGL}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs cursor-pointer"
+                className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs cursor-pointer"
               >
-                {isPostingGL ? "Posting..." : "Confirm & Post GL Voucher"}
+                <Check className="h-3.5 w-3.5 mr-1" />
+                {isPostingGL ? "Posting..." : "Confirm"}
               </Button>
             </div>
           </div>
