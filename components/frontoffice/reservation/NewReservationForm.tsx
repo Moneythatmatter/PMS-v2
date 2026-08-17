@@ -40,10 +40,7 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
-
-function generateRef() {
-  return `BK-${1044 + Math.floor(Math.random() * 100)}`;
-}
+import { displayBookingNo } from "@/lib/booking-display";
 
 function nightsBetween(checkIn: string, checkOut: string) {
   if (!checkIn || !checkOut) return 0;
@@ -140,7 +137,7 @@ export function NewReservationForm() {
         : searchParamCheckOut
     : "";
 
-  const [ref] = useState(generateRef);
+  const [savedBookingNo, setSavedBookingNo] = useState<string | null>(null);
   const [availableRoomNos, setAvailableRoomNos] = useState<string[]>([]);
   const [tariffByPlanMap, setTariffByPlanMap] = useState<Record<string, number>>({});
   const [baseRateByRoomMap, setBaseRateByRoomMap] = useState<Record<string, number>>({});
@@ -306,7 +303,7 @@ export function NewReservationForm() {
         if (activeSources.length > 0) {
           setSourceOptions(
             activeSources.map((s) => ({
-              id: s.name,
+              id: s.id,
               label: s.name,
               hint: s.code,
             })),
@@ -519,7 +516,13 @@ export function NewReservationForm() {
           mobile: form.mobile,
           email: form.email,
           nationality: form.nationality || "Indian",
+          gender: form.gender || "",
+          dob: form.dob || "",
           address: form.address || "",
+          city: form.city || "",
+          state: form.state || "",
+          country: form.country || "",
+          pincode: form.pincode || "",
           idType: form.idProofType || "Aadhaar",
           idNumber: form.idNumber || "",
           preferences: form.preferences?.length ? form.preferences : [],
@@ -530,11 +533,17 @@ export function NewReservationForm() {
           mobile: form.mobile,
           email: form.email,
           nationality: form.nationality || "Indian",
+          gender: form.gender || "",
+          dob: form.dob || "",
+          address: form.address || "",
+          city: form.city || "",
+          state: form.state || "",
+          country: form.country || "",
+          pincode: form.pincode || "",
           totalStays: 1,
           loyaltyPoints: 100,
           idType: form.idProofType || "Aadhaar",
           idNumber: form.idNumber || "",
-          address: form.address || "",
           memberSince: new Date().toLocaleString("en-IN", { month: "short", year: "numeric" }),
           preferences: form.preferences || [],
         });
@@ -542,16 +551,9 @@ export function NewReservationForm() {
       }
 
       const booking = await reservationService.create({
-        guestId: finalGuestId,
-        guestName: guestNameStr,
-        phone: form.mobile,
-        email: form.email,
-        nationality: form.nationality || "Indian",
-        idProofType: form.idProofType || "Aadhaar",
-        idNumber: form.idNumber || "",
-        source: form.source || "Direct",
-        roomNo: form.roomNumber || "TBA",
-        roomType: form.roomType,
+        guestId: finalGuestId!,
+        roomRefId: form.roomNumber || undefined,
+        sourceId: form.source || undefined,
         checkIn: form.checkIn,
         checkOut: form.checkOut,
         nights,
@@ -566,19 +568,16 @@ export function NewReservationForm() {
         balance: pendingAmount,
         status: "Reserved",
         bookedBy: currentUser.name,
-        gender: form.gender || "",
-        dob: form.dob || "",
-        address: form.address || "",
-        city: form.city || "",
-        state: form.state || "",
-        country: form.country || "",
-        pincode: form.pincode || "",
+        bookingType: form.bookingType,
+        companyName: form.companyName,
+        specialRequests: form.notes || undefined,
       });
 
       setSavedStatus("Reserved");
+      setSavedBookingNo(displayBookingNo(booking));
       setToastVariant("success");
       setToast(
-        `Reservation ${booking.id} saved as Reserved for ${form.firstName} ${form.lastName}. Total: ${formatINR(totalAmount)}`,
+        `Reservation ${displayBookingNo(booking)} saved as Reserved for ${form.firstName} ${form.lastName}. Total: ${formatINR(totalAmount)}`,
       );
     } catch (e) {
       setToastVariant("error");
@@ -602,8 +601,8 @@ export function NewReservationForm() {
           <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-green-50 px-4 py-2.5">
             <CalendarDays className="h-4 w-4 text-emerald-700" />
             <div>
-              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Reference</p>
-              <p className="text-sm font-bold text-slate-800">{ref}</p>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Booking No.</p>
+              <p className="text-sm font-bold text-slate-800">Assigned on save</p>
             </div>
           </div>
         }
@@ -658,7 +657,7 @@ export function NewReservationForm() {
           </div>
           <p className="mt-4 text-xl font-bold text-slate-900">Reservation Saved</p>
           <p className="mt-1 text-sm text-slate-600">
-            {ref} · {guestName} · {savedStatus}
+            {savedBookingNo} · {guestName} · {savedStatus}
           </p>
           <p className="mt-1 text-sm font-semibold text-emerald-700">{formatINR(totalAmount)} total</p>
           <div className="mt-6 flex gap-3">
@@ -878,7 +877,7 @@ export function NewReservationForm() {
               <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Booking Summary</p>
                 <p className="mt-2 text-lg font-bold text-slate-900">{guestName}</p>
-                <p className="text-xs text-slate-500">{ref}</p>
+                <p className="text-xs text-slate-500">Auto-assigned on save (BK-0, BK-1, …)</p>
 
                 <div className="mt-4 space-y-2.5 text-sm">
                   {[

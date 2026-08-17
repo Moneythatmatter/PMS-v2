@@ -35,6 +35,8 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { displayBookingNo } from "@/lib/booking-display";
+import { formatBookingGuestLine } from "@/lib/reservation-display";
 import { isArrivingToday } from "@/lib/reservation-dates";
 
 import { bookingTypeOptions } from "@/app/data/frontoffice/checkin";
@@ -236,7 +238,7 @@ export function CheckInForm() {
 
   const loadArrival = (found: any) => {
     setBooking(found);
-    setBookingId(found.id);
+    setBookingId(displayBookingNo(found));
     const preassigned = String(found.assignedRoom || found.roomNo || "").trim();
     // Never treat booking placeholders (TBA / unassigned) as a real room
     const isRealRoom =
@@ -249,7 +251,7 @@ export function CheckInForm() {
     setLookupError("");
     setErrors({});
     setToastVariant("success");
-    setToast(`Loaded booking reference ${found.id} for ${found.guestName}.`);
+    setToast(`Loaded booking ${displayBookingNo(found)} for ${found.guestName}.`);
   };
 
   const handleLookupBooking = (idToSearch?: string) => {
@@ -271,8 +273,10 @@ export function CheckInForm() {
 
     const found = pool.find(
       (b) =>
+        displayBookingNo(b).toLowerCase() === query.toLowerCase() ||
+        (b.guestNo ?? "").toLowerCase() === query.toLowerCase() ||
         b.id.toLowerCase() === query.toLowerCase() ||
-        b.guestName.toLowerCase().includes(query.toLowerCase()),
+        b.guestName?.toLowerCase().includes(query.toLowerCase()),
     );
 
     if (found) {
@@ -363,17 +367,51 @@ export function CheckInForm() {
     setErrors({});
 
     try {
+      const guestPayload = {
+        gender: guestDetails.gender,
+        dob: guestDetails.dob,
+        nationality: guestDetails.nationality,
+        address: guestDetails.address,
+        city: guestDetails.city,
+        state: guestDetails.state,
+        country: guestDetails.country,
+        pincode: guestDetails.pincode,
+        idProofType: guestDetails.idProofType,
+        idNumber: guestDetails.idNumber,
+      };
+
       if (checkInMode === "reserved" && booking) {
         await reservationService.checkIn(booking.id, {
           roomNo: roomForApi,
+          ...guestPayload,
         } as Partial<ReservationBooking>);
       } else {
-        const created = await reservationService.create({
-          guestName: guestNameForApi,
-          phone: walkIn.mobile,
+        const checkIn = formatStayDate(new Date());
+        const checkOutDate = new Date();
+        checkOutDate.setDate(checkOutDate.getDate() + walkIn.nights);
+        const checkOut = formatStayDate(checkOutDate);
+
+        const guest = await guestService.create({
+          name: guestNameForApi,
           email: walkIn.email || undefined,
-          roomNo: roomForApi,
-          roomType: walkIn.roomType,
+          mobile: walkIn.mobile,
+          nationality: guestDetails.nationality || undefined,
+          gender: guestDetails.gender || undefined,
+          dob: guestDetails.dob || undefined,
+          address: guestDetails.address || undefined,
+          city: guestDetails.city || undefined,
+          state: guestDetails.state || undefined,
+          country: guestDetails.country || undefined,
+          pincode: guestDetails.pincode || undefined,
+          idType: guestDetails.idProofType || undefined,
+          idNumber: guestDetails.idNumber || undefined,
+        });
+
+        const created = await reservationService.create({
+          guestId: guest.id,
+          roomRefId: roomForApi,
+          checkIn,
+          checkOut,
           nights: walkIn.nights,
           adults: walkIn.adults,
           totalAmount: walkInTotal,
@@ -381,15 +419,12 @@ export function CheckInForm() {
           paymentMode: walkIn.paymentMode,
           status: "Confirmed",
           source: "Walk-in",
+          bookingType: walkIn.bookingType || "Individual",
+          companyName: walkIn.companyName || undefined,
         } as Partial<ReservationBooking>);
         await reservationService.checkIn(created.id, {
-          roomNo: roomForApi,
+          roomRefId: roomForApi,
         } as Partial<ReservationBooking>);
-        await guestService.create({
-          name: guestNameForApi,
-          email: walkIn.email || undefined,
-          mobile: walkIn.mobile || undefined,
-        });
       }
 
       setCompleted(true);
@@ -544,7 +579,7 @@ export function CheckInForm() {
                   onKeyDown={(e) =>
                     e.key === "Enter" && handleLookupBooking()
                   }
-                  placeholder="e.g. BK-1002 or James Wilson"
+                  placeholder="e.g. BK-0 or James Wilson"
                   className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
                 />
                 <Button
@@ -619,7 +654,7 @@ export function CheckInForm() {
                               )}
                             </div>
                             <p className="text-xs text-slate-500">
-                              {arr.id} · {roomLabel}
+                              {formatBookingGuestLine(arr)} · {roomLabel}
                             </p>
                             <p className="mt-1 text-xs font-semibold text-emerald-700">
                               {arr.roomType}
@@ -672,7 +707,7 @@ export function CheckInForm() {
                             <Crown className="h-4 w-4 shrink-0 text-amber-500" />
                           )}
                         </div>
-                        <p className="text-sm text-slate-500">{booking.id}</p>
+                        <p className="text-sm text-slate-500">{formatBookingGuestLine(booking)}</p>
                       </div>
                     </div>
                     <button

@@ -103,30 +103,24 @@ export function RoomStatusView() {
   const handleSave = async () => {
     if (!selectedRoom) return;
     try {
-      const body: Partial<{ status: string; housekeeping: string; maintenance: string }> = {};
-      if (actionType === "status" && newStatus) body.status = newStatus;
-      if (actionType === "hk" && newHk) body.housekeeping = newHk;
-      const updated = await roomService.update(selectedRoom.roomNo, body);
-      setRooms((prev) =>
-        prev.map((r) =>
-          r.roomNo === selectedRoom.roomNo
-            ? {
-                ...r,
-                status: updated.status ?? body.status ?? r.status,
-                housekeeping: updated.housekeeping ?? body.housekeeping ?? r.housekeeping,
-                maintenance: updated.maintenance ?? r.maintenance,
-                guestName: updated.guestName ?? r.guestName,
-              }
-            : r,
-        ),
-      );
+      const body: Partial<{ status: string }> = {};
+      if (actionType === "status" && newStatus) {
+        body.status = newStatus;
+      }
+      if (actionType === "hk" && newHk) {
+        body.status = newHk === "Dirty" ? "Dirty" : newHk === "In Progress" ? "Maintenance" : "Vacant";
+      }
+      const updated = await roomService.update(selectedRoom.id ?? selectedRoom.roomNo, body);
+      const data = await roomService.status();
+      setRooms(data);
       setToast(
         actionType === "hk"
           ? `Housekeeping updated for Room ${selectedRoom.roomNo}.`
           : actionType === "status"
-            ? `Room ${selectedRoom.roomNo} status changed to ${newStatus}.`
+            ? `Room ${selectedRoom.roomNo} status changed to ${body.status ?? newStatus}.`
             : `Room ${selectedRoom.roomNo} assigned successfully.`,
       );
+      void updated;
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Failed to update room");
     }

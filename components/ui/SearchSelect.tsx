@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, ReactNode } from "react";
+import { useState, useRef, useEffect, useMemo, ReactNode } from "react";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,18 +46,27 @@ export function SearchSelect({
   const [internalQuery, setInternalQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const uniqueOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return options.filter((opt) => {
+      if (seen.has(opt.id)) return false;
+      seen.add(opt.id);
+      return true;
+    });
+  }, [options]);
+
   const isControlledQuery = onChange !== undefined;
   const query = isControlledQuery ? value : internalQuery;
 
   const selected =
-    (selectedId ? options.find((o) => o.id === selectedId) : null) ??
+    (selectedId ? uniqueOptions.find((o) => o.id === selectedId) : null) ??
     (selectedId
       ? { id: selectedId, label: selectedId, data: { id: selectedId, label: selectedId } }
       : null);
 
   const displayValue = isOpen ? query : (selected?.label ?? "");
 
-  const matches = options.filter((opt) => {
+  const matches = uniqueOptions.filter((opt) => {
     const q = query.toLowerCase().trim();
     if (!q) return true;
     return (
@@ -69,7 +78,7 @@ export function SearchSelect({
   });
 
   const trimmedQuery = query.trim();
-  const exactMatch = options.some(
+  const exactMatch = uniqueOptions.some(
     (o) =>
       o.id.toLowerCase() === trimmedQuery.toLowerCase() ||
       o.label.toLowerCase() === trimmedQuery.toLowerCase(),
@@ -193,9 +202,9 @@ export function SearchSelect({
                 : "No options available"}
             </p>
           )}
-          {matches.map((opt) => (
+          {matches.map((opt, index) => (
             <button
-              key={opt.id}
+              key={`${opt.id}-${index}`}
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {

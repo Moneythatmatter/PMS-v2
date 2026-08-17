@@ -36,6 +36,7 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { displayGuestNo } from "@/lib/guest-display";
 
 const tabs = [
   "Personal",
@@ -103,7 +104,7 @@ export function GuestProfileView() {
         ((g.name || "").toLowerCase().includes(q) ||
           (g.email || "").toLowerCase().includes(q) ||
           (g.mobile || "").includes(q) ||
-          (g.id || "").toLowerCase().includes(q)),
+          displayGuestNo(g).toLowerCase().includes(q)),
     );
   }, [search, tierFilter, pmsProfiles]);
 
@@ -167,7 +168,7 @@ export function GuestProfileView() {
       <FOSearchToolbar
         search={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search by name, email, mobile, or guest ID…"
+        searchPlaceholder="Search by name, email, mobile, or guest no…"
         filterPills={{
           active: tierFilter,
           onChange: setTierFilter,
@@ -200,7 +201,7 @@ export function GuestProfileView() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold text-slate-900">{guest.name}</p>
                   <p className="truncate text-xs text-slate-500">
-                    {guest.id} · {guest.mobile}
+                    {displayGuestNo(guest)} · {guest.mobile}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
@@ -234,7 +235,7 @@ export function GuestProfileView() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         title={selected.name}
-        description={`${selected.id} · ${selected.nationality}`}
+        description={`${displayGuestNo(selected)} · ${selected.nationality}`}
         width="lg"
         footer={
           <>
@@ -317,6 +318,7 @@ function ProfilePanel({
         {activeTab === "Personal" && (
           <div className="grid gap-4 sm:grid-cols-2">
             {[
+              { icon: User, label: "Guest No.", value: displayGuestNo(guest) },
               { icon: Phone, label: "Mobile", value: guest.mobile },
               { icon: Mail, label: "Email", value: guest.email },
               { icon: MapPin, label: "Address", value: guest.address ?? "—" },

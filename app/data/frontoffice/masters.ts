@@ -13,6 +13,19 @@ export interface RoomTypeMaster {
   status: "Active" | "Inactive";
 }
 
+export interface RoomMaster {
+  id: string;
+  roomNo: string;
+  roomType: string;
+  floor?: string;
+  status?: string;
+  maxOccupancy?: number;
+  bedType?: string;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface TariffPlanMaster {
   id: string;
   code: string;

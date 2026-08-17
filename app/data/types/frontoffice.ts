@@ -77,13 +77,18 @@ export interface ReservationSummaryStat {
 
 export interface ReservationBooking {
   id: string;
-  guestName: string;
-  guestId?: string;
-  phone: string;
+  bookingNo?: string;
+  guestId: string;
+  guestNo?: string;
+  roomRefId?: string;
+  guestName?: string;
+  phone?: string;
   email?: string;
-  source: string;
-  roomNo: string;
-  roomType: string;
+  sourceId?: string;
+  /** Enriched from booking_sources */
+  source?: string;
+  roomNo?: string;
+  roomType?: string;
   checkIn: string;
   checkOut: string;
   balance: number;

@@ -34,6 +34,9 @@ import {
 
 
 import * as actions from "./HousekeepingActions";
+import { normalizeHkRoom } from "./roomUtils";
+import { normalizeGuestRequest } from "./guestRequestUtils";
+import { normalizeMaintenanceRequest } from "./maintenanceRequestUtils";
 import {
   hkRoomService,
   hkPublicAreaService,
@@ -91,14 +94,25 @@ interface HousekeepingContextType {
   returnLostFound: (id: string, claimBy?: string) => void;
   addHKRequest: (req: {
     room: string;
+    roomId?: string;
+    bookingId?: string;
     guest: string;
     issue: string;
     priority: "Low" | "Medium" | "High";
     assignedStaff: string;
     assignmentType: "Auto" | "Manual";
+    remarks?: string;
   }) => void;
   assignHKRequest: (id: string, staffName: string, assignmentType: "Auto" | "Manual", reason: string) => void;
   completeHKRequest: (id: string) => void;
+  updateHKRequest: (
+    id: string,
+    patch: {
+      issue: string;
+      priority: "Low" | "Medium" | "High";
+      remarks?: string;
+    },
+  ) => void;
   addMaintenanceRequest: (req: {
     room: string;
     problem: string;
@@ -171,7 +185,7 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
       return initial;
     };
 
-    setRooms(getOrInit("hk_rooms", initialHKRooms));
+    setRooms(getOrInit("hk_rooms", initialHKRooms).map(normalizeHkRoom));
 
     const loadedPublicAreas = getOrInit("hk_publicAreas", initialHKPublicAreas);
     const verifiedPublicAreas = loadedPublicAreas.map((area: any) => {
@@ -240,12 +254,7 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
       }
 
       const apiRooms = value<HKRoom[]>(1, []);
-      setRooms(
-        apiRooms.map((r) => ({
-          ...r,
-          roomNo: String(r.roomNo || (r as { id?: string }).id || ""),
-        })),
-      );
+      setRooms(apiRooms.map((r) => normalizeHkRoom(r)));
       setPublicAreas(value(2, initialHKPublicAreas));
       setInventory(value(3, initialHKInventory));
       const apiLaundry = value<HKLaundryJob[]>(4, []);
@@ -265,16 +274,20 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         const stored = localStorage.getItem("hk_luggage");
         setLuggageJobs(stored ? JSON.parse(stored) : initialHKLuggageJobs);
       }
-      const apiRequests = value<HousekeepingRequest[]>(9, []);
+      const apiRequests = value<
+        import("./guestRequestUtils").GuestRequestDto[]
+      >(9, []);
       if (Array.isArray(apiRequests) && apiRequests.length > 0) {
-        setRequests(apiRequests);
+        setRequests(apiRequests.map(normalizeGuestRequest));
       } else {
         const stored = localStorage.getItem("hk_requests");
         setRequests(stored ? JSON.parse(stored) : initialHKRequests);
       }
-      const apiMaintenance = value<MaintenanceRequest[]>(10, []);
+      const apiMaintenance = value<
+        import("./maintenanceRequestUtils").MaintenanceRequestDto[]
+      >(10, []);
       if (Array.isArray(apiMaintenance) && apiMaintenance.length > 0) {
-        setMaintenance(apiMaintenance);
+        setMaintenance(apiMaintenance.map(normalizeMaintenanceRequest));
       } else {
         const stored = localStorage.getItem("hk_maintenance");
         setMaintenance(stored ? JSON.parse(stored) : initialMaintenanceRequests);
@@ -469,11 +482,14 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
 
   const addHKRequest = (req: {
     room: string;
+    roomId?: string;
+    bookingId?: string;
     guest: string;
     issue: string;
     priority: "Low" | "Medium" | "High";
     assignedStaff: string;
     assignmentType: "Auto" | "Manual";
+    remarks?: string;
   }) => {
     actions.addHKRequest(req, requests.length, dispatchers);
   };
@@ -484,6 +500,17 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
 
   const completeHKRequest = (id: string) => {
     actions.completeHKRequest(id, requests, dispatchers);
+  };
+
+  const updateHKRequest = (
+    id: string,
+    patch: {
+      issue: string;
+      priority: "Low" | "Medium" | "High";
+      remarks?: string;
+    },
+  ) => {
+    actions.updateHKRequest(id, patch, dispatchers);
   };
 
   const addMaintenanceRequest = (req: {
@@ -676,6 +703,7 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         addHKRequest,
         assignHKRequest,
         completeHKRequest,
+        updateHKRequest,
         addMaintenanceRequest,
         assignMaintenanceRequest,
         startMaintenanceRepair,

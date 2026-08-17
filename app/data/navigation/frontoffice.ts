@@ -25,6 +25,7 @@ export const frontOfficeNavItems: ModuleNavItem[] = [
     href: "/frontoffice/masters",
     icon: "book-open",
     children: [
+      { label: "Rooms", href: "/frontoffice/masters/rooms", icon: "door-open" },
       { label: "Room Types", href: "/frontoffice/masters/room-types", icon: "bed" },
       { label: "Tariff Plans", href: "/frontoffice/masters/tariff-plans", icon: "tag" },
       { label: "Market Segments", href: "/frontoffice/masters/market-segments", icon: "pie-chart" },

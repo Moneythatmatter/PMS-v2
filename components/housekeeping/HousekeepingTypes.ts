@@ -13,6 +13,12 @@ export interface HKInspectionHistory {
 }
 
 export interface HKRoom {
+  /** hk_rooms primary key (UUID) — use for all API calls. */
+  id?: string;
+  /** Front Office `rooms.id` FK. */
+  roomId?: string;
+  /** Front Office `rooms.room_no` / legacy alias for roomId. */
+  roomRefId?: string;
   roomNo: string;
   category: string;
   type?: string; // Front Office compatible naming
@@ -32,6 +38,13 @@ export interface HKRoom {
   remarks: string;
   assignedStaff?: string;
   assignedSupervisor?: string;
+  /** Slim schema timestamps (from API). */
+  lastCleanedAt?: string | null;
+  lastInspectedAt?: string | null;
+  /** Active housekeeping_tasks row (cleaning queue). */
+  activeTaskId?: string;
+  activeTaskNumber?: string;
+  activeTaskType?: string;
   cleaningTimer?: {
     startedAt: string; // ISO string
     elapsedSeconds: number;
@@ -194,3 +207,46 @@ export interface HKLuggageJob {
 }
 
 export type { HousekeepingRequest, MaintenanceRequest, LostFoundItem };
+
+export type HkTaskType =
+  | "CHECKOUT_CLEANING"
+  | "REGULAR_CLEANING"
+  | "DEEP_CLEANING"
+  | "INSPECTION"
+  | "TURNDOWN"
+  | "SPECIAL_REQUEST";
+
+export type HkTaskStatus =
+  | "PENDING"
+  | "ASSIGNED"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "APPROVED"
+  | "CANCELLED";
+
+export type HkTaskPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+
+export interface HKTask {
+  id: string;
+  taskNumber?: string;
+  roomId: string;
+  bookingId?: string | null;
+  taskType: HkTaskType;
+  status: HkTaskStatus;
+  assignedTo?: string | null;
+  createdBy?: string | null;
+  priority: HkTaskPriority;
+  notes?: string | null;
+  assignedAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  roomNo?: string;
+  bookingNo?: string;
+  assignedToName?: string;
+  createdByName?: string;
+  approvedByName?: string;
+}

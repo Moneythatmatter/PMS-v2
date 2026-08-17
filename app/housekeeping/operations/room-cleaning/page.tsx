@@ -2,7 +2,13 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
-import { hkRoomService } from "@/services/housekeeping";
+import { hkRoomService, hkTaskService } from "@/services/housekeeping";
+import { roomService, type RoomDto } from "@/services/front-office/rooms";
+import { reservationService } from "@/services/front-office/reservations";
+import type { ReservationBooking } from "@/app/data/types";
+import type { HKTask, HkTaskType } from "@/components/housekeeping/HousekeepingTypes";
+import { mergeTasksIntoRooms, formatTaskTypeLabel } from "@/components/housekeeping/taskUtils";
+import { normalizeHkRoom, findRoomByKey, roomApiId, roomKey } from "@/components/housekeeping/roomUtils";
 import {
   Clock,
   Play,
@@ -15,9 +21,9 @@ import {
   Layers,
   AlertTriangle,
   Eye,
-  Filter,
   Building2,
   BedDouble,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -31,6 +37,18 @@ import {
 } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
+import { TextAreaInput } from "@/components/frontoffice/ui";
+
+const TASK_TYPES: HkTaskType[] = [
+  "CHECKOUT_CLEANING",
+  "REGULAR_CLEANING",
+  "DEEP_CLEANING",
+  "INSPECTION",
+  "TURNDOWN",
+  "SPECIAL_REQUEST",
+];
+
+const TASK_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 
 export default function RoomCleaningOperations() {
   const {
@@ -43,13 +61,27 @@ export default function RoomCleaningOperations() {
     resumeCleaning,
     completeCleaning,
     changeRoomStatus,
+    setRooms,
   } = useHousekeeping();
+
+  const [tasks, setTasks] = useState<HKTask[]>([]);
+  const [foRooms, setFoRooms] = useState<RoomDto[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newTaskRoomId, setNewTaskRoomId] = useState("");
+  const [newTaskType, setNewTaskType] = useState<HkTaskType>("REGULAR_CLEANING");
+  const [newTaskPriority, setNewTaskPriority] = useState<string>("MEDIUM");
+  const [newTaskNotes, setNewTaskNotes] = useState("");
+  const [roomBooking, setRoomBooking] = useState<ReservationBooking | null>(null);
+  const [linkBooking, setLinkBooking] = useState(true);
+  const [loadingBooking, setLoadingBooking] = useState(false);
 
   const [search, setSearch] = useState("");
   const [floorFilter, setFloorFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
-  const [selectedRoomNo, setSelectedRoomNo] = useState<string | null>(null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [assignee, setAssignee] = useState("");
   const [checklistId, setChecklistId] = useState("");
   const [checkedItems, setCheckedItems] = useState<string[]>([]);
@@ -58,10 +90,102 @@ export default function RoomCleaningOperations() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  useEffect(() => {
+    void hkTaskService
+      .list()
+      .then(setTasks)
+      .catch(() => setTasks([]));
+    void roomService
+      .list()
+      .then(setFoRooms)
+      .catch(() => setFoRooms([]));
+  }, []);
+
+  useEffect(() => {
+    if (!createOpen || !newTaskRoomId.trim()) {
+      setRoomBooking(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingBooking(true);
+    void reservationService
+      .getCurrentForRoom(newTaskRoomId.trim())
+      .then((booking) => {
+        if (cancelled) return;
+        setRoomBooking(booking);
+        setLinkBooking(true);
+        if (booking.status === "Checked Out") {
+          setNewTaskType("CHECKOUT_CLEANING");
+        } else if (
+          booking.status === "Checked In" ||
+          booking.status === "In-House"
+        ) {
+          setNewTaskType("REGULAR_CLEANING");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRoomBooking(null);
+          setLinkBooking(false);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBooking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, newTaskRoomId]);
+
+  const queueRooms = useMemo(
+    () => mergeTasksIntoRooms(rooms, tasks),
+    [rooms, tasks],
+  );
+
+  const reloadQueue = async () => {
+    const [taskList, roomList] = await Promise.all([
+      hkTaskService.list(),
+      hkRoomService.list(),
+    ]);
+    setTasks(taskList);
+    setRooms(roomList.map(normalizeHkRoom));
+  };
+
+  const handleCreateTask = async () => {
+    if (!newTaskRoomId.trim()) {
+      setCreateError("Select a room.");
+      return;
+    }
+    setCreating(true);
+    setCreateError(null);
+    try {
+      await hkTaskService.create({
+        roomId: newTaskRoomId.trim(),
+        bookingId:
+          linkBooking && roomBooking?.id ? roomBooking.id : undefined,
+        taskType: newTaskType,
+        priority: newTaskPriority as HKTask["priority"],
+        notes: newTaskNotes.trim() || undefined,
+      });
+      await reloadQueue();
+      setCreateOpen(false);
+      setNewTaskRoomId("");
+      setNewTaskNotes("");
+      setRoomBooking(null);
+      setLinkBooking(true);
+      setNewTaskType("REGULAR_CLEANING");
+      setNewTaskPriority("MEDIUM");
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "Failed to create task");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   // Selected room details
   const selectedRoom = useMemo(() => {
-    return rooms.find((r) => r.roomNo === selectedRoomNo) || null;
-  }, [rooms, selectedRoomNo]);
+    return selectedRoomId ? findRoomByKey(queueRooms, selectedRoomId) ?? null : null;
+  }, [queueRooms, selectedRoomId]);
 
   // Housekeepers list
   const housekeepers = useMemo(() => {
@@ -69,10 +193,10 @@ export default function RoomCleaningOperations() {
   }, [staff]);
 
   // Handle room click: Open Drawer
-  const handleRoomClick = (roomNo: string) => {
-    const rm = rooms.find((r) => r.roomNo === roomNo);
+  const handleRoomClick = (roomId: string) => {
+    const rm = findRoomByKey(queueRooms, roomId);
     if (!rm) return;
-    setSelectedRoomNo(roomNo);
+    setSelectedRoomId(roomId);
     setAssignee(rm.assignedStaff || (housekeepers[0]?.name ?? ""));
 
     // Choose appropriate checklist based on occupancy
@@ -88,7 +212,7 @@ export default function RoomCleaningOperations() {
 
   // Filters and search logic
   const filteredRooms = useMemo(() => {
-    return rooms.filter((r) => {
+    return queueRooms.filter((r) => {
       const matchSearch =
         r.roomNo.includes(search) ||
         r.category.toLowerCase().includes(search.toLowerCase()) ||
@@ -111,23 +235,21 @@ export default function RoomCleaningOperations() {
 
       return matchSearch && matchFloor && matchStatus;
     });
-  }, [rooms, search, floorFilter, statusFilter]);
+  }, [queueRooms, search, floorFilter, statusFilter]);
 
-  // Floor lists helper
   const uniqueFloors = useMemo(() => {
-    return Array.from(new Set(rooms.map((r) => r.floor))).sort();
-  }, [rooms]);
+    return Array.from(new Set(queueRooms.map((r) => r.floor).filter(Boolean))).sort();
+  }, [queueRooms]);
 
-  // KPI stats computation
   const stats = useMemo(() => {
-    const total = rooms.length;
-    const dirty = rooms.filter((r) => r.status.includes("Dirty")).length;
-    const cleaning = rooms.filter((r) => r.status === "Cleaning").length;
-    const inspection = rooms.filter((r) => r.status === "Inspection Pending").length;
-    const ready = rooms.filter((r) => r.status === "Vacant Ready").length;
+    const total = queueRooms.length;
+    const dirty = queueRooms.filter((r) => r.status.includes("Dirty")).length;
+    const cleaning = queueRooms.filter((r) => r.status === "Cleaning").length;
+    const inspection = queueRooms.filter((r) => r.status === "Inspection Pending").length;
+    const ready = queueRooms.filter((r) => r.status === "Vacant Ready").length;
 
     return { total, dirty, cleaning, inspection, ready };
-  }, [rooms]);
+  }, [queueRooms]);
 
   // Checklist items
   const activeChecklist = useMemo(() => {
@@ -156,8 +278,8 @@ export default function RoomCleaningOperations() {
         if (resultUrl) {
           setUploadedPhotos((prev) => {
             const next = [...prev, resultUrl];
-            if (selectedRoomNo) {
-              hkRoomService.update(selectedRoomNo, { photos: next }).catch((err) => {
+            if (selectedRoomId && selectedRoom) {
+              hkRoomService.update(roomApiId(selectedRoom), { photos: next }).catch((err) => {
                 console.error("[HK] Failed to sync photo upload to API", err);
               });
             }
@@ -190,6 +312,18 @@ export default function RoomCleaningOperations() {
         }
         action={
           <div className="flex items-center gap-2">
+            <Button
+              onClick={() => {
+                setCreateError(null);
+                if (!newTaskRoomId && foRooms[0]?.id) {
+                  setNewTaskRoomId(foRooms[0].id);
+                }
+                setCreateOpen(true);
+              }}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1.5"
+            >
+              <Plus className="h-4 w-4" /> Create Task
+            </Button>
             <Button
               variant={viewMode === "grid" ? "primary" : "outline"}
               onClick={() => setViewMode("grid")}
@@ -280,8 +414,25 @@ export default function RoomCleaningOperations() {
         </div>
       </OperationsFilterDrawer>
 
+      {filteredRooms.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-10 text-center">
+          <Sparkles className="mx-auto h-10 w-10 text-slate-300" />
+          <h3 className="mt-3 text-sm font-bold text-slate-800">No cleaning tasks in queue</h3>
+          <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
+            Tasks are created automatically on guest check-out, or you can add one manually
+            (e.g. deep clean on a vacant room).
+          </p>
+          <Button
+            onClick={() => setCreateOpen(true)}
+            className="mt-4 bg-emerald-700 hover:bg-emerald-800 text-white"
+          >
+            <Plus className="mr-1.5 h-4 w-4" /> Create Cleaning Task
+          </Button>
+        </div>
+      ) : null}
+
       {/* Main Grid View */}
-      {viewMode === "grid" ? (
+      {viewMode === "grid" && filteredRooms.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filteredRooms.map((room) => {
             const isCleaning = room.status === "Cleaning";
@@ -295,8 +446,8 @@ export default function RoomCleaningOperations() {
 
             return (
               <div
-                key={room.roomNo}
-                onClick={() => handleRoomClick(room.roomNo)}
+                key={roomKey(room)}
+                onClick={() => handleRoomClick(roomKey(room))}
                 className={cn(
                   "cursor-pointer rounded-md border bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-md",
                   isCleaning
@@ -313,7 +464,11 @@ export default function RoomCleaningOperations() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-slate-800">Room {room.roomNo}</h3>
-                    <p className="text-xs text-slate-500 font-medium">{room.category}</p>
+                    <p className="text-xs text-slate-500 font-medium">
+                      {room.activeTaskNumber
+                        ? `${room.activeTaskNumber} · ${formatTaskTypeLabel(room.activeTaskType)}`
+                        : room.category}
+                    </p>
                   </div>
                   <span
                     className={cn(
@@ -365,7 +520,7 @@ export default function RoomCleaningOperations() {
             );
           })}
         </div>
-      ) : (
+      ) : filteredRooms.length > 0 ? (
         /* List View */
         <>
           <div className="space-y-3 md:hidden">
@@ -373,22 +528,22 @@ export default function RoomCleaningOperations() {
               <button
                 key={room.roomNo}
                 type="button"
-                onClick={() => handleRoomClick(room.roomNo)}
+                onClick={() => handleRoomClick(roomKey(room))}
                 className={cn(
                   "w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-2xs transition-colors",
-                  selectedIds.has(room.roomNo) && "border-emerald-300 bg-emerald-50/40",
+                  selectedIds.has(roomKey(room)) && "border-emerald-300 bg-emerald-50/40",
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-3 min-w-0">
                     <input
                       type="checkbox"
-                      checked={selectedIds.has(room.roomNo)}
+                      checked={selectedIds.has(roomKey(room))}
                       onClick={(e) => e.stopPropagation()}
                       onChange={() => {
                         const next = new Set(selectedIds);
-                        if (next.has(room.roomNo)) next.delete(room.roomNo);
-                        else next.add(room.roomNo);
+                        if (next.has(roomKey(room))) next.delete(roomKey(room));
+                        else next.add(roomKey(room));
                         setSelectedIds(next);
                       }}
                       className="mt-0.5 rounded border-slate-300"
@@ -437,10 +592,10 @@ export default function RoomCleaningOperations() {
                       type="checkbox"
                       checked={
                         filteredRooms.length > 0 &&
-                        filteredRooms.every((room) => selectedIds.has(room.roomNo))
+                        filteredRooms.every((room) => selectedIds.has(roomKey(room)))
                       }
                       onChange={() => {
-                        const allIds = filteredRooms.map((room) => room.roomNo);
+                        const allIds = filteredRooms.map((room) => roomKey(room));
                         const allSelected = allIds.every((id) => selectedIds.has(id));
                         setSelectedIds(allSelected ? new Set() : new Set(allIds));
                       }}
@@ -459,21 +614,21 @@ export default function RoomCleaningOperations() {
               <tbody className="divide-y divide-slate-100">
                 {filteredRooms.map((room) => (
                   <tr
-                    key={room.roomNo}
-                    onClick={() => handleRoomClick(room.roomNo)}
+                    key={roomKey(room)}
+                    onClick={() => handleRoomClick(roomKey(room))}
                     className={cn(
                       "hover:bg-slate-50/50 cursor-pointer",
-                      selectedIds.has(room.roomNo) && "bg-emerald-50/40",
+                      selectedIds.has(roomKey(room)) && "bg-emerald-50/40",
                     )}
                   >
                     <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
-                        checked={selectedIds.has(room.roomNo)}
-                        onChange={() => {
-                          const next = new Set(selectedIds);
-                          if (next.has(room.roomNo)) next.delete(room.roomNo);
-                          else next.add(room.roomNo);
+                      checked={selectedIds.has(roomKey(room))}
+                      onChange={() => {
+                        const next = new Set(selectedIds);
+                        if (next.has(roomKey(room))) next.delete(roomKey(room));
+                        else next.add(roomKey(room));
                           setSelectedIds(next);
                         }}
                         className="rounded border-slate-300"
@@ -515,12 +670,125 @@ export default function RoomCleaningOperations() {
             </table>
           </div>
         </>
-      )}
+      ) : null}
+
+      {/* Create Task Drawer */}
+      <Drawer
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Create Cleaning Task"
+        description="Assign work to a room — booking is optional (e.g. deep clean on vacant room)."
+      >
+        <div className="space-y-4">
+          {createError && (
+            <p className="text-xs font-medium text-red-600 rounded-lg bg-red-50 px-3 py-2">
+              {createError}
+            </p>
+          )}
+          <FormField label="Room" required>
+            <SelectInput
+              value={newTaskRoomId}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setNewTaskRoomId(e.target.value)
+              }
+              className="text-xs"
+            >
+              <option value="">Select room…</option>
+              {foRooms.map((r) => (
+                <option key={r.id} value={r.id ?? r.roomNo}>
+                  {r.roomNo} — {r.roomType ?? "Standard"}
+                  {r.floor ? ` (${r.floor})` : ""}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+
+          <FormField label="Guest booking">
+            {loadingBooking ? (
+              <p className="text-xs text-slate-500">Looking up booking for this room…</p>
+            ) : roomBooking ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
+                <label className="flex items-start gap-2 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={linkBooking}
+                    onChange={(e) => setLinkBooking(e.target.checked)}
+                    className="mt-0.5 rounded border-slate-300"
+                  />
+                  <span>
+                    <span className="font-bold text-slate-800 block">
+                      Link to {roomBooking.bookingNo ?? roomBooking.id}
+                    </span>
+                    <span className="text-slate-600">
+                      {roomBooking.guestName ?? "Guest"} · {roomBooking.status}
+                      {roomBooking.checkOut ? ` · Out ${roomBooking.checkOut}` : ""}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2">
+                No active booking for this room — task will be created without a
+                booking link (e.g. vacant deep clean).
+              </p>
+            )}
+          </FormField>
+
+          <FormField label="Task Type" required>
+            <SelectInput
+              value={newTaskType}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setNewTaskType(e.target.value as HkTaskType)
+              }
+              className="text-xs"
+            >
+              {TASK_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {formatTaskTypeLabel(t)}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+          <FormField label="Priority">
+            <SelectInput
+              value={newTaskPriority}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setNewTaskPriority(e.target.value)
+              }
+              className="text-xs"
+            >
+              {TASK_PRIORITIES.map((p) => (
+                <option key={p} value={p}>
+                  {p.charAt(0) + p.slice(1).toLowerCase()}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+          <FormField label="Notes">
+            <TextAreaInput
+              value={newTaskNotes}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                setNewTaskNotes(e.target.value)
+              }
+              rows={3}
+              placeholder="Optional instructions for housekeeper…"
+              className="text-xs"
+            />
+          </FormField>
+          <Button
+            className="w-full bg-emerald-700 hover:bg-emerald-800"
+            onClick={() => void handleCreateTask()}
+            disabled={creating}
+          >
+            {creating ? "Creating…" : "Create Task"}
+          </Button>
+        </div>
+      </Drawer>
 
       {/* Drawer: Detailed Cleaning Operations */}
       <Drawer
-        open={!!selectedRoomNo}
-        onClose={() => setSelectedRoomNo(null)}
+        open={!!selectedRoomId}
+        onClose={() => setSelectedRoomId(null)}
         title={`Room ${selectedRoom?.roomNo} Cleaning Console`}
       >
         {selectedRoom && (
@@ -586,7 +854,7 @@ export default function RoomCleaningOperations() {
                   </FormField>
 
                   <Button
-                    onClick={() => startCleaning(selectedRoom.roomNo, assignee)}
+                    onClick={() => startCleaning(roomKey(selectedRoom), assignee)}
                     className="w-full bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center gap-2"
                   >
                     <Play className="h-4 w-4" /> Start Cleaning
@@ -624,7 +892,7 @@ export default function RoomCleaningOperations() {
                     {selectedRoom.cleaningTimer.paused ? (
                       <Button
                         variant="outline"
-                        onClick={() => resumeCleaning(selectedRoom.roomNo)}
+                        onClick={() => resumeCleaning(roomKey(selectedRoom))}
                         className="flex items-center justify-center gap-1.5 text-xs"
                       >
                         <Play className="h-3.5 w-3.5" /> Resume
@@ -632,14 +900,14 @@ export default function RoomCleaningOperations() {
                     ) : (
                       <Button
                         variant="outline"
-                        onClick={() => pauseCleaning(selectedRoom.roomNo)}
+                        onClick={() => pauseCleaning(roomKey(selectedRoom))}
                         className="flex items-center justify-center gap-1.5 text-xs"
                       >
                         <Pause className="h-3.5 w-3.5" /> Pause
                       </Button>
                     )}
                     <Button
-                      onClick={() => completeCleaning(selectedRoom.roomNo, checkedItems, uploadedPhotos)}
+                      onClick={() => completeCleaning(roomKey(selectedRoom), checkedItems, uploadedPhotos)}
                       className="bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center gap-1.5 text-xs"
                       disabled={calculatedProgress < 50} // Requires at least 50% task completion
                     >
@@ -675,7 +943,7 @@ export default function RoomCleaningOperations() {
                   </div>
                   <Button
                     variant="outline"
-                    onClick={() => changeRoomStatus(selectedRoom.roomNo, "Vacant Dirty")}
+                    onClick={() => changeRoomStatus(roomKey(selectedRoom), "Vacant Dirty")}
                     className="text-xs border-slate-200 text-slate-700 hover:bg-slate-50"
                   >
                     Mark as Dirty (Request Re-clean)
@@ -693,7 +961,7 @@ export default function RoomCleaningOperations() {
                   </div>
                   <Button
                     variant="outline"
-                    onClick={() => changeRoomStatus(selectedRoom.roomNo, selectedRoom.status.includes("Occupied") ? "Occupied Dirty" : "Vacant Dirty")}
+                    onClick={() => changeRoomStatus(roomKey(selectedRoom), selectedRoom.status.includes("Occupied") ? "Occupied Dirty" : "Vacant Dirty")}
                     className="text-xs border-slate-200 text-slate-700 hover:bg-slate-50"
                   >
                     Mark as Dirty

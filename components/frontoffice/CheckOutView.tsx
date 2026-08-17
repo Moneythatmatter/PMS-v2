@@ -31,6 +31,7 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { displayBookingNo } from "@/lib/booking-display";
 import { isDepartingToday } from "@/lib/reservation-dates";
 import { CheckoutInvoiceDrawer } from "@/components/frontoffice/CheckoutInvoice";
 
@@ -58,6 +59,7 @@ const BILL_LINES: { key: BillLineKey; label: string; splittable: boolean }[] = [
 
 function mapInHouseToFolio(g: {
   id: string;
+  bookingNo?: string;
   guestName: string;
   email?: string;
   room: string;
@@ -76,7 +78,7 @@ function mapInHouseToFolio(g: {
   const laundry = g.laundry || 0;
   return {
     id: g.id,
-    bookingId: g.id,
+    bookingId: displayBookingNo(g),
     guestName: g.guestName,
     phone: "",
     email: g.email,
@@ -193,7 +195,7 @@ export function CheckOutView() {
         f.room === query,
     );
     if (!found) {
-      setLookupError("No in-house guest found. Try BK-1040, James Wilson, or room 112.");
+      setLookupError("No in-house guest found. Try BK-0, James Wilson, or room 112.");
       setSelected(null);
       return;
     }
@@ -441,7 +443,7 @@ export function CheckOutView() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleLookup()}
-                  placeholder="e.g. BK-1040 or James Wilson"
+                  placeholder="e.g. BK-0 or James Wilson"
                   className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
                 />
                 <Button onClick={handleLookup} className="h-11 gap-2 bg-emerald-700 hover:bg-emerald-800">

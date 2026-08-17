@@ -2,8 +2,14 @@ import { logAudit } from "../common/audit";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { HKRoom, HKPublicArea, HousekeepingRequest } from "../../HousekeepingTypes";
 import { hkRoomService, hkGuestRequestService } from "@/services/housekeeping";
+import { matchesRoomKey, roomApiId, roomDisplayNo, uiStatusToHkEnum } from "../../roomUtils";
+import {
+  normalizeGuestRequest,
+  mapRequestItemToType,
+  uiPriorityToApi,
+} from "../../guestRequestUtils";
 
-export const changeRoomStatus = (roomNo: string, status: HKRoom["status"], dispatchers: HousekeepingDispatchers) => {
+export const changeRoomStatus = (roomKey: string, status: HKRoom["status"], dispatchers: HousekeepingDispatchers) => {
   let hkSt: HKRoom["hkStatus"] = "Clean";
   let foSt: HKRoom["foStatus"] = "Vacant";
 
@@ -36,25 +42,29 @@ export const changeRoomStatus = (roomNo: string, status: HKRoom["status"], dispa
     foSt = "Vacant";
   }
 
-  dispatchers.setRooms((prev) =>
-    prev.map((r) => {
-      if (r.roomNo !== roomNo) return r;
+  let apiId = roomKey;
+  let label = roomKey;
+
+  dispatchers.setRooms((prev) => {
+    const match = prev.find((r) => matchesRoomKey(r, roomKey));
+    apiId = match ? roomApiId(match) : roomKey;
+    label = match ? roomDisplayNo(match) : roomKey;
+    return prev.map((r) => {
+      if (!matchesRoomKey(r, roomKey)) return r;
       return {
         ...r,
         status,
         hkStatus: hkSt,
         foStatus: foSt,
       };
-    })
-  );
-  logAudit("Room Status", "Status Override", `Overwrote status of Room ${roomNo} to ${status}.`, roomNo, dispatchers.currentUsername, dispatchers.setHistory);
+    });
+  });
+  logAudit("Room Status", "Status Override", `Overwrote status of Room ${label} to ${status}.`, label, dispatchers.currentUsername, dispatchers.setHistory);
 
-  void hkRoomService.update(roomNo, {
-    status,
-    hkStatus: hkSt,
-    foStatus: foSt,
+  void hkRoomService.update(apiId, {
+    status: uiStatusToHkEnum(status),
   }).catch((err) => {
-    console.error(`[HK] Failed to sync changeRoomStatus for room ${roomNo} to API`, err);
+    console.error(`[HK] Failed to sync changeRoomStatus for room ${roomKey} to API`, err);
   });
 };
 
@@ -62,11 +72,14 @@ export const changeRoomStatus = (roomNo: string, status: HKRoom["status"], dispa
 export const addHKRequest = (
   req: {
     room: string;
+    roomId?: string;
+    bookingId?: string;
     guest: string;
     issue: string;
     priority: "Low" | "Medium" | "High";
     assignedStaff: string;
     assignmentType: "Auto" | "Manual";
+    remarks?: string;
   },
   requestsLength: number,
   dispatchers: HousekeepingDispatchers
@@ -80,8 +93,10 @@ export const addHKRequest = (
     hour12: true,
   });
 
+  const tempId = `HK-${String(requestsLength + 1).padStart(2, "0")}`;
+
   const record: HousekeepingRequest = {
-    id: `HK-${String(requestsLength + 1).padStart(2, "0")}`,
+    id: tempId,
     guest: req.guest,
     room: req.room,
     issue: req.issue,
@@ -127,9 +142,26 @@ export const addHKRequest = (
     dispatchers.setHistory
   );
 
-  void hkGuestRequestService.create(record).catch((err) => {
-    console.error("[HK] Failed to sync new HK request to API", err);
-  });
+  void hkGuestRequestService
+    .create({
+      roomId: req.roomId ?? req.room,
+      bookingId: req.bookingId,
+      requestType: mapRequestItemToType(req.issue),
+      description: req.issue,
+      priority: uiPriorityToApi(req.priority),
+      assignedTo: req.assignedStaff !== "—" ? req.assignedStaff : undefined,
+      createdBy: dispatchers.currentUsername,
+      notes: req.remarks?.trim() || undefined,
+    })
+    .then((created) => {
+      dispatchers.setRequests((prev) => [
+        normalizeGuestRequest(created),
+        ...prev.filter((r) => r.id !== tempId),
+      ]);
+    })
+    .catch((err) => {
+      console.error("[HK] Failed to sync new HK request to API", err);
+    });
 };
 
 export const assignHKRequest = (
@@ -198,14 +230,19 @@ export const assignHKRequest = (
     dispatchers.setHistory
   );
 
-  void hkGuestRequestService.update(id, {
-    status: "In Progress",
-    assignedStaff: staffName,
-    assignmentType,
-    assignmentHistory: updatedHistory,
-  }).catch((err) => {
-    console.error("[HK] Failed to sync assign HK request to API", err);
-  });
+  void hkGuestRequestService
+    .assign(id, staffName)
+    .then((updated) => {
+      const normalized = normalizeGuestRequest(updated);
+      dispatchers.setRequests((prev) =>
+        prev.map((r) =>
+          r.id === id || r.id === normalized.id ? { ...normalized, assignmentHistory: updatedHistory } : r,
+        ),
+      );
+    })
+    .catch((err) => {
+      console.error("[HK] Failed to sync assign HK request to API", err);
+    });
 };
 
 export const completeHKRequest = (
@@ -251,9 +288,64 @@ export const completeHKRequest = (
 
   logAudit("Room Status", "Request Completed", `Completed request "${req?.issue}" for Room ${req?.room}. Stock adjusted.`, req?.room, dispatchers.currentUsername, dispatchers.setHistory);
 
-  void hkGuestRequestService.update(id, { status: "Completed" }).catch((err) => {
-    console.error("[HK] Failed to sync complete HK request to API", err);
-  });
+  void hkGuestRequestService
+    .complete(id)
+    .then((updated) => {
+      dispatchers.setRequests((prev) =>
+        prev.map((r) =>
+          r.id === id ? normalizeGuestRequest(updated) : r,
+        ),
+      );
+    })
+    .catch((err) => {
+      console.error("[HK] Failed to sync complete HK request to API", err);
+    });
+};
+
+export const updateHKRequest = (
+  id: string,
+  patch: {
+    issue: string;
+    priority: HousekeepingRequest["priority"];
+    remarks?: string;
+  },
+  dispatchers: HousekeepingDispatchers,
+) => {
+  dispatchers.setRequests((prev) =>
+    prev.map((r) =>
+      r.id === id
+        ? {
+            ...r,
+            issue: patch.issue,
+            priority: patch.priority,
+          }
+        : r,
+    ),
+  );
+
+  logAudit(
+    "Room Status",
+    "Guest Request Updated",
+    `Updated request ${id}: "${patch.issue}" (${patch.priority}).`,
+    undefined,
+    dispatchers.currentUsername,
+    dispatchers.setHistory,
+  );
+
+  void hkGuestRequestService
+    .update(id, {
+      description: patch.issue,
+      priority: uiPriorityToApi(patch.priority),
+      notes: patch.remarks?.trim() || undefined,
+    })
+    .then((updated) => {
+      dispatchers.setRequests((prev) =>
+        prev.map((r) => (r.id === id ? normalizeGuestRequest(updated) : r)),
+      );
+    })
+    .catch((err) => {
+      console.error("[HK] Failed to sync update HK request to API", err);
+    });
 };
 
 export const cleanPublicArea = (id: string, completed: boolean, currentPublicAreas: HKPublicArea[], dispatchers: HousekeepingDispatchers) => {

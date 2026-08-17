@@ -2,6 +2,8 @@ import type { ReservationStatus } from "../types";
 
 export interface InHouseGuest {
   id: string;
+  bookingNo?: string;
+  guestNo?: string;
   guestName: string;
   room: string;
   roomType: string;
@@ -26,6 +28,7 @@ export interface RoomAvailabilityRow {
 }
 
 export interface RoomStatusCard {
+  id?: string;
   roomNo: string;
   type: string;
   floor: string;
@@ -38,6 +41,7 @@ export interface RoomStatusCard {
 
 export interface GuestProfile {
   id: string;
+  guestNo?: string;
   name: string;
   mobile: string;
   email: string;
@@ -184,6 +188,8 @@ export interface HousekeepingRequest {
   assignedStaff: string;
   createdAt: string;
   createdAtLabel?: string;
+  bookingId?: string;
+  bookingNo?: string;
   assignmentType?: "Auto" | "Manual";
   assignmentHistory?: {
     timestamp: string;
