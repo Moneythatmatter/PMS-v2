@@ -36,9 +36,16 @@ export const hkDashboardService = {
 export const hkRoomService = {
   list: (query = "") => api.get<HKRoom[]>(hkPath(`/rooms${query}`)),
   get: (id: string) => api.get<HKRoom>(hkPath(`/rooms/${id}`)),
-  create: (body: Partial<HKRoom>) => api.post<HKRoom>(hkPath("/rooms"), body),
-  update: (id: string, body: Partial<HKRoom> & { status?: string }) =>
-    api.put<HKRoom>(hkPath(`/rooms/${id}`), body),
+  create: (body: {
+    roomId: string;
+    status?: string;
+    notes?: string;
+    assignedTo?: string;
+  }) => api.post<Record<string, unknown>>(hkPath("/rooms"), body),
+  update: (
+    id: string,
+    body: Omit<Partial<HKRoom>, "status"> & { status?: string },
+  ) => api.put<HKRoom>(hkPath(`/rooms/${id}`), body),
   remove: (id: string) => api.delete<{ id: string }>(hkPath(`/rooms/${id}`)),
   startClean: (id: string, assignedStaff?: string) =>
     api.post<HKRoom>(hkPath(`/rooms/${id}/start-clean`), { assignedStaff }),

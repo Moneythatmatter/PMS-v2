@@ -40,7 +40,7 @@ function mapHistoryLogToAuditEntry(log: HKHistoryLog, index: number): Housekeepi
           ? "Inventory"
           : log.category === "Inventory"
             ? "Inventory"
-            : log.category === "Guest Services"
+            : String(log.category) === "Guest Services"
               ? "Room Cleaning"
               : "Room Cleaning",
     eventCode: log.action,

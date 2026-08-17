@@ -698,7 +698,7 @@ export function HousekeepingRequestsView() {
                   const booking = roomBookings.get(r.id);
                   return (
                     <option key={r.id} value={r.id}>
-                      {r.roomNo} — {r.roomType ?? r.category ?? "Room"}
+                      {r.roomNo} — {r.roomType ?? "Room"}
                       {booking?.guestName ? ` (${booking.guestName})` : ""}
                     </option>
                   );

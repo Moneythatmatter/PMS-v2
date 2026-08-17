@@ -568,7 +568,7 @@ export function NewReservationForm() {
         balance: pendingAmount,
         status: "Reserved",
         bookedBy: currentUser.name,
-        bookingType: form.bookingType,
+        bookingType: form.bookingType || undefined,
         companyName: form.companyName,
         specialRequests: form.notes || undefined,
       });

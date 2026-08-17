@@ -111,6 +111,7 @@ export function roomDisplayNo(room: Pick<HKRoom, "roomNo">): string {
 
 type ApiHkRoom = Partial<HKRoom> & {
   roomId?: string;
+  roomType?: string;
   assignedTo?: string | null;
   assignedToName?: string | null;
   inspectedBy?: string | null;

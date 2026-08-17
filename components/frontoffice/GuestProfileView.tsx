@@ -49,7 +49,8 @@ const tabs = [
 
 type Tab = (typeof tabs)[number];
 
-function getInitials(name: string) {
+function getInitials(name?: string) {
+  if (!name?.trim()) return "?";
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 

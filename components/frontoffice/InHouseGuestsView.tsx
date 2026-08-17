@@ -8,6 +8,7 @@ import { ReservationStatusBadge } from "@/components/frontoffice/reservation/Res
 import { Button } from "@/components/ui/Button";
 import { formatBookingGuestLine } from "@/lib/reservation-display";
 import {
+  ActionButtons,
   AlertBanner,
   DataTable,
   Drawer,

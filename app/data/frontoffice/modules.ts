@@ -51,6 +51,12 @@ export interface GuestProfile {
   idType?: string;
   idNumber?: string;
   address?: string;
+  gender?: string;
+  dob?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
   memberSince?: string;
   preferences?: string[];
 }

@@ -6,6 +6,7 @@ import {
   PUBLIC_AREA_PRIORITIES,
   PUBLIC_AREA_TYPES,
   type PublicAreaMaster,
+  type PublicAreaPriority,
 } from "@/app/data/housekeeping/masters";
 import { publicAreaMasterService } from "@/services/housekeeping/public-areas-master";
 import { Button } from "@/components/ui/Button";
@@ -49,7 +50,7 @@ export function PublicAreasView() {
   const [areaType, setAreaType] = useState<string>(PUBLIC_AREA_TYPES[0]);
   const [location, setLocation] = useState("");
   const [floorNumber, setFloorNumber] = useState("");
-  const [priority, setPriority] = useState<string>("MEDIUM");
+  const [priority, setPriority] = useState<PublicAreaPriority>("MEDIUM");
   const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
@@ -329,7 +330,7 @@ export function PublicAreasView() {
               />
             </FormField>
             <FormField label="Priority">
-              <SelectInput value={priority} onChange={(e) => setPriority(e.target.value)}>
+              <SelectInput value={priority} onChange={(e) => setPriority(e.target.value as PublicAreaPriority)}>
                 {PUBLIC_AREA_PRIORITIES.map((p) => (
                   <option key={p} value={p}>{priorityLabel(p)}</option>
                 ))}

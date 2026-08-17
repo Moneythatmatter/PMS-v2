@@ -57,7 +57,8 @@ function formatBalance(amount: number) {
   }).format(amount);
 }
 
-function getInitials(name: string) {
+function getInitials(name?: string) {
+  if (!name?.trim()) return "?";
   return name
     .split(" ")
     .map((n) => n[0])

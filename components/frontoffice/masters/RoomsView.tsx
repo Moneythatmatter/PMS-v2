@@ -41,7 +41,7 @@ export function RoomsView() {
   const [saving, setSaving] = useState(false);
 
   const [roomNo, setRoomNo] = useState("");
-  const [roomType, setRoomType] = useState(roomTypes[0] ?? "Standard");
+  const [roomType, setRoomType] = useState<string>(roomTypes[0] ?? "Standard");
   const [floor, setFloor] = useState("1st Floor");
   const [status, setStatus] = useState<string>("Vacant");
   const [maxOccupancy, setMaxOccupancy] = useState("2");

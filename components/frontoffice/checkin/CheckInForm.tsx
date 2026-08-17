@@ -68,7 +68,8 @@ function generateWalkInRef() {
   return `WI-${String(Date.now()).slice(-6)}`;
 }
 
-function getInitials(name: string) {
+function getInitials(name?: string) {
+  if (!name?.trim()) return "?";
   return name
     .split(/\s+/)
     .filter(Boolean)
