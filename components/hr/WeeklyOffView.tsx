@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   CalendarOff,
   Search,
@@ -16,10 +16,8 @@ import {
   Trash2,
   Check,
   X,
-  FileText,
   Printer,
-  ChevronLeft,
-  ChevronRight,
+  ChevronDown,
   Building2,
   User,
   ShieldAlert,
@@ -194,21 +192,40 @@ export function WeeklyOffView() {
   const [editingAssignment, setEditingAssignment] = useState<WeeklyOffAssignment | null>(null);
   const [viewingAssignment, setViewingAssignment] = useState<WeeklyOffAssignment | null>(null);
 
-  // Single Assign Form State
-  const [assignEmpId, setAssignEmpId] = useState("EMP-0101");
+  // Single Assign Form State (With Unified Searchable Combobox & Auto-Close)
+  const [assignEmpId, setAssignEmpId] = useState("");
+  const [assignEmpQuery, setAssignEmpQuery] = useState("");
+  const [isAssignEmpComboboxOpen, setIsAssignEmpComboboxOpen] = useState(false);
+  const assignComboboxRef = useRef<HTMLDivElement>(null);
   const [assignType, setAssignType] = useState<"Fixed" | "Rotational">("Fixed");
   const [assignDays, setAssignDays] = useState<string[]>(["Sunday"]);
+  const [rotationalFrequency, setRotationalFrequency] = useState<"Weekly Roster Sync" | "Custom Monthly Cycle" | "Shift Rotation">("Weekly Roster Sync");
+  const [rotationalWeek1Day, setRotationalWeek1Day] = useState("Sunday");
+  const [rotationalWeek2Day, setRotationalWeek2Day] = useState("Monday");
+  const [rotationalWeek3Day, setRotationalWeek3Day] = useState("Tuesday");
+  const [rotationalWeek4Day, setRotationalWeek4Day] = useState("Wednesday");
   const [assignRotationPattern, setAssignRotationPattern] = useState("");
-  const [assignEffectiveFrom, setAssignEffectiveFrom] = useState("2026-08-01");
-  const [assignEffectiveTo, setAssignEffectiveTo] = useState("2026-12-31");
+  const [assignEffectiveFrom, setAssignEffectiveFrom] = useState("");
+  const [assignEffectiveTo, setAssignEffectiveTo] = useState("");
   const [assignRemarks, setAssignRemarks] = useState("");
 
+  // Close Employee Combobox Popover when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (assignComboboxRef.current && !assignComboboxRef.current.contains(event.target as Node)) {
+        setIsAssignEmpComboboxOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   // Bulk Assign Form State
-  const [bulkDepartment, setBulkDepartment] = useState("Front Office");
+  const [bulkDepartment, setBulkDepartment] = useState("");
   const [bulkType, setBulkType] = useState<"Fixed" | "Rotational">("Fixed");
   const [bulkDays, setBulkDays] = useState<string[]>(["Sunday"]);
-  const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState("2026-08-01");
-  const [bulkEffectiveTo, setBulkEffectiveTo] = useState("2026-12-31");
+  const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState("");
+  const [bulkEffectiveTo, setBulkEffectiveTo] = useState("");
 
   // Filtered Assignments
   const filteredAssignments = useMemo(() => {
@@ -238,6 +255,7 @@ export function WeeklyOffView() {
 
   // Bulk preview list
   const bulkPreviewStaff = useMemo(() => {
+    if (!bulkDepartment) return [];
     if (bulkDepartment === "ALL") return INITIAL_WEEKLY_OFFS;
     return INITIAL_WEEKLY_OFFS.filter((a) => a.department === bulkDepartment);
   }, [bulkDepartment]);
@@ -257,16 +275,23 @@ export function WeeklyOffView() {
     if (existing) {
       setEditingAssignment(existing);
       setAssignEmpId(existing.employeeId);
+      setAssignEmpQuery(`${existing.employeeName} (${existing.employeeId}) - ${existing.department}`);
+      setIsAssignEmpComboboxOpen(false);
       setAssignType(existing.type);
       setAssignDays(existing.days);
       setAssignRotationPattern(existing.rotationPattern || "");
       setAssignRemarks(existing.remarks || "");
     } else {
+      const todayIso = new Date().toISOString().split("T")[0];
       setEditingAssignment(null);
-      setAssignEmpId("EMP-0101");
+      setAssignEmpId("");
+      setAssignEmpQuery("");
+      setIsAssignEmpComboboxOpen(false);
       setAssignType("Fixed");
       setAssignDays(["Sunday"]);
       setAssignRotationPattern("");
+      setAssignEffectiveFrom(todayIso);
+      setAssignEffectiveTo("2026-12-31");
       setAssignRemarks("");
     }
     setIsAssignModalOpen(true);
@@ -285,6 +310,8 @@ export function WeeklyOffView() {
     const formattedFrom = fromParts.length === 3 ? `${fromParts[2]}/${fromParts[1]}/${fromParts[0]}` : assignEffectiveFrom;
     const formattedTo = toParts.length === 3 ? `${toParts[2]}/${toParts[1]}/${toParts[0]}` : assignEffectiveTo;
 
+    const rotationPatternStr = assignType === "Rotational" ? assignRotationPattern || "Rotational Shift Off" : undefined;
+
     if (editingAssignment) {
       setAssignments((prev) =>
         prev.map((a) =>
@@ -293,7 +320,7 @@ export function WeeklyOffView() {
                 ...a,
                 type: assignType,
                 days: assignDays,
-                rotationPattern: assignType === "Rotational" ? assignRotationPattern || "Rotational Weekly Off" : undefined,
+                rotationPattern: rotationPatternStr,
                 effectiveFrom: formattedFrom,
                 effectiveTo: formattedTo,
                 remarks: assignRemarks,
@@ -305,14 +332,14 @@ export function WeeklyOffView() {
     } else {
       const newWO: WeeklyOffAssignment = {
         id: `WO-${Math.floor(400 + Math.random() * 600)}`,
-        employeeId: assignEmpId,
+        employeeId: assignEmpId || "EMP-0101",
         employeeName: empName,
         department: empDept,
         designation: empDesig,
         avatar: empAvatar,
         type: assignType,
         days: assignDays,
-        rotationPattern: assignType === "Rotational" ? assignRotationPattern || "Rotational Weekly Off" : undefined,
+        rotationPattern: rotationPatternStr,
         effectiveFrom: formattedFrom,
         effectiveTo: formattedTo,
         status: "Active",
@@ -734,18 +761,94 @@ export function WeeklyOffView() {
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Select Employee <span className="text-rose-500">*</span>
             </label>
-            <select
-              value={assignEmpId}
-              onChange={(e) => setAssignEmpId(e.target.value)}
-              required
-              className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
-            >
-              {INITIAL_WEEKLY_OFFS.map((staff) => (
-                <option key={staff.employeeId} value={staff.employeeId}>
-                  👤 {staff.employeeName} ({staff.employeeId}) - {staff.department}
-                </option>
-              ))}
-            </select>
+
+            {/* Single Unified Searchable Employee Combobox */}
+            <div className="relative" ref={assignComboboxRef}>
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={assignEmpQuery}
+                onFocus={() => setIsAssignEmpComboboxOpen(true)}
+                onChange={(e) => {
+                  setAssignEmpQuery(e.target.value);
+                  setIsAssignEmpComboboxOpen(true);
+                }}
+                placeholder="Type employee name, ID or department to search..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-xs font-semibold text-slate-900 shadow-2xs focus:border-emerald-500 focus:outline-none"
+              />
+              {assignEmpQuery ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssignEmpQuery("");
+                    setAssignEmpId("");
+                    setIsAssignEmpComboboxOpen(true);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              )}
+
+              {/* Combobox Dropdown Results List */}
+              {isAssignEmpComboboxOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl space-y-1 max-h-56 overflow-y-auto animate-in fade-in-50">
+                  {INITIAL_WEEKLY_OFFS.filter((staff) => {
+                    if (!assignEmpQuery.trim()) return true;
+                    const q = assignEmpQuery.toLowerCase().trim();
+                    return (
+                      staff.employeeName.toLowerCase().includes(q) ||
+                      staff.employeeId.toLowerCase().includes(q) ||
+                      staff.department.toLowerCase().includes(q) ||
+                      staff.designation.toLowerCase().includes(q)
+                    );
+                  }).length === 0 ? (
+                    <div className="p-3 text-center text-xs text-slate-400 font-medium">
+                      No matching employee found.
+                    </div>
+                  ) : (
+                    INITIAL_WEEKLY_OFFS.filter((staff) => {
+                      if (!assignEmpQuery.trim()) return true;
+                      const q = assignEmpQuery.toLowerCase().trim();
+                      return (
+                        staff.employeeName.toLowerCase().includes(q) ||
+                        staff.employeeId.toLowerCase().includes(q) ||
+                        staff.department.toLowerCase().includes(q) ||
+                        staff.designation.toLowerCase().includes(q)
+                      );
+                    }).map((staff) => (
+                      <div
+                        key={staff.employeeId}
+                        onClick={() => {
+                          setAssignEmpId(staff.employeeId);
+                          setAssignEmpQuery(`${staff.employeeName} (${staff.employeeId}) - ${staff.department}`);
+                          setIsAssignEmpComboboxOpen(false);
+                        }}
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded-xl cursor-pointer transition-colors hover:bg-slate-100/80 border border-transparent",
+                          assignEmpId === staff.employeeId && "bg-emerald-50 text-emerald-900 border-emerald-200"
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 font-bold text-[10px] shrink-0">
+                            {staff.avatar}
+                          </div>
+                          <div className="truncate">
+                            <p className="font-bold text-xs text-slate-900 truncate">
+                              {staff.employeeName} <span className="text-[10px] font-semibold text-emerald-700">({staff.employeeId})</span>
+                            </p>
+                            <p className="text-[10px] text-slate-500 truncate">{staff.designation} • {staff.department}</p>
+                          </div>
+                        </div>
+                        {assignEmpId === staff.employeeId && <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-2" />}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div>
@@ -808,17 +911,22 @@ export function WeeklyOffView() {
             </div>
           </div>
 
-          {/* Rotational Pattern Option */}
+          {/* Simple Rotational Off Field */}
           {assignType === "Rotational" && (
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Rotation Pattern Notes</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Rotation Pattern / Notes <span className="text-slate-400 font-normal">(Optional)</span>
+              </label>
               <input
                 type="text"
-                placeholder="e.g. Week 1: Sunday, Week 2: Monday, Week 3: Tuesday"
+                placeholder="e.g. Rotates weekly with shift roster (W1: Mon, W2: Tue)"
                 value={assignRotationPattern}
                 onChange={(e) => setAssignRotationPattern(e.target.value)}
-                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-medium focus:ring-2 focus:ring-emerald-600 focus:outline-none"
               />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Rotational Off automatically adjusts rest days based on shift roster assignments.
+              </p>
             </div>
           )}
 
@@ -890,8 +998,9 @@ export function WeeklyOffView() {
               <select
                 value={bulkDepartment}
                 onChange={(e) => setBulkDepartment(e.target.value)}
-                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
+                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
               >
+                <option value="">-- Select Department --</option>
                 <option value="ALL">All Departments</option>
                 <option value="Front Office">Front Office</option>
                 <option value="Housekeeping">Housekeeping</option>

@@ -36,12 +36,15 @@ import {
   sampleEvents,
   sampleHolidaysAndShifts,
   sampleGrievances,
+  sampleDesignationHeadcounts,
+  sampleGenderDistribution,
   PendingLeaveItem,
 } from "@/app/data/hr/hrDashboardData";
 import { cn } from "@/lib/utils";
 
 export function HRDashboardView() {
   const [leavesList, setLeavesList] = useState<PendingLeaveItem[]>(samplePendingLeaves);
+  const [selectedDesigDept, setSelectedDesigDept] = useState<string>("All");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const handleApproveLeave = (id: string, name: string) => {
@@ -211,6 +214,182 @@ export function HRDashboardView() {
               );
             })}
           </div>
+        </div>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────
+          ROW 2.5: Employee Count by Designation & Gender Distribution
+      ───────────────────────────────────────────────────────────── */}
+      <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-12">
+        {/* 1. Employee Count by Designation (7 cols) */}
+        <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                  <Users className="h-4 w-4 text-emerald-700" />
+                  Employee Count by Designation
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  Staff allocation across key hotel job titles and roles
+                </p>
+              </div>
+              <a href="/human-resources/masters/designations" className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
+                View All <ArrowRight className="h-3 w-3" />
+              </a>
+            </div>
+
+            {/* Department Shortcuts / Quick Filters */}
+            <div className="mb-3.5 flex flex-wrap items-center gap-1.5 border-b border-slate-100 pb-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Depts:</span>
+              <button
+                onClick={() => setSelectedDesigDept("All")}
+                className={cn(
+                  "px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-all cursor-pointer",
+                  selectedDesigDept === "All"
+                    ? "bg-emerald-700 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+              >
+                All (128)
+              </button>
+              {Array.from(new Set(sampleDesignationHeadcounts.map((d) => d.department))).map((dept) => {
+                const deptCount = sampleDesignationHeadcounts
+                  .filter((d) => d.department === dept)
+                  .reduce((acc, curr) => acc + curr.count, 0);
+                const isSelected = selectedDesigDept === dept;
+                return (
+                  <button
+                    key={dept}
+                    onClick={() => setSelectedDesigDept(dept)}
+                    className={cn(
+                      "px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1",
+                      isSelected
+                        ? "bg-emerald-700 text-white shadow-xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    )}
+                  >
+                    <span>{dept}</span>
+                    <span className={cn(
+                      "text-[9px] px-1 rounded-full font-bold",
+                      isSelected ? "bg-emerald-800 text-emerald-100" : "bg-slate-200 text-slate-700"
+                    )}>
+                      {deptCount}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="space-y-2.5">
+              {sampleDesignationHeadcounts
+                .filter((desig) => selectedDesigDept === "All" || desig.department === selectedDesigDept)
+                .map((desig) => {
+                  const percentage = Math.round((desig.count / 128) * 100);
+                  return (
+                    <div key={desig.designation} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                          <button
+                            onClick={() => setSelectedDesigDept(desig.department)}
+                            className="text-slate-400 hover:text-emerald-700 font-normal text-[10px] cursor-pointer hover:underline"
+                            title={`Filter by ${desig.department}`}
+                          >
+                            [{desig.department}]
+                          </button>
+                          {desig.designation}
+                        </span>
+                        <span className="font-bold text-slate-900">
+                          {desig.count} <span className="text-[10px] text-slate-400 font-normal">({percentage}%)</span>
+                        </span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={cn("h-full rounded-full transition-all duration-300", desig.color)}
+                          style={{ width: `${(desig.count / 24) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Gender Distribution Widget (5 cols) */}
+        <div className="lg:col-span-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+          <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <Users className="h-4 w-4 text-indigo-600" />
+                Gender Distribution
+              </h3>
+              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                Workforce diversity breakdown across active staff
+              </p>
+            </div>
+            <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-800 border border-indigo-200">
+              128 Total
+            </span>
+          </div>
+
+          {/* Visual Stacked Bar */}
+          <div className="space-y-4 my-auto">
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-[11px] font-semibold text-slate-600">
+                <span>Gender Ratio</span>
+                <span>64% Male / 33% Female / 3% Other</span>
+              </div>
+              <div className="flex h-3.5 w-full overflow-hidden rounded-full bg-slate-100 p-0.5 border border-slate-200">
+                <div
+                  className="bg-blue-600 rounded-l-full"
+                  style={{ width: `${(sampleGenderDistribution.male / sampleGenderDistribution.total) * 100}%` }}
+                  title={`Male: ${sampleGenderDistribution.male}`}
+                />
+                <div
+                  className="bg-purple-500"
+                  style={{ width: `${(sampleGenderDistribution.female / sampleGenderDistribution.total) * 100}%` }}
+                  title={`Female: ${sampleGenderDistribution.female}`}
+                />
+                <div
+                  className="bg-amber-500 rounded-r-full"
+                  style={{ width: `${(sampleGenderDistribution.other / sampleGenderDistribution.total) * 100}%` }}
+                  title={`Other: ${sampleGenderDistribution.other}`}
+                />
+              </div>
+            </div>
+
+            {/* Stat Cards Grid */}
+            <div className="grid grid-cols-3 gap-2.5">
+              <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-center">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Male</span>
+                <p className="text-xl font-black text-blue-950 mt-1">{sampleGenderDistribution.male}</p>
+                <span className="text-[10px] text-blue-700 font-bold">
+                  {Math.round((sampleGenderDistribution.male / sampleGenderDistribution.total) * 100)}% Staff
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3 text-center">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700">Female</span>
+                <p className="text-xl font-black text-purple-950 mt-1">{sampleGenderDistribution.female}</p>
+                <span className="text-[10px] text-purple-700 font-bold">
+                  {Math.round((sampleGenderDistribution.female / sampleGenderDistribution.total) * 100)}% Staff
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-center">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Other</span>
+                <p className="text-xl font-black text-amber-950 mt-1">{sampleGenderDistribution.other}</p>
+                <span className="text-[10px] text-amber-700 font-bold">
+                  {Math.round((sampleGenderDistribution.other / sampleGenderDistribution.total) * 100)}% Staff
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-slate-400 font-medium text-center pt-2">
+            Equal opportunity employer • Compliant with statutory diversity standards
+          </p>
         </div>
       </div>
 

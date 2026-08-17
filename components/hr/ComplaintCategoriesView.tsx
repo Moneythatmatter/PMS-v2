@@ -22,21 +22,25 @@ import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 
 export type ComplaintCategoryStatus = "Active" | "Inactive";
 
+export type ReviewLevelRequirement = "Standard" | "Manager Review" | "Senior Management Review" | "Special Committee Review";
+
 export interface ComplaintCategory {
   id: string;
   categoryName: string;
   description: string;
+  reviewLevel: ReviewLevelRequirement;
   status: ComplaintCategoryStatus;
   createdDate: string;
   complaintsCount: number;
 }
 
-// 16 Default Categories
+// 16 Default Categories with Configurable Review Levels
 export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
   {
     id: "CAT-001",
     categoryName: "Payroll & Salary Issues",
     description: "Discrepancies in monthly pay, allowances, OT pay, or statutory deductions.",
+    reviewLevel: "Standard",
     status: "Active",
     createdDate: "01/01/2026",
     complaintsCount: 14,
@@ -45,6 +49,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-002",
     categoryName: "Attendance Issues",
     description: "Biometric punch errors, missing attendance marks, or late arrival disputes.",
+    reviewLevel: "Standard",
     status: "Active",
     createdDate: "01/01/2026",
     complaintsCount: 8,
@@ -53,6 +58,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-003",
     categoryName: "Leave Related Issues",
     description: "Delayed leave approval, balance mismatch, or unapproved leave deductions.",
+    reviewLevel: "Standard",
     status: "Active",
     createdDate: "05/01/2026",
     complaintsCount: 5,
@@ -61,6 +67,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-004",
     categoryName: "Shift Scheduling Issues",
     description: "Unfair roster distribution, consecutive night shifts, or short notice changes.",
+    reviewLevel: "Standard",
     status: "Active",
     createdDate: "10/01/2026",
     complaintsCount: 12,
@@ -69,6 +76,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-005",
     categoryName: "Overtime Issues",
     description: "Unrecorded overtime hours or delayed OT calculation and payout.",
+    reviewLevel: "Standard",
     status: "Active",
     createdDate: "15/01/2026",
     complaintsCount: 6,
@@ -77,6 +85,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-006",
     categoryName: "Manager Complaint",
     description: "Unprofessional conduct, unfair treatment, or communication issues with direct supervisors.",
+    reviewLevel: "Manager Review",
     status: "Active",
     createdDate: "20/01/2026",
     complaintsCount: 3,
@@ -85,6 +94,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-007",
     categoryName: "Team Conflict",
     description: "Interpersonal disputes or uncooperative behavior between colleagues.",
+    reviewLevel: "Standard",
     status: "Active",
     createdDate: "25/01/2026",
     complaintsCount: 4,
@@ -93,6 +103,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-008",
     categoryName: "Workplace Harassment",
     description: "Verbal abuse, intimidation, bullying, or hostile work environments.",
+    reviewLevel: "Senior Management Review",
     status: "Active",
     createdDate: "01/02/2026",
     complaintsCount: 2,
@@ -101,6 +112,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-009",
     categoryName: "Sexual Harassment (POSH)",
     description: "Grievances reported under Prevention of Sexual Harassment (POSH) framework.",
+    reviewLevel: "Special Committee Review",
     status: "Active",
     createdDate: "01/02/2026",
     complaintsCount: 1,
@@ -109,6 +121,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-010",
     categoryName: "Discrimination",
     description: "Biased treatment based on gender, race, religion, age, or background.",
+    reviewLevel: "Senior Management Review",
     status: "Active",
     createdDate: "05/02/2026",
     complaintsCount: 0,
@@ -117,6 +130,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-011",
     categoryName: "Workplace Safety",
     description: "Hazards in kitchen, housekeeping, or engineering operations.",
+    reviewLevel: "Senior Management Review",
     status: "Active",
     createdDate: "10/02/2026",
     complaintsCount: 7,
@@ -125,6 +139,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-012",
     categoryName: "Policy Violation",
     description: "Breaches of standard hotel operating procedures or company guidelines.",
+    reviewLevel: "Manager Review",
     status: "Active",
     createdDate: "15/02/2026",
     complaintsCount: 3,
@@ -133,6 +148,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-013",
     categoryName: "Facilities & Infrastructure",
     description: "Staff cafeteria, locker room cleanliness, uniform size allocation, or rest areas.",
+    reviewLevel: "Standard",
     status: "Active",
     createdDate: "20/02/2026",
     complaintsCount: 9,
@@ -141,6 +157,7 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
     id: "CAT-014",
     categoryName: "IT/System Issues",
     description: "PMS system access issues, email account errors, or hardware glitches.",
+    reviewLevel: "Standard",
     status: "Active",
     createdDate: "25/02/2026",
     complaintsCount: 11,
@@ -148,15 +165,17 @@ export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
   {
     id: "CAT-015",
     categoryName: "Workload Concerns",
-    description: "Excessive operational hours or unrealistic task targets during peak occupancy.",
+    description: "Excessive operational pressure or inadequate staffing ratios.",
+    reviewLevel: "Manager Review",
     status: "Active",
     createdDate: "01/03/2026",
-    complaintsCount: 5,
+    complaintsCount: 4,
   },
   {
     id: "CAT-016",
     categoryName: "Other",
-    description: "General grievances not covered in predefined categories.",
+    description: "General complaints not explicitly covered under other categories.",
+    reviewLevel: "Standard",
     status: "Active",
     createdDate: "01/03/2026",
     complaintsCount: 2,
@@ -177,9 +196,10 @@ export function ComplaintCategoriesView() {
   const [editingCategory, setEditingCategory] = useState<ComplaintCategory | null>(null);
   const [viewingCategory, setViewingCategory] = useState<ComplaintCategory | null>(null);
 
-  // Form State
+  // Form Inputs
   const [formName, setFormName] = useState("");
   const [formDescription, setFormDescription] = useState("");
+  const [formReviewLevel, setFormReviewLevel] = useState<ReviewLevelRequirement>("Standard");
   const [formStatus, setFormStatus] = useState<ComplaintCategoryStatus>("Active");
   const [nameError, setNameError] = useState("");
 
@@ -209,6 +229,7 @@ export function ComplaintCategoriesView() {
     setEditingCategory(null);
     setFormName("");
     setFormDescription("");
+    setFormReviewLevel("Standard");
     setFormStatus("Active");
     setNameError("");
     setIsModalOpen(true);
@@ -219,6 +240,7 @@ export function ComplaintCategoriesView() {
     setEditingCategory(category);
     setFormName(category.categoryName);
     setFormDescription(category.description);
+    setFormReviewLevel(category.reviewLevel || "Standard");
     setFormStatus(category.status);
     setNameError("");
     setIsModalOpen(true);
@@ -229,20 +251,20 @@ export function ComplaintCategoriesView() {
     e.preventDefault();
     setNameError("");
 
-    const trimmedName = formName.trim();
-    if (!trimmedName) {
+    if (!formName.trim()) {
       setNameError("Category name is required.");
       return;
     }
 
+    // Check duplicate name
     const isDuplicate = categories.some(
       (c) =>
-        c.categoryName.toLowerCase() === trimmedName.toLowerCase() &&
-        (!editingCategory || c.id !== editingCategory.id)
+        c.categoryName.toLowerCase() === formName.trim().toLowerCase() &&
+        c.id !== editingCategory?.id
     );
 
     if (isDuplicate) {
-      setNameError(`A category named "${trimmedName}" already exists.`);
+      setNameError("A category with this name already exists.");
       return;
     }
 
@@ -252,25 +274,27 @@ export function ComplaintCategoriesView() {
           c.id === editingCategory.id
             ? {
                 ...c,
-                categoryName: trimmedName,
+                categoryName: formName.trim(),
                 description: formDescription.trim(),
+                reviewLevel: formReviewLevel,
                 status: formStatus,
               }
             : c
         )
       );
-      setToastMessage(`Updated category "${trimmedName}".`);
+      setToastMessage(`Category "${formName.trim()}" updated successfully.`);
     } else {
       const newCategory: ComplaintCategory = {
         id: `CAT-${Math.floor(100 + Math.random() * 900)}`,
-        categoryName: trimmedName,
+        categoryName: formName.trim(),
         description: formDescription.trim(),
+        reviewLevel: formReviewLevel,
         status: formStatus,
         createdDate: new Date().toLocaleDateString("en-GB"),
         complaintsCount: 0,
       };
       setCategories((prev) => [newCategory, ...prev]);
-      setToastMessage(`Created category "${trimmedName}".`);
+      setToastMessage(`Category "${formName.trim()}" created successfully.`);
     }
 
     setIsModalOpen(false);
@@ -426,6 +450,7 @@ export function ComplaintCategoriesView() {
               <tr>
                 <th className="py-3.5 px-4">Category Name</th>
                 <th className="py-3.5 px-4">Description</th>
+                <th className="py-3.5 px-4">Configured Review Level</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4">Created Date</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
@@ -453,6 +478,12 @@ export function ComplaintCategoriesView() {
 
                     <td className="py-3.5 px-4 max-w-xs">
                       <p className="text-slate-600 truncate">{cat.description || "No description provided."}</p>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-purple-100 text-purple-900 border border-purple-200">
+                        {cat.reviewLevel || "Standard"}
+                      </span>
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -633,6 +664,26 @@ export function ComplaintCategoriesView() {
                 onChange={(e) => setFormDescription(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 p-2.5 font-medium text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
+            </div>
+
+            {/* Configured Review Level */}
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Configured Review Level <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={formReviewLevel}
+                onChange={(e) => setFormReviewLevel(e.target.value as ReviewLevelRequirement)}
+                className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-purple-900 bg-purple-50/40 focus:outline-none focus:ring-2 focus:ring-purple-600"
+              >
+                <option value="Standard">Standard (1-Level Officer Review)</option>
+                <option value="Manager Review">Manager Review (HR Manager Approval Required)</option>
+                <option value="Senior Management Review">Senior Management Review (HR Manager + GM Review)</option>
+                <option value="Special Committee Review">Special Committee Review (POSH / Internal Committee)</option>
+              </select>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Determines the approval chain routing required for grievances filed under this category.
+              </p>
             </div>
 
             {/* Status Selection */}

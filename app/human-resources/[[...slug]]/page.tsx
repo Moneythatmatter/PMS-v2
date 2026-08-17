@@ -16,12 +16,19 @@ import { PayrollSettingsView } from "@/components/hr/PayrollSettingsView";
 import { ProcessPayrollView } from "@/components/hr/ProcessPayrollView";
 import { PayslipsView } from "@/components/hr/PayslipsView";
 import { TaxManagementView } from "@/components/hr/TaxManagementView";
+import { ApprovalMatrixView } from "@/components/hr/ApprovalMatrixView";
 import { ComplaintCategoriesView } from "@/components/hr/ComplaintCategoriesView";
 import { RaiseComplaintView } from "@/components/hr/RaiseComplaintView";
 import { ComplaintListView } from "@/components/hr/ComplaintListView";
 import { ComplaintStatusView } from "@/components/hr/ComplaintStatusView";
 import { DepartmentMasterView } from "@/components/hr/DepartmentMasterView";
 import { DesignationMasterView } from "@/components/hr/DesignationMasterView";
+import { EmploymentTypesMasterView } from "@/components/hr/EmploymentTypesMasterView";
+import { ShiftTypesMasterView } from "@/components/hr/ShiftTypesMasterView";
+import { LeaveTypesMasterView } from "@/components/hr/LeaveTypesMasterView";
+import { HolidayCalendarMasterView } from "@/components/hr/HolidayCalendarMasterView";
+import { SalaryComponentsMasterView } from "@/components/hr/SalaryComponentsMasterView";
+import { HRReportsView } from "@/components/hr/HRReportsView";
 
 export default async function HumanResourcesPage({
   params,
@@ -100,6 +107,14 @@ export default async function HumanResourcesPage({
   }
 
   if (
+    slugPath === "approvals/approval-matrix" ||
+    slugPath === "approvals" ||
+    slugPath === "approval-matrix"
+  ) {
+    return <ApprovalMatrixView />;
+  }
+
+  if (
     slugPath === "grievances/complaint-categories" ||
     slugPath === "grievances/categories" ||
     slugPath === "masters/complaint-categories"
@@ -129,16 +144,72 @@ export default async function HumanResourcesPage({
     return <ComplaintStatusView />;
   }
 
-  // Masters pages set to blank placeholder view (data hidden in browser, sidebar links intact)
-  if (slugPath.startsWith("masters")) {
-    return <HRBlankView slugPath={slugPath} />;
+  if (
+    slugPath === "masters/departments" ||
+    slugPath === "masters/department" ||
+    slugPath === "departments"
+  ) {
+    return <DepartmentMasterView />;
+  }
+
+  if (
+    slugPath === "masters/designations" ||
+    slugPath === "masters/designation" ||
+    slugPath === "designations"
+  ) {
+    return <DesignationMasterView />;
+  }
+
+  if (
+    slugPath === "masters/employment-types" ||
+    slugPath === "masters/employment-type" ||
+    slugPath === "employment-types"
+  ) {
+    return <EmploymentTypesMasterView />;
+  }
+
+  if (
+    slugPath === "masters/shift-types" ||
+    slugPath === "masters/shift-type" ||
+    slugPath === "shift-types"
+  ) {
+    return <ShiftTypesMasterView />;
+  }
+
+  if (
+    slugPath === "masters/leave-types" ||
+    slugPath === "masters/leave-type" ||
+    slugPath === "leave-types"
+  ) {
+    return <LeaveTypesMasterView />;
+  }
+
+  if (
+    slugPath === "masters/holiday-calendar" ||
+    slugPath === "masters/holidays" ||
+    slugPath === "holiday-calendar"
+  ) {
+    return <HolidayCalendarMasterView />;
+  }
+
+  if (
+    slugPath === "masters/salary-components" ||
+    slugPath === "masters/salary-component" ||
+    slugPath === "salary-components"
+  ) {
+    return <SalaryComponentsMasterView />;
+  }
+
+  if (
+    slugPath === "masters/document-masters" ||
+    slugPath === "masters/documents"
+  ) {
+    return <DocumentMastersView />;
+  }
+
+  if (slugPath === "reports") {
+    return <HRReportsView />;
   }
 
   return <HRBlankView slugPath={slugPath} />;
 }
-
-
-
-
-
-

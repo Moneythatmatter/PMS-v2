@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Repeat,
   Search,
@@ -347,9 +347,23 @@ export function ShiftManagementView() {
   const [historyTarget, setHistoryTarget] = useState<ShiftAssignment | null>(null);
   const [viewingAssignment, setViewingAssignment] = useState<ShiftAssignment | null>(null);
 
-  // Single Form State
-  const [assignEmpId, setAssignEmpId] = useState("EMP-0101");
-  const [assignShiftId, setAssignShiftId] = useState("shift-m1");
+  // Single Form State (With Live Search Employee Filter)
+  const [assignEmpId, setAssignEmpId] = useState("");
+  const [assignEmpQuery, setAssignEmpQuery] = useState("");
+  const [isEmpComboboxOpen, setIsEmpComboboxOpen] = useState(false);
+  const assignComboboxRef = useRef<HTMLDivElement>(null);
+  const [assignShiftId, setAssignShiftId] = useState("");
+
+  // Close Employee Combobox Popover when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (assignComboboxRef.current && !assignComboboxRef.current.contains(event.target as Node)) {
+        setIsEmpComboboxOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   const [assignEffectiveFrom, setAssignEffectiveFrom] = useState("2026-08-01");
   const [assignEffectiveTo, setAssignEffectiveTo] = useState("");
   const [assignRemarks, setAssignRemarks] = useState("");
@@ -360,10 +374,10 @@ export function ShiftManagementView() {
 
   // Flexible Bulk Form State
   const [bulkApplyTo, setBulkApplyTo] = useState<"Department" | "Employees" | "Designation" | "EmploymentType">("Department");
-  const [bulkDepartment, setBulkDepartment] = useState("Front Office");
-  const [bulkDesignation, setBulkDesignation] = useState("Front Desk Manager");
-  const [bulkEmploymentType, setBulkEmploymentType] = useState("Permanent");
-  const [bulkShiftId, setBulkShiftId] = useState("shift-m1");
+  const [bulkDepartment, setBulkDepartment] = useState("");
+  const [bulkDesignation, setBulkDesignation] = useState("");
+  const [bulkEmploymentType, setBulkEmploymentType] = useState("");
+  const [bulkShiftId, setBulkShiftId] = useState("");
   const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState("2026-08-01");
   const [bulkEffectiveTo, setBulkEffectiveTo] = useState("");
 
@@ -419,13 +433,16 @@ export function ShiftManagementView() {
   // Bulk Preview Staff List (Improvement #7)
   const bulkPreviewStaff = useMemo(() => {
     if (bulkApplyTo === "Department") {
+      if (!bulkDepartment) return [];
       return assignments.filter((a) => bulkDepartment === "ALL" || a.department === bulkDepartment);
     } else if (bulkApplyTo === "Designation") {
+      if (!bulkDesignation) return [];
       return assignments.filter((a) => a.designation === bulkDesignation);
     } else if (bulkApplyTo === "EmploymentType") {
+      if (!bulkEmploymentType) return [];
       return assignments.filter((a) => a.employmentType === bulkEmploymentType);
     }
-    return assignments;
+    return [];
   }, [assignments, bulkApplyTo, bulkDepartment, bulkDesignation, bulkEmploymentType]);
 
   // Single Assign Handler
@@ -433,19 +450,24 @@ export function ShiftManagementView() {
     if (existing) {
       setEditingAssignment(existing);
       setAssignEmpId(existing.employeeId);
+      setAssignEmpQuery(`${existing.employeeName} (${existing.employeeId}) - ${existing.department}`);
+      setIsEmpComboboxOpen(false);
       setAssignShiftId(existing.shiftId);
       setAssignEffectiveFrom("2026-08-01");
       setAssignEffectiveTo(existing.effectiveTo || "");
       setAssignRemarks(existing.remarks || "");
       checkConflict(existing.employeeId, existing.id);
     } else {
+      const todayIso = new Date().toISOString().split("T")[0];
       setEditingAssignment(null);
-      setAssignEmpId("EMP-0101");
-      setAssignShiftId("shift-m1");
-      setAssignEffectiveFrom("2026-08-01");
+      setAssignEmpId("");
+      setAssignEmpQuery("");
+      setIsEmpComboboxOpen(false);
+      setAssignShiftId("");
+      setAssignEffectiveFrom(todayIso);
       setAssignEffectiveTo("");
       setAssignRemarks("");
-      checkConflict("EMP-0101");
+      setConflictWarning(null);
     }
     setIsAssignModalOpen(true);
   };
@@ -1147,21 +1169,95 @@ export function ShiftManagementView() {
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Select Employee <span className="text-rose-500">*</span>
             </label>
-            <select
-              value={assignEmpId}
-              onChange={(e) => {
-                setAssignEmpId(e.target.value);
-                checkConflict(e.target.value, editingAssignment?.id);
-              }}
-              required
-              className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
-            >
-              {INITIAL_ASSIGNMENTS.map((staff) => (
-                <option key={staff.employeeId} value={staff.employeeId}>
-                  👤 {staff.employeeName} ({staff.employeeId}) - {staff.department}
-                </option>
-              ))}
-            </select>
+
+            {/* Single Unified Searchable Employee Combobox */}
+            <div className="relative" ref={assignComboboxRef}>
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={assignEmpQuery}
+                onFocus={() => setIsEmpComboboxOpen(true)}
+                onChange={(e) => {
+                  setAssignEmpQuery(e.target.value);
+                  setIsEmpComboboxOpen(true);
+                }}
+                placeholder="Type employee name, ID or department to search..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-xs font-semibold text-slate-900 shadow-2xs focus:border-emerald-500 focus:outline-none"
+              />
+              {assignEmpQuery ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssignEmpQuery("");
+                    setAssignEmpId("");
+                    setIsEmpComboboxOpen(true);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              )}
+
+              {/* Combobox Dropdown Results List */}
+              {isEmpComboboxOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl space-y-1 max-h-56 overflow-y-auto animate-in fade-in-50">
+                  {INITIAL_ASSIGNMENTS.filter((staff) => {
+                    if (!assignEmpQuery.trim()) return true;
+                    const q = assignEmpQuery.toLowerCase().trim();
+                    return (
+                      staff.employeeName.toLowerCase().includes(q) ||
+                      staff.employeeId.toLowerCase().includes(q) ||
+                      staff.department.toLowerCase().includes(q) ||
+                      staff.designation.toLowerCase().includes(q)
+                    );
+                  }).length === 0 ? (
+                    <div className="p-3 text-center text-xs text-slate-400 font-medium">
+                      No matching employee found.
+                    </div>
+                  ) : (
+                    INITIAL_ASSIGNMENTS.filter((staff) => {
+                      if (!assignEmpQuery.trim()) return true;
+                      const q = assignEmpQuery.toLowerCase().trim();
+                      return (
+                        staff.employeeName.toLowerCase().includes(q) ||
+                        staff.employeeId.toLowerCase().includes(q) ||
+                        staff.department.toLowerCase().includes(q) ||
+                        staff.designation.toLowerCase().includes(q)
+                      );
+                    }).map((staff) => (
+                      <div
+                        key={staff.employeeId}
+                        onClick={() => {
+                          setAssignEmpId(staff.employeeId);
+                          setAssignEmpQuery(`${staff.employeeName} (${staff.employeeId}) - ${staff.department}`);
+                          setIsEmpComboboxOpen(false);
+                          checkConflict(staff.employeeId, editingAssignment?.id);
+                        }}
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded-xl cursor-pointer transition-colors hover:bg-slate-100/80 border border-transparent",
+                          assignEmpId === staff.employeeId && "bg-emerald-50 text-emerald-900 border-emerald-200"
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 font-bold text-[10px] shrink-0">
+                            {staff.avatar}
+                          </div>
+                          <div className="truncate">
+                            <p className="font-bold text-xs text-slate-900 truncate">
+                              {staff.employeeName} <span className="text-[10px] font-semibold text-emerald-700">({staff.employeeId})</span>
+                            </p>
+                            <p className="text-[10px] text-slate-500 truncate">{staff.designation} • {staff.department}</p>
+                          </div>
+                        </div>
+                        {assignEmpId === staff.employeeId && <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-2" />}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div>
@@ -1172,8 +1268,9 @@ export function ShiftManagementView() {
               value={assignShiftId}
               onChange={(e) => setAssignShiftId(e.target.value)}
               required
-              className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
+              className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
             >
+              <option value="">-- Select Shift Type --</option>
               {MASTER_SHIFTS.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} ({s.code}) • {s.startTime} - {s.endTime}
@@ -1300,12 +1397,16 @@ export function ShiftManagementView() {
                 <select
                   value={bulkDepartment}
                   onChange={(e) => setBulkDepartment(e.target.value)}
-                  className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
+                  className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
                 >
+                  <option value="">-- Select Department --</option>
                   <option value="ALL">All Departments</option>
                   <option value="Front Office">Front Office</option>
                   <option value="Housekeeping">Housekeeping</option>
-                  <option value="Food & Beverage">Food &amp; Beverage</option>
+                  <option value="Kitchen / Culinary">Kitchen / Culinary</option>
+                  <option value="F&B Service">F&amp;B Service</option>
+                  <option value="Maintenance & Eng.">Maintenance &amp; Eng.</option>
+                  <option value="HR & Admin">HR &amp; Admin</option>
                 </select>
               </div>
             )}
@@ -1316,11 +1417,14 @@ export function ShiftManagementView() {
                 <select
                   value={bulkDesignation}
                   onChange={(e) => setBulkDesignation(e.target.value)}
-                  className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
+                  className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
                 >
+                  <option value="">-- Select Designation --</option>
                   <option value="Front Desk Manager">Front Desk Manager</option>
                   <option value="Guest Relations Executive">Guest Relations Executive</option>
+                  <option value="Executive Housekeeper">Executive Housekeeper</option>
                   <option value="Room Attendant">Room Attendant</option>
+                  <option value="Executive Head Chef">Executive Head Chef</option>
                   <option value="Restaurant Captain">Restaurant Captain</option>
                 </select>
               </div>
@@ -1332,8 +1436,9 @@ export function ShiftManagementView() {
                 <select
                   value={bulkEmploymentType}
                   onChange={(e) => setBulkEmploymentType(e.target.value)}
-                  className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
+                  className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
                 >
+                  <option value="">-- Select Employment Type --</option>
                   <option value="Permanent">Permanent</option>
                   <option value="Contractual">Contractual</option>
                   <option value="Probation">Probation</option>
@@ -1346,8 +1451,9 @@ export function ShiftManagementView() {
               <select
                 value={bulkShiftId}
                 onChange={(e) => setBulkShiftId(e.target.value)}
-                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
+                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
               >
+                <option value="">-- Select Shift Type --</option>
                 {MASTER_SHIFTS.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.code})

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Timer,
   Search,
@@ -19,6 +19,7 @@ import {
   Building2,
   SlidersHorizontal,
   Plus,
+  ChevronDown,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge, SearchSelect } from "@/components/ui";
@@ -202,12 +203,26 @@ export function OvertimeManagementView() {
   const [viewingRecord, setViewingRecord] = useState<OvertimeRecord | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
-  // Request OT Form State
-  const [reqEmpId, setReqEmpId] = useState("EMP-0101");
-  const [reqOtType, setReqOtType] = useState<OvertimeType>("Regular OT");
-  const [reqDate, setReqDate] = useState("2026-08-08");
-  const [reqHours, setReqHours] = useState<number>(2.0);
+  // Request OT Form State (With Unified Searchable Combobox & Auto-Close)
+  const [reqEmpId, setReqEmpId] = useState("");
+  const [reqEmpQuery, setReqEmpQuery] = useState("");
+  const [isReqEmpComboboxOpen, setIsReqEmpComboboxOpen] = useState(false);
+  const reqComboboxRef = useRef<HTMLDivElement>(null);
+  const [reqOtType, setReqOtType] = useState<OvertimeType | "">("");
+  const [reqDate, setReqDate] = useState("");
+  const [reqHours, setReqHours] = useState<string>("");
   const [reqReason, setReqReason] = useState("");
+
+  // Close Employee Combobox Popover when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (reqComboboxRef.current && !reqComboboxRef.current.contains(event.target as Node)) {
+        setIsReqEmpComboboxOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Filtered Records
   const filteredRecords = useMemo(() => {
@@ -319,27 +334,29 @@ export function OvertimeManagementView() {
   const handleSaveRequest = (e: React.FormEvent) => {
     e.preventDefault();
     const empObj = INITIAL_OVERTIME_RECORDS.find((x) => x.employeeId === reqEmpId);
-    const multiplier = reqOtType === "Regular OT" ? 1.5 : 2.0;
+    const parsedHours = parseFloat(reqHours) || 2.0;
+    const actualOtType = reqOtType || "Regular OT";
+    const multiplier = actualOtType === "Regular OT" ? 1.5 : 2.0;
     const hourlyRate = 300;
-    const payable = Math.round(reqHours * multiplier * hourlyRate);
+    const payable = Math.round(parsedHours * multiplier * hourlyRate);
 
     const newRecord: OvertimeRecord = {
       id: `OT-${Math.floor(300 + Math.random() * 700)}`,
-      employeeId: reqEmpId,
+      employeeId: reqEmpId || "EMP-0101",
       employeeName: empObj?.employeeName || "Rajesh Kumar",
       department: empObj?.department || "Front Office",
       designation: empObj?.designation || "Staff",
       avatar: empObj?.avatar || "RK",
       shiftCode: "MS-01",
       shiftName: "Morning Shift (A)",
-      otType: reqOtType,
-      date: reqDate,
+      otType: actualOtType,
+      date: reqDate || new Date().toISOString().split("T")[0],
       checkIn: "07:00 AM",
       checkOut: "07:30 PM",
       scheduledHours: 8.0,
       breakHours: 0.75,
-      workedHours: 8.0 + reqHours,
-      overtimeHours: reqHours,
+      workedHours: 8.0 + parsedHours,
+      overtimeHours: parsedHours,
       hourlyRate,
       otRateMultiplier: multiplier,
       payableAmount: payable,
@@ -349,7 +366,7 @@ export function OvertimeManagementView() {
 
     setRecords((prev) => [newRecord, ...prev]);
     setIsRequestModalOpen(false);
-    setToastMessage(`Submitted ${reqOtType} request for ${newRecord.employeeName} (${reqHours} Hrs).`);
+    setToastMessage(`Submitted ${actualOtType} request for ${newRecord.employeeName} (${parsedHours} Hrs).`);
   };
 
   return (
@@ -369,7 +386,15 @@ export function OvertimeManagementView() {
           <Button
             type="button"
             size="sm"
-            onClick={() => setIsRequestModalOpen(true)}
+            onClick={() => {
+              setReqEmpId("");
+              setReqEmpQuery("");
+              setIsReqEmpComboboxOpen(false);
+              setReqOtType("");
+              setReqHours("");
+              setReqReason("");
+              setIsRequestModalOpen(true);
+            }}
             className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs cursor-pointer"
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -857,28 +882,108 @@ export function OvertimeManagementView() {
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Select Employee <span className="text-rose-500">*</span>
             </label>
-            <select
-              value={reqEmpId}
-              onChange={(e) => setReqEmpId(e.target.value)}
-              required
-              className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
-            >
-              {INITIAL_OVERTIME_RECORDS.map((staff) => (
-                <option key={staff.employeeId} value={staff.employeeId}>
-                  👤 {staff.employeeName} ({staff.employeeId}) - {staff.department}
-                </option>
-              ))}
-            </select>
+
+            {/* Single Unified Searchable Employee Combobox */}
+            <div className="relative" ref={reqComboboxRef}>
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={reqEmpQuery}
+                onFocus={() => setIsReqEmpComboboxOpen(true)}
+                onChange={(e) => {
+                  setReqEmpQuery(e.target.value);
+                  setIsReqEmpComboboxOpen(true);
+                }}
+                placeholder="Type employee name, ID or department to search..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-xs font-semibold text-slate-900 shadow-2xs focus:border-emerald-500 focus:outline-none"
+              />
+              {reqEmpQuery ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReqEmpQuery("");
+                    setReqEmpId("");
+                    setIsReqEmpComboboxOpen(true);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              )}
+
+              {/* Combobox Dropdown Results List */}
+              {isReqEmpComboboxOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl space-y-1 max-h-56 overflow-y-auto animate-in fade-in-50">
+                  {INITIAL_OVERTIME_RECORDS.filter((staff) => {
+                    if (!reqEmpQuery.trim()) return true;
+                    const q = reqEmpQuery.toLowerCase().trim();
+                    return (
+                      staff.employeeName.toLowerCase().includes(q) ||
+                      staff.employeeId.toLowerCase().includes(q) ||
+                      staff.department.toLowerCase().includes(q) ||
+                      staff.designation.toLowerCase().includes(q)
+                    );
+                  }).length === 0 ? (
+                    <div className="p-3 text-center text-xs text-slate-400 font-medium">
+                      No matching employee found.
+                    </div>
+                  ) : (
+                    INITIAL_OVERTIME_RECORDS.filter((staff) => {
+                      if (!reqEmpQuery.trim()) return true;
+                      const q = reqEmpQuery.toLowerCase().trim();
+                      return (
+                        staff.employeeName.toLowerCase().includes(q) ||
+                        staff.employeeId.toLowerCase().includes(q) ||
+                        staff.department.toLowerCase().includes(q) ||
+                        staff.designation.toLowerCase().includes(q)
+                      );
+                    }).map((staff) => (
+                      <div
+                        key={staff.employeeId}
+                        onClick={() => {
+                          setReqEmpId(staff.employeeId);
+                          setReqEmpQuery(`${staff.employeeName} (${staff.employeeId}) - ${staff.department}`);
+                          setIsReqEmpComboboxOpen(false);
+                        }}
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded-xl cursor-pointer transition-colors hover:bg-slate-100/80 border border-transparent",
+                          reqEmpId === staff.employeeId && "bg-emerald-50 text-emerald-900 border-emerald-200"
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 font-bold text-[10px] shrink-0">
+                            {staff.avatar}
+                          </div>
+                          <div className="truncate">
+                            <p className="font-bold text-xs text-slate-900 truncate">
+                              {staff.employeeName} <span className="text-[10px] font-semibold text-emerald-700">({staff.employeeId})</span>
+                            </p>
+                            <p className="text-[10px] text-slate-500 truncate">{staff.designation} • {staff.department}</p>
+                          </div>
+                        </div>
+                        {reqEmpId === staff.employeeId && <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-2" />}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Overtime Type</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Overtime Type <span className="text-rose-500">*</span>
+              </label>
               <select
                 value={reqOtType}
                 onChange={(e) => setReqOtType(e.target.value as OvertimeType)}
-                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
+                required
+                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
               >
+                <option value="">-- Select Overtime Type --</option>
                 <option value="Regular OT">Regular OT (1.5x)</option>
                 <option value="Weekly Off OT">Weekly Off OT (2.0x)</option>
                 <option value="Emergency Call-In OT">Emergency Call-In (2.0x)</option>
@@ -887,16 +992,19 @@ export function OvertimeManagementView() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">OT Hours</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                OT Hours <span className="text-rose-500">*</span>
+              </label>
               <input
                 type="number"
                 step="0.5"
                 min="0.5"
                 max="12"
+                placeholder="e.g. 2.0"
                 value={reqHours}
-                onChange={(e) => setReqHours(parseFloat(e.target.value) || 1)}
+                onChange={(e) => setReqHours(e.target.value)}
                 required
-                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-bold"
+                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-bold text-slate-800"
               />
             </div>
           </div>

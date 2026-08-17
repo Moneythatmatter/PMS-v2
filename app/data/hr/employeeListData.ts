@@ -25,8 +25,11 @@ export interface EmployeeItem {
   attendanceRate?: number;
   leaveBalance?: { casual: number; sick: number; earned: number };
   bankAccount?: string;
+  bankName?: string;
   ifscCode?: string;
   panNumber?: string;
+  uanNumber?: string;
+  esicNumber?: string;
   documentsCount?: number;
   openGrievancesCount?: number;
 }

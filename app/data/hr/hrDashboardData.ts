@@ -230,3 +230,35 @@ export const sampleGrievances: GrievanceSummary = {
   escalated: 1,
   resolved: 19,
 };
+
+export interface DesignationHeadcount {
+  designation: string;
+  department: string;
+  count: number;
+  color: string;
+}
+
+export interface GenderDistribution {
+  male: number;
+  female: number;
+  other: number;
+  total: number;
+}
+
+export const sampleDesignationHeadcounts: DesignationHeadcount[] = [
+  { designation: "Housekeeping Attendant", department: "Housekeeping", count: 24, color: "bg-emerald-500" },
+  { designation: "F&B Steward / Waiter", department: "F&B Service", count: 19, color: "bg-blue-500" },
+  { designation: "Chef de Partie / Cook", department: "Kitchen", count: 15, color: "bg-amber-500" },
+  { designation: "Front Desk Executive", department: "Front Office", count: 12, color: "bg-purple-500" },
+  { designation: "Maintenance Technician", department: "Maintenance", count: 8, color: "bg-rose-500" },
+  { designation: "Banquet Captain", department: "F&B Service", count: 8, color: "bg-sky-500" },
+  { designation: "Housekeeping Supervisor", department: "Housekeeping", count: 6, color: "bg-teal-500" },
+  { designation: "Duty Manager", department: "Front Office", count: 4, color: "bg-indigo-500" },
+];
+
+export const sampleGenderDistribution: GenderDistribution = {
+  male: 82,
+  female: 42,
+  other: 4,
+  total: 128,
+};

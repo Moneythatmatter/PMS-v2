@@ -60,6 +60,9 @@ export function EmployeeListView() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkMenu, setShowBulkMenu] = useState(false);
 
+  // Quick summary popover state on employee click
+  const [activePopoverEmpId, setActivePopoverEmpId] = useState<string | null>(null);
+
   // Drawer detail state
   const [selectedEmployeeDetail, setSelectedEmployeeDetail] = useState<EmployeeItem | null>(null);
   const [activeTab, setActiveTab] = useState<ProfileTab>("personal");
@@ -469,95 +472,206 @@ export function EmployeeListView() {
               ) : (
                 filteredEmployees.map((row) => {
                   const isSelected = selectedIds.has(row.id);
+                  const activePopoverRow = activePopoverEmpId === row.id ? row : null;
+
                   return (
-                    <tr
-                      key={row.id}
-                      className={cn(
-                        "even:bg-slate-50/50 hover:bg-slate-100/80 transition-colors",
-                        isSelected && "bg-emerald-50/80 hover:bg-emerald-100/80 border-l-2 border-l-emerald-600"
-                      )}
-                    >
-                      <td className="px-3 py-2.5 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelectRow(row.id)}
-                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
-                        />
-                      </td>
-                      <td className="px-3 py-2.5 font-bold text-slate-900">{row.empCode}</td>
-                      <td className="px-3.5 py-2.5">
-                        <div className="flex items-center gap-3">
-                          {/* Photo Avatar or Initials Fallback */}
-                          {row.photoUrl ? (
-                            <img
-                              src={row.photoUrl}
-                              alt={row.name}
-                              className="h-9 w-9 rounded-xl object-cover border border-slate-200 shadow-2xs shrink-0"
-                            />
-                          ) : (
-                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 font-bold text-xs shrink-0 border border-emerald-200">
-                              {row.avatar}
+                    <React.Fragment key={row.id}>
+                      <tr
+                        className={cn(
+                          "even:bg-slate-50/50 hover:bg-slate-100/80 transition-colors",
+                          isSelected && "bg-emerald-50/80 hover:bg-emerald-100/80 border-l-2 border-l-emerald-600",
+                          activePopoverEmpId === row.id && "bg-emerald-50/60"
+                        )}
+                      >
+                        <td className="px-3 py-2.5 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectRow(row.id)}
+                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5 font-bold text-slate-900">{row.empCode}</td>
+                        <td className="px-3.5 py-2.5">
+                          <div className="flex items-center gap-3">
+                            {/* Photo Avatar or Initials Fallback */}
+                            {row.photoUrl ? (
+                              <img
+                                src={row.photoUrl}
+                                alt={row.name}
+                                className="h-9 w-9 rounded-xl object-cover border border-slate-200 shadow-2xs shrink-0 cursor-pointer"
+                                onClick={() => openEmployeeDrawer(row, "personal")}
+                              />
+                            ) : (
+                              <div
+                                onClick={() => openEmployeeDrawer(row, "personal")}
+                                className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 font-bold text-xs shrink-0 border border-emerald-200 cursor-pointer"
+                              >
+                                {row.avatar}
+                              </div>
+                            )}
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={`/human-resources/employees/profile?id=${row.id}`}
+                                  className="font-bold text-slate-900 hover:text-emerald-700 hover:underline cursor-pointer"
+                                >
+                                  {row.name}
+                                </a>
+
+                                {/* Prominent Expand Toggle Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => setActivePopoverEmpId(activePopoverEmpId === row.id ? null : row.id)}
+                                  className={cn(
+                                    "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border transition-all cursor-pointer",
+                                    activePopoverEmpId === row.id
+                                      ? "bg-emerald-700 text-white border-emerald-800 shadow-xs"
+                                      : "bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border-slate-200"
+                                  )}
+                                  title="Expand/Collapse employee statistics summary"
+                                >
+                                  <span>{activePopoverEmpId === row.id ? "Hide Details" : "Summary"}</span>
+                                  <ChevronDown className={cn("h-3 w-3 transition-transform duration-200", activePopoverEmpId === row.id && "rotate-180")} />
+                                </button>
+                              </div>
+                              <p className="text-[10px] text-slate-500 truncate max-w-[180px]">{row.email}</p>
                             </div>
-                          )}
-                          <div>
-                            <a
-                              href={`/human-resources/employees/profile?id=${row.id}`}
-                              className="font-bold text-slate-900 hover:text-emerald-700 hover:underline cursor-pointer"
-                            >
-                              {row.name}
-                            </a>
-                            <p className="text-[10px] text-slate-500 truncate max-w-[180px]">{row.email}</p>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-3.5 py-2.5">
-                        <p className="font-bold text-slate-800">{row.designation}</p>
-                        <p className="text-[10px] text-slate-500 font-medium">{row.department}</p>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span
-                          className={cn(
-                            "inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase border",
-                            row.employmentType === "Permanent"
-                              ? "bg-blue-50 text-blue-800 border-blue-200"
-                              : row.employmentType === "Contractual"
-                              ? "bg-amber-50 text-amber-800 border-amber-200"
-                              : "bg-purple-50 text-purple-800 border-purple-200"
-                          )}
-                        >
-                          {row.employmentType}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-slate-700 font-medium">{row.shiftType}</td>
-                      <td className="px-3.5 py-2.5 text-right font-bold text-slate-900">
-                        ₹{row.salary.toLocaleString("en-IN")}
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
-                        <span
-                          className={cn(
-                            "inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border",
-                            row.status === "Active"
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                              : row.status === "On Leave"
-                              ? "bg-amber-100 text-amber-800 border-amber-300"
-                              : "bg-rose-100 text-rose-800 border-rose-300"
-                          )}
-                        >
-                          {row.status}
-                        </span>
-                      </td>
-                      {/* Action Column with Direct Link to Employee Profile passing ?id=${row.id} */}
-                      <td className="px-3 py-2.5 text-center">
-                        <a
-                          href={`/human-resources/employees/profile?id=${row.id}`}
-                          className="inline-flex items-center justify-center p-1.5 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 transition-colors cursor-pointer"
-                          title="Open Employee Profile"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </a>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-3.5 py-2.5">
+                          <p className="font-bold text-slate-800">{row.designation}</p>
+                          <p className="text-[10px] text-slate-500 font-medium">{row.department}</p>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span
+                            className={cn(
+                              "inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase border",
+                              row.employmentType === "Permanent"
+                                ? "bg-blue-50 text-blue-800 border-blue-200"
+                                : row.employmentType === "Contractual"
+                                ? "bg-amber-50 text-amber-800 border-amber-200"
+                                : "bg-purple-50 text-purple-800 border-purple-200"
+                            )}
+                          >
+                            {row.employmentType}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-700 font-medium">{row.shiftType}</td>
+                        <td className="px-3.5 py-2.5 text-right font-bold text-slate-900">
+                          ₹{row.salary.toLocaleString("en-IN")}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span
+                            className={cn(
+                              "inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border",
+                              row.status === "Active"
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                : row.status === "On Leave"
+                                ? "bg-amber-100 text-amber-800 border-amber-300"
+                                : "bg-rose-100 text-rose-800 border-rose-300"
+                            )}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+                        {/* Action Column */}
+                        <td className="px-3 py-2.5 text-center">
+                          <a
+                            href={`/human-resources/employees/profile?id=${row.id}`}
+                            className="inline-flex items-center justify-center p-1.5 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 transition-colors cursor-pointer"
+                            title="Open Employee Profile"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </a>
+                        </td>
+                      </tr>
+
+                      {/* INLINE EXPANDED ROW STATS PANEL (PocketHRMS Style) */}
+                      {activePopoverRow && (
+                        <tr className="bg-gradient-to-r from-slate-50 via-emerald-50/40 to-slate-50 border-b-2 border-emerald-300 animate-in fade-in-50">
+                          <td colSpan={9} className="p-3.5 sm:p-4">
+                            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-700 text-white font-bold text-xs shadow-2xs">
+                                    {row.avatar}
+                                  </div>
+                                  <div>
+                                    <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
+                                      {row.name}
+                                      <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                                        {row.empCode}
+                                      </span>
+                                    </h4>
+                                    <p className="text-[11px] text-slate-500 font-medium">
+                                      {row.designation} • <span className="text-emerald-700">{row.department}</span>
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <a
+                                    href={`/human-resources/employees/profile?id=${row.id}`}
+                                    className="px-3 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition-colors cursor-pointer"
+                                  >
+                                    View Full Profile &rarr;
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActivePopoverEmpId(null)}
+                                    className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Horizontal Statistics Row */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                                {/* 1. Leave Summary */}
+                                <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200 space-y-1">
+                                  <span className="text-[10px] font-bold uppercase text-blue-800 tracking-wider block">
+                                    🏖️ Leave Summary
+                                  </span>
+                                  <p className="text-base font-black text-blue-950">16 / 24 Days Left</p>
+                                  <p className="text-[11px] font-medium text-blue-700">8 Days Used this year</p>
+                                </div>
+
+                                {/* 2. Attendance Summary */}
+                                <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 space-y-1">
+                                  <span className="text-[10px] font-bold uppercase text-emerald-800 tracking-wider block">
+                                    ⏰ Attendance Rate
+                                  </span>
+                                  <p className="text-base font-black text-emerald-950">96.2% Present</p>
+                                  <p className="text-[11px] font-medium text-emerald-700">24 / 26 Working Days</p>
+                                </div>
+
+                                {/* 3. Payroll / Gross Salary */}
+                                <div className="p-3 rounded-xl bg-purple-50/80 border border-purple-200 space-y-1">
+                                  <span className="text-[10px] font-bold uppercase text-purple-800 tracking-wider block">
+                                    💰 Gross Salary
+                                  </span>
+                                  <p className="text-base font-black text-purple-950">₹{row.salary.toLocaleString("en-IN")}</p>
+                                  <p className="text-[11px] font-semibold text-purple-800">
+                                    Net Pay: ₹{Math.round(row.salary * 0.88).toLocaleString("en-IN")}
+                                  </p>
+                                </div>
+
+                                {/* 4. Income Tax TDS */}
+                                <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 space-y-1">
+                                  <span className="text-[10px] font-bold uppercase text-amber-800 tracking-wider block">
+                                    📄 Income Tax (TDS)
+                                  </span>
+                                  <p className="text-base font-black text-amber-950">₹{Math.round(row.salary * 0.05).toLocaleString("en-IN")}</p>
+                                  <p className="text-[11px] font-medium text-amber-700">Tax Calculated till July 2026</p>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })
               )}
@@ -810,7 +924,7 @@ export function EmployeeListView() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Bank Account No:</span>
-                  <span className="font-bold text-slate-800">{selectedEmployeeDetail.bankAccount || "987654321098"}</span>
+                  <span className="font-bold text-slate-800">{selectedEmployeeDetail.bankAccount || "•••• 4821"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">IFSC Code:</span>
@@ -819,6 +933,14 @@ export function EmployeeListView() {
                 <div className="flex justify-between">
                   <span className="text-slate-500">PAN Number:</span>
                   <span className="font-bold text-slate-800">{selectedEmployeeDetail.panNumber || "ABCDE1234F"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">UAN (PF) No <span className="text-[9px] text-slate-400 font-normal italic">(Optional)</span>:</span>
+                  <span className="font-bold text-slate-800">{selectedEmployeeDetail.uanNumber || "101293847501"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">ESIC No <span className="text-[9px] text-slate-400 font-normal italic">(Optional)</span>:</span>
+                  <span className="font-bold text-slate-800">{selectedEmployeeDetail.esicNumber || "31000482910001"}</span>
                 </div>
               </div>
             )}

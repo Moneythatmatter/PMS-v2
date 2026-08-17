@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Search,
   Plus,
@@ -19,11 +19,13 @@ import {
   Building2,
   Briefcase,
   X,
+  ChevronDown,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
+import { cn } from "@/lib/utils";
 
 // Types & Master Interfaces
 export type ComponentType = "Earnings" | "Deductions";
@@ -68,15 +70,25 @@ export interface SalaryStructure {
   name: string;
   department: string;
   employmentType: "Permanent" | "Contract" | "Probation" | "Trainee" | "All";
+  structureType: "Grade-Based" | "Role-Based" | "Custom";
+  version: number;
+  isCurrentVersion: boolean;
+  effectiveFrom: string;
+  effectiveTo?: string;
   description?: string;
   effectiveDate?: string;
   status: "Active" | "Inactive";
+  overtimeEligible: boolean;
+  incentives: number;
   earnings: StructureComponentLine[];
   deductions: StructureComponentLine[];
   grossSalary: number;
   totalDeductions: number;
   netSalary: number;
   assignedEmployees: AssignedEmployee[];
+  createdBy: string;
+  createdDate: string;
+  lastUpdated: string;
   history?: SalaryStructureHistoryEntry[];
 }
 
@@ -108,9 +120,16 @@ export const INITIAL_STRUCTURES: SalaryStructure[] = [
     name: "Front Office Executive",
     department: "Front Office",
     employmentType: "Permanent",
+    structureType: "Grade-Based",
+    version: 2,
+    isCurrentVersion: true,
+    effectiveFrom: "01/04/2026",
+    effectiveTo: "31/03/2027",
     description: "Standard grade salary structure template for Front Office & Reception staff.",
     effectiveDate: "01/04/2026",
     status: "Active",
+    overtimeEligible: true,
+    incentives: 1000,
     earnings: [
       { componentId: "SC-01", componentName: "Basic Salary", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 18000, computedAmount: 18000 },
       { componentId: "SC-02", componentName: "HRA", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 7200, computedAmount: 7200 },
@@ -120,13 +139,17 @@ export const INITIAL_STRUCTURES: SalaryStructure[] = [
     deductions: [
       { componentId: "SC-06", componentName: "PF", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 1800, computedAmount: 1800 },
       { componentId: "SC-07", componentName: "ESI", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 300, computedAmount: 300 },
+      { componentId: "SC-08", componentName: "Professional Tax", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 200, computedAmount: 200 },
     ],
-    grossSalary: 28700,
-    totalDeductions: 2100,
-    netSalary: 26600,
+    grossSalary: 29700,
+    totalDeductions: 2300,
+    netSalary: 27400,
     assignedEmployees: [INITIAL_EMPLOYEES[0], INITIAL_EMPLOYEES[1], INITIAL_EMPLOYEES[5]],
+    createdBy: "Neha Mehta (HR Manager)",
+    createdDate: "15/01/2025",
+    lastUpdated: "01/04/2026",
     history: [
-      { id: "HIS-01", changeDate: "01/04/2026", changedBy: "Neha Mehta (HR Manager)", description: "Annual revision: Incremented Basic Salary by ₹2,000.", oldNetSalary: 24600, newNetSalary: 26600 }
+      { id: "HIS-01", changeDate: "01/04/2026", changedBy: "Neha Mehta (HR Manager)", description: "Annual revision: Incremented Basic Salary by ₹2,000.", oldNetSalary: 24600, newNetSalary: 27400 }
     ],
   },
   {
@@ -134,9 +157,16 @@ export const INITIAL_STRUCTURES: SalaryStructure[] = [
     name: "Housekeeping Senior Staff",
     department: "Housekeeping",
     employmentType: "Permanent",
+    structureType: "Role-Based",
+    version: 1,
+    isCurrentVersion: true,
+    effectiveFrom: "01/01/2026",
+    effectiveTo: "31/12/2026",
     description: "Salary package for Housekeeping Supervisors and Executive Staff.",
-    effectiveDate: "01/04/2026",
+    effectiveDate: "01/01/2026",
     status: "Active",
+    overtimeEligible: true,
+    incentives: 500,
     earnings: [
       { componentId: "SC-01", componentName: "Basic Salary", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 16000, computedAmount: 16000 },
       { componentId: "SC-02", componentName: "HRA", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 6400, computedAmount: 6400 },
@@ -146,18 +176,27 @@ export const INITIAL_STRUCTURES: SalaryStructure[] = [
       { componentId: "SC-06", componentName: "PF", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 1600, computedAmount: 1600 },
       { componentId: "SC-08", componentName: "Professional Tax", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 200, computedAmount: 200 },
     ],
-    grossSalary: 24900,
+    grossSalary: 25400,
     totalDeductions: 1800,
-    netSalary: 23100,
+    netSalary: 23600,
     assignedEmployees: [INITIAL_EMPLOYEES[2]],
+    createdBy: "Neha Mehta (HR Manager)",
+    createdDate: "01/01/2026",
+    lastUpdated: "01/01/2026",
   },
   {
     id: "SS-103",
     name: "Kitchen Head & Chef Package",
     department: "Food & Beverage",
     employmentType: "Permanent",
+    structureType: "Custom",
+    version: 1,
+    isCurrentVersion: true,
+    effectiveFrom: "01/01/2026",
     description: "Senior culinary staff salary structure including special chef allowance.",
     status: "Active",
+    overtimeEligible: false,
+    incentives: 2500,
     earnings: [
       { componentId: "SC-01", componentName: "Basic Salary", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 35000, computedAmount: 35000 },
       { componentId: "SC-02", componentName: "HRA", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 14000, computedAmount: 14000 },
@@ -169,10 +208,13 @@ export const INITIAL_STRUCTURES: SalaryStructure[] = [
       { componentId: "SC-08", componentName: "Professional Tax", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 200, computedAmount: 200 },
       { componentId: "SC-09", componentName: "TDS / Income Tax", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 2500, computedAmount: 2500 },
     ],
-    grossSalary: 58000,
+    grossSalary: 60500,
     totalDeductions: 6200,
-    netSalary: 51800,
+    netSalary: 54300,
     assignedEmployees: [INITIAL_EMPLOYEES[3]],
+    createdBy: "Rajesh Sharma (HR Director)",
+    createdDate: "01/01/2026",
+    lastUpdated: "01/01/2026",
   },
 ];
 
@@ -210,6 +252,19 @@ export function SalaryStructureView() {
   const [selectedAssignDept, setSelectedAssignDept] = useState("Front Office");
   const [selectedMultiEmpIds, setSelectedMultiEmpIds] = useState<string[]>([]);
   const [assignSearchTerm, setAssignSearchTerm] = useState("");
+  const [isAssignComboboxOpen, setIsAssignComboboxOpen] = useState(false);
+  const assignComboboxRef = useRef<HTMLDivElement>(null);
+
+  // Auto-close Assign Searchable Combobox on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (assignComboboxRef.current && !assignComboboxRef.current.contains(event.target as Node)) {
+        setIsAssignComboboxOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Filtered Structures
   const filteredStructures = useMemo(() => {
@@ -226,14 +281,23 @@ export function SalaryStructureView() {
     });
   }, [structures, searchTerm, selectedDept, selectedEmpType, selectedStatus]);
 
-  // KPI Metrics
+  // KPI Metrics (5 Top Dashboard Metrics)
   const metrics = useMemo(() => {
     const totalStructures = structures.length + 5; // 8
+    const activeStructuresCount = structures.filter((s) => s.status === "Active").length + 5; // 8
     const assignedEmployeesCount = structures.reduce((sum, s) => sum + s.assignedEmployees.length, 120); // 126
     const unassignedEmployeesCount = 4;
-    const activeStructuresCount = structures.filter((s) => s.status === "Active").length + 5; // 8
+    const avgGross = Math.round(
+      structures.reduce((sum, s) => sum + s.grossSalary, 115000) / (structures.length + 3)
+    );
 
-    return { totalStructures, assignedEmployeesCount, unassignedEmployeesCount, activeStructuresCount };
+    return {
+      totalStructures,
+      activeStructuresCount,
+      assignedEmployeesCount,
+      unassignedEmployeesCount,
+      avgGross,
+    };
   }, [structures]);
 
   // Helper for computing live calculations
@@ -356,19 +420,29 @@ export function SalaryStructureView() {
       );
       setToastMessage(`Salary Structure "${formName}" updated successfully.`);
     } else {
+      const today = new Date().toLocaleDateString("en-GB");
       const newStructure: SalaryStructure = {
         id: `SS-${Math.floor(100 + Math.random() * 900)}`,
         name: formName,
         department: formDept,
         employmentType: formEmpType,
+        structureType: "Grade-Based",
+        version: 1,
+        isCurrentVersion: true,
+        effectiveFrom: today,
         description: formDesc,
         status: "Active",
+        overtimeEligible: true,
+        incentives: 0,
         earnings: computedEarnings,
         deductions: computedDeductions,
         grossSalary: gross,
         totalDeductions: totalDed,
         netSalary: net,
         assignedEmployees: [],
+        createdBy: "Neha Mehta (HR Manager)",
+        createdDate: today,
+        lastUpdated: today,
       };
       setStructures((prev) => [newStructure, ...prev]);
       setToastMessage(`New Salary Structure "${formName}" created successfully.`);
@@ -425,17 +499,63 @@ export function SalaryStructureView() {
     setToastMessage(`Successfully assigned structure "${assigningStructure.name}" to employees.`);
   };
 
-  // Duplicate Structure
-  const handleDuplicateStructure = (structure: SalaryStructure) => {
+  // Duplicate Structure Options
+  const handleDuplicateAsNewVersion = (structure: SalaryStructure) => {
+    const nextVer = structure.version + 1;
+    const today = new Date().toLocaleDateString("en-GB");
+
+    // Mark previous versions as false for isCurrentVersion
+    setStructures((prev) =>
+      prev.map((s) =>
+        s.name.toLowerCase() === structure.name.toLowerCase()
+          ? { ...s, isCurrentVersion: false }
+          : s
+      )
+    );
+
     const duplicated: SalaryStructure = {
       ...structure,
       id: `SS-${Math.floor(100 + Math.random() * 900)}`,
-      name: `${structure.name} (Copy)`,
-      assignedEmployees: [],
-      effectiveDate: new Date().toLocaleDateString("en-GB"),
+      version: nextVer,
+      isCurrentVersion: true,
+      effectiveFrom: today,
+      effectiveTo: undefined,
+      lastUpdated: today,
+      assignedEmployees: [...structure.assignedEmployees],
+      history: [
+        ...(structure.history || []),
+        {
+          id: `HIS-${Math.floor(10 + Math.random() * 90)}`,
+          changeDate: today,
+          changedBy: "Neha Mehta (HR Manager)",
+          description: `Created Version ${nextVer} revision from Version ${structure.version}.`,
+          oldNetSalary: structure.netSalary,
+          newNetSalary: structure.netSalary,
+        },
+      ],
     };
+
     setStructures((prev) => [duplicated, ...prev]);
-    setToastMessage(`Duplicated structure template "${structure.name}" as "${duplicated.name}".`);
+    setToastMessage(`Created Version ${nextVer} for "${structure.name}"! Set as Active Version.`);
+  };
+
+  const handleDuplicateAsNewStructure = (structure: SalaryStructure) => {
+    const today = new Date().toLocaleDateString("en-GB");
+    const duplicated: SalaryStructure = {
+      ...structure,
+      id: `SS-${Math.floor(100 + Math.random() * 900)}`,
+      name: `${structure.name} (New Template)`,
+      version: 1,
+      isCurrentVersion: true,
+      effectiveFrom: today,
+      assignedEmployees: [],
+      createdBy: "Neha Mehta (HR Manager)",
+      createdDate: today,
+      lastUpdated: today,
+    };
+
+    setStructures((prev) => [duplicated, ...prev]);
+    setToastMessage(`Duplicated "${structure.name}" as new structure "${duplicated.name}".`);
   };
 
   // Delete Structure
@@ -496,15 +616,22 @@ export function SalaryStructureView() {
       }
     >
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: 4 SUMMARY KPI CARDS
+          SECTION 1: 5 TOP DASHBOARD METRICS CARDS
       ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 mb-5">
         <HRKPICard
           label="Total Structures"
           value={`${metrics.totalStructures}`}
           subtitle="Salary Templates"
           tone="blue"
           icon={<Layers className="h-5 w-5" />}
+        />
+        <HRKPICard
+          label="Active Structures"
+          value={`${metrics.activeStructuresCount}`}
+          subtitle="Ready for Payroll"
+          tone="purple"
+          icon={<CheckCircle2 className="h-5 w-5" />}
         />
         <HRKPICard
           label="Assigned Employees"
@@ -521,11 +648,11 @@ export function SalaryStructureView() {
           icon={<Users className="h-5 w-5" />}
         />
         <HRKPICard
-          label="Active Structures"
-          value={`${metrics.activeStructuresCount}`}
-          subtitle="Ready for Payroll"
-          tone="purple"
-          icon={<CheckCircle2 className="h-5 w-5" />}
+          label="Average Gross Salary"
+          value={`₹${metrics.avgGross.toLocaleString("en-IN")}`}
+          subtitle="Per Employee CTC"
+          tone="emerald"
+          icon={<DollarSign className="h-5 w-5" />}
         />
       </div>
 
@@ -626,106 +753,171 @@ export function SalaryStructureView() {
           <table className="w-full text-left text-xs text-slate-700">
             <thead className="bg-slate-50 text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200 sticky top-0 z-10">
               <tr>
-                <th className="py-3.5 px-4">Structure Name</th>
-                <th className="py-3.5 px-4">Department</th>
-                <th className="py-3.5 px-4">Employment Type</th>
-                <th className="py-3.5 px-4">Gross Salary</th>
-                <th className="py-3.5 px-4">Employees Assigned</th>
-                <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-4">Structure Name &amp; Ver</th>
+                <th className="py-3.5 px-4">Type &amp; Dept</th>
+                <th className="py-3.5 px-4">Effective Dates</th>
+                <th className="py-3.5 px-4">Components Summary</th>
+                <th className="py-3.5 px-4">Gross &amp; Net Salary</th>
+                <th className="py-3.5 px-4">Assigned Employees</th>
+                <th className="py-3.5 px-4">Last Updated</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredStructures.map((s) => (
-                <tr
-                  key={s.id}
-                  className="hover:bg-slate-50/80 transition cursor-pointer"
-                  onClick={() => setViewingStructure(s)}
-                >
-                  <td className="py-3.5 px-4">
-                    <p className="font-bold text-slate-900 text-sm">{s.name}</p>
-                    <p className="text-[11px] text-slate-400 font-mono">{s.id}</p>
-                  </td>
+              {filteredStructures.map((s) => {
+                const basicComp = s.earnings.find((e) => e.componentName.toLowerCase().includes("basic"));
+                const hraComp = s.earnings.find((e) => e.componentName.toLowerCase().includes("hra"));
+                const pfComp = s.deductions.find((d) => d.componentName.toLowerCase().includes("pf"));
+                const esiComp = s.deductions.find((d) => d.componentName.toLowerCase().includes("esi"));
 
-                  <td className="py-3.5 px-4 font-semibold text-slate-800">{s.department}</td>
-
-                  <td className="py-3.5 px-4 font-medium text-slate-600">{s.employmentType}</td>
-
-                  <td className="py-3.5 px-4">
-                    <p className="font-black text-slate-900 text-sm">₹{s.grossSalary.toLocaleString("en-IN")}</p>
-                    <p className="text-[10px] text-emerald-700 font-semibold">
-                      Net: ₹{s.netSalary.toLocaleString("en-IN")}
-                    </p>
-                  </td>
-
-                  <td className="py-3.5 px-4">
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                      👥 {s.assignedEmployees.length} Employees
-                    </span>
-                  </td>
-
-                  <td className="py-3.5 px-4">
-                    <StatusBadge status={s.status} />
-                  </td>
-
-                  <td
-                    className="py-3.5 px-4 text-right"
-                    onClick={(e) => e.stopPropagation()}
+                return (
+                  <tr
+                    key={s.id}
+                    className="hover:bg-slate-50/80 transition cursor-pointer"
+                    onClick={() => setViewingStructure(s)}
                   >
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setViewingStructure(s)}
-                        className="rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                      >
-                        <Eye className="h-3.5 w-3.5 mr-1 text-slate-500" /> View
-                      </Button>
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-slate-900 text-sm">{s.name}</p>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-900 text-amber-400 border border-slate-700">
+                          v{s.version}
+                        </span>
+                        {s.isCurrentVersion && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            Active Ver
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">{s.id} • Created by {s.createdBy}</p>
+                    </td>
 
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenCreateModal(s)}
-                        className="rounded-xl text-xs font-semibold text-emerald-800 border-emerald-300 hover:bg-emerald-50"
-                      >
-                        <Edit className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Edit
-                      </Button>
+                    <td className="py-3.5 px-4 font-semibold text-slate-800">
+                      <span className="px-2 py-0.5 rounded-lg text-[11px] bg-slate-100 border border-slate-200 font-bold text-slate-700 block w-fit mb-1">
+                        {s.structureType}
+                      </span>
+                      <span className="text-slate-600">{s.department}</span>
+                    </td>
 
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenAssignModal(s)}
-                        className="rounded-xl text-xs font-semibold text-blue-800 border-blue-300 hover:bg-blue-50"
-                      >
-                        <UserPlus className="h-3.5 w-3.5 mr-1 text-blue-600" /> Assign
-                      </Button>
+                    <td className="py-3.5 px-4 font-medium text-slate-700">
+                      <p className="text-slate-900 font-semibold">From: {s.effectiveFrom}</p>
+                      <p className="text-slate-500 text-[10px]">To: {s.effectiveTo || "Present"}</p>
+                    </td>
 
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDuplicateStructure(s)}
-                        className="rounded-xl text-xs font-semibold text-purple-800 border-purple-300 hover:bg-purple-50"
-                      >
-                        <Layers className="h-3.5 w-3.5 mr-1 text-purple-600" /> Duplicate
-                      </Button>
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {basicComp && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            Basic: ₹{basicComp.computedAmount.toLocaleString("en-IN")}
+                          </span>
+                        )}
+                        {hraComp && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                            HRA: ₹{hraComp.computedAmount.toLocaleString("en-IN")}
+                          </span>
+                        )}
+                        {pfComp && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-rose-50 text-rose-800 border border-rose-200">
+                            PF
+                          </span>
+                        )}
+                        {esiComp && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200">
+                            ESI
+                          </span>
+                        )}
+                        {s.overtimeEligible && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200">
+                            OT 1.0x
+                          </span>
+                        )}
+                      </div>
+                    </td>
 
-                      <Button
+                    <td className="py-3.5 px-4">
+                      <p className="font-black text-slate-900 text-sm">₹{s.grossSalary.toLocaleString("en-IN")}</p>
+                      <p className="text-[10px] text-emerald-700 font-bold">
+                        Net: ₹{s.netSalary.toLocaleString("en-IN")}
+                      </p>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <button
                         type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteStructure(s.id, s.name)}
-                        className="rounded-xl text-xs font-semibold text-rose-700 border-rose-200 hover:bg-rose-50"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingStructure(s);
+                        }}
+                        className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 transition flex items-center gap-1"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        👥 {s.assignedEmployees.length} Staff
+                      </button>
+                    </td>
+
+                    <td className="py-3.5 px-4 font-medium text-slate-600 text-[11px]">
+                      {s.lastUpdated}
+                    </td>
+
+                    <td
+                      className="py-3.5 px-4 text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewingStructure(s)}
+                          className="rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          <Eye className="h-3.5 w-3.5 mr-1 text-slate-500" /> View
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenCreateModal(s)}
+                          className="rounded-xl text-xs font-semibold text-emerald-800 border-emerald-300 hover:bg-emerald-50"
+                        >
+                          <Edit className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Edit
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenAssignModal(s)}
+                          className="rounded-xl text-xs font-semibold text-blue-800 border-blue-300 hover:bg-blue-50"
+                        >
+                          <UserPlus className="h-3.5 w-3.5 mr-1 text-blue-600" /> Assign
+                        </Button>
+
+                        <div className="relative group">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDuplicateAsNewVersion(s)}
+                            className="rounded-xl text-xs font-semibold text-purple-800 border-purple-300 hover:bg-purple-50"
+                          >
+                            <Layers className="h-3.5 w-3.5 mr-1 text-purple-600" /> +New Ver
+                          </Button>
+                        </div>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteStructure(s.id, s.name)}
+                          className="rounded-xl text-xs font-semibold text-rose-700 border-rose-200 hover:bg-rose-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1148,62 +1340,95 @@ export function SalaryStructureView() {
               </button>
             </div>
 
-            {/* Individual Employee Selection */}
+            {/* Individual Employee Selection - Unified Searchable Combobox */}
             {assignMode === "Individual" && (
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700">Select Employee</label>
+              <div className="space-y-1.5" ref={assignComboboxRef}>
+                <label className="block text-xs font-bold text-slate-700">
+                  Select Employee <span className="text-rose-500">*</span>
+                </label>
+
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search employee by name, ID or department..."
-                    value={assignSearchTerm}
-                    onChange={(e) => {
-                      const query = e.target.value;
-                      setAssignSearchTerm(query);
-                      const matches = INITIAL_EMPLOYEES.filter((emp) =>
-                        query
-                          ? emp.name.toLowerCase().includes(query.toLowerCase()) ||
-                            emp.id.toLowerCase().includes(query.toLowerCase()) ||
-                            emp.department.toLowerCase().includes(query.toLowerCase())
-                          : true
-                      );
-                      if (matches.length > 0) {
-                        setSelectedEmpId(matches[0].id);
-                      }
-                    }}
-                    className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 font-medium focus:ring-2 focus:ring-emerald-600 focus:outline-none mb-2"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsAssignComboboxOpen(!isAssignComboboxOpen)}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-white text-xs text-left font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-2xs"
+                  >
+                    {selectedEmpId ? (
+                      (() => {
+                        const emp = INITIAL_EMPLOYEES.find((e) => e.id === selectedEmpId);
+                        return emp ? (
+                          <span className="font-extrabold text-slate-900">
+                            {emp.name} <span className="text-slate-400 font-normal">({emp.id} • {emp.department})</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">-- Select Employee --</span>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-slate-400 font-normal">-- Select Employee --</span>
+                    )}
+                    <ChevronDown className="h-4 w-4 text-slate-400 ml-2 shrink-0" />
+                  </button>
+
+                  {isAssignComboboxOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 space-y-2 text-xs animate-in fade-in">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="Search employee by name, ID or department..."
+                          value={assignSearchTerm}
+                          onChange={(e) => setAssignSearchTerm(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-slate-50 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        />
+                      </div>
+
+                      <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                        {INITIAL_EMPLOYEES.filter((emp) =>
+                          assignSearchTerm
+                            ? emp.name.toLowerCase().includes(assignSearchTerm.toLowerCase()) ||
+                              emp.id.toLowerCase().includes(assignSearchTerm.toLowerCase()) ||
+                              emp.department.toLowerCase().includes(assignSearchTerm.toLowerCase())
+                            : true
+                        ).map((emp) => {
+                          const isAssigned = assigningStructure?.assignedEmployees.some((a) => a.id === emp.id);
+
+                          return (
+                            <button
+                              key={emp.id}
+                              type="button"
+                              disabled={isAssigned}
+                              onClick={() => {
+                                setSelectedEmpId(emp.id);
+                                setIsAssignComboboxOpen(false);
+                                setAssignSearchTerm("");
+                              }}
+                              className={cn(
+                                "w-full text-left p-2 rounded-xl flex items-center justify-between transition text-xs",
+                                isAssigned
+                                  ? "bg-slate-100/70 text-slate-400 opacity-60 cursor-not-allowed"
+                                  : selectedEmpId === emp.id
+                                  ? "bg-emerald-50 text-emerald-950 font-bold border border-emerald-300"
+                                  : "hover:bg-slate-50 text-slate-800"
+                              )}
+                            >
+                              <div>
+                                <p className="font-semibold">{emp.name}</p>
+                                <p className="text-[10px] text-slate-400 font-mono">{emp.id} • {emp.department}</p>
+                              </div>
+                              {isAssigned && (
+                                <span className="text-[10px] font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
+                                  Already Assigned
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <select
-                  required
-                  value={selectedEmpId}
-                  onChange={(e) => setSelectedEmpId(e.target.value)}
-                  className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-600"
-                >
-                  <option value="" disabled>
-                    -- Select Employee --
-                  </option>
-                  {INITIAL_EMPLOYEES.filter((emp) =>
-                    assignSearchTerm
-                      ? emp.name.toLowerCase().includes(assignSearchTerm.toLowerCase()) ||
-                        emp.id.toLowerCase().includes(assignSearchTerm.toLowerCase()) ||
-                        emp.department.toLowerCase().includes(assignSearchTerm.toLowerCase())
-                      : true
-                  ).map((emp) => {
-                    const isAssigned = assigningStructure?.assignedEmployees.some((a) => a.id === emp.id);
-                    return (
-                      <option
-                        key={emp.id}
-                        value={emp.id}
-                        disabled={isAssigned}
-                        className={isAssigned ? "text-slate-400 bg-slate-100 italic" : "text-slate-900"}
-                      >
-                        {emp.name} ({emp.id}) - {emp.department} {isAssigned ? "✓ (Already Assigned)" : ""}
-                      </option>
-                    );
-                  })}
-                </select>
               </div>
             )}
 
@@ -1216,6 +1441,7 @@ export function SalaryStructureView() {
                   onChange={(e) => setSelectedAssignDept(e.target.value)}
                   className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
                 >
+                  <option value="" disabled>-- Select Department --</option>
                   <option value="Front Office">Front Office (All Employees)</option>
                   <option value="Housekeeping">Housekeeping (All Employees)</option>
                   <option value="Food & Beverage">Food &amp; Beverage (All Employees)</option>
@@ -1326,30 +1552,55 @@ export function SalaryStructureView() {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          SIDE DRAWER: STRUCTURE DETAILS & ASSIGNED EMPLOYEES
+          SIDE DRAWER: DETAILED SALARY STRUCTURE PREVIEW & AUDIT
       ───────────────────────────────────────────────────────────── */}
       <Drawer
         isOpen={Boolean(viewingStructure)}
         onClose={() => setViewingStructure(null)}
-        title="Salary Structure Details"
+        title="Detailed Salary Structure Preview"
         icon={<Layers className="h-5 w-5 text-emerald-700" />}
       >
         {viewingStructure && (
           <div className="space-y-4 text-xs">
-            {/* Header Info */}
+            {/* Header Info with Version Badges */}
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="font-extrabold text-slate-900 text-sm">{viewingStructure.name}</h3>
-                <StatusBadge status={viewingStructure.status} />
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm">{viewingStructure.name}</h3>
+                  <p className="text-[11px] text-slate-400 font-mono">{viewingStructure.id}</p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-900 text-amber-400 border border-slate-700">
+                    Version {viewingStructure.version}
+                  </span>
+                  {viewingStructure.isCurrentVersion && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      Active Version
+                    </span>
+                  )}
+                  <StatusBadge status={viewingStructure.status} />
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-slate-600 text-[11px]">
-                <span className="flex items-center gap-1 font-semibold">
-                  <Building2 className="h-3.5 w-3.5 text-slate-400" /> {viewingStructure.department}
-                </span>
-                <span className="flex items-center gap-1 font-semibold">
-                  <Briefcase className="h-3.5 w-3.5 text-slate-400" /> {viewingStructure.employmentType}
-                </span>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200 text-slate-600 text-[11px]">
+                <div>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Structure Type</span>
+                  <span className="font-extrabold text-slate-800">{viewingStructure.structureType}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Department &amp; Type</span>
+                  <span className="font-semibold text-slate-800">{viewingStructure.department} • {viewingStructure.employmentType}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Effective From</span>
+                  <span className="font-semibold text-slate-800">{viewingStructure.effectiveFrom}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Effective To</span>
+                  <span className="font-semibold text-slate-800">{viewingStructure.effectiveTo || "Present / Active"}</span>
+                </div>
               </div>
+
               {viewingStructure.description && (
                 <p className="text-slate-500 italic text-[11px] border-t border-slate-200 pt-2">
                   "{viewingStructure.description}"
@@ -1357,25 +1608,9 @@ export function SalaryStructureView() {
               )}
             </div>
 
-            {/* Financial Summary */}
-            <div className="p-3.5 rounded-xl border border-slate-200 bg-white grid grid-cols-3 gap-2 text-center">
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold block">Gross Salary</span>
-                <span className="font-black text-slate-900 text-sm">₹{viewingStructure.grossSalary.toLocaleString("en-IN")}</span>
-              </div>
-              <div className="border-x border-slate-200">
-                <span className="text-[10px] text-slate-400 font-bold block">Deductions</span>
-                <span className="font-black text-rose-700 text-sm">₹{viewingStructure.totalDeductions.toLocaleString("en-IN")}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold block">Net Salary</span>
-                <span className="font-black text-emerald-700 text-sm">₹{viewingStructure.netSalary.toLocaleString("en-IN")}</span>
-              </div>
-            </div>
-
-            {/* Earnings Breakup */}
+            {/* Complete Financial Component Breakdown */}
             <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-2">
-              <span className="font-bold text-emerald-950 block uppercase text-[11px]">Earnings Breakdown</span>
+              <span className="font-extrabold text-emerald-950 block uppercase text-[11px]">1. Earnings Breakdown</span>
               <div className="space-y-1.5">
                 {viewingStructure.earnings.map((e, idx) => (
                   <div key={idx} className="flex justify-between items-center bg-white p-2 rounded-lg border border-emerald-100">
@@ -1383,12 +1618,22 @@ export function SalaryStructureView() {
                     <span className="font-black text-emerald-800">₹{e.computedAmount.toLocaleString("en-IN")}</span>
                   </div>
                 ))}
+                {viewingStructure.incentives > 0 && (
+                  <div className="flex justify-between items-center bg-emerald-100/60 p-2 rounded-lg border border-emerald-200">
+                    <span className="font-extrabold text-emerald-950">Performance Incentives:</span>
+                    <span className="font-black text-emerald-900">+₹{viewingStructure.incentives.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center bg-amber-50 p-2 rounded-lg border border-amber-200">
+                  <span className="font-bold text-amber-950">Overtime Eligibility:</span>
+                  <span className="font-black text-amber-900">{viewingStructure.overtimeEligible ? "Eligible (1.0x Rate)" : "Exempt / Ineligible"}</span>
+                </div>
               </div>
             </div>
 
-            {/* Deductions Breakup */}
+            {/* Deductions Breakdown */}
             <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/40 space-y-2">
-              <span className="font-bold text-rose-950 block uppercase text-[11px]">Deductions Breakdown</span>
+              <span className="font-extrabold text-rose-950 block uppercase text-[11px]">2. Deductions Breakdown</span>
               <div className="space-y-1.5">
                 {viewingStructure.deductions.map((d, idx) => (
                   <div key={idx} className="flex justify-between items-center bg-white p-2 rounded-lg border border-rose-100">
@@ -1397,6 +1642,30 @@ export function SalaryStructureView() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Financial Summary Card */}
+            <div className="p-4 rounded-2xl bg-slate-900 text-white grid grid-cols-3 gap-2 text-center shadow-lg">
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold block uppercase">Total Gross</span>
+                <span className="font-black text-white text-base">₹{viewingStructure.grossSalary.toLocaleString("en-IN")}</span>
+              </div>
+              <div className="border-x border-slate-700">
+                <span className="text-[10px] text-slate-400 font-bold block uppercase">Deductions</span>
+                <span className="font-black text-rose-400 text-base">-₹{viewingStructure.totalDeductions.toLocaleString("en-IN")}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold block uppercase">Net Salary</span>
+                <span className="font-black text-amber-400 text-base">₹{viewingStructure.netSalary.toLocaleString("en-IN")}</span>
+              </div>
+            </div>
+
+            {/* Audit Information */}
+            <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 space-y-1.5">
+              <span className="font-extrabold text-slate-900 block uppercase text-[11px]">Audit Information</span>
+              <p className="flex justify-between text-slate-600"><span>Created By:</span> <strong>{viewingStructure.createdBy}</strong></p>
+              <p className="flex justify-between text-slate-600"><span>Created Date:</span> <strong>{viewingStructure.createdDate}</strong></p>
+              <p className="flex justify-between text-slate-600"><span>Last Modified Date:</span> <strong>{viewingStructure.lastUpdated}</strong></p>
             </div>
 
             {/* Assigned Employees List */}
@@ -1433,6 +1702,36 @@ export function SalaryStructureView() {
               ) : (
                 <p className="text-slate-400 italic text-center py-3">No employees assigned to this template yet.</p>
               )}
+            </div>
+
+            {/* Duplication Actions */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleDuplicateAsNewVersion(viewingStructure);
+                  setViewingStructure(null);
+                }}
+                className="w-full text-xs font-bold text-purple-800 border-purple-300 hover:bg-purple-50"
+              >
+                <Layers className="h-3.5 w-3.5 mr-1" />
+                Duplicate as New Version
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleDuplicateAsNewStructure(viewingStructure);
+                  setViewingStructure(null);
+                }}
+                className="w-full text-xs font-bold text-blue-800 border-blue-300 hover:bg-blue-50"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Duplicate as New Template
+              </Button>
             </div>
           </div>
         )}
