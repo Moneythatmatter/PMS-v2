@@ -660,6 +660,5 @@ export const setRole = (role: string, dispatchers: HousekeepingDispatchers) => {
             ? "Suresh Gupta"
             : "Admin User";
   dispatchers.setCurrentUsername(name);
-  localStorage.setItem("hk_role", role);
   logAudit("Room Status", "Role Switched", `Switched active user profile to ${role} (${name}).`, undefined, name, dispatchers.setHistory);
 };

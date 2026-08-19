@@ -161,14 +161,25 @@ export interface HKLaundryJob {
 
 export interface HKDamageReport {
   id: string;
+  reportNumber?: string;
   room: string;
-  damageType: "Electrical" | "Plumbing" | "AC" | "Furniture" | "Wall" | "Linen" | "Other";
+  roomId?: string;
+  bookingId?: string;
+  guestId?: string;
+  guestName?: string;
+  assetId?: string;
+  damageType: string;
+  severity: string;
+  responsibility: string;
   description: string;
   photo?: string;
   reportedBy: string;
   reportedAt: string;
   estimatedCost: number;
-  status: "Reported" | "Approved" | "Repaired" | "Cancelled";
+  actualCost?: number;
+  status: string;
+  resolvedAt?: string;
+  notes?: string;
 }
 
 export interface HKRequisition {

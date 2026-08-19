@@ -90,3 +90,30 @@ export function formatTaskTypeLabel(type?: string): string {
     .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
     .join(" ");
 }
+
+export function formatTaskStatusLabel(status?: string): string {
+  if (!status) return "Pending";
+  return status
+    .split("_")
+    .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+export function taskStatusTone(
+  status: string,
+): "slate" | "amber" | "blue" | "emerald" | "red" {
+  switch (status) {
+    case "IN_PROGRESS":
+      return "amber";
+    case "COMPLETED":
+      return "blue";
+    case "APPROVED":
+      return "emerald";
+    case "CANCELLED":
+      return "red";
+    case "ASSIGNED":
+    case "PENDING":
+    default:
+      return "slate";
+  }
+}

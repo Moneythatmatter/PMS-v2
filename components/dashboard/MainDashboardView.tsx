@@ -25,8 +25,9 @@ import { OverallRatings } from "@/components/dashboard/OverallRatings";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { BookingList } from "@/components/dashboard/BookingList";
 import { WakeUpCallsAlert } from "@/components/frontoffice/WakeUpCallsAlert";
-import { initialHKRooms } from "@/app/data/housekeepingData";
 import type { HKRoom } from "@/components/housekeeping/HousekeepingTypes";
+import { normalizeHkRoom } from "@/components/housekeeping/roomUtils";
+import { hkRoomService } from "@/services/housekeeping";
 import { wakeUpCallService } from "@/services/front-office";
 import type { WakeUpCall } from "@/app/data/frontoffice/modules";
 
@@ -35,18 +36,20 @@ export function MainDashboardView() {
   const [wakeUpCalls, setWakeUpCalls] = useState<WakeUpCall[]>([]);
 
   useEffect(() => {
-    const loadRooms = () => {
-      const stored = localStorage.getItem("hk_rooms");
-      if (stored) {
-        setRooms(JSON.parse(stored));
-      } else {
-        localStorage.setItem("hk_rooms", JSON.stringify(initialHKRooms));
-        setRooms(initialHKRooms);
+    let cancelled = false;
+    (async () => {
+      try {
+        const apiRooms = await hkRoomService.list();
+        if (!cancelled) {
+          setRooms(apiRooms.map((r) => normalizeHkRoom(r)));
+        }
+      } catch {
+        if (!cancelled) setRooms([]);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    loadRooms();
-    window.addEventListener("storage", loadRooms);
-    return () => window.removeEventListener("storage", loadRooms);
   }, []);
 
   useEffect(() => {

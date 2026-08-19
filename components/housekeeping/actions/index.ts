@@ -36,6 +36,5 @@ export * from "./lostfound/claimItem";
 
 // Common Actions
 export * from "./common/audit";
-export * from "./common/storage";
 export * from "./common/history";
 export * from "./common/reset";

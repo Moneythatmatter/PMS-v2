@@ -33,11 +33,6 @@ import {
   createInitialNightAuditState,
   fetchLiveNightAuditItems,
   formatBusinessDate,
-  loadDayClosingState,
-  loadNightAuditState,
-  resetClosingDemo,
-  saveDayClosingState,
-  saveNightAuditState,
   type DayClosingSessionState,
   type NightAuditItem,
   type NightAuditSessionState,
@@ -68,7 +63,6 @@ function statusPill(status: NightAuditItem["status"]) {
 }
 
 export function NightAuditView() {
-  const [hydrated, setHydrated] = useState(false);
   const [dayClose, setDayClose] = useState<DayClosingSessionState | null>(null);
   const [audit, setAudit] = useState<NightAuditSessionState>(createInitialNightAuditState);
   const [search, setSearch] = useState("");
@@ -83,38 +77,18 @@ export function NightAuditView() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const storedAudit = loadNightAuditState();
-      const day = loadDayClosingState();
       try {
         const items = await fetchLiveNightAuditItems();
         if (cancelled) return;
-        setDayClose(day);
-        setAudit({
-          ...storedAudit,
-          // Prefer live items unless a completed audit session already has items
-          items:
-            storedAudit.completed && storedAudit.items.length > 0
-              ? storedAudit.items
-              : items,
-        });
+        setAudit((prev) => ({ ...prev, items }));
       } catch {
-        if (!cancelled) {
-          setDayClose(day);
-          setAudit(storedAudit);
-        }
-      } finally {
-        if (!cancelled) setHydrated(true);
+        /* keep initial in-memory state */
       }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    saveNightAuditState(audit);
-  }, [audit, hydrated]);
 
   const unlocked = !!dayClose?.completed;
   const auditDate = dayClose?.report?.previousBusinessDate ?? dayClose?.summary.businessDate;
@@ -270,12 +244,7 @@ export function NightAuditView() {
       auditLog: ["Night audit completed", ...prev.auditLog],
     }));
 
-    const closing = loadDayClosingState();
-    saveDayClosingState({
-      ...closing,
-      nightAuditCompleted: true,
-    });
-    setDayClose({ ...closing, nightAuditCompleted: true });
+    setDayClose((prev) => (prev ? { ...prev, nightAuditCompleted: true } : prev));
 
     setRunning(false);
     setStepIndex(-1);
@@ -311,8 +280,7 @@ export function NightAuditView() {
   };
 
   const resetDemo = () => {
-    resetClosingDemo();
-    setDayClose(loadDayClosingState());
+    setDayClose(null);
     setAudit(createInitialNightAuditState());
     closeResolveDrawer();
     setToast("Closing & night-audit demo reset. Start again from Day Closing.");

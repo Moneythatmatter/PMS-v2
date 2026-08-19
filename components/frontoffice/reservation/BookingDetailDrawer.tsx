@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Drawer, formatINR } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
+import { checkInHref, checkOutHref } from "@/lib/check-in-navigation";
 import { formatBookingGuestLine } from "@/lib/reservation-display";
 import { ReservationStatusBadge } from "./ReservationStatusBadge";
 
@@ -127,14 +128,14 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
             Print
           </Button>
           {detail.status === "Checked In" || detail.status === "In-House" ? (
-            <Link href="/frontoffice/check-out">
+            <Link href={checkOutHref(detail)}>
               <Button className="gap-1.5 bg-emerald-700 hover:bg-emerald-800">
                 <LogOut className="h-3.5 w-3.5" />
                 Check Out
               </Button>
             </Link>
           ) : detail.status !== "Cancelled" && detail.status !== "Checked Out" ? (
-            <Link href="/frontoffice/check-in">
+            <Link href={checkInHref(detail)}>
               <Button className="gap-1.5 bg-emerald-700 hover:bg-emerald-800">
                 <LogIn className="h-3.5 w-3.5" />
                 Check In

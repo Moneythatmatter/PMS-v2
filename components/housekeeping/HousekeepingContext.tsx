@@ -19,24 +19,19 @@ import type {
 } from "./HousekeepingTypes";
 
 import {
-  initialHKRooms,
-  initialHKPublicAreas,
-  initialHKChecklistTemplates,
-  initialHKStaff,
-  initialHKShifts,
-  initialHKInventory,
-  initialHKLaundry,
-  initialHKDamageReports,
-  initialHKRequisitions,
-  initialHKHistory,
-  initialHKLuggageJobs
-} from "@/app/data/housekeepingData"
-
-
+  normalizeHkRoom,
+} from "./roomUtils";
 import * as actions from "./HousekeepingActions";
-import { normalizeHkRoom } from "./roomUtils";
 import { normalizeGuestRequest } from "./guestRequestUtils";
 import { normalizeMaintenanceRequest } from "./maintenanceRequestUtils";
+import {
+  normalizeDamageReport,
+  type DamageReportCreateInput,
+} from "./damageReportUtils";
+import {
+  normalizeLostFoundItem,
+  type LostFoundCreateInput,
+} from "./lostFoundItemUtils";
 import {
   hkRoomService,
   hkPublicAreaService,
@@ -54,10 +49,6 @@ import {
   hkShiftService,
   hkDashboardService,
 } from "@/services/housekeeping";
-
-const initialHKRequests: HousekeepingRequest[] = [];
-const initialMaintenanceRequests: MaintenanceRequest[] = [];
-const initialLostFoundItems: LostFoundItem[] = [];
 
 interface HousekeepingContextType {
   rooms: HKRoom[];
@@ -90,7 +81,7 @@ interface HousekeepingContextType {
   completeCleaning: (roomNo: string, progressItems: string[], photos?: string[]) => void;
   inspectRoom: (roomNo: string, passed: boolean, signature: string, remarks: string, qualityScore: number) => void;
   changeRoomStatus: (roomNo: string, status: HKRoom["status"]) => void;
-  addLostFoundItem: (item: Omit<LostFoundItem, "id" | "foundDate" | "status">) => void;
+  addLostFoundItem: (item: LostFoundCreateInput) => void;
   returnLostFound: (id: string, claimBy?: string) => void;
   addHKRequest: (req: {
     room: string;
@@ -130,8 +121,8 @@ interface HousekeepingContextType {
   updateLaundryStatus: (id: string, newStatus: HKLaundryJob["status"]) => void;
   addLuggageJob: (job: Omit<HKLuggageJob, "id" | "status" | "pickupTime">) => void;
   deliverLuggage: (id: string) => void;
-  addDamageReport: (report: Omit<HKDamageReport, "id" | "reportedAt" | "status" | "reportedBy">) => void;
-  updateDamageStatus: (id: string, status: HKDamageReport["status"]) => void;
+  addDamageReport: (report: DamageReportCreateInput) => void;
+  updateDamageStatus: (id: string, status: string, actualCost?: number) => void;
   addRequisition: (req: Omit<HKRequisition, "id" | "requestNo" | "status" | "requestedAt" | "requestedBy">) => void;
   approveRequisition: (id: string) => void;
   issueRequisition: (id: string) => void;
@@ -173,53 +164,35 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
   const [currentUserRole, setCurrentUserRole] = useState("Executive Housekeeper");
   const [currentUsername, setCurrentUsername] = useState("Admin User");
 
-  const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [apiConnected, setApiConnected] = useState(false);
 
-  const hydrateFromLocal = () => {
-    const getOrInit = <T,>(key: string, initial: T): T => {
-      const val = localStorage.getItem(key);
-      if (val) return JSON.parse(val);
-      localStorage.setItem(key, JSON.stringify(initial));
-      return initial;
-    };
+  const roleToUsername = (role: string) =>
+    role === "Housekeeper"
+      ? "Meena Kumari"
+      : role === "Supervisor"
+        ? "Ramesh Kumar"
+        : role === "Laundry Staff"
+          ? "Somnath Sen"
+          : role === "Engineering Staff"
+            ? "Suresh Gupta"
+            : "Admin User";
 
-    setRooms(getOrInit("hk_rooms", initialHKRooms).map(normalizeHkRoom));
-
-    const loadedPublicAreas = getOrInit("hk_publicAreas", initialHKPublicAreas);
-    const verifiedPublicAreas = loadedPublicAreas.map((area: any) => {
-      const defaultArea =
-        initialHKPublicAreas.find((a) => a.id === area.id) ||
-        initialHKPublicAreas[0];
-      return {
-        ...defaultArea,
-        ...area,
-        checklist: area.checklist || defaultArea.checklist || [],
-        history: area.history || defaultArea.history || [],
-      };
-    });
-    setPublicAreas(verifiedPublicAreas);
-
-    setInventory(getOrInit("hk_inventory", initialHKInventory));
-    setLaundryJobs(getOrInit("hk_laundry", initialHKLaundry));
-    setDamageReports(getOrInit("hk_damages", initialHKDamageReports));
-    setRequisitions(getOrInit("hk_requisitions", initialHKRequisitions));
-    setHistory(getOrInit("hk_history", initialHKHistory));
-    setLuggageJobs(getOrInit("hk_luggage", initialHKLuggageJobs));
-    setRequests(getOrInit("hk_requests", initialHKRequests));
-    const loadedMaint = getOrInit("hk_maintenance", initialMaintenanceRequests);
-    const uniqueMaint = Array.isArray(loadedMaint)
-      ? loadedMaint.filter(
-          (item: any, index: number, self: any[]) =>
-            index === self.findIndex((t: any) => t.id === item.id),
-        )
-      : loadedMaint;
-    setMaintenance(uniqueMaint);
-    setLostFound(getOrInit("hk_lostfound", initialLostFoundItems));
-    setStaff(getOrInit("hk_staff", initialHKStaff));
-    setChecklists(getOrInit("hk_checklists", initialHKChecklistTemplates));
-    setShifts(getOrInit("hk_shifts", initialHKShifts));
+  const applyEmptyState = () => {
+    setRooms([]);
+    setPublicAreas([]);
+    setInventory([]);
+    setLaundryJobs([]);
+    setDamageReports([]);
+    setRequisitions([]);
+    setHistory([]);
+    setLuggageJobs([]);
+    setRequests([]);
+    setMaintenance([]);
+    setLostFound([]);
+    setStaff([]);
+    setChecklists([]);
+    setShifts([]);
   };
 
   const refreshFromApi = async () => {
@@ -255,174 +228,53 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
 
       const apiRooms = value<HKRoom[]>(1, []);
       setRooms(apiRooms.map((r) => normalizeHkRoom(r)));
-      setPublicAreas(value(2, initialHKPublicAreas));
-      setInventory(value(3, initialHKInventory));
-      const apiLaundry = value<HKLaundryJob[]>(4, []);
-      if (Array.isArray(apiLaundry) && apiLaundry.length > 0) {
-        setLaundryJobs(apiLaundry);
-      } else {
-        const stored = localStorage.getItem("hk_laundry");
-        setLaundryJobs(stored ? JSON.parse(stored) : initialHKLaundry);
-      }
-      setDamageReports(value(5, initialHKDamageReports));
-      setRequisitions(value(6, initialHKRequisitions));
-      setHistory(value(7, initialHKHistory));
-      const apiLuggage = value<HKLuggageJob[]>(8, []);
-      if (Array.isArray(apiLuggage) && apiLuggage.length > 0) {
-        setLuggageJobs(apiLuggage);
-      } else {
-        const stored = localStorage.getItem("hk_luggage");
-        setLuggageJobs(stored ? JSON.parse(stored) : initialHKLuggageJobs);
-      }
-      const apiRequests = value<
-        import("./guestRequestUtils").GuestRequestDto[]
-      >(9, []);
-      if (Array.isArray(apiRequests) && apiRequests.length > 0) {
-        setRequests(apiRequests.map(normalizeGuestRequest));
-      } else {
-        const stored = localStorage.getItem("hk_requests");
-        setRequests(stored ? JSON.parse(stored) : initialHKRequests);
-      }
-      const apiMaintenance = value<
-        import("./maintenanceRequestUtils").MaintenanceRequestDto[]
-      >(10, []);
-      if (Array.isArray(apiMaintenance) && apiMaintenance.length > 0) {
-        setMaintenance(apiMaintenance.map(normalizeMaintenanceRequest));
-      } else {
-        const stored = localStorage.getItem("hk_maintenance");
-        setMaintenance(stored ? JSON.parse(stored) : initialMaintenanceRequests);
-      }
-      const apiLostFound = value<LostFoundItem[]>(11, []);
-      if (Array.isArray(apiLostFound) && apiLostFound.length > 0) {
-        setLostFound(apiLostFound);
-      } else {
-        const stored = localStorage.getItem("hk_lostfound");
-        setLostFound(stored ? JSON.parse(stored) : initialLostFoundItems);
-      }
-      setStaff(value(12, initialHKStaff));
-      setChecklists(value(13, initialHKChecklistTemplates));
-      setShifts(value(14, initialHKShifts));
+      setPublicAreas(value(2, []));
+      setInventory(value(3, []));
+      setLaundryJobs(value<HKLaundryJob[]>(4, []));
+      setDamageReports(
+        value<import("./damageReportUtils").DamageReportDto[]>(5, []).map(
+          normalizeDamageReport,
+        ),
+      );
+      setRequisitions(value(6, []));
+      setHistory(value(7, []));
+      setLuggageJobs(value<HKLuggageJob[]>(8, []));
+      setRequests(
+        value<import("./guestRequestUtils").GuestRequestDto[]>(9, []).map(
+          normalizeGuestRequest,
+        ),
+      );
+      setMaintenance(
+        value<import("./maintenanceRequestUtils").MaintenanceRequestDto[]>(
+          10,
+          [],
+        ).map(normalizeMaintenanceRequest),
+      );
+      setLostFound(
+        value<import("./lostFoundItemUtils").LostFoundItemDto[]>(11, []).map(
+          normalizeLostFoundItem,
+        ),
+      );
+      setStaff(value(12, []));
+      setChecklists(value(13, []));
+      setShifts(value(14, []));
       setApiConnected(true);
     } catch (e) {
-      console.warn("[HK] API unavailable — falling back to local data", e);
+      console.warn("[HK] API unavailable", e);
       setApiConnected(false);
-      hydrateFromLocal();
+      applyEmptyState();
     } finally {
       setLoading(false);
-      setHydrated(true);
     }
   };
 
-  // Bootstrap from backend (FO/F&B style); localStorage is fallback only
   useEffect(() => {
-    try {
-      const role = localStorage.getItem("hk_role") || "Executive Housekeeper";
-      setCurrentUserRole(role);
-      setCurrentUsername(
-        role === "Housekeeper"
-          ? "Meena Kumari"
-          : role === "Supervisor"
-            ? "Ramesh Kumar"
-            : role === "Laundry Staff"
-              ? "Somnath Sen"
-              : role === "Engineering Staff"
-                ? "Suresh Gupta"
-                : "Admin User",
-      );
-    } catch {
-      /* ignore */
-    }
+    const role = "Executive Housekeeper";
+    setCurrentUserRole(role);
+    setCurrentUsername(roleToUsername(role));
     void refreshFromApi();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Window storage sync listener to keep tabs synchronized in real-time
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (!e.key) return;
-      try {
-        if (e.key === "hk_rooms" && e.newValue) setRooms(JSON.parse(e.newValue));
-        if (e.key === "hk_publicAreas" && e.newValue) setPublicAreas(JSON.parse(e.newValue));
-        if (e.key === "hk_inventory" && e.newValue) setInventory(JSON.parse(e.newValue));
-        if (e.key === "hk_laundry" && e.newValue) setLaundryJobs(JSON.parse(e.newValue));
-        if (e.key === "hk_damages" && e.newValue) setDamageReports(JSON.parse(e.newValue));
-        if (e.key === "hk_requisitions" && e.newValue) setRequisitions(JSON.parse(e.newValue));
-        if (e.key === "hk_history" && e.newValue) setHistory(JSON.parse(e.newValue));
-        if (e.key === "hk_luggage" && e.newValue) setLuggageJobs(JSON.parse(e.newValue));
-        if (e.key === "hk_requests" && e.newValue) setRequests(JSON.parse(e.newValue));
-        if (e.key === "hk_maintenance" && e.newValue) setMaintenance(JSON.parse(e.newValue));
-        if (e.key === "hk_lostfound" && e.newValue) setLostFound(JSON.parse(e.newValue));
-        if (e.key === "hk_staff" && e.newValue) setStaff(JSON.parse(e.newValue));
-        if (e.key === "hk_checklists" && e.newValue) setChecklists(JSON.parse(e.newValue));
-        if (e.key === "hk_shifts" && e.newValue) setShifts(JSON.parse(e.newValue));
-      } catch (err) {
-        console.error("Storage change sync error", err);
-      }
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
-
-  // Save to localStorage when state changes
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_rooms", JSON.stringify(rooms));
-  }, [rooms, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_publicAreas", JSON.stringify(publicAreas));
-  }, [publicAreas, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_inventory", JSON.stringify(inventory));
-  }, [inventory, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_laundry", JSON.stringify(laundryJobs));
-  }, [laundryJobs, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_damages", JSON.stringify(damageReports));
-  }, [damageReports, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_requisitions", JSON.stringify(requisitions));
-  }, [requisitions, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_history", JSON.stringify(history));
-  }, [history, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_luggage", JSON.stringify(luggageJobs));
-  }, [luggageJobs, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_requests", JSON.stringify(requests));
-  }, [requests, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_maintenance", JSON.stringify(maintenance));
-  }, [maintenance, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_lostfound", JSON.stringify(lostFound));
-  }, [lostFound, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("hk_staff", JSON.stringify(staff));
-  }, [staff, hydrated]);
 
   // Group dispatchers for the moved actions
   const dispatchers: actions.HousekeepingDispatchers = {
@@ -472,8 +324,8 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
     actions.changeRoomStatus(roomNo, status, dispatchers);
   };
 
-  const addLostFoundItem = (item: Omit<LostFoundItem, "id" | "foundDate" | "status">) => {
-    actions.addLostFoundItem(item, lostFound.length, dispatchers);
+  const addLostFoundItem = (item: LostFoundCreateInput) => {
+    actions.addLostFoundItem(item, dispatchers);
   };
 
   const returnLostFound = (id: string, claimBy?: string) => {
@@ -538,7 +390,7 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
   };
 
   const verifyMaintenanceRequest = (id: string) => {
-    actions.verifyMaintenanceRequest(id, maintenance, dispatchers);
+    actions.verifyMaintenanceRequest(id, maintenance, rooms, dispatchers);
   };
 
   const addLaundryJob = (job: Omit<HKLaundryJob, "id" | "status" | "timeline">) => {
@@ -557,12 +409,16 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
     actions.deliverLuggage(id, luggageJobs, dispatchers);
   };
 
-  const addDamageReport = (report: Omit<HKDamageReport, "id" | "reportedAt" | "status" | "reportedBy">) => {
-    actions.addDamageReport(report, damageReports.length, dispatchers);
+  const addDamageReport = (report: DamageReportCreateInput) => {
+    actions.addDamageReport(report, dispatchers);
   };
 
-  const updateDamageStatus = (id: string, status: HKDamageReport["status"]) => {
-    actions.updateDamageStatus(id, status, damageReports, dispatchers);
+  const updateDamageStatus = (
+    id: string,
+    status: string,
+    actualCost?: number,
+  ) => {
+    actions.updateDamageStatus(id, status, damageReports, dispatchers, actualCost);
   };
 
   const addRequisition = (req: Omit<HKRequisition, "id" | "requestNo" | "status" | "requestedAt" | "requestedBy">) => {

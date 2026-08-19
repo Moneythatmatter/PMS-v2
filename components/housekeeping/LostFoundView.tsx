@@ -10,8 +10,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Truck,
-  History,
-  FileText,
   Lock,
   MoreHorizontal,
 } from "lucide-react";
@@ -21,7 +19,7 @@ import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 
-// Exact sample records (6 Found Items, 3 Lost Complaints, 2 Couriers, 6 Audit Logs)
+// Sample records for demo tabs (found / lost / courier)
 const SAMPLE_FOUND_ITEMS = [
   { id: "LF-1001", name: "iPhone 15 Pro Max", category: "Electronics", tier: "High Value", location: "Room 305", room: "305", foundBy: "Meena Kumari", storage: "Locker A · Shelf 1", expiry: "18 Oct 26", status: "Stored", brand: "Apple", serial: "F2LX99810", date: "18 Jul 26", guest: "Sarah Chen" },
   { id: "LF-1002", name: "Gold Engagement Ring", category: "Jewelry", tier: "High Value", location: "Room 412", room: "412", foundBy: "Ravi Shankar", storage: "Safe Locker 01", expiry: "18 Oct 26", status: "Under Verification", brand: "Tiffany & Co.", serial: "TIF-9921", date: "18 Jul 26", guest: "Michael Vance" },
@@ -42,24 +40,15 @@ const SAMPLE_COURIER_SHIPMENTS = [
   { id: "CR-902", vendor: "DHL Express", tracking: "DHL-99102834", receiver: "Alexander Wright", address: "10 Downing St, London", dispatchDate: "16 Jul 26", expectedDelivery: "20 Jul 26", charges: "$85.00", paymentMode: "Billed to Folio", status: "Dispatched" },
 ];
 
-const SAMPLE_AUDIT_LOGS = [
-  { time: "18 Jul 26, 11:15 AM", user: "Ravi Shankar", action: "Item Registered", item: "LF-1002", remarks: "Assigned to Safe Locker 01" },
-  { time: "18 Jul 26, 10:30 AM", user: "Meena Kumari", action: "Item Registered", item: "LF-1001", remarks: "Assigned to Locker A · Shelf 1" },
-  { time: "17 Jul 26, 04:20 PM", user: "Anita Roy", action: "Owner Verified", item: "LF-1003", remarks: "Guest notified via Phone" },
-  { time: "17 Jul 26, 02:00 PM", user: "Rajesh Kumar", action: "Courier Dispatched", item: "LF-1004", remarks: "Tracking TRK-88492019" },
-  { time: "16 Jul 26, 05:10 PM", user: "Sanjay Patel", action: "Item Returned", item: "LF-1005", remarks: "Handover signed by guest" },
-  { time: "15 Jul 26, 02:10 PM", user: "Pooja Verma", action: "Item Registered", item: "LF-1005", remarks: "Assigned to Locker B · Shelf 2" },
-];
-
 export function LostFoundView() {
   const [isMounted, setIsMounted] = useState(false);
-  const { lostFound, addLostFoundItem, returnLostFound } = useHousekeeping();
+  const { lostFound, addLostFoundItem, returnLostFound, apiConnected } = useHousekeeping();
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  const [activeTab, setActiveTab] = useState<"found" | "lost" | "courier" | "retention" | "reports" | "audit">("found");
+  const [activeTab, setActiveTab] = useState<"found" | "lost" | "courier" | "retention">("found");
 
   // Filter States
   const [search, setSearch] = useState("");
@@ -115,22 +104,25 @@ export function LostFoundView() {
     const contextMapped = lostFound.map((lf) => ({
       id: lf.id,
       name: lf.item,
-      category: "General",
+      category: lf.category ?? "General",
       tier: "Standard",
-      location: lf.room || "Room 102",
-      room: lf.room || "102",
+      location: lf.foundLocation ?? lf.room ?? "—",
+      room: lf.room || "—",
       foundBy: lf.foundBy || "Housekeeping",
-      storage: "Locker A · Shelf 1",
-      expiry: "30 Sep 26",
-      status: lf.status === "Returned" ? "Returned" : "Stored",
-      brand: "Generic",
+      storage: lf.storedLocation ?? "—",
+      expiry: "—",
+      status: lf.status,
+      brand: "—",
       serial: "—",
-      date: lf.foundDate || "18 Jul 26",
+      date: lf.foundDate || "—",
       guest: lf.guest || "Unknown",
     }));
 
+    if (apiConnected || contextMapped.length > 0) {
+      return contextMapped;
+    }
     return [...contextMapped, ...SAMPLE_FOUND_ITEMS];
-  }, [lostFound]);
+  }, [lostFound, apiConnected]);
 
   // Filtered Found Items
   const filteredFoundItems = useMemo(() => {
@@ -168,7 +160,10 @@ export function LostFoundView() {
       item: foundName,
       guest: "Unknown",
       foundBy: foundByStaff || "Housekeeping Staff",
-      room: foundRoom || "Lobby",
+      room: foundRoom || foundLoc || "Lobby",
+      foundLocation: foundLoc || foundRoom || "Lobby",
+      storedLocation: foundLocker,
+      category: foundCat,
       description: foundDesc,
     });
     setCreateFoundOpen(false);
@@ -301,8 +296,6 @@ export function LostFoundView() {
             { id: "lost", label: `Lost Complaints (${SAMPLE_LOST_COMPLAINTS.length})` },
             { id: "courier", label: `Courier Deliveries (${SAMPLE_COURIER_SHIPMENTS.length})` },
             { id: "retention", label: "Retention & Disposal" },
-            { id: "reports", label: "Reports" },
-            { id: "audit", label: "Operational Audit Logs" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -673,70 +666,6 @@ export function LostFoundView() {
                         Dispose
                       </Button>
                     </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: REPORTS & ANALYTICS (Report Cards Only) */}
-      {activeTab === "reports" && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {[
-              { title: "Lost & Found Summary", desc: "Overview of cataloged found items, claims, and returns.", icon: FileText },
-              { title: "Pending Claims Ledger", desc: "List of open inquiries matching active storage items.", icon: Clock },
-              { title: "Returned Items Report", desc: "Handover signatures and guest confirmation records.", icon: CheckCircle2 },
-              { title: "Courier Shipping Report", desc: "Outbound shipment tracking and delivery confirmations.", icon: Truck },
-              { title: "Retention Expiry Report", desc: "Items reaching policy limits for disposal.", icon: AlertCircle },
-            ].map((rep, i) => (
-              <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs flex flex-col justify-between space-y-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="font-extrabold text-slate-800 text-xs">{rep.title}</h4>
-                    <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-tight">{rep.desc}</p>
-                  </div>
-                  <div className="rounded-lg bg-slate-50 p-2 text-slate-600 shrink-0">
-                    <rep.icon className="h-4 w-4" />
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center pt-2 border-t border-slate-100">
-                  <span className="text-[9.5px] font-bold text-emerald-750">Ready</span>
-                  <Button variant="outline" className="h-6 px-2 text-[9.5px] font-bold !bg-slate-100 hover:!bg-slate-200 !text-slate-750 !border-slate-200 rounded-md">
-                    Export
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 6: OPERATIONAL AUDIT LOGS */}
-      {activeTab === "audit" && (
-        <div className="space-y-3">
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 bg-slate-50 z-10">
-                  <th className="px-3 py-2.5">Timestamp</th>
-                  <th className="px-3 py-2.5">User</th>
-                  <th className="px-3 py-2.5">Action</th>
-                  <th className="px-3 py-2.5">Item</th>
-                  <th className="px-3 py-2.5 text-right">Remarks</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-mono text-[10.5px] text-slate-700">
-                {SAMPLE_AUDIT_LOGS.map((log, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50">
-                    <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">{log.time}</td>
-                    <td className="px-3 py-2.5 text-slate-900 font-sans font-bold">{log.user}</td>
-                    <td className="px-3 py-2.5 font-bold text-slate-900">{log.action}</td>
-                    <td className="px-3 py-2.5 text-emerald-805 font-bold">{log.item}</td>
-                    <td className="px-3 py-2.5 text-right text-slate-500 font-sans">{log.remarks}</td>
                   </tr>
                 ))}
               </tbody>

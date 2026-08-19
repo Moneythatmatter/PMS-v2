@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { CheckInForm } from "@/components/frontoffice/CheckInForm";
 
 export const metadata: Metadata = {
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function CheckInPage() {
-  return <CheckInForm />;
+  return (
+    <Suspense fallback={<p className="p-6 text-sm text-slate-500">Loading check-in…</p>}>
+      <CheckInForm />
+    </Suspense>
+  );
 }

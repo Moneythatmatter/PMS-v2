@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
 import { formatBookingGuestLine } from "@/lib/reservation-display";
 import { isArrivingToday } from "@/lib/reservation-dates";
+import { checkInHref, checkOutHref } from "@/lib/check-in-navigation";
 import { BookingDetailDrawer } from "./BookingDetailDrawer";
 import { ReservationStatusBadge } from "./ReservationStatusBadge";
 import { ReservationSummaryCards } from "./ReservationSummaryCards";
@@ -71,7 +72,7 @@ function getInitials(name?: string) {
 function primaryAction(booking: ReservationBooking) {
   if (booking.status === "Checked In" || booking.status === "In-House") {
     return {
-      href: "/frontoffice/check-out",
+      href: checkOutHref(booking),
       icon: LogOut,
       title: "Check out",
       className: "text-orange-700 hover:bg-orange-50",
@@ -79,7 +80,7 @@ function primaryAction(booking: ReservationBooking) {
   }
   if (booking.status === "Reserved" || booking.status === "Confirmed") {
     return {
-      href: "/frontoffice/check-in",
+      href: checkInHref(booking),
       icon: LogIn,
       title: "Check in",
       className: "text-emerald-700 hover:bg-emerald-50",

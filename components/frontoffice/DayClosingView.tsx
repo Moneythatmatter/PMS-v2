@@ -45,9 +45,6 @@ import {
   createInitialDayClosingState,
   fetchLiveDayClosingState,
   formatBusinessDate,
-  loadDayClosingState,
-  resetClosingDemo,
-  saveDayClosingState,
   type DayClosingSessionState,
 } from "@/lib/day-closing-session";
 
@@ -137,7 +134,6 @@ function buildChecklist(state: DayClosingSessionState): DayClosingChecklistItem[
 }
 
 export function DayClosingView() {
-  const [hydrated, setHydrated] = useState(false);
   const [state, setState] = useState<DayClosingSessionState>(createInitialDayClosingState);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -147,33 +143,18 @@ export function DayClosingView() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const stored = loadDayClosingState();
       try {
         const live = await fetchLiveDayClosingState();
         if (cancelled) return;
-        setState({
-          ...stored,
-          ...live,
-          // Keep session progress flags from local storage only
-          completed: stored.completed,
-          report: stored.report,
-          nightAuditCompleted: stored.nightAuditCompleted,
-        });
+        setState((prev) => ({ ...prev, ...live }));
       } catch {
-        if (!cancelled) setState(stored);
-      } finally {
-        if (!cancelled) setHydrated(true);
+        /* keep initial in-memory state */
       }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    saveDayClosingState(state);
-  }, [state, hydrated]);
 
   const checklist = useMemo(() => buildChecklist(state), [state]);
   const blockers = useMemo(
@@ -343,12 +324,6 @@ export function DayClosingView() {
       },
     }));
 
-    // Rollover business date globally across localStorage
-    localStorage.setItem("pms_business_date", next);
-
-    // Notify other components via storage event rollover trigger
-    window.dispatchEvent(new Event("storage"));
-
     setRunning(false);
     setStepIndex(-1);
     setToastMsg(
@@ -357,8 +332,6 @@ export function DayClosingView() {
   };
 
   const resetDemo = () => {
-    resetClosingDemo();
-    localStorage.removeItem("pms_business_date");
     setState(createInitialDayClosingState());
     void fetchLiveDayClosingState().then((live) => {
       setState((prev) => ({ ...prev, ...live }));

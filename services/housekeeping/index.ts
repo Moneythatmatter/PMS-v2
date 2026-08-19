@@ -124,7 +124,33 @@ export const hkChecklistService = crud<HKChecklistTemplate>("/checklists");
 export const hkStaffService = crud<HKStaff>("/staff");
 export const hkShiftService = crud<HKShift>("/shifts");
 export const hkInventoryService = crud<HKInventoryItem>("/inventory");
-export const hkDamageService = crud<HKDamageReport>("/damage-reports");
+export const hkDamageService = {
+  list: (query = "") =>
+    api.get<
+      import("@/components/housekeeping/damageReportUtils").DamageReportDto[]
+    >(hkPath(`/damage-reports${query}`)),
+  get: (id: string) =>
+    api.get<
+      import("@/components/housekeeping/damageReportUtils").DamageReportDto
+    >(hkPath(`/damage-reports/${id}`)),
+  create: (
+    body: Record<string, unknown> & { description: string },
+  ) =>
+    api.post<
+      import("@/components/housekeeping/damageReportUtils").DamageReportDto
+    >(hkPath("/damage-reports"), body),
+  update: (id: string, body: Record<string, unknown>) =>
+    api.put<
+      import("@/components/housekeeping/damageReportUtils").DamageReportDto
+    >(hkPath(`/damage-reports/${id}`), body),
+  resolve: (
+    id: string,
+    body?: { actualCost?: number; status?: string; notes?: string },
+  ) =>
+    api.post<
+      import("@/components/housekeeping/damageReportUtils").DamageReportDto
+    >(hkPath(`/damage-reports/${id}/resolve`), body ?? {}),
+};
 export const hkHistoryService = crud<HKHistoryLog>("/history");
 export const hkLuggageService = crud<HKLuggageJob>("/luggage");
 export const hkSettingsService = crud<{
@@ -227,7 +253,58 @@ export const hkMaintenanceService = {
       import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto
     >(hkPath(`/maintenance/${id}/cancel`), body ?? {}),
 };
-export const hkLostFoundService = crud("/lost-found");
+export const hkLostFoundService = {
+  list: (query = "") =>
+    api.get<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto[]
+    >(hkPath(`/lost-found${query}`)),
+  get: (id: string) =>
+    api.get<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(hkPath(`/lost-found/${id}`)),
+  create: (
+    body: Partial<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    > & { itemName: string },
+  ) =>
+    api.post<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(hkPath("/lost-found"), body),
+  update: (
+    id: string,
+    body: Partial<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >,
+  ) =>
+    api.put<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(hkPath(`/lost-found/${id}`), body),
+  return: (
+    id: string,
+    body?: { returnedTo?: string; claimBy?: string; guest?: string },
+  ) =>
+    api.post<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(hkPath(`/lost-found/${id}/return`), body ?? {}),
+  claim: (
+    id: string,
+    body?: { claimedBy?: string; claimBy?: string; guest?: string },
+  ) =>
+    api.post<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(hkPath(`/lost-found/${id}/claim`), body ?? {}),
+  dispose: (id: string, body?: { notes?: string }) =>
+    api.post<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(hkPath(`/lost-found/${id}/dispose`), body ?? {}),
+  courier: (
+    id: string,
+    body?: { returnedTo?: string; notes?: string; trackingNumber?: string },
+  ) =>
+    api.post<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(hkPath(`/lost-found/${id}/courier`), body ?? {}),
+};
 
 export const hkReportService = {
   get: (type: string) =>

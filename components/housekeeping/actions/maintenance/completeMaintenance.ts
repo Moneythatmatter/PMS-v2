@@ -118,6 +118,7 @@ export const completeMaintenanceRequest = (
 export const verifyMaintenanceRequest = (
   id: string,
   currentMaintenance: MaintenanceRequest[],
+  currentRooms: HKRoom[],
   dispatchers: HousekeepingDispatchers,
 ) => {
   const nowStr = new Date().toLocaleString("en-IN", {
@@ -167,13 +168,8 @@ export const verifyMaintenanceRequest = (
     );
   }
 
-  const storedRooms = localStorage.getItem("hk_rooms");
-  let targetHKStatus = "Clean";
-  if (storedRooms) {
-    const hkRooms: HKRoom[] = JSON.parse(storedRooms);
-    const targetRoomObj = hkRooms.find((rm) => rm.roomNo === req.room);
-    targetHKStatus = targetRoomObj?.hkStatus || "Clean";
-  }
+  const targetRoomObj = currentRooms.find((rm) => rm.roomNo === req.room);
+  const targetHKStatus = targetRoomObj?.hkStatus || "Clean";
 
   const finalRoomStatus =
     targetHKStatus === "Clean" || targetHKStatus === "Inspected"

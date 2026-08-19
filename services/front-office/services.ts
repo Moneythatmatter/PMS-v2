@@ -2,7 +2,6 @@ import { api, foPath } from "../api";
 import type {
   GuestFeedbackRecord,
   HousekeepingRequest,
-  LostFoundItem,
   LuggageRecord,
   MaintenanceRequest,
   MessageRecord,
@@ -28,7 +27,47 @@ export const taxiBookingService = crud<TaxiBooking>("/taxi-bookings");
 export const luggageService = crud<LuggageRecord>("/luggage");
 export const messageService = crud<MessageRecord>("/messages");
 export const feedbackService = crud<GuestFeedbackRecord>("/feedback");
-export const lostFoundService = crud<LostFoundItem>("/lost-found");
+export const lostFoundService = {
+  list: (query = "") =>
+    api.get<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto[]
+    >(foPath(`/lost-found${query}`)),
+  get: (id: string) =>
+    api.get<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(foPath(`/lost-found/${id}`)),
+  create: (
+    body: Partial<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    > & { itemName: string },
+  ) =>
+    api.post<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(foPath("/lost-found"), body),
+  update: (
+    id: string,
+    body: Partial<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >,
+  ) =>
+    api.put<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(foPath(`/lost-found/${id}`), body),
+  return: (
+    id: string,
+    body?: { returnedTo?: string; claimBy?: string; guest?: string },
+  ) =>
+    api.post<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(foPath(`/lost-found/${id}/return`), body ?? {}),
+  claim: (
+    id: string,
+    body?: { claimedBy?: string; claimBy?: string; guest?: string },
+  ) =>
+    api.post<
+      import("@/components/housekeeping/lostFoundItemUtils").LostFoundItemDto
+    >(foPath(`/lost-found/${id}/claim`), body ?? {}),
+};
 export const housekeepingRequestService =
   crud<HousekeepingRequest>("/housekeeping-requests");
 export const maintenanceRequestService =

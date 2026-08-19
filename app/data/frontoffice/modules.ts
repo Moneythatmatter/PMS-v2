@@ -120,8 +120,20 @@ export interface LostFoundItem {
   room: string;
   foundDate: string;
   description?: string;
-  status: "Stored" | "Returned" | "Claimed";
+  status:
+    | "Stored"
+    | "Returned"
+    | "Claimed"
+    | "Awaiting Claim"
+    | "Under Verification"
+    | "Courier Dispatched"
+    | "Disposed";
   returnedDate?: string;
+  itemNumber?: string;
+  category?: string;
+  foundLocation?: string;
+  storedLocation?: string;
+  returnMethod?: string;
 }
 
 export interface VisitorEntry {
