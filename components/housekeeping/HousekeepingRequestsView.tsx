@@ -2,7 +2,10 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
-import { Sparkles, Bell, Clock, CheckCircle2, User, Plus } from "lucide-react";
+import { roomService, type RoomDto } from "@/services/front-office/rooms";
+import { reservationService } from "@/services/front-office/reservations";
+import type { ReservationBooking } from "@/app/data/types";
+import { Sparkles, Bell, Clock, CheckCircle2, User, Plus, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
@@ -24,6 +27,8 @@ const REQUEST_ITEMS = [
   "Iron & Ironing Board",
 ];
 
+const CHECKED_IN_STATUSES = ["Checked In", "In-House"] as const;
+
 export function HousekeepingRequestsView() {
   const {
     requests,
@@ -32,6 +37,7 @@ export function HousekeepingRequestsView() {
     addHKRequest,
     assignHKRequest,
     completeHKRequest,
+    updateHKRequest,
     currentUsername,
   } = useHousekeeping();
 
@@ -41,14 +47,110 @@ export function HousekeepingRequestsView() {
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailEditMode, setDetailEditMode] = useState(false);
   const [selectedReqId, setSelectedReqId] = useState<string | null>(null);
+  const [detailReqId, setDetailReqId] = useState<string | null>(null);
+  const [editIssue, setEditIssue] = useState("");
+  const [editPriority, setEditPriority] = useState<"Low" | "Medium" | "High">("Medium");
+  const [editRemarks, setEditRemarks] = useState("");
 
   // Form Fields
-  const [roomNo, setRoomNo] = useState("102");
-  const [guestName, setGuestName] = useState("James Wilson");
+  const [checkedInRooms, setCheckedInRooms] = useState<RoomDto[]>([]);
+  const [roomBookings, setRoomBookings] = useState<Map<string, ReservationBooking>>(
+    new Map(),
+  );
+  const [selectedRoomId, setSelectedRoomId] = useState("");
+  const [roomBooking, setRoomBooking] = useState<ReservationBooking | null>(null);
+  const [linkBooking, setLinkBooking] = useState(true);
+  const [loadingRooms, setLoadingRooms] = useState(false);
+  const [guestName, setGuestName] = useState("");
   const [selectedItem, setSelectedItem] = useState(REQUEST_ITEMS[0]);
   const [priority, setPriority] = useState<"Low" | "Medium" | "High">("Medium");
   const [remarks, setRemarks] = useState("");
+
+  const selectedFoRoom = useMemo(
+    () => checkedInRooms.find((r) => r.id === selectedRoomId),
+    [checkedInRooms, selectedRoomId],
+  );
+  const roomNo = selectedFoRoom?.roomNo ?? "";
+
+  useEffect(() => {
+    if (!createOpen) return;
+
+    let cancelled = false;
+    setLoadingRooms(true);
+
+    void Promise.all([
+      roomService.list(),
+      ...CHECKED_IN_STATUSES.map((status) =>
+        reservationService.list(status).catch(() => [] as ReservationBooking[]),
+      ),
+    ])
+      .then(([allRooms, ...bookingGroups]) => {
+        if (cancelled) return;
+
+        const bookings = bookingGroups
+          .flat()
+          .filter(
+            (booking, index, list) =>
+              list.findIndex((item) => item.id === booking.id) === index,
+          );
+
+        const bookingByRoomKey = new Map<string, ReservationBooking>();
+        for (const booking of bookings) {
+          if (booking.roomRefId) {
+            bookingByRoomKey.set(booking.roomRefId, booking);
+          }
+          if (booking.roomNo) {
+            bookingByRoomKey.set(booking.roomNo, booking);
+          }
+        }
+
+        const occupied = allRooms
+          .filter(
+            (room) =>
+              bookingByRoomKey.has(room.id) ||
+              (room.roomNo ? bookingByRoomKey.has(room.roomNo) : false),
+          )
+          .sort((a, b) => a.roomNo.localeCompare(b.roomNo));
+
+        const byRoomId = new Map<string, ReservationBooking>();
+        for (const room of occupied) {
+          const booking =
+            bookingByRoomKey.get(room.id) ??
+            (room.roomNo ? bookingByRoomKey.get(room.roomNo) : undefined);
+          if (booking) byRoomId.set(room.id, booking);
+        }
+
+        setCheckedInRooms(occupied);
+        setRoomBookings(byRoomId);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCheckedInRooms([]);
+          setRoomBookings(new Map());
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRooms(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen]);
+
+  useEffect(() => {
+    if (!createOpen || !selectedRoomId.trim()) {
+      setRoomBooking(null);
+      return;
+    }
+    const booking = roomBookings.get(selectedRoomId.trim()) ?? null;
+    setRoomBooking(booking);
+    setLinkBooking(true);
+    setGuestName(booking?.guestName ?? "");
+  }, [createOpen, selectedRoomId, roomBookings]);
 
   // Assignment states
   const [assignmentMode, setAssignmentMode] = useState<"Auto" | "Manual">("Auto");
@@ -148,6 +250,10 @@ export function HousekeepingRequestsView() {
     return requests.find((r) => r.id === selectedReqId);
   }, [requests, selectedReqId]);
 
+  const detailRequest = useMemo(() => {
+    return requests.find((r) => r.id === detailReqId) ?? null;
+  }, [requests, detailReqId]);
+
   const selectedReqRecommendedStaff = useMemo(() => {
     if (!selectedRequest) return null;
     const targetRoom = rooms.find((r) => r.roomNo === selectedRequest.room);
@@ -210,17 +316,65 @@ export function HousekeepingRequestsView() {
     setAssignOpen(true);
   };
 
+  const handleOpenDetail = (id: string) => {
+    setDetailReqId(id);
+    setDetailEditMode(false);
+    setDetailOpen(true);
+  };
+
+  const handleOpenEdit = (id: string) => {
+    const req = requests.find((r) => r.id === id);
+    if (!req || req.status === "Completed") return;
+    setDetailReqId(id);
+    setEditIssue(req.issue);
+    setEditPriority(req.priority);
+    setEditRemarks("");
+    setDetailEditMode(true);
+    setDetailOpen(true);
+  };
+
+  const handleCloseDetail = () => {
+    setDetailOpen(false);
+    setDetailEditMode(false);
+    setDetailReqId(null);
+  };
+
+  const handleStartEdit = () => {
+    if (!detailRequest) return;
+    setEditIssue(detailRequest.issue);
+    setEditPriority(detailRequest.priority);
+    setEditRemarks("");
+    setDetailEditMode(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!detailReqId || !editIssue.trim()) return;
+    updateHKRequest(detailReqId, {
+      issue: editIssue.trim(),
+      priority: editPriority,
+      remarks: editRemarks.trim() || undefined,
+    });
+    setDetailEditMode(false);
+  };
+
   const handleSaveRequest = () => {
+    if (!selectedRoomId.trim()) return;
     addHKRequest({
-      room: roomNo,
-      guest: guestName,
+      room: roomNo || selectedRoomId,
+      roomId: selectedRoomId,
+      bookingId: linkBooking && roomBooking?.id ? roomBooking.id : undefined,
+      guest: guestName.trim() || roomBooking?.guestName || "Guest",
       issue: selectedItem + (remarks ? ` (${remarks})` : ""),
       priority,
       assignedStaff: chosenStaff || "—",
       assignmentType: assignmentMode,
+      remarks,
     });
     setCreateOpen(false);
     setRemarks("");
+    setSelectedRoomId("");
+    setGuestName("");
+    setRoomBooking(null);
   };
 
   const handleSaveAssignment = () => {
@@ -315,12 +469,21 @@ export function HousekeepingRequestsView() {
             return (
               <div
                 key={req.id}
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleOpenDetail(req.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") handleOpenDetail(req.id);
+                }}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs cursor-pointer hover:border-emerald-200 hover:shadow-sm transition"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-bold text-slate-800">Room {req.room}</p>
                     <p className="text-[11px] text-slate-500 font-semibold truncate">{req.guest}</p>
+                    {req.bookingNo && (
+                      <p className="text-[10px] text-slate-400">{req.bookingNo}</p>
+                    )}
                   </div>
                   <span
                     className={cn(
@@ -351,8 +514,17 @@ export function HousekeepingRequestsView() {
                   <span>·</span>
                   <span>{formatDisplayDate(req)}</span>
                 </div>
-                {(isOpen || isProgress) && (
-                  <div className="mt-3 flex flex-wrap gap-2">
+                {(isOpen || isProgress || req.status !== "Completed") && (
+                  <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                    {req.status !== "Completed" && (
+                      <Button
+                        variant="outline"
+                        onClick={() => handleOpenEdit(req.id)}
+                        className="py-1.5 px-3 text-[11px] font-semibold text-slate-700 border-slate-200"
+                      >
+                        Edit
+                      </Button>
+                    )}
                     {isOpen && (
                       <Button
                         variant="outline"
@@ -408,11 +580,18 @@ export function HousekeepingRequestsView() {
               const isProgress = req.status === "In Progress";
 
               return (
-                <tr key={req.id} className="hover:bg-slate-50/50">
+                <tr
+                  key={req.id}
+                  onClick={() => handleOpenDetail(req.id)}
+                  className="hover:bg-slate-50/50 cursor-pointer"
+                >
                   <td className="px-5 py-4 font-semibold text-slate-500">{req.id}</td>
                   <td className="px-5 py-4">
                     <p className="font-bold text-slate-800">Room {req.room}</p>
                     <p className="text-[10px] text-slate-500 font-semibold">{req.guest}</p>
+                    {req.bookingNo && (
+                      <p className="text-[9px] text-slate-400">{req.bookingNo}</p>
+                    )}
                   </td>
                   <td className="px-5 py-4 text-slate-700 font-medium max-w-xs truncate">{req.issue}</td>
                   <td className="px-5 py-4">
@@ -450,7 +629,16 @@ export function HousekeepingRequestsView() {
                       {req.status}
                     </span>
                   </td>
-                  <td className="px-5 py-4 text-right space-x-1.5 whitespace-nowrap">
+                  <td className="px-5 py-4 text-right space-x-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    {req.status !== "Completed" && (
+                      <Button
+                        variant="outline"
+                        onClick={() => handleOpenEdit(req.id)}
+                        className="py-1 px-2.5 text-[10px] font-semibold text-slate-700 border-slate-200"
+                      >
+                        Edit
+                      </Button>
+                    )}
                     {isOpen && (
                       <Button
                         variant="outline"
@@ -490,13 +678,56 @@ export function HousekeepingRequestsView() {
       <Drawer open={createOpen} onClose={() => setCreateOpen(false)} title="Create Guest Request">
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Room Number" required>
-              <TextInput value={roomNo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoomNo(e.target.value)} />
+            <FormField label="Room" required>
+              <SelectInput
+                value={selectedRoomId}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setSelectedRoomId(e.target.value)
+                }
+                disabled={loadingRooms}
+              >
+                <option value="">
+                  {loadingRooms ? "Loading checked-in rooms…" : "Select room…"}
+                </option>
+                {!loadingRooms && checkedInRooms.length === 0 && (
+                  <option value="" disabled>
+                    No checked-in rooms
+                  </option>
+                )}
+                {checkedInRooms.map((r) => {
+                  const booking = roomBookings.get(r.id);
+                  return (
+                    <option key={r.id} value={r.id}>
+                      {r.roomNo} — {r.roomType ?? "Room"}
+                      {booking?.guestName ? ` (${booking.guestName})` : ""}
+                    </option>
+                  );
+                })}
+              </SelectInput>
             </FormField>
-            <FormField label="Guest Name" required>
-              <TextInput value={guestName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGuestName(e.target.value)} />
+            <FormField label="Guest Name">
+              <TextInput
+                value={guestName}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setGuestName(e.target.value)
+                }
+                placeholder={loadingRooms ? "Loading…" : "Guest name"}
+              />
             </FormField>
           </div>
+
+          {roomBooking && (
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={linkBooking}
+                onChange={(e) => setLinkBooking(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              Link to booking {roomBooking.bookingNo ?? roomBooking.id}
+              {roomBooking.status ? ` (${roomBooking.status})` : ""}
+            </label>
+          )}
 
           <FormField label="Item Requested" required>
             <SelectInput value={selectedItem} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedItem(e.target.value)}>
@@ -596,12 +827,162 @@ export function HousekeepingRequestsView() {
 
           <Button
             onClick={handleSaveRequest}
-            disabled={!chosenStaff}
+            disabled={!chosenStaff || !selectedRoomId.trim()}
             className="w-full bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center gap-1 h-10 text-sm font-semibold rounded-lg mt-4"
           >
             Create Work Request
           </Button>
         </div>
+      </Drawer>
+
+      {/* Drawer: Request Details / Edit */}
+      <Drawer
+        open={detailOpen}
+        onClose={handleCloseDetail}
+        title={detailEditMode ? "Edit Guest Request" : "Guest Request Details"}
+      >
+        {detailRequest && (
+          <div className="space-y-4">
+            {!detailEditMode ? (
+              <>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-3 text-sm">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Request ID</span>
+                      <p className="font-semibold text-slate-800">{detailRequest.id}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Status</span>
+                      <p className="font-semibold text-slate-800">{detailRequest.status}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Room</span>
+                      <p className="font-semibold text-slate-800">{detailRequest.room}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Guest</span>
+                      <p className="font-semibold text-slate-800">{detailRequest.guest}</p>
+                    </div>
+                    {detailRequest.bookingNo && (
+                      <div>
+                        <span className="text-[10px] font-bold uppercase text-slate-400">Booking</span>
+                        <p className="font-semibold text-slate-800">{detailRequest.bookingNo}</p>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Priority</span>
+                      <p className="font-semibold text-slate-800">{detailRequest.priority}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Assigned Staff</span>
+                      <p className="font-semibold text-slate-800">{detailRequest.assignedStaff || "—"}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Logged At</span>
+                      <p className="font-semibold text-slate-800">{formatDisplayDate(detailRequest)}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Request Details</span>
+                    <p className="mt-1 font-medium text-slate-700">{detailRequest.issue}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {detailRequest.status !== "Completed" && (
+                    <Button
+                      onClick={handleStartEdit}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1.5"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit Request
+                    </Button>
+                  )}
+                  {detailRequest.status === "Open" && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        handleCloseDetail();
+                        handleOpenAssign(detailRequest.id);
+                      }}
+                    >
+                      Assign Staff
+                    </Button>
+                  )}
+                  {detailRequest.status === "In Progress" && (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          handleCloseDetail();
+                          handleOpenAssign(detailRequest.id);
+                        }}
+                      >
+                        Reassign
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          handleMarkComplete(detailRequest.id);
+                          handleCloseDetail();
+                        }}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white"
+                      >
+                        Mark Complete
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <FormField label="Request Details" required>
+                  <TextAreaInput
+                    value={editIssue}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setEditIssue(e.target.value)
+                    }
+                  />
+                </FormField>
+                <FormField label="Priority">
+                  <SelectInput
+                    value={editPriority}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                      setEditPriority(e.target.value as "Low" | "Medium" | "High")
+                    }
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                  </SelectInput>
+                </FormField>
+                <FormField label="Remarks / Notes">
+                  <TextAreaInput
+                    value={editRemarks}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setEditRemarks(e.target.value)
+                    }
+                    placeholder="Optional notes"
+                  />
+                </FormField>
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    onClick={handleSaveEdit}
+                    disabled={!editIssue.trim()}
+                    className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white"
+                  >
+                    Save Changes
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setDetailEditMode(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </Drawer>
 
       {/* Drawer: Assign Staff / Reassign Staff */}

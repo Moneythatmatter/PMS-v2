@@ -32,7 +32,10 @@ import {
   SelectInput,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { displayBookingNo } from "@/lib/booking-display";
+import { formatBookingGuestLine } from "@/lib/reservation-display";
 import { isArrivingToday } from "@/lib/reservation-dates";
+import { checkInHref, checkOutHref } from "@/lib/check-in-navigation";
 import { BookingDetailDrawer } from "./BookingDetailDrawer";
 import { ReservationStatusBadge } from "./ReservationStatusBadge";
 import { ReservationSummaryCards } from "./ReservationSummaryCards";
@@ -55,7 +58,8 @@ function formatBalance(amount: number) {
   }).format(amount);
 }
 
-function getInitials(name: string) {
+function getInitials(name?: string) {
+  if (!name?.trim()) return "?";
   return name
     .split(" ")
     .map((n) => n[0])
@@ -68,7 +72,7 @@ function getInitials(name: string) {
 function primaryAction(booking: ReservationBooking) {
   if (booking.status === "Checked In" || booking.status === "In-House") {
     return {
-      href: "/frontoffice/check-out",
+      href: checkOutHref(booking),
       icon: LogOut,
       title: "Check out",
       className: "text-orange-700 hover:bg-orange-50",
@@ -76,7 +80,7 @@ function primaryAction(booking: ReservationBooking) {
   }
   if (booking.status === "Reserved" || booking.status === "Confirmed") {
     return {
-      href: "/frontoffice/check-in",
+      href: checkInHref(booking),
       icon: LogIn,
       title: "Check in",
       className: "text-emerald-700 hover:bg-emerald-50",
@@ -185,12 +189,13 @@ export function AllBookingsView() {
     return bookings.filter((booking) => {
       const matchesSearch =
         !query ||
-        booking.guestName.toLowerCase().includes(query) ||
-        booking.id.toLowerCase().includes(query) ||
-        booking.phone.toLowerCase().includes(query) ||
-        booking.roomNo.toLowerCase().includes(query) ||
-        booking.roomType.toLowerCase().includes(query) ||
-        booking.source.toLowerCase().includes(query);
+        booking.guestName?.toLowerCase().includes(query) ||
+        displayBookingNo(booking).toLowerCase().includes(query) ||
+        (booking.guestNo ?? "").toLowerCase().includes(query) ||
+        booking.phone?.toLowerCase().includes(query) ||
+        booking.roomNo?.toLowerCase().includes(query) ||
+        booking.roomType?.toLowerCase().includes(query) ||
+        booking.source?.toLowerCase().includes(query);
       const matchesSource = sourceFilter === "all" || booking.source === sourceFilter;
       const matchesRoomType =
         roomTypeFilter === "all" || booking.roomType === roomTypeFilter;
@@ -237,7 +242,7 @@ export function AllBookingsView() {
       );
       const summary = await reservationService.summary();
       setSummaryStats(summary);
-      setToast(`Booking ${cancelBooking.id} has been cancelled.`);
+      setToast(`Booking ${displayBookingNo(cancelBooking)} has been cancelled.`);
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Failed to cancel booking");
     }
@@ -247,7 +252,7 @@ export function AllBookingsView() {
   const handleExport = () => {
     const rows = filtered.map(
       (b) =>
-        `${b.id},${b.guestName},${b.roomNo},${b.checkIn},${b.checkOut},${b.status},${b.balance}`,
+        `${displayBookingNo(b)},${b.guestName ?? ""},${b.roomNo ?? ""},${b.checkIn},${b.checkOut},${b.status},${b.balance}`,
     );
     const csv = ["Booking ID,Guest,Room,Check-in,Check-out,Status,Balance", ...rows].join(
       "\n",
@@ -447,7 +452,7 @@ export function AllBookingsView() {
                         <div>
                           <p className="font-semibold text-slate-900">{booking.guestName}</p>
                           <p className="text-xs text-slate-500">
-                            {booking.id} · {booking.phone}
+                            {formatBookingGuestLine(booking)}
                           </p>
                         </div>
                         <ReservationStatusBadge status={booking.status} />
@@ -532,7 +537,7 @@ export function AllBookingsView() {
                           checked={selected.has(booking.id)}
                           onChange={() => toggleOne(booking.id)}
                           className="rounded border-slate-300"
-                          aria-label={`Select ${booking.id}`}
+                          aria-label={`Select ${displayBookingNo(booking)}`}
                         />
                       </td>
                       <td className="px-4 py-3.5">
@@ -543,7 +548,7 @@ export function AllBookingsView() {
                           <div className="min-w-0">
                             <p className="font-semibold text-slate-900">{booking.guestName}</p>
                             <p className="text-xs text-slate-500">
-                              {booking.id} · {booking.phone}
+                              {formatBookingGuestLine(booking)}
                             </p>
                             <p className="text-[11px] text-slate-400">{booking.source}</p>
                           </div>
@@ -610,7 +615,7 @@ export function AllBookingsView() {
                                     {
                                       icon: Pencil,
                                       label: "Edit",
-                                      onClick: () => setToast(`Edit ${booking.id} coming soon.`),
+                                      onClick: () => setToast(`Edit ${displayBookingNo(booking)} coming soon.`),
                                     },
                                     {
                                       icon: Printer,
@@ -685,7 +690,7 @@ export function AllBookingsView() {
         onClose={() => setCancelBooking(null)}
         onConfirm={handleCancel}
         title="Cancel Reservation"
-        message={`Are you sure you want to cancel booking ${cancelBooking?.id} for ${cancelBooking?.guestName}? This action cannot be undone.`}
+        message={`Are you sure you want to cancel booking ${cancelBooking ? displayBookingNo(cancelBooking) : ""} for ${cancelBooking?.guestName}? This action cannot be undone.`}
         confirmLabel="Cancel Booking"
         variant="danger"
       />

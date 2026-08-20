@@ -1,16 +1,8 @@
 import { api, foPath } from "../api";
+import type { RoomMaster } from "@/app/data/frontoffice/masters";
 import type { RoomAvailabilityRow, RoomStatusCard } from "@/app/data/frontoffice/modules";
 
-export type RoomDto = {
-  roomNo: string;
-  roomType: string;
-  floor: string;
-  status: string;
-  guestName?: string;
-  housekeeping: string;
-  maintenance: string;
-  checkoutDate?: string;
-};
+export type RoomDto = RoomMaster;
 
 export type RoomAvailabilityResponse = {
   start: string;

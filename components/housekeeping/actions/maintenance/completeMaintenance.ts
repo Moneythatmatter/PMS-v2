@@ -3,11 +3,12 @@ import { changeRoomStatus } from "../room/roomStatus";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { MaintenanceRequest, HKRoom } from "../../HousekeepingTypes";
 import { hkMaintenanceService } from "@/services/housekeeping";
+import { normalizeMaintenanceRequest } from "../../maintenanceRequestUtils";
 
 export const startMaintenanceRepair = (
   id: string,
   currentMaintenance: MaintenanceRequest[],
-  dispatchers: HousekeepingDispatchers
+  dispatchers: HousekeepingDispatchers,
 ) => {
   const nowStr = new Date().toLocaleString("en-IN", {
     day: "numeric",
@@ -35,24 +36,34 @@ export const startMaintenanceRepair = (
         startedAt: nowStr,
         assignmentHistory: updatedHistory,
       };
-    })
+    }),
   );
 
-  logAudit("Maintenance", "Repair Started", `Engineer started repair on request #${id} in Room ${req?.room}.`, req?.room, dispatchers.currentUsername, dispatchers.setHistory);
+  logAudit(
+    "Maintenance",
+    "Repair Started",
+    `Engineer started repair on request #${id} in Room ${req?.room}.`,
+    req?.room,
+    dispatchers.currentUsername,
+    dispatchers.setHistory,
+  );
 
-  void hkMaintenanceService.update(id, {
-    status: "In Progress",
-    startedAt: nowStr,
-    assignmentHistory: updatedHistory,
-  }).catch((err) => {
-    console.error("[HK] Failed to sync start repair to API", err);
-  });
+  void hkMaintenanceService
+    .start(id)
+    .then((updated) => {
+      dispatchers.setMaintenance((prev) =>
+        prev.map((r) => (r.id === id ? normalizeMaintenanceRequest(updated) : r)),
+      );
+    })
+    .catch((err) => {
+      console.error("[HK] Failed to sync start repair to API", err);
+    });
 };
 
 export const completeMaintenanceRequest = (
   id: string,
   currentMaintenance: MaintenanceRequest[],
-  dispatchers: HousekeepingDispatchers
+  dispatchers: HousekeepingDispatchers,
 ) => {
   const nowStr = new Date().toLocaleString("en-IN", {
     day: "numeric",
@@ -80,24 +91,35 @@ export const completeMaintenanceRequest = (
         completedAt: nowStr,
         assignmentHistory: updatedHistory,
       };
-    })
+    }),
   );
 
-  logAudit("Maintenance", "Repair Completed", `Engineer completed repair on request #${id} in Room ${req?.room}. Awaiting supervisor verification.`, req?.room, dispatchers.currentUsername, dispatchers.setHistory);
+  logAudit(
+    "Maintenance",
+    "Repair Completed",
+    `Engineer completed repair on request #${id} in Room ${req?.room}. Awaiting supervisor verification.`,
+    req?.room,
+    dispatchers.currentUsername,
+    dispatchers.setHistory,
+  );
 
-  void hkMaintenanceService.update(id, {
-    status: "Awaiting Verification",
-    completedAt: nowStr,
-    assignmentHistory: updatedHistory,
-  }).catch((err) => {
-    console.error("[HK] Failed to sync complete repair to API", err);
-  });
+  void hkMaintenanceService
+    .complete(id)
+    .then((updated) => {
+      dispatchers.setMaintenance((prev) =>
+        prev.map((r) => (r.id === id ? normalizeMaintenanceRequest(updated) : r)),
+      );
+    })
+    .catch((err) => {
+      console.error("[HK] Failed to sync complete repair to API", err);
+    });
 };
 
 export const verifyMaintenanceRequest = (
   id: string,
   currentMaintenance: MaintenanceRequest[],
-  dispatchers: HousekeepingDispatchers
+  currentRooms: HKRoom[],
+  dispatchers: HousekeepingDispatchers,
 ) => {
   const nowStr = new Date().toLocaleString("en-IN", {
     day: "numeric",
@@ -111,7 +133,7 @@ export const verifyMaintenanceRequest = (
   if (!req) return;
 
   const engineerName = req.engineer;
-  const history = req.assignmentHistory || [];
+  const history = req?.assignmentHistory || [];
   const newLog = {
     timestamp: nowStr,
     action: "Verified by Supervisor",
@@ -128,10 +150,9 @@ export const verifyMaintenanceRequest = (
         actualCompletion: nowStr,
         assignmentHistory: updatedHistory,
       };
-    })
+    }),
   );
 
-  // Update workloads
   if (engineerName && engineerName !== "—") {
     dispatchers.setStaff((prev) =>
       prev.map((s) => {
@@ -143,29 +164,36 @@ export const verifyMaintenanceRequest = (
           };
         }
         return s;
-      })
+      }),
     );
   }
 
-  // Release room back to vacant dirty/clean!
-  const storedRooms = localStorage.getItem("hk_rooms");
-  let targetHKStatus = "Clean";
-  if (storedRooms) {
-    const hkRooms: HKRoom[] = JSON.parse(storedRooms);
-    const targetRoomObj = hkRooms.find((rm) => rm.roomNo === req.room);
-    targetHKStatus = targetRoomObj?.hkStatus || "Clean";
-  }
+  const targetRoomObj = currentRooms.find((rm) => rm.roomNo === req.room);
+  const targetHKStatus = targetRoomObj?.hkStatus || "Clean";
 
-  const finalRoomStatus = (targetHKStatus === "Clean" || targetHKStatus === "Inspected") ? "Vacant Ready" : "Vacant Dirty";
+  const finalRoomStatus =
+    targetHKStatus === "Clean" || targetHKStatus === "Inspected"
+      ? "Vacant Ready"
+      : "Vacant Dirty";
   changeRoomStatus(req.room, finalRoomStatus as any, dispatchers);
 
-  logAudit("Maintenance", "Issue Closed", `Verified and closed maintenance request #${id} in Room ${req.room}. Room released back to cleaning/occupancy.`, req.room, dispatchers.currentUsername, dispatchers.setHistory);
+  logAudit(
+    "Maintenance",
+    "Issue Closed",
+    `Verified and closed maintenance request #${id} in Room ${req.room}. Room released back to cleaning/occupancy.`,
+    req.room,
+    dispatchers.currentUsername,
+    dispatchers.setHistory,
+  );
 
-  void hkMaintenanceService.update(id, {
-    status: "Closed",
-    actualCompletion: nowStr,
-    assignmentHistory: updatedHistory,
-  }).catch((err) => {
-    console.error("[HK] Failed to sync verify/close repair to API", err);
-  });
+  void hkMaintenanceService
+    .verify(id, dispatchers.currentUsername)
+    .then((updated) => {
+      dispatchers.setMaintenance((prev) =>
+        prev.map((r) => (r.id === id ? normalizeMaintenanceRequest(updated) : r)),
+      );
+    })
+    .catch((err) => {
+      console.error("[HK] Failed to sync verify/close repair to API", err);
+    });
 };

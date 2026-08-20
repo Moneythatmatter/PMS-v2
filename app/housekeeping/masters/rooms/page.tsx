@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
 import { Bed, Plus, CheckCircle2, ShieldAlert, FolderOpen, Heart, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,8 @@ import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import { hkRoomService } from "@/services/housekeeping";
+import { roomService, type RoomDto } from "@/services/front-office/rooms";
+import { findRoomByKey, matchesRoomKey, normalizeHkRoom, roomApiId, roomKey } from "@/components/housekeeping/roomUtils";
 
 const ROOM_CATEGORIES = ["Standard", "Deluxe", "Executive Suite", "Presidential Suite"];
 const BED_TYPES = ["King", "Queen", "Twin", "Single"];
@@ -22,13 +24,14 @@ export default function RoomMasterConfig() {
   } = useHousekeeping();
 
   const [activeTab, setActiveTab] = useState<"floorplan" | "list">("floorplan");
-  const [selectedRoomNo, setSelectedRoomNo] = useState<string | null>(null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [foRooms, setFoRooms] = useState<RoomDto[]>([]);
 
-  // Form Fields: New Room
-  const [newRoomNo, setNewRoomNo] = useState("");
+  // Form Fields: New Room — pick FO room ref, not a free-text hardcoded number as id
+  const [newRoomRefId, setNewRoomRefId] = useState("");
   const [newCategory, setNewCategory] = useState(ROOM_CATEGORIES[0]);
   const [newBed, setNewBed] = useState(BED_TYPES[0]);
   const [newFloor, setNewFloor] = useState("1st Floor");
@@ -38,8 +41,28 @@ export default function RoomMasterConfig() {
   const [remarks, setRemarks] = useState("");
 
   const selectedRoom = useMemo(() => {
-    return rooms.find((r) => r.roomNo === selectedRoomNo) || null;
-  }, [rooms, selectedRoomNo]);
+    return selectedRoomId ? findRoomByKey(rooms, selectedRoomId) ?? null : null;
+  }, [rooms, selectedRoomId]);
+
+  const availableFoRooms = useMemo(() => {
+    const linked = new Set(
+      rooms.map((r) => r.roomId ?? r.roomRefId ?? r.roomNo),
+    );
+    return foRooms.filter((r) => !linked.has(r.id) && !linked.has(r.roomNo));
+  }, [foRooms, rooms]);
+
+  useEffect(() => {
+    roomService
+      .list()
+      .then(setFoRooms)
+      .catch(() => setFoRooms([]));
+  }, []);
+
+  useEffect(() => {
+    if (!newRoomRefId && availableFoRooms[0]?.roomNo) {
+      setNewRoomRefId(availableFoRooms[0].roomNo);
+    }
+  }, [availableFoRooms, newRoomRefId]);
 
   // Group rooms by floor for floorplan view
   const roomsByFloor = useMemo(() => {
@@ -52,91 +75,84 @@ export default function RoomMasterConfig() {
     return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
   }, [rooms]);
 
-  const handleCreateRoom = () => {
-    const trimmedRoomNo = newRoomNo.trim();
-    if (!trimmedRoomNo) {
-      setCreateError("Please enter a valid room number.");
+  const handleCreateRoom = async () => {
+    const trimmedRoomRef = newRoomRefId.trim();
+    if (!trimmedRoomRef) {
+      setCreateError("Select a Front Office room reference.");
       return;
     }
 
     const duplicate = rooms.find(
-      (r) => r.roomNo.trim().toLowerCase() === trimmedRoomNo.toLowerCase()
+      (r) =>
+        (r.roomId ?? r.roomRefId ?? r.roomNo).trim().toLowerCase() ===
+          trimmedRoomRef.toLowerCase() ||
+        r.roomNo.trim().toLowerCase() === trimmedRoomRef.toLowerCase(),
     );
     if (duplicate) {
-      setCreateError(`Room "${trimmedRoomNo}" already exists in the master plan.`);
+      setCreateError(`Room "${trimmedRoomRef}" is already linked in housekeeping.`);
       return;
     }
 
     setCreateError(null);
-    const occ = parseInt(newOccupancy, 10) || 2;
-    const facs = facilities.split(",").map((f) => f.trim()).filter(Boolean);
 
-    const newRecord: any = {
-      id: trimmedRoomNo,
-      roomNo: trimmedRoomNo,
-      category: newCategory,
-      type: newCategory,
-      bedType: newBed,
-      floor: newFloor,
-      wing: newWing,
-      maxOccupancy: occ,
-      cleaningFrequency: "Daily",
-      deepCleaningFrequency: "Every 30 Days",
-      lastDeepCleaned: "Never",
-      status: "Vacant Dirty",
-      hkStatus: "Dirty",
-      foStatus: "Vacant",
-      dnd: false,
-      sleepOut: false,
-      facilities: facs,
-      remarks,
+    const payload = {
+      roomId: trimmedRoomRef,
+      status: "DIRTY" as const,
+      notes: remarks || undefined,
     };
 
-    setRooms((prev: any) => [...prev, newRecord].sort((a, b) => a.roomNo.localeCompare(b.roomNo)));
-    logAudit("Room Status", "Room Added", `Created new Room ${trimmedRoomNo} in master plan.`);
-    setCreateOpen(false);
-    setNewRoomNo("");
-    setRemarks("");
-
-    void hkRoomService.create(newRecord).catch((err) => {
-      console.error(`[HK] Failed to sync new room ${trimmedRoomNo} to API`, err);
-    });
+    try {
+      const saved = normalizeHkRoom(await hkRoomService.create(payload));
+      setRooms((prev) =>
+        [...prev, saved].sort((a, b) => a.roomNo.localeCompare(b.roomNo)),
+      );
+      logAudit("Room Status", "Room Added", `Created HK record for Room ${trimmedRoomRef}.`);
+      setCreateOpen(false);
+      setNewRoomRefId("");
+      setRemarks("");
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create room");
+    }
   };
 
-  const handleToggleDnd = (roomNo: string) => {
+  const handleToggleDnd = (roomKey: string) => {
     let nextState = false;
+    let apiId = roomKey;
     setRooms((prev) =>
       prev.map((r) => {
-        if (r.roomNo !== roomNo) return r;
+        if (!matchesRoomKey(r, roomKey)) return r;
+        apiId = roomApiId(r);
         nextState = !r.dnd;
-        logAudit("Room Status", "DND Toggled", `Toggled DND state for room ${roomNo} to ${nextState ? "ON" : "OFF"}.`, roomNo);
+        logAudit("Room Status", "DND Toggled", `Toggled DND state for room ${r.roomNo} to ${nextState ? "ON" : "OFF"}.`, r.roomNo);
         return { ...r, dnd: nextState };
-      })
+      }),
     );
 
-    void hkRoomService.update(roomNo, { dnd: nextState }).catch((err) => {
-      console.error(`[HK] Failed to sync DND toggle for room ${roomNo}`, err);
+    void hkRoomService.update(apiId, { dnd: nextState }).catch((err) => {
+      console.error(`[HK] Failed to sync DND toggle for room ${roomKey}`, err);
     });
   };
 
-  const handleToggleSleepOut = (roomNo: string) => {
+  const handleToggleSleepOut = (roomKey: string) => {
     let nextState = false;
+    let apiId = roomKey;
     setRooms((prev) =>
       prev.map((r) => {
-        if (r.roomNo !== roomNo) return r;
+        if (!matchesRoomKey(r, roomKey)) return r;
+        apiId = roomApiId(r);
         nextState = !r.sleepOut;
-        logAudit("Room Status", "Sleep Out Toggled", `Toggled Sleep Out state for room ${roomNo} to ${nextState ? "ON" : "OFF"}.`, roomNo);
+        logAudit("Room Status", "Sleep Out Toggled", `Toggled Sleep Out state for room ${r.roomNo} to ${nextState ? "ON" : "OFF"}.`, r.roomNo);
         return { ...r, sleepOut: nextState };
-      })
+      }),
     );
 
-    void hkRoomService.update(roomNo, { sleepOut: nextState }).catch((err) => {
-      console.error(`[HK] Failed to sync Sleep Out toggle for room ${roomNo}`, err);
+    void hkRoomService.update(apiId, { sleepOut: nextState }).catch((err) => {
+      console.error(`[HK] Failed to sync Sleep Out toggle for room ${roomKey}`, err);
     });
   };
 
-  const handleStatusChange = (roomNo: string, val: any) => {
-    changeRoomStatus(roomNo, val);
+  const handleStatusChange = (roomKey: string, val: any) => {
+    changeRoomStatus(roomKey, val);
   };
 
   return (
@@ -207,7 +223,7 @@ export default function RoomMasterConfig() {
                   return (
                     <div
                       key={room.roomNo}
-                      onClick={() => setSelectedRoomNo(room.roomNo)}
+                      onClick={() => setSelectedRoomId(roomKey(room))}
                       className={cn(
                         "relative cursor-pointer rounded-xl border p-4 text-center transition-all hover:shadow-md hover:border-slate-400",
                         isReady
@@ -269,7 +285,7 @@ export default function RoomMasterConfig() {
                 icon: <Eye className="h-3.5 w-3.5" />,
                 onClick: () => {
                   const firstId = Array.from(selectedIds)[0];
-                  if (firstId) setSelectedRoomNo(firstId);
+                  if (firstId) setSelectedRoomId(firstId);
                 },
               },
             ]}
@@ -281,9 +297,9 @@ export default function RoomMasterConfig() {
                 <th className="w-10 px-5 py-3">
                   <input
                     type="checkbox"
-                    checked={rooms.length > 0 && rooms.every((room) => selectedIds.has(room.roomNo))}
+                    checked={rooms.length > 0 && rooms.every((room) => selectedIds.has(roomKey(room)))}
                     onChange={() => {
-                      const allIds = rooms.map((room) => room.roomNo);
+                      const allIds = rooms.map((room) => roomKey(room));
                       const allSelected = allIds.every((id) => selectedIds.has(id));
                       setSelectedIds(allSelected ? new Set() : new Set(allIds));
                     }}
@@ -303,21 +319,21 @@ export default function RoomMasterConfig() {
             <tbody className="divide-y divide-slate-100">
               {rooms.map((room) => (
                 <tr
-                  key={room.roomNo}
-                  onClick={() => setSelectedRoomNo(room.roomNo)}
+                  key={roomKey(room)}
+                  onClick={() => setSelectedRoomId(roomKey(room))}
                   className={cn(
                     "hover:bg-slate-50/50 cursor-pointer",
-                    selectedIds.has(room.roomNo) && "bg-emerald-50/40",
+                    selectedIds.has(roomKey(room)) && "bg-emerald-50/40",
                   )}
                 >
                   <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
-                      checked={selectedIds.has(room.roomNo)}
+                      checked={selectedIds.has(roomKey(room))}
                       onChange={() => {
                         const next = new Set(selectedIds);
-                        if (next.has(room.roomNo)) next.delete(room.roomNo);
-                        else next.add(room.roomNo);
+                        if (next.has(roomKey(room))) next.delete(roomKey(room));
+                        else next.add(roomKey(room));
                         setSelectedIds(next);
                       }}
                       className="rounded border-slate-300"
@@ -353,7 +369,7 @@ export default function RoomMasterConfig() {
       )}
 
       {/* Drawer: Detail Override room values */}
-      <Drawer open={!!selectedRoomNo} onClose={() => setSelectedRoomNo(null)} title={`Room ${selectedRoom?.roomNo} Configurations`}>
+      <Drawer open={!!selectedRoomId} onClose={() => setSelectedRoomId(null)} title={`Room ${selectedRoom?.roomNo} Configurations`}>
         {selectedRoom && (
           <div className="space-y-6">
             
@@ -377,7 +393,7 @@ export default function RoomMasterConfig() {
             <FormField label="Force PMS Status Override">
               <SelectInput
                 value={selectedRoom.status}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleStatusChange(selectedRoom.roomNo, e.target.value as any)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleStatusChange(roomKey(selectedRoom), e.target.value as any)}
               >
                 <option value="Vacant Ready">Vacant Ready (Clean & Inspected)</option>
                 <option value="Vacant Dirty">Vacant Dirty (Awaiting clean)</option>
@@ -395,7 +411,7 @@ export default function RoomMasterConfig() {
             <div className="space-y-3 pt-3 border-t border-slate-100">
               <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wider">Housekeeping Flag Settings</h4>
               
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => handleToggleDnd(selectedRoom.roomNo)}>
+              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => handleToggleDnd(roomKey(selectedRoom))}>
                 <div>
                   <p className="text-xs font-bold text-slate-700">Do Not Disturb (DND) Flag</p>
                   <p className="text-[10px] text-slate-400">Skip cleaning. Alerts staff to not enter.</p>
@@ -408,7 +424,7 @@ export default function RoomMasterConfig() {
                 </span>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => handleToggleSleepOut(selectedRoom.roomNo)}>
+              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => handleToggleSleepOut(roomKey(selectedRoom))}>
                 <div>
                   <p className="text-xs font-bold text-slate-700">Sleep Out (SO) Flag</p>
                   <p className="text-[10px] text-slate-400">Guest is paying but did not spend the night.</p>
@@ -444,15 +460,21 @@ export default function RoomMasterConfig() {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Room Number" required>
-              <TextInput
-                placeholder="e.g. 105"
-                value={newRoomNo}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  setNewRoomNo(e.target.value);
+            <FormField label="Front Office Room" required>
+              <SelectInput
+                value={newRoomRefId}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                  setNewRoomRefId(e.target.value);
                   setCreateError(null);
                 }}
-              />
+              >
+                <option value="">Select room…</option>
+                {availableFoRooms.map((room) => (
+                  <option key={room.roomNo} value={room.roomNo}>
+                    {room.roomNo} · {room.roomType} · {room.floor}
+                  </option>
+                ))}
+              </SelectInput>
             </FormField>
             <FormField label="Room Category">
               <SelectInput value={newCategory} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewCategory(e.target.value)}>

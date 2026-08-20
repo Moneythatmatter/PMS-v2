@@ -13,7 +13,6 @@ import {
   reservationService,
   roomChargePostingService,
 } from "@/services/front-office";
-import { safeGetStorage, safeRemoveStorage, safeSetStorage } from "@/lib/utils";
 
 export type { NightAuditItem, NightAuditItemStatus };
 
@@ -180,48 +179,31 @@ export function formatBusinessDate(isoDate: string) {
 }
 
 export function loadDayClosingState(): DayClosingSessionState {
-  const initial = createInitialDayClosingState();
-  const parsed = safeGetStorage<Partial<DayClosingSessionState> | null>(
-    DAY_CLOSING_STORAGE_KEY,
-    null,
-    true,
-  );
-  if (!parsed) return initial;
-  return {
-    ...initial,
-    ...parsed,
-    nightAuditCompleted: parsed.nightAuditCompleted ?? false,
-  };
+  return createInitialDayClosingState();
 }
 
-export function saveDayClosingState(state: DayClosingSessionState) {
-  safeSetStorage(DAY_CLOSING_STORAGE_KEY, state, true);
+export function saveDayClosingState(_state: DayClosingSessionState) {
+  /* in-memory only — no browser persistence */
 }
 
 export function clearDayClosingState() {
-  safeRemoveStorage(DAY_CLOSING_STORAGE_KEY, true);
+  if (typeof window !== "undefined") {
+    sessionStorage.removeItem(DAY_CLOSING_STORAGE_KEY);
+  }
 }
 
 export function loadNightAuditState(): NightAuditSessionState {
-  const initial = createInitialNightAuditState();
-  const parsed = safeGetStorage<Partial<NightAuditSessionState> | null>(
-    NIGHT_AUDIT_STORAGE_KEY,
-    null,
-    true,
-  );
-  if (!parsed) return initial;
-  return {
-    ...initial,
-    ...parsed,
-  };
+  return createInitialNightAuditState();
 }
 
-export function saveNightAuditState(state: NightAuditSessionState) {
-  safeSetStorage(NIGHT_AUDIT_STORAGE_KEY, state, true);
+export function saveNightAuditState(_state: NightAuditSessionState) {
+  /* in-memory only — no browser persistence */
 }
 
 export function clearNightAuditState() {
-  safeRemoveStorage(NIGHT_AUDIT_STORAGE_KEY, true);
+  if (typeof window !== "undefined") {
+    sessionStorage.removeItem(NIGHT_AUDIT_STORAGE_KEY);
+  }
 }
 
 export function resetClosingDemo() {

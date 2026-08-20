@@ -398,8 +398,8 @@ export const initialHKLaundry: HKLaundryJob[] = [
 ];
 
 export const initialHKDamageReports: HKDamageReport[] = [
-  { id: "DM-01", room: "305", damageType: "Furniture", description: "Bed side table drawer handle broken.", reportedBy: "Meena (Housekeeper)", reportedAt: "23 Jun 08:45 AM", estimatedCost: 450, status: "Reported" },
-  { id: "DM-02", room: "104", damageType: "AC", description: "Compressor failure causing no cooling.", reportedBy: "Ramesh (Supervisor)", reportedAt: "23 Jun 07:10 AM", estimatedCost: 4500, status: "Approved" }
+  { id: "DM-01", room: "305", damageType: "Furniture", severity: "Minor", responsibility: "Guest", description: "Bed side table drawer handle broken.", reportedBy: "Meena (Housekeeper)", reportedAt: "23 Jun 08:45 AM", estimatedCost: 450, status: "Reported" },
+  { id: "DM-02", room: "104", damageType: "AC / HVAC", severity: "Major", responsibility: "Hotel", description: "Compressor failure causing no cooling.", reportedBy: "Ramesh (Supervisor)", reportedAt: "23 Jun 07:10 AM", estimatedCost: 4500, status: "Under Review" }
 ];
 
 export const initialHKRequisitions: HKRequisition[] = [

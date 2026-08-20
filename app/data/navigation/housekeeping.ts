@@ -7,9 +7,10 @@ export const housekeepingNavItems: ModuleNavItem[] = [
     href: "/housekeeping/operations",
     icon: "sparkles",
     children: [
-      { label: "Room Cleaning", href: "/housekeeping/operations/room-cleaning", icon: "sparkles" },
+      { label: "Cleaning Tasks", href: "/housekeeping/operations/room-cleaning", icon: "sparkles" },
+      { label: "Room Status", href: "/housekeeping/operations/rooms", icon: "bed" },
       { label: "Public Area", href: "/housekeeping/operations/public-cleaning", icon: "trees" },
-      { label: "Room Inspection", href: "/housekeeping/operations/inspection", icon: "user-check" },
+      { label: "Cleaning Inspection", href: "/housekeeping/operations/inspection", icon: "user-check" },
       { label: "Guest Requests", href: "/housekeeping/housekeeping-requests", icon: "bell" },
       { label: "Maintenance", href: "/housekeeping/maintenance-requests", icon: "wrench" },
       { label: "Laundry Flow", href: "/housekeeping/operations/laundry", icon: "arrow-right-left" },
@@ -26,6 +27,7 @@ export const housekeepingNavItems: ModuleNavItem[] = [
     icon: "bed",
     children: [
       { label: "Room Master", href: "/housekeeping/masters/rooms", icon: "bed" },
+      { label: "Public Areas", href: "/housekeeping/masters/public-areas", icon: "trees" },
       { label: "Cleaning Checklists", href: "/housekeeping/masters/checklists", icon: "clipboard-list" },
       { label: "Staff & Shifts", href: "/housekeeping/masters/staff", icon: "users" },
     ],
@@ -34,11 +36,6 @@ export const housekeepingNavItems: ModuleNavItem[] = [
     label: "Inventory",
     href: "/housekeeping/inventory",
     icon: "tag",
-  },
-  {
-    label: "Audit Logs",
-    href: "/housekeeping/history",
-    icon: "history",
   },
   {
     label: "Reports",

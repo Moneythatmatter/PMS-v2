@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 const housekeepingSubNavItems = [
   { label: "Room Cleaning", href: "/housekeeping/operations/room-cleaning", icon: Sparkles },
   { label: "Public Area", href: "/housekeeping/operations/public-cleaning", icon: Layers },
-  { label: "Room Inspection", href: "/housekeeping/operations/inspection", icon: UserCheck },
+  { label: "Cleaning Inspection", href: "/housekeeping/operations/inspection", icon: UserCheck },
   { label: "Guest Requests", href: "/housekeeping/housekeeping-requests", icon: Bell },
   { label: "Maintenance", href: "/housekeeping/maintenance-requests", icon: Wrench },
   { label: "Damage Reports", href: "/housekeeping/operations/damage-reports", icon: AlertTriangle },

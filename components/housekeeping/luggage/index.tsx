@@ -69,19 +69,8 @@ export function LuggageView() {
   const [extraInfoMap, setExtraInfoMap] = useState<Record<string, any>>({});
   const [toast, setToast] = useState<{ message: string; variant: "success" | "error" | "info" } | null>(null);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("pms_luggage_extra_info");
-    if (stored) {
-      setExtraInfoMap(JSON.parse(stored));
-    }
-  }, []);
-
   const saveExtraInfo = (jobId: string, info: any) => {
-    setExtraInfoMap((prev) => {
-      const next = { ...prev, [jobId]: info };
-      localStorage.setItem("pms_luggage_extra_info", JSON.stringify(next));
-      return next;
-    });
+    setExtraInfoMap((prev) => ({ ...prev, [jobId]: info }));
   };
 
   useEffect(() => {

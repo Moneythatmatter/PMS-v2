@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   BedDouble,
   Calendar,
@@ -16,12 +17,17 @@ import {
   Utensils,
 } from "lucide-react";
 import type { ReservationBooking } from "@/app/data/types";
+import { reservationService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import { Drawer, formatINR } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { displayBookingNo } from "@/lib/booking-display";
+import { checkInHref, checkOutHref } from "@/lib/check-in-navigation";
+import { formatBookingGuestLine } from "@/lib/reservation-display";
 import { ReservationStatusBadge } from "./ReservationStatusBadge";
 
-function getInitials(name: string) {
+function getInitials(name?: string) {
+  if (!name?.trim()) return "?";
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
@@ -71,21 +77,48 @@ interface BookingDetailDrawerProps {
 }
 
 export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetailDrawerProps) {
-  if (!booking) return null;
+  const [detail, setDetail] = useState<ReservationBooking | null>(booking);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  useEffect(() => {
+    if (!booking?.id) {
+      setDetail(null);
+      return;
+    }
+    setDetail(booking);
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadingDetail(true);
+        const full = await reservationService.get(booking.id);
+        if (!cancelled) setDetail(full);
+      } catch {
+        if (!cancelled) setDetail(booking);
+      } finally {
+        if (!cancelled) setLoadingDetail(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [booking?.id]);
+
+  if (!booking || !detail) return null;
 
   const open = true;
+  const guestNo = detail.guestNo?.trim() || "—";
 
-  const nights = booking.nights ?? 3;
-  const roomRate = booking.roomRate ?? Math.round((booking.totalAmount ?? booking.balance + (booking.advancePaid ?? 0)) / nights);
-  const total = booking.totalAmount ?? booking.balance + (booking.advancePaid ?? 0);
-  const advance = booking.advancePaid ?? 0;
+  const nights = detail.nights ?? 3;
+  const roomRate = detail.roomRate ?? Math.round((detail.totalAmount ?? detail.balance + (detail.advancePaid ?? 0)) / nights);
+  const total = detail.totalAmount ?? detail.balance + (detail.advancePaid ?? 0);
+  const advance = detail.advancePaid ?? 0;
 
   return (
     <Drawer
       open={open}
       onClose={onClose}
-      title={booking.guestName}
-      description={booking.id}
+      title={detail.guestName ?? "Guest"}
+      description={formatBookingGuestLine(detail)}
       width="md"
       footer={
         <>
@@ -94,15 +127,15 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
             <Printer className="h-3.5 w-3.5" />
             Print
           </Button>
-          {booking.status === "Checked In" || booking.status === "In-House" ? (
-            <Link href="/frontoffice/check-out">
+          {detail.status === "Checked In" || detail.status === "In-House" ? (
+            <Link href={checkOutHref(detail)}>
               <Button className="gap-1.5 bg-emerald-700 hover:bg-emerald-800">
                 <LogOut className="h-3.5 w-3.5" />
                 Check Out
               </Button>
             </Link>
-          ) : booking.status !== "Cancelled" && booking.status !== "Checked Out" ? (
-            <Link href="/frontoffice/check-in">
+          ) : detail.status !== "Cancelled" && detail.status !== "Checked Out" ? (
+            <Link href={checkInHref(detail)}>
               <Button className="gap-1.5 bg-emerald-700 hover:bg-emerald-800">
                 <LogIn className="h-3.5 w-3.5" />
                 Check In
@@ -115,15 +148,15 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
       {/* Guest header */}
       <div className="mb-6 flex items-center gap-4 rounded-2xl bg-gradient-to-br from-slate-50 to-emerald-50/50 p-4">
         <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-lg font-bold text-white shadow-md shadow-emerald-200/50">
-          {getInitials(booking.guestName)}
+          {getInitials(detail.guestName ?? "G")}
         </div>
         <div className="min-w-0 flex-1">
-          <ReservationStatusBadge status={booking.status} />
+          <ReservationStatusBadge status={detail.status} />
           <div className="mt-2 flex flex-wrap gap-2">
             <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-slate-600 shadow-sm">
-              {booking.source}
+              {detail.source}
             </span>
-            {booking.arrivingToday && (
+            {detail.arrivingToday && (
               <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
                 Arriving Today
               </span>
@@ -136,8 +169,8 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
       <div className="mb-6 grid grid-cols-3 gap-2">
         {[
           { label: "Nights", value: nights },
-          { label: "Adults", value: booking.adults ?? 1 },
-          { label: "Children", value: booking.children ?? 0 },
+          { label: "Adults", value: detail.adults ?? 1 },
+          { label: "Children", value: detail.children ?? 0 },
         ].map(({ label, value }) => (
           <div key={label} className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-center">
             <p className="text-[10px] font-medium uppercase text-slate-400">{label}</p>
@@ -148,33 +181,34 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
 
       <div className="space-y-5">
         <Section title="Guest Information">
-          <DetailRow icon={Phone} label="Mobile" value={booking.phone} />
-          {booking.email && <DetailRow icon={Mail} label="Email" value={booking.email} />}
-          {booking.nationality && (
-            <DetailRow icon={MapPin} label="Nationality" value={booking.nationality} />
+          <DetailRow icon={User} label="Guest No." value={loadingDetail ? "…" : guestNo} />
+          <DetailRow icon={Phone} label="Mobile" value={detail.phone ?? "—"} />
+          {detail.email && <DetailRow icon={Mail} label="Email" value={detail.email} />}
+          {detail.nationality && (
+            <DetailRow icon={MapPin} label="Nationality" value={detail.nationality} />
           )}
-          {booking.idProofType && (
+          {detail.idProofType && (
             <DetailRow
               icon={User}
               label="ID Proof"
-              value={`${booking.idProofType}${booking.idNumber ? ` · ${booking.idNumber}` : ""}`}
+              value={`${detail.idProofType}${detail.idNumber ? ` · ${detail.idNumber}` : ""}`}
             />
           )}
         </Section>
 
         <Section title="Stay Details">
-          <DetailRow icon={Calendar} label="Check-in" value={booking.checkIn} />
-          <DetailRow icon={Calendar} label="Check-out" value={booking.checkOut} />
+          <DetailRow icon={Calendar} label="Check-in" value={detail.checkIn} />
+          <DetailRow icon={Calendar} label="Check-out" value={detail.checkOut} />
           <DetailRow
             icon={BedDouble}
             label="Room"
-            value={`Room ${booking.roomNo} · ${booking.roomType}`}
+            value={`Room ${detail.roomNo ?? "TBA"} · ${detail.roomType ?? "—"}`}
           />
-          {booking.tariffPlan && (
-            <DetailRow label="Tariff Plan" value={booking.tariffPlan} />
+          {detail.tariffPlan && (
+            <DetailRow label="Tariff Plan" value={detail.tariffPlan} />
           )}
-          {booking.mealPlan && (
-            <DetailRow icon={Utensils} label="Meal Plan" value={booking.mealPlan} />
+          {detail.mealPlan && (
+            <DetailRow icon={Utensils} label="Meal Plan" value={detail.mealPlan} />
           )}
         </Section>
 
@@ -191,15 +225,15 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
               </div>
               {advance > 0 && (
                 <div className="flex justify-between text-emerald-600">
-                  <span>Advance Paid{booking.paymentMode ? ` (${booking.paymentMode})` : ""}</span>
+                  <span>Advance Paid{detail.paymentMode ? ` (${detail.paymentMode})` : ""}</span>
                   <span>− {formatINR(advance)}</span>
                 </div>
               )}
               <div className="border-t border-slate-200 pt-2">
                 <div className="flex justify-between">
                   <span className="font-semibold text-slate-900">Balance Due</span>
-                  <span className={cn("text-lg font-bold", booking.balance > 0 ? "text-amber-600" : "text-emerald-600")}>
-                    {formatINR(booking.balance)}
+                  <span className={cn("text-lg font-bold", detail.balance > 0 ? "text-amber-600" : "text-emerald-600")}>
+                    {formatINR(detail.balance)}
                   </span>
                 </div>
               </div>
@@ -207,30 +241,31 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
           </div>
         </Section>
 
-        {booking.specialRequests && (
+        {detail.specialRequests && (
           <Section title="Special Requests">
             <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              {booking.specialRequests}
+              {detail.specialRequests}
             </p>
           </Section>
         )}
 
         <Section title="Booking Meta">
-          {booking.createdAt && (
-            <DetailRow label="Created" value={booking.createdAt} />
+          {detail.createdAt && (
+            <DetailRow label="Created" value={detail.createdAt} />
           )}
-          {booking.bookedBy && (
-            <DetailRow label="Booked By" value={booking.bookedBy} />
+          {detail.bookedBy && (
+            <DetailRow label="Booked By" value={detail.bookedBy} />
           )}
-          <DetailRow icon={CreditCard} label="Booking ID" value={booking.id} />
+          <DetailRow icon={CreditCard} label="Booking No." value={displayBookingNo(detail)} />
+          <DetailRow icon={User} label="Guest No." value={loadingDetail ? "…" : guestNo} />
         </Section>
       </div>
 
-      {onCancel && booking.status !== "Cancelled" && booking.status !== "Checked Out" && (
+      {onCancel && detail.status !== "Cancelled" && detail.status !== "Checked Out" && (
         <div className="mt-6 border-t border-slate-100 pt-4">
           <button
             type="button"
-            onClick={() => onCancel(booking)}
+            onClick={() => onCancel(detail)}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
           >
             <Pencil className="h-3.5 w-3.5" />

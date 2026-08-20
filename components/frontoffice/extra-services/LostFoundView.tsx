@@ -1,11 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { CheckCircle2, Clock, PackageSearch } from "lucide-react";
 import { lostFoundService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import { FormField, SelectInput, TextAreaInput, TextInput } from "@/components/frontoffice/ui";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
+import {
+  normalizeLostFoundItem,
+  resolveLostFoundApiId,
+  toLostFoundCreatePayload,
+} from "@/components/housekeeping/lostFoundItemUtils";
+import type { LostFoundItem } from "@/app/data/frontoffice/modules";
 import {
   ClickableTable,
   FormDrawer,
@@ -18,8 +24,13 @@ import {
 } from "./common";
 
 export function LostFoundView() {
+  const loadItems = useCallback(async () => {
+    const rows = await lostFoundService.list();
+    return rows.map(normalizeLostFoundItem);
+  }, []);
+
   const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered } =
-    useModulePage(() => lostFoundService.list(), (r, q) => r.item.toLowerCase().includes(q) || r.guest.toLowerCase().includes(q) || r.room.includes(q));
+    useModulePage(loadItems, (r, q) => r.item.toLowerCase().includes(q) || r.guest.toLowerCase().includes(q) || r.room.includes(q));
 
   const [item, setItem] = useState("");
   const [guest, setGuest] = useState("");
@@ -40,11 +51,16 @@ export function LostFoundView() {
   const handleSave = async () => {
     if (!item.trim()) { setToast("Please enter item name."); return; }
     try {
-      const record = await lostFoundService.create({
-        item, guest: guest || "Unknown", foundBy, room: room || "Lobby",
-        foundDate: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
-        description: description || undefined, status: "Stored",
-      });
+      const row = await lostFoundService.create(
+        toLostFoundCreatePayload({
+          item,
+          guest: guest || "Unknown",
+          foundBy,
+          room: room || "Lobby",
+          description: description || undefined,
+        }),
+      );
+      const record = normalizeLostFoundItem(row);
       setItems((prev) => [record, ...prev]);
       setFormOpen(false);
       setItem(""); setGuest(""); setRoom(""); setDescription("");
@@ -54,23 +70,33 @@ export function LostFoundView() {
     }
   };
 
-  const markReturned = (id: string) => {
-    const now = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-    setItems((prev) => prev.map((r) => r.id === id ? { ...r, status: "Returned" as const, returnedDate: now } : r));
-    setPreview((p) => p?.id === id ? { ...p, status: "Returned", returnedDate: now } : p);
-    setToast("Item marked as returned to guest.");
+  const markReturned = async (target: LostFoundItem) => {
+    const apiId = resolveLostFoundApiId(target);
+    const claimant = target.guest || "Guest";
+    try {
+      const row = await lostFoundService.return(apiId, {
+        returnedTo: claimant,
+        claimBy: claimant,
+      });
+      const record = normalizeLostFoundItem(row);
+      setItems((prev) => prev.map((r) => (r.id === target.id ? record : r)));
+      setPreview((p) => (p?.id === target.id ? record : p));
+      setToast("Item marked as returned to guest.");
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to mark returned");
+    }
   };
 
   return (
     <ModuleShell toast={toast} setToast={setToast} eyebrow="Housekeeping"
       header={{ title: "Lost & Found", desc: "Track lost and found items for guests.", btn: "Log Item", onBtn: () => setFormOpen(true) }}
       stats={[
-        { label: "Stored", value: items.filter((r) => r.status === "Stored").length, accent: "#f59e0b", icon: PackageSearch, sublabel: "In custody" },
-        { label: "Returned", value: items.filter((r) => r.status === "Returned" || r.status === "Claimed").length, accent: "#10b981", icon: CheckCircle2 },
+        { label: "Stored", value: items.filter((r) => r.status === "Stored" || r.status === "Awaiting Claim" || r.status === "Under Verification").length, accent: "#f59e0b", icon: PackageSearch, sublabel: "In custody" },
+        { label: "Returned", value: items.filter((r) => r.status === "Returned" || r.status === "Claimed" || r.status === "Courier Dispatched").length, accent: "#10b981", icon: CheckCircle2 },
         { label: "Total Items", value: items.length, icon: Clock },
       ]}
       search={search} setSearch={setSearch} searchPh="Search item, guest, room…"
-      filters={{ active: filter, onChange: setFilter, options: [{ id: "all", label: "All" }, { id: "Stored", label: "Stored" }, { id: "Returned", label: "Returned" }, { id: "Claimed", label: "Claimed" }] }}
+      filters={{ active: filter, onChange: setFilter, options: [{ id: "all", label: "All" }, { id: "Stored", label: "Stored" }, { id: "Returned", label: "Returned" }, { id: "Claimed", label: "Claimed" }, { id: "Awaiting Claim", label: "Awaiting Claim" }] }}
       sort={{ value: sortBy, onChange: setSortBy, options: [{ value: "newest", label: "Newest first" }, { value: "item", label: "By item" }, { value: "guest", label: "Guest A–Z" }] }}
       resultCount={{ shown: list.length, total: items.length }}
       hasActiveAdvancedFilters={sortBy !== "newest"}
@@ -87,8 +113,11 @@ export function LostFoundView() {
                 if (firstSelected) setPreview(firstSelected);
               },
             },
-            ...(firstSelected && firstSelected.status === "Stored"
-              ? [{ label: "Return", onClick: () => markReturned(firstSelected.id) }]
+            ...(firstSelected &&
+            (firstSelected.status === "Stored" ||
+              firstSelected.status === "Awaiting Claim" ||
+              firstSelected.status === "Under Verification")
+              ? [{ label: "Return", onClick: () => void markReturned(firstSelected) }]
               : []),
           ]}
         />
@@ -104,7 +133,7 @@ export function LostFoundView() {
           { key: "guest", header: "Guest", render: (r) => r.guest },
           { key: "room", header: "Room", render: (r) => r.room },
           { key: "found", header: "Found By", render: (r) => r.foundBy },
-          { key: "status", header: "Status", render: (r) => <Pill className={statusColors[r.status]}>{r.status}</Pill> },
+          { key: "status", header: "Status", render: (r) => <Pill className={statusColors[r.status] ?? statusColors.Stored}>{r.status}</Pill> },
         ]}
       />
       <FormDrawer open={formOpen} onClose={() => setFormOpen(false)} title="Log Lost & Found Item" onSave={handleSave}>
@@ -117,8 +146,13 @@ export function LostFoundView() {
         <FormField label="Description"><TextAreaInput value={description} onChange={(e) => setDescription(e.target.value)} /></FormField>
       </FormDrawer>
       <PreviewDrawer open={!!preview} onClose={() => setPreview(null)} title={preview?.item ?? ""} desc={preview?.guest}
-        footer={preview?.status === "Stored" && <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={() => markReturned(preview.id)}>Mark Returned</Button>}>
-        {preview && <PreviewGrid icon={PackageSearch} rows={[["Guest", preview.guest], ["Room", preview.room], ["Found By", preview.foundBy], ["Found Date", preview.foundDate], ["Description", preview.description ?? "—"], ["Status", preview.status], ["Returned", preview.returnedDate ?? "—"]]} />}
+        footer={preview &&
+          (preview.status === "Stored" ||
+            preview.status === "Awaiting Claim" ||
+            preview.status === "Under Verification") && (
+          <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={() => void markReturned(preview)}>Mark Returned</Button>
+        )}>
+        {preview && <PreviewGrid icon={PackageSearch} rows={[["Guest", preview.guest], ["Room", preview.room], ["Found By", preview.foundBy], ["Found Date", preview.foundDate], ["Storage", preview.storedLocation ?? "—"], ["Description", preview.description ?? "—"], ["Status", preview.status], ["Returned", preview.returnedDate ?? "—"]]} />}
       </PreviewDrawer>
     </ModuleShell>
   );

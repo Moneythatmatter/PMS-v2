@@ -44,4 +44,8 @@ export const reservationService = {
     api.get<ReservationSummaryStat[]>(foPath("/reservations/summary")),
   inHouse: () =>
     api.get<InHouseGuestDto[]>(foPath("/reservations/in-house")),
+  getCurrentForRoom: (roomId: string) =>
+    api.get<ReservationBooking>(
+      foPath(`/reservations/by-room/${encodeURIComponent(roomId)}/current`),
+    ),
 };

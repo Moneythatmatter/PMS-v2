@@ -8,20 +8,39 @@ export function todayIso() {
   return `${y}-${m}-${day}`;
 }
 
-function matchesToday(dateValue?: string) {
+function normalizeToIso(dateValue?: string): string | null {
   const value = String(dateValue ?? "").trim();
-  if (!value) return false;
-  const today = todayIso();
-  const displayToday = new Date().toLocaleDateString("en-IN", {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  return null;
+}
+
+export function matchesDate(dateValue: string | undefined, isoDate: string) {
+  const value = String(dateValue ?? "").trim();
+  if (!value || !isoDate) return false;
+
+  const normalized = normalizeToIso(value);
+  if (normalized === isoDate) return true;
+
+  const target = new Date(`${isoDate}T12:00:00`);
+  if (Number.isNaN(target.getTime())) return false;
+  const displayTarget = target.toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
-  return (
-    value === today ||
-    value.startsWith(today) ||
-    value.includes(displayToday)
-  );
+  return value === displayTarget || value.includes(displayTarget);
+}
+
+function matchesToday(dateValue?: string) {
+  return matchesDate(dateValue, todayIso());
 }
 
 export function isArrivingToday(booking: {
@@ -30,6 +49,30 @@ export function isArrivingToday(booking: {
 }) {
   if (booking.arrivingToday) return true;
   return matchesToday(booking.checkIn);
+}
+
+export function isArrivingOnDate(
+  booking: {
+    checkIn?: string;
+    arrivingToday?: boolean;
+  },
+  isoDate: string,
+) {
+  if (booking.checkIn) return matchesDate(booking.checkIn, isoDate);
+  if (isoDate === todayIso()) return booking.arrivingToday === true;
+  return false;
+}
+
+export function isDepartingOnDate(
+  booking: {
+    checkOut?: string;
+    departingToday?: boolean;
+  },
+  isoDate: string,
+) {
+  if (booking.checkOut) return matchesDate(booking.checkOut, isoDate);
+  if (isoDate === todayIso()) return booking.departingToday === true;
+  return false;
 }
 
 export function isDepartingToday(booking: {

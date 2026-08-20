@@ -475,7 +475,8 @@ function dayAfterCheckout(checkOut: string) {
   return toIsoDate(next);
 }
 
-function getInitials(name: string) {
+function getInitials(name?: string) {
+  if (!name?.trim()) return "?";
   return name
     .split(" ")
     .map((part) => part[0])

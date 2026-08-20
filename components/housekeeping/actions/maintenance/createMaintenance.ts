@@ -3,8 +3,17 @@ import { changeRoomStatus } from "../room/roomStatus";
 import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import type { HKStaff, MaintenanceRequest } from "../../HousekeepingTypes";
 import { hkMaintenanceService } from "@/services/housekeeping";
+import {
+  normalizeMaintenanceRequest,
+  uiCategoryToIssueType,
+  uiPriorityToMaintenanceApi,
+} from "../../maintenanceRequestUtils";
 
-export const getSmartEngineerRecommendation = (staffList: HKStaff[], targetFloor: string, category: string): HKStaff | null => {
+export const getSmartEngineerRecommendation = (
+  staffList: HKStaff[],
+  targetFloor: string,
+  category: string,
+): HKStaff | null => {
   const candidateEngineers = staffList.filter((s) => {
     const isEngineer = s.role === "Engineer";
     const isActive = s.status === "Active";
@@ -20,33 +29,49 @@ export const getSmartEngineerRecommendation = (staffList: HKStaff[], targetFloor
     const specLower = spec.toLowerCase();
     if (catLower.includes("elect") && specLower === "electrical") return true;
     if (catLower.includes("plumb") && specLower === "plumbing") return true;
-    if ((catLower.includes("ac") || catLower.includes("air cond") || catLower.includes("cooler") || catLower.includes("heating")) && specLower === "hvac") return true;
+    if (
+      (catLower.includes("ac") ||
+        catLower.includes("air cond") ||
+        catLower.includes("cooler") ||
+        catLower.includes("heating")) &&
+      specLower === "hvac"
+    ) {
+      return true;
+    }
     if (catLower.includes("furn") && specLower === "carpentry") return true;
-    if (catLower.includes("general") || catLower.includes("other") || specLower === "general") return true;
+    if (catLower.includes("general") || catLower.includes("other") || specLower === "general") {
+      return true;
+    }
     return false;
   };
 
   const sorted = candidateEngineers.slice().sort((a, b) => {
-    // 1. Lowest workload
     const jobsA = a.activeJobs || 0;
     const jobsB = b.activeJobs || 0;
     if (jobsA !== jobsB) return jobsA - jobsB;
 
-    // 2. Same floor
-    const floorMatchA = (a.currentFloor && targetFloor && a.currentFloor.toLowerCase() === targetFloor.toLowerCase()) ? 1 : 0;
-    const floorMatchB = (b.currentFloor && targetFloor && b.currentFloor.toLowerCase() === targetFloor.toLowerCase()) ? 1 : 0;
+    const floorMatchA =
+      a.currentFloor &&
+      targetFloor &&
+      a.currentFloor.toLowerCase() === targetFloor.toLowerCase()
+        ? 1
+        : 0;
+    const floorMatchB =
+      b.currentFloor &&
+      targetFloor &&
+      b.currentFloor.toLowerCase() === targetFloor.toLowerCase()
+        ? 1
+        : 0;
     if (floorMatchA !== floorMatchB) {
       return floorMatchB - floorMatchA;
     }
 
-    // 3. Specialization match
     const specMatchA = matchSpecialization(category, a.specialization) ? 1 : 0;
     const specMatchB = matchSpecialization(category, b.specialization) ? 1 : 0;
     if (specMatchA !== specMatchB) {
       return specMatchB - specMatchA;
     }
 
-    // 4. Least recently assigned
     const timeA = a.lastAssignedTime ? new Date(a.lastAssignedTime).getTime() : 0;
     const timeB = b.lastAssignedTime ? new Date(b.lastAssignedTime).getTime() : 0;
     return timeA - timeB;
@@ -66,7 +91,7 @@ export const addMaintenanceRequest = (
     attachments?: { name: string; type: "image" | "pdf" | "video"; url: string }[];
   },
   maintenanceLength: number,
-  dispatchers: HousekeepingDispatchers
+  dispatchers: HousekeepingDispatchers,
 ) => {
   const isoStr = new Date().toISOString();
   const nowStr = new Date().toLocaleString("en-IN", {
@@ -78,8 +103,11 @@ export const addMaintenanceRequest = (
   });
 
   const isAssigned = req.engineer && req.engineer !== "—";
+  const parts = req.problem.split(/\s[—-]\s/);
+  const category = parts[0]?.trim() || "Others";
+  const description = parts.slice(1).join(" — ").trim() || req.problem;
 
-  const record: MaintenanceRequest = {
+  const optimistic: MaintenanceRequest = {
     id: `MT-${String(maintenanceLength + 1).padStart(2, "0")}-${Math.floor(100 + Math.random() * 900)}`,
     room: req.room,
     problem: req.problem,
@@ -94,22 +122,20 @@ export const addMaintenanceRequest = (
     assignmentType: req.assignmentType,
     attachments: req.attachments || [],
     assignmentHistory: [
-      {
-        timestamp: nowStr,
-        action: "Issue Reported",
-        by: "System",
-      },
-      ...(isAssigned ? [
-        {
-          timestamp: nowStr,
-          action: `${req.assignmentType === "Auto" ? "Auto Assigned" : "Manually Assigned"} → ${req.engineer}`,
-          by: "System",
-        }
-      ] : [])
+      { timestamp: nowStr, action: "Issue Reported", by: "System" },
+      ...(isAssigned
+        ? [
+            {
+              timestamp: nowStr,
+              action: `${req.assignmentType === "Auto" ? "Auto Assigned" : "Manually Assigned"} → ${req.engineer}`,
+              by: "System",
+            },
+          ]
+        : []),
     ],
   };
 
-  dispatchers.setMaintenance((prev) => [record, ...prev]);
+  dispatchers.setMaintenance((prev) => [optimistic, ...prev]);
 
   if (isAssigned) {
     dispatchers.setStaff((prev) =>
@@ -123,21 +149,45 @@ export const addMaintenanceRequest = (
           };
         }
         return s;
-      })
+      }),
     );
   }
 
-  // OOO / OOS rules: Critical issue immediately blocks room
   if (req.priority === "Critical") {
     changeRoomStatus(req.room, "Out of Order", dispatchers);
   } else if (req.priority === "High") {
     changeRoomStatus(req.room, "Out of Service", dispatchers);
   }
 
-  logAudit("Maintenance", "Issue Raised", `Reported maintenance issue in Room ${req.room}: "${req.problem}".`, req.room, dispatchers.currentUsername, dispatchers.setHistory);
+  logAudit(
+    "Maintenance",
+    "Issue Raised",
+    `Reported maintenance issue in Room ${req.room}: "${req.problem}".`,
+    req.room,
+    dispatchers.currentUsername,
+    dispatchers.setHistory,
+  );
 
-  void hkMaintenanceService.create(record).catch((err) => {
-    console.error("[HK] Failed to sync new maintenance request to API", err);
-  });
+  void hkMaintenanceService
+    .create({
+      roomId: req.room,
+      issueType: uiCategoryToIssueType(category),
+      title: category,
+      description,
+      priority: uiPriorityToMaintenanceApi(req.priority),
+      assignedTo: isAssigned ? req.engineer : undefined,
+      reportedBy: dispatchers.currentUsername,
+      estimatedCompletionAt: req.estimatedCompletion,
+      blocksRoom: req.priority === "High" || req.priority === "Critical",
+    })
+    .then((created) => {
+      dispatchers.setMaintenance((prev) =>
+        prev.map((r) =>
+          r.id === optimistic.id ? normalizeMaintenanceRequest(created) : r,
+        ),
+      );
+    })
+    .catch((err) => {
+      console.error("[HK] Failed to sync new maintenance request to API", err);
+    });
 };
-

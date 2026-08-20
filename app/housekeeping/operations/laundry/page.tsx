@@ -245,11 +245,6 @@ export default function LaundryOperations() {
   const [activeReportTab, setActiveReportTab] = useState<"daily" | "revenue" | "inventory" | "damage" | "staff" | "machines">("daily");
 
   useEffect(() => {
-    const stored = localStorage.getItem("pms_laundry_extra_info");
-    if (stored) {
-      setExtraInfoMap(JSON.parse(stored));
-    }
-
     // Initialize Mock Audit Logs from data
     const mockAudits = [
       { id: "A-01", timestamp: "18 Jul 18:30", event: "Laundry Created", user: "reception_suresh", details: "Guest Laundry job LD-08 booked. Room 102.", target: "LD-08" },
@@ -264,11 +259,7 @@ export default function LaundryOperations() {
   }, []);
 
   const saveExtraInfo = (jobId: string, info: any) => {
-    setExtraInfoMap((prev) => {
-      const next = { ...prev, [jobId]: info };
-      localStorage.setItem("pms_laundry_extra_info", JSON.stringify(next));
-      return next;
-    });
+    setExtraInfoMap((prev) => ({ ...prev, [jobId]: info }));
   };
 
   const addAuditLog = (event: string, details: string, target: string) => {

@@ -6,6 +6,7 @@ import type { InHouseGuest } from "@/app/data/frontoffice/modules";
 import { reservationService } from "@/services/front-office";
 import { ReservationStatusBadge } from "@/components/frontoffice/reservation/ReservationStatusBadge";
 import { Button } from "@/components/ui/Button";
+import { formatBookingGuestLine } from "@/lib/reservation-display";
 import {
   ActionButtons,
   AlertBanner,
@@ -61,6 +62,8 @@ export function InHouseGuestsView() {
       const query = search.toLowerCase();
       const matchesSearch =
         g.guestName.toLowerCase().includes(query) ||
+        (g.guestNo ?? "").toLowerCase().includes(query) ||
+        (g.bookingNo ?? "").toLowerCase().includes(query) ||
         g.room.includes(query) ||
         g.email?.toLowerCase().includes(query);
       return matchesFilter && matchesSearch;
@@ -234,7 +237,9 @@ export function InHouseGuestsView() {
                         <p className="font-semibold text-slate-900">{g.guestName}</p>
                         {g.isVip && <Crown className="h-3.5 w-3.5 text-amber-500" />}
                       </div>
-                      <p className="text-xs text-slate-500">Room {g.room} · {g.roomType}</p>
+                      <p className="text-xs text-slate-500">
+                        {formatBookingGuestLine(g)} · Room {g.room} · {g.roomType}
+                      </p>
                     </div>
                     <ReservationStatusBadge status={g.status} />
                   </div>

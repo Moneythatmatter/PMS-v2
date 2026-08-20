@@ -30,6 +30,14 @@ import {
   roomTypeService,
 } from "@/services/front-office";
 import { CompanySearchSelect } from "@/components/frontoffice/CompanySearchSelect";
+import { GuestProfileSearchSelect } from "@/components/frontoffice/GuestProfileSearchSelect";
+import { GuestExistingProfileSuggestion } from "@/components/frontoffice/GuestExistingProfileSuggestion";
+import {
+  findGuestByEmail,
+  findGuestByMobile,
+  guestToFormFields,
+  splitGuestName,
+} from "@/components/frontoffice/guestFormUtils";
 import { SearchSelect } from "@/components/frontoffice/SearchSelect";
 import { Button } from "@/components/ui/Button";
 import {
@@ -40,10 +48,7 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
-
-function generateRef() {
-  return `BK-${1044 + Math.floor(Math.random() * 100)}`;
-}
+import { displayBookingNo } from "@/lib/booking-display";
 
 function nightsBetween(checkIn: string, checkOut: string) {
   if (!checkIn || !checkOut) return 0;
@@ -140,7 +145,7 @@ export function NewReservationForm() {
         : searchParamCheckOut
     : "";
 
-  const [ref] = useState(generateRef);
+  const [savedBookingNo, setSavedBookingNo] = useState<string | null>(null);
   const [availableRoomNos, setAvailableRoomNos] = useState<string[]>([]);
   const [tariffByPlanMap, setTariffByPlanMap] = useState<Record<string, number>>({});
   const [baseRateByRoomMap, setBaseRateByRoomMap] = useState<Record<string, number>>({});
@@ -162,6 +167,7 @@ export function NewReservationForm() {
   >(() =>
     fallbackBookingSources.map((s) => ({ id: s, label: s })),
   );
+  const [guestProfiles, setGuestProfiles] = useState<GuestProfile[]>([]);
 
   const [form, setForm] = useState({
     firstName: "",
@@ -306,7 +312,7 @@ export function NewReservationForm() {
         if (activeSources.length > 0) {
           setSourceOptions(
             activeSources.map((s) => ({
-              id: s.name,
+              id: s.id,
               label: s.name,
               hint: s.code,
             })),
@@ -324,95 +330,21 @@ export function NewReservationForm() {
     };
   }, []);
 
-  // Automated Existing Guest Detection and Auto-Fill
   useEffect(() => {
-    if (!form.mobile && !form.email && (!form.firstName || !form.lastName)) {
-      return;
-    }
-
     let cancelled = false;
-    (async () => {
-      let profilesList: GuestProfile[] = [];
-      try {
-        profilesList = await guestService.list();
-      } catch {
-        return;
-      }
-      if (cancelled) return;
-
-      const searchMobile = form.mobile.trim().replace(/[\s\-\+]/g, "");
-      const searchEmail = form.email.trim().toLowerCase();
-      const searchName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim().toLowerCase();
-
-      let matchedGuest: GuestProfile | undefined;
-
-      if (searchMobile.length >= 10) {
-        matchedGuest = profilesList.find((g) => {
-          const gm = (g.mobile || "").replace(/[\s\-\+]/g, "");
-          return gm.endsWith(searchMobile) || searchMobile.endsWith(gm);
-        });
-      }
-
-      if (!matchedGuest && searchEmail) {
-        matchedGuest = profilesList.find((g) => (g.email || "").trim().toLowerCase() === searchEmail);
-      }
-
-      if (!matchedGuest && form.idNumber) {
-        const searchId = form.idNumber.trim().toLowerCase();
-        matchedGuest = profilesList.find((g) => (g.idNumber || "").trim().toLowerCase() === searchId);
-      }
-
-      if (!matchedGuest && form.firstName.trim().length >= 2 && form.lastName.trim().length >= 2) {
-        matchedGuest = profilesList.find((g) => (g.name || "").trim().toLowerCase() === searchName);
-      }
-
-      if (matchedGuest) {
-        const nameParts = (matchedGuest.name || "").split(" ");
-        const matchFirstName = nameParts[0] || "";
-        const matchLastName = nameParts.slice(1).join(" ") || "";
-
-        setForm((prev) => {
-          const cleanMatchedMobile = (matchedGuest!.mobile || "").replace(/\D/g, "");
-          if (
-            prev.guestId === matchedGuest!.id &&
-            prev.firstName === matchFirstName &&
-            prev.lastName === matchLastName &&
-            prev.mobile === cleanMatchedMobile &&
-            prev.email === matchedGuest!.email
-          ) {
-            return prev;
-          }
-
-          return {
-            ...prev,
-            guestId: matchedGuest!.id,
-            firstName: matchFirstName,
-            lastName: matchLastName,
-            mobile: cleanMatchedMobile,
-            email: matchedGuest!.email,
-            nationality: matchedGuest!.nationality || prev.nationality || "",
-            idProofType: matchedGuest!.idType || prev.idProofType || "",
-            idNumber: matchedGuest!.idNumber || prev.idNumber || "",
-            address: matchedGuest!.address || prev.address || "",
-            preferences: matchedGuest!.preferences || prev.preferences || [],
-            loyaltyPoints: matchedGuest!.loyaltyPoints || 0,
-            totalStays: matchedGuest!.totalStays || 0,
-          };
-        });
-      } else if (form.guestId) {
-        setForm((prev) => ({
-          ...prev,
-          guestId: "",
-          loyaltyPoints: 0,
-          totalStays: 0,
-        }));
-      }
-    })();
-
+    void guestService
+      .list()
+      .then((list) => {
+        if (!cancelled) setGuestProfiles(list);
+      })
+      .catch(() => {
+        if (!cancelled) setGuestProfiles([]);
+      });
     return () => {
       cancelled = true;
     };
-  }, [form.mobile, form.email, form.firstName, form.lastName, form.idNumber, form.guestId]);
+  }, []);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
@@ -457,6 +389,9 @@ export function NewReservationForm() {
   const stepIndex = steps.findIndex((s) => s.id === currentStep);
 
   const update = (field: string, value: string | number) => {
+    const guestContactFields = ["firstName", "lastName", "mobile", "email"];
+    if (form.guestId && guestContactFields.includes(field)) return;
+
     setForm((prev) => {
       const next = { ...prev, [field]: value };
       if (field === "roomType") next.roomNumber = "";
@@ -474,6 +409,122 @@ export function NewReservationForm() {
     });
     setSavedStatus(null);
   };
+
+  const applyGuestProfile = (guest: GuestProfile) => {
+    const fields = guestToFormFields(guest);
+    setForm((prev) => ({
+      ...prev,
+      ...fields,
+      bookingType: prev.bookingType,
+      companyName: prev.companyName,
+      companyId: prev.companyId,
+      checkIn: prev.checkIn,
+      checkOut: prev.checkOut,
+      adults: prev.adults,
+      children: prev.children,
+      roomType: prev.roomType,
+      roomNumber: prev.roomNumber,
+      tariffPlan: prev.tariffPlan,
+      mealPlan: prev.mealPlan,
+      source: prev.source,
+      advancePaid: prev.advancePaid,
+      paymentMode: prev.paymentMode,
+      notes: prev.notes,
+    }));
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.firstName;
+      delete next.lastName;
+      delete next.mobile;
+      delete next.email;
+      return next;
+    });
+    setSavedStatus(null);
+  };
+
+  const clearLinkedGuest = () => {
+    setForm((prev) => ({
+      ...prev,
+      guestId: "",
+      firstName: "",
+      lastName: "",
+      mobile: "",
+      email: "",
+      nationality: "",
+      idProofType: "",
+      idNumber: "",
+      address: "",
+      gender: "",
+      dob: "",
+      city: "",
+      state: "",
+      country: "",
+      pincode: "",
+      preferences: [],
+      loyaltyPoints: 0,
+      totalStays: 0,
+    }));
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.firstName;
+      delete next.lastName;
+      delete next.mobile;
+      delete next.email;
+      return next;
+    });
+    setSavedStatus(null);
+  };
+
+  const guestFieldsLocked = Boolean(form.guestId);
+  const lockedInputClass = cn(inputClass, "bg-slate-50 text-slate-700 cursor-not-allowed");
+
+  const suggestedGuestByMobile = useMemo(() => {
+    if (guestFieldsLocked || form.mobile.trim().length < 10) return null;
+    return findGuestByMobile(guestProfiles, form.mobile) ?? null;
+  }, [guestFieldsLocked, form.mobile, guestProfiles]);
+
+  const suggestedGuestByEmail = useMemo(() => {
+    if (guestFieldsLocked || !form.email.trim().includes("@")) return null;
+    const match = findGuestByEmail(guestProfiles, form.email);
+    if (!match) return null;
+    if (suggestedGuestByMobile?.id === match.id) return null;
+    return match;
+  }, [guestFieldsLocked, form.email, guestProfiles, suggestedGuestByMobile]);
+
+  const checkGuestUniqueness = (guestId = form.guestId) => {
+    const next: Record<string, string> = {};
+    if (guestId) return next;
+
+    if (suggestedGuestByMobile) {
+      next.mobile = "This mobile number is already registered.";
+    }
+
+    if (suggestedGuestByEmail) {
+      next.email = "This email is already registered.";
+    }
+
+    return next;
+  };
+
+  const validateGuestContact = () => {
+    const uniqueness = checkGuestUniqueness();
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (uniqueness.mobile) next.mobile = uniqueness.mobile;
+      else delete next.mobile;
+      if (uniqueness.email) next.email = uniqueness.email;
+      else delete next.email;
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (guestFieldsLocked) return;
+    if (form.mobile.length >= 10 || form.email.trim().includes("@")) {
+      validateGuestContact();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync duplicate hints while typing
+  }, [form.mobile, form.email, guestFieldsLocked, guestProfiles]);
 
   const validate = () => {
     const today = getTodayString();
@@ -498,6 +549,7 @@ export function NewReservationForm() {
       next.checkOut = "Check-out date must be after check-in date";
     }
     if (!form.roomType) next.roomType = "Required";
+    Object.assign(next, checkGuestUniqueness());
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -505,7 +557,13 @@ export function NewReservationForm() {
   const handleSave = async () => {
     if (!validate()) {
       setToastVariant("error");
-      setToast("Please fill in all required fields marked with *.");
+      const hasDuplicate =
+        !form.guestId && (Boolean(suggestedGuestByMobile) || Boolean(suggestedGuestByEmail));
+      setToast(
+        hasDuplicate
+          ? "This guest already exists — click the recommendation below mobile or email to use their profile."
+          : "Please fill in all required fields marked with *.",
+      );
       return;
     }
 
@@ -513,28 +571,23 @@ export function NewReservationForm() {
       let finalGuestId = form.guestId;
       const guestNameStr = `${form.firstName} ${form.lastName}`;
 
-      if (finalGuestId) {
-        await guestService.update(finalGuestId, {
-          name: guestNameStr,
-          mobile: form.mobile,
-          email: form.email,
-          nationality: form.nationality || "Indian",
-          address: form.address || "",
-          idType: form.idProofType || "Aadhaar",
-          idNumber: form.idNumber || "",
-          preferences: form.preferences?.length ? form.preferences : [],
-        });
-      } else {
+      if (!finalGuestId) {
         const created = await guestService.create({
           name: guestNameStr,
           mobile: form.mobile,
           email: form.email,
           nationality: form.nationality || "Indian",
+          gender: form.gender || "",
+          dob: form.dob || "",
+          address: form.address || "",
+          city: form.city || "",
+          state: form.state || "",
+          country: form.country || "",
+          pincode: form.pincode || "",
           totalStays: 1,
           loyaltyPoints: 100,
           idType: form.idProofType || "Aadhaar",
           idNumber: form.idNumber || "",
-          address: form.address || "",
           memberSince: new Date().toLocaleString("en-IN", { month: "short", year: "numeric" }),
           preferences: form.preferences || [],
         });
@@ -542,16 +595,9 @@ export function NewReservationForm() {
       }
 
       const booking = await reservationService.create({
-        guestId: finalGuestId,
-        guestName: guestNameStr,
-        phone: form.mobile,
-        email: form.email,
-        nationality: form.nationality || "Indian",
-        idProofType: form.idProofType || "Aadhaar",
-        idNumber: form.idNumber || "",
-        source: form.source || "Direct",
-        roomNo: form.roomNumber || "TBA",
-        roomType: form.roomType,
+        guestId: finalGuestId!,
+        roomRefId: form.roomNumber || undefined,
+        sourceId: form.source || undefined,
         checkIn: form.checkIn,
         checkOut: form.checkOut,
         nights,
@@ -566,19 +612,16 @@ export function NewReservationForm() {
         balance: pendingAmount,
         status: "Reserved",
         bookedBy: currentUser.name,
-        gender: form.gender || "",
-        dob: form.dob || "",
-        address: form.address || "",
-        city: form.city || "",
-        state: form.state || "",
-        country: form.country || "",
-        pincode: form.pincode || "",
+        bookingType: form.bookingType || undefined,
+        companyName: form.companyName,
+        specialRequests: form.notes || undefined,
       });
 
       setSavedStatus("Reserved");
+      setSavedBookingNo(displayBookingNo(booking));
       setToastVariant("success");
       setToast(
-        `Reservation ${booking.id} saved as Reserved for ${form.firstName} ${form.lastName}. Total: ${formatINR(totalAmount)}`,
+        `Reservation ${displayBookingNo(booking)} saved as Reserved for ${form.firstName} ${form.lastName}. Total: ${formatINR(totalAmount)}`,
       );
     } catch (e) {
       setToastVariant("error");
@@ -602,8 +645,8 @@ export function NewReservationForm() {
           <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-green-50 px-4 py-2.5">
             <CalendarDays className="h-4 w-4 text-emerald-700" />
             <div>
-              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Reference</p>
-              <p className="text-sm font-bold text-slate-800">{ref}</p>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Booking No.</p>
+              <p className="text-sm font-bold text-slate-800">Assigned on save</p>
             </div>
           </div>
         }
@@ -658,7 +701,7 @@ export function NewReservationForm() {
           </div>
           <p className="mt-4 text-xl font-bold text-slate-900">Reservation Saved</p>
           <p className="mt-1 text-sm text-slate-600">
-            {ref} · {guestName} · {savedStatus}
+            {savedBookingNo} · {guestName} · {savedStatus}
           </p>
           <p className="mt-1 text-sm font-semibold text-emerald-700">{formatINR(totalAmount)} total</p>
           <div className="mt-6 flex gap-3">
@@ -671,29 +714,110 @@ export function NewReservationForm() {
           {/* Form columns */}
           <div className="space-y-5 lg:col-span-2">
             <SectionCard icon={User} title="Guest Details" description="Basic contact only — ID, address, and other details are collected at check-in">
+              <FormField label="Search Guest" className="sm:col-span-2 lg:col-span-3">
+                <GuestProfileSearchSelect
+                  value={
+                    form.guestId
+                      ? [form.firstName, form.lastName].filter(Boolean).join(" ")
+                      : form.firstName
+                  }
+                  selectedGuestId={form.guestId || null}
+                  onChange={(v) => {
+                    if (form.guestId) return;
+                    const { firstName, lastName } = splitGuestName(v);
+                    setForm((prev) => ({
+                      ...prev,
+                      firstName: lastName ? firstName : v.trim(),
+                      lastName: lastName || prev.lastName,
+                    }));
+                    setErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.firstName;
+                      delete next.mobile;
+                      delete next.email;
+                      return next;
+                    });
+                    setSavedStatus(null);
+                  }}
+                  onSelectGuest={applyGuestProfile}
+                  onClear={clearLinkedGuest}
+                  placeholder="Search by name, mobile, or email…"
+                  inputClassName={inputClass}
+                />
+                {form.guestId && (
+                  <p className="mt-1.5 text-xs font-medium text-emerald-700">
+                    Guest profile linked — contact fields are locked. Use ✕ on search to clear and enter a different guest.
+                  </p>
+                )}
+                {errors.firstName && <p className="text-xs text-red-500">{errors.firstName}</p>}
+              </FormField>
               <FormField label="First Name" required>
-                <TextInput className={inputClass} placeholder="Enter first name" value={form.firstName} onChange={(e) => update("firstName", e.target.value)} />
+                <TextInput
+                  className={guestFieldsLocked ? lockedInputClass : inputClass}
+                  placeholder="Enter first name"
+                  autoComplete="off"
+                  readOnly={guestFieldsLocked}
+                  value={form.firstName}
+                  onChange={(e) => update("firstName", e.target.value)}
+                />
                 {errors.firstName && <p className="text-xs text-red-500">{errors.firstName}</p>}
               </FormField>
               <FormField label="Last Name" required>
-                <TextInput className={inputClass} placeholder="Enter last name" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
+                <TextInput
+                  className={guestFieldsLocked ? lockedInputClass : inputClass}
+                  placeholder="Enter last name"
+                  autoComplete="off"
+                  readOnly={guestFieldsLocked}
+                  value={form.lastName}
+                  onChange={(e) => update("lastName", e.target.value)}
+                />
                 {errors.lastName && <p className="text-xs text-red-500">{errors.lastName}</p>}
               </FormField>
               <FormField label="Mobile" required>
                 <TextInput
-                  className={inputClass}
+                  className={guestFieldsLocked ? lockedInputClass : inputClass}
                   type="tel"
                   inputMode="numeric"
                   placeholder="Enter mobile number"
+                  autoComplete="off"
+                  readOnly={guestFieldsLocked}
                   value={form.mobile}
                   onChange={(e) => update("mobile", e.target.value.replace(/\D/g, ""))}
+                  onBlur={guestFieldsLocked ? undefined : validateGuestContact}
                   maxLength={10}
                 />
-                {errors.mobile && <p className="text-xs text-red-500">{errors.mobile}</p>}
+                {errors.mobile && !suggestedGuestByMobile && (
+                  <p className="text-xs text-red-500">{errors.mobile}</p>
+                )}
+                {suggestedGuestByMobile && (
+                  <GuestExistingProfileSuggestion
+                    guest={suggestedGuestByMobile}
+                    fieldLabel="mobile"
+                    onSelect={applyGuestProfile}
+                  />
+                )}
               </FormField>
               <FormField label="Email" required>
-                <TextInput className={inputClass} type="email" placeholder="Enter email" value={form.email} onChange={(e) => update("email", e.target.value)} />
-                {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
+                <TextInput
+                  className={guestFieldsLocked ? lockedInputClass : inputClass}
+                  type="email"
+                  placeholder="Enter email"
+                  autoComplete="off"
+                  readOnly={guestFieldsLocked}
+                  value={form.email}
+                  onChange={(e) => update("email", e.target.value)}
+                  onBlur={guestFieldsLocked ? undefined : validateGuestContact}
+                />
+                {errors.email && !suggestedGuestByEmail && (
+                  <p className="text-xs text-red-500">{errors.email}</p>
+                )}
+                {suggestedGuestByEmail && (
+                  <GuestExistingProfileSuggestion
+                    guest={suggestedGuestByEmail}
+                    fieldLabel="email"
+                    onSelect={applyGuestProfile}
+                  />
+                )}
               </FormField>
               <FormField label="Booking Type" required>
                 <SearchSelect
@@ -878,7 +1002,7 @@ export function NewReservationForm() {
               <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Booking Summary</p>
                 <p className="mt-2 text-lg font-bold text-slate-900">{guestName}</p>
-                <p className="text-xs text-slate-500">{ref}</p>
+                <p className="text-xs text-slate-500">Auto-assigned on save (BK-0, BK-1, …)</p>
 
                 <div className="mt-4 space-y-2.5 text-sm">
                   {[

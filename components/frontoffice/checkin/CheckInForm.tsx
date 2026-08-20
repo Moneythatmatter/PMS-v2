@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   BedDouble,
@@ -35,7 +36,9 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
-import { isArrivingToday } from "@/lib/reservation-dates";
+import { displayBookingNo } from "@/lib/booking-display";
+import { formatBookingGuestLine } from "@/lib/reservation-display";
+import { isArrivingOnDate, isArrivingToday, todayIso } from "@/lib/reservation-dates";
 
 import { bookingTypeOptions } from "@/app/data/frontoffice/checkin";
 
@@ -66,21 +69,14 @@ function generateWalkInRef() {
   return `WI-${String(Date.now()).slice(-6)}`;
 }
 
-function getInitials(name: string) {
+function getInitials(name?: string) {
+  if (!name?.trim()) return "?";
   return name
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? "")
     .join("");
-}
-
-function todayIso() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function SectionCard({
@@ -122,7 +118,36 @@ function formatStayDate(date: Date) {
   });
 }
 
+function guestDetailsFromBooking(found: ReservationBooking) {
+  return {
+    gender: found.gender || "",
+    dob: found.dob || "",
+    nationality: found.nationality || "",
+    address: found.address || "",
+    city: found.city || "",
+    state: found.state || "",
+    country: found.country || "",
+    pincode: found.pincode || "",
+    idProofType: found.idProofType || "",
+    idNumber: found.idNumber || "",
+  };
+}
+
+function isEligibleForCheckIn(status: string) {
+  return (
+    status !== "Checked In" &&
+    status !== "Cancelled" &&
+    status !== "Checked Out" &&
+    status !== "In-House"
+  );
+}
+
 export function CheckInForm() {
+  const searchParams = useSearchParams();
+  const prefillBookingKey =
+    searchParams.get("bookingId") ?? searchParams.get("booking") ?? "";
+  const prefillAttempted = useRef<string | null>(null);
+  const arrivalDateInputRef = useRef<HTMLInputElement>(null);
   const [checkInMode, setCheckInMode] = useState<CheckInMode>("reserved");
   const [bookingId, setBookingId] = useState("");
   const [lookupError, setLookupError] = useState("");
@@ -157,6 +182,7 @@ export function CheckInForm() {
     { roomNo: string; roomType: string; status: string; housekeeping: string }[]
   >([]);
   const [roomTypeRates, setRoomTypeRates] = useState<Record<string, number>>({});
+  const [arrivalDate, setArrivalDate] = useState(() => todayIso());
 
   useEffect(() => {
     let cancelled = false;
@@ -200,17 +226,40 @@ export function CheckInForm() {
     };
   }, []);
 
-  const arrivalsToday = useMemo(
+  const eligibleArrivals = useMemo(
     () =>
       pmsBookings.filter(
         (b) =>
           b.status !== "Checked In" &&
           b.status !== "Cancelled" &&
           b.status !== "Checked Out" &&
-          isArrivingToday(b),
+          b.status !== "In-House",
       ),
     [pmsBookings],
   );
+
+  const arrivalsToday = useMemo(
+    () => eligibleArrivals.filter((b) => isArrivingToday(b)),
+    [eligibleArrivals],
+  );
+
+  const arrivalsOnSelectedDate = useMemo(
+    () => eligibleArrivals.filter((b) => isArrivingOnDate(b, arrivalDate)),
+    [eligibleArrivals, arrivalDate],
+  );
+
+  const isSelectedArrivalDateToday = arrivalDate === todayIso();
+
+  const arrivalSectionTitle = useMemo(() => {
+    if (isSelectedArrivalDateToday) return "Arriving Today";
+    const d = new Date(`${arrivalDate}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return "Arrivals";
+    return `Arriving ${d.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })}`;
+  }, [arrivalDate, isSelectedArrivalDateToday]);
 
   const walkInRate = roomTypeRates[walkIn.roomType] ?? 0;
   const walkInTotal = walkInRate * walkIn.nights * walkIn.adults;
@@ -234,23 +283,82 @@ export function CheckInForm() {
     }
   };
 
-  const loadArrival = (found: any) => {
-    setBooking(found);
-    setBookingId(found.id);
-    const preassigned = String(found.assignedRoom || found.roomNo || "").trim();
-    // Never treat booking placeholders (TBA / unassigned) as a real room
+  const loadArrival = useCallback(async (found: ReservationBooking) => {
+    let bookingRecord = found;
+    try {
+      const full = await reservationService.get(found.id);
+      bookingRecord = full;
+    } catch {
+      // use list row if detail fetch fails
+    }
+
+    setCheckInMode("reserved");
+    setBooking(bookingRecord);
+    setBookingId(displayBookingNo(bookingRecord));
+    const preassigned = String(bookingRecord.roomNo || bookingRecord.roomRefId || "").trim();
     const isRealRoom =
       preassigned &&
       !/^tba$/i.test(preassigned) &&
       !/^n\/?a$/i.test(preassigned) &&
       !/^unassigned$/i.test(preassigned);
     setAssignedRoom(isRealRoom ? preassigned : "");
-    setDeposit(found.advancePaid || 0);
+    setDeposit(bookingRecord.advancePaid || 0);
     setLookupError("");
     setErrors({});
+    setIdentityErrors({});
+    setGuestDetails(guestDetailsFromBooking(bookingRecord));
+
+    if (bookingRecord.guestId) {
+      try {
+        const guest = await guestService.get(bookingRecord.guestId);
+        setGuestDetails((prev) => ({
+          gender: guest.gender || prev.gender,
+          dob: guest.dob || prev.dob,
+          nationality: guest.nationality || prev.nationality,
+          address: guest.address || prev.address,
+          city: guest.city || prev.city,
+          state: guest.state || prev.state,
+          country: guest.country || prev.country,
+          pincode: guest.pincode || prev.pincode,
+          idProofType: guest.idType || prev.idProofType,
+          idNumber: guest.idNumber || prev.idNumber,
+        }));
+      } catch {
+        // guest profile optional
+      }
+    }
+
     setToastVariant("success");
-    setToast(`Loaded booking reference ${found.id} for ${found.guestName}.`);
-  };
+    setToast(
+      `Loaded booking ${displayBookingNo(bookingRecord)} for ${bookingRecord.guestName}.`,
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!prefillBookingKey || pmsBookings.length === 0) return;
+    if (prefillAttempted.current === prefillBookingKey) return;
+
+    const eligible = pmsBookings.filter((b) => isEligibleForCheckIn(b.status));
+    const found = eligible.find(
+      (b) =>
+        b.id === prefillBookingKey ||
+        displayBookingNo(b).toLowerCase() === prefillBookingKey.toLowerCase() ||
+        (b.bookingNo ?? "").toLowerCase() === prefillBookingKey.toLowerCase() ||
+        (b.guestNo ?? "").toLowerCase() === prefillBookingKey.toLowerCase(),
+    );
+
+    if (found) {
+      prefillAttempted.current = prefillBookingKey;
+      void loadArrival(found);
+      return;
+    }
+
+    prefillAttempted.current = prefillBookingKey;
+    setCheckInMode("reserved");
+    setLookupError(
+      `Booking "${prefillBookingKey}" was not found or is not eligible for check-in.`,
+    );
+  }, [prefillBookingKey, pmsBookings, loadArrival]);
 
   const handleLookupBooking = (idToSearch?: string) => {
     const query = (idToSearch ?? bookingId).trim();
@@ -259,24 +367,19 @@ export function CheckInForm() {
       return;
     }
 
-    const pool =
-      arrivalsToday.length > 0
-        ? arrivalsToday
-        : pmsBookings.filter(
-          (b) =>
-            b.status !== "Checked In" &&
-            b.status !== "Cancelled" &&
-            b.status !== "Checked Out",
-        );
+    const pool = pmsBookings.filter((b) => isEligibleForCheckIn(b.status));
 
     const found = pool.find(
       (b) =>
+        displayBookingNo(b).toLowerCase() === query.toLowerCase() ||
+        (b.bookingNo ?? "").toLowerCase() === query.toLowerCase() ||
+        (b.guestNo ?? "").toLowerCase() === query.toLowerCase() ||
         b.id.toLowerCase() === query.toLowerCase() ||
-        b.guestName.toLowerCase().includes(query.toLowerCase()),
+        b.guestName?.toLowerCase().includes(query.toLowerCase()),
     );
 
     if (found) {
-      loadArrival(found);
+      void loadArrival(found);
     } else {
       setLookupError(
         `No active arrival found matching "${query}". Try another ID or switch to Walk-in.`,
@@ -363,17 +466,51 @@ export function CheckInForm() {
     setErrors({});
 
     try {
+      const guestPayload = {
+        gender: guestDetails.gender,
+        dob: guestDetails.dob,
+        nationality: guestDetails.nationality,
+        address: guestDetails.address,
+        city: guestDetails.city,
+        state: guestDetails.state,
+        country: guestDetails.country,
+        pincode: guestDetails.pincode,
+        idProofType: guestDetails.idProofType,
+        idNumber: guestDetails.idNumber,
+      };
+
       if (checkInMode === "reserved" && booking) {
         await reservationService.checkIn(booking.id, {
           roomNo: roomForApi,
+          ...guestPayload,
         } as Partial<ReservationBooking>);
       } else {
-        const created = await reservationService.create({
-          guestName: guestNameForApi,
-          phone: walkIn.mobile,
+        const checkIn = formatStayDate(new Date());
+        const checkOutDate = new Date();
+        checkOutDate.setDate(checkOutDate.getDate() + walkIn.nights);
+        const checkOut = formatStayDate(checkOutDate);
+
+        const guest = await guestService.create({
+          name: guestNameForApi,
           email: walkIn.email || undefined,
-          roomNo: roomForApi,
-          roomType: walkIn.roomType,
+          mobile: walkIn.mobile,
+          nationality: guestDetails.nationality || undefined,
+          gender: guestDetails.gender || undefined,
+          dob: guestDetails.dob || undefined,
+          address: guestDetails.address || undefined,
+          city: guestDetails.city || undefined,
+          state: guestDetails.state || undefined,
+          country: guestDetails.country || undefined,
+          pincode: guestDetails.pincode || undefined,
+          idType: guestDetails.idProofType || undefined,
+          idNumber: guestDetails.idNumber || undefined,
+        });
+
+        const created = await reservationService.create({
+          guestId: guest.id,
+          roomRefId: roomForApi,
+          checkIn,
+          checkOut,
           nights: walkIn.nights,
           adults: walkIn.adults,
           totalAmount: walkInTotal,
@@ -381,15 +518,12 @@ export function CheckInForm() {
           paymentMode: walkIn.paymentMode,
           status: "Confirmed",
           source: "Walk-in",
+          bookingType: walkIn.bookingType || "Individual",
+          companyName: walkIn.companyName || undefined,
         } as Partial<ReservationBooking>);
         await reservationService.checkIn(created.id, {
-          roomNo: roomForApi,
+          roomRefId: roomForApi,
         } as Partial<ReservationBooking>);
-        await guestService.create({
-          name: guestNameForApi,
-          email: walkIn.email || undefined,
-          mobile: walkIn.mobile || undefined,
-        });
       }
 
       setCompleted(true);
@@ -544,7 +678,7 @@ export function CheckInForm() {
                   onKeyDown={(e) =>
                     e.key === "Enter" && handleLookupBooking()
                   }
-                  placeholder="e.g. BK-1002 or James Wilson"
+                  placeholder="e.g. BK-0 or James Wilson"
                   className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
                 />
                 <Button
@@ -563,24 +697,58 @@ export function CheckInForm() {
             </div>
 
             <div className="rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/80 to-teal-50/50 p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-emerald-600" />
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <div className="min-w-0">
                   <p className="text-sm font-semibold text-emerald-900">
-                    Arriving Today
+                    {arrivalSectionTitle}
                   </p>
+                  {!isSelectedArrivalDateToday && (
+                    <button
+                      type="button"
+                      onClick={() => setArrivalDate(todayIso())}
+                      className="mt-0.5 text-[11px] font-medium text-emerald-700 hover:underline"
+                    >
+                      Back to today
+                    </button>
+                  )}
                 </div>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
-                  {arrivalsToday.length}
-                </span>
+                <div className="relative flex shrink-0 items-center gap-2">
+                  <input
+                    ref={arrivalDateInputRef}
+                    type="date"
+                    value={arrivalDate}
+                    onChange={(e) => setArrivalDate(e.target.value || todayIso())}
+                    className="sr-only"
+                    tabIndex={-1}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = arrivalDateInputRef.current;
+                      if (!input) return;
+                      if (typeof input.showPicker === "function") input.showPicker();
+                      else input.click();
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-700 shadow-sm transition hover:bg-emerald-50"
+                    title="Pick arrival date"
+                    aria-label="Pick arrival date"
+                  >
+                    <Calendar className="h-4 w-4" />
+                  </button>
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
+                    {arrivalsOnSelectedDate.length}
+                  </span>
+                </div>
               </div>
               <div className="space-y-2">
-                {arrivalsToday.length === 0 ? (
+                {arrivalsOnSelectedDate.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-emerald-200 bg-white/60 px-3 py-6 text-center text-xs text-slate-500">
-                    No expected arrivals for today.
+                    {isSelectedArrivalDateToday
+                      ? "No expected arrivals for today."
+                      : "No expected arrivals on this date."}
                   </p>
                 ) : (
-                  arrivalsToday.map((arr) => {
+                  arrivalsOnSelectedDate.map((arr) => {
                     const isSelected = booking?.id === arr.id;
                     const roomLabel =
                       arr.roomNo && arr.roomNo !== "TBA"
@@ -590,7 +758,7 @@ export function CheckInForm() {
                       <button
                         key={arr.id}
                         type="button"
-                        onClick={() => loadArrival(arr)}
+                        onClick={() => void loadArrival(arr)}
                         className={cn(
                           "w-full rounded-xl border p-3.5 text-left transition-all",
                           isSelected
@@ -619,7 +787,8 @@ export function CheckInForm() {
                               )}
                             </div>
                             <p className="text-xs text-slate-500">
-                              {arr.id} · {roomLabel}
+                              {formatBookingGuestLine(arr)} · {roomLabel}
+                              {arr.checkIn ? ` · In ${arr.checkIn}` : ""}
                             </p>
                             <p className="mt-1 text-xs font-semibold text-emerald-700">
                               {arr.roomType}
@@ -651,8 +820,7 @@ export function CheckInForm() {
                   No guest selected
                 </p>
                 <p className="mt-1 max-w-xs text-sm text-slate-500">
-                  Look up a booking or select from arriving today to
-                  continue check-in.
+                  Look up a booking or pick an arrival date to continue check-in.
                 </p>
               </div>
             ) : (
@@ -672,7 +840,7 @@ export function CheckInForm() {
                             <Crown className="h-4 w-4 shrink-0 text-amber-500" />
                           )}
                         </div>
-                        <p className="text-sm text-slate-500">{booking.id}</p>
+                        <p className="text-sm text-slate-500">{formatBookingGuestLine(booking)}</p>
                       </div>
                     </div>
                     <button

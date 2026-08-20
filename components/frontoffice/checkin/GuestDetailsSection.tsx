@@ -16,7 +16,14 @@ const inputClass = "rounded-xl";
 const errorClass = "border-red-400 bg-red-50/40 focus:border-red-500 focus:ring-red-100";
 
 function toOptions(values: readonly string[]) {
-  return values.map((v) => ({ id: v, label: v }));
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const value of values) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    unique.push(value);
+  }
+  return unique.map((v) => ({ id: v, label: v }));
 }
 
 export type GuestDetails = {

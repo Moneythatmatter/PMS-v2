@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, ReactNode } from "react";
+import { useState, useRef, useEffect, useMemo, ReactNode } from "react";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +26,8 @@ export interface SearchSelectProps {
   renderOption?: (option: SearchOption) => ReactNode;
   /** Allow committing typed text that is not in the options list. */
   allowCustom?: boolean;
+  /** When a selection exists, lock the input (clear via X only). */
+  lockInputWhenSelected?: boolean;
 }
 
 export function SearchSelect({
@@ -41,23 +43,33 @@ export function SearchSelect({
   inputClassName,
   renderOption,
   allowCustom = false,
+  lockInputWhenSelected = false,
 }: SearchSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [internalQuery, setInternalQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const uniqueOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return options.filter((opt) => {
+      if (seen.has(opt.id)) return false;
+      seen.add(opt.id);
+      return true;
+    });
+  }, [options]);
+
   const isControlledQuery = onChange !== undefined;
   const query = isControlledQuery ? value : internalQuery;
 
   const selected =
-    (selectedId ? options.find((o) => o.id === selectedId) : null) ??
+    (selectedId ? uniqueOptions.find((o) => o.id === selectedId) : null) ??
     (selectedId
       ? { id: selectedId, label: selectedId, data: { id: selectedId, label: selectedId } }
       : null);
 
   const displayValue = isOpen ? query : (selected?.label ?? "");
 
-  const matches = options.filter((opt) => {
+  const matches = uniqueOptions.filter((opt) => {
     const q = query.toLowerCase().trim();
     if (!q) return true;
     return (
@@ -69,7 +81,7 @@ export function SearchSelect({
   });
 
   const trimmedQuery = query.trim();
-  const exactMatch = options.some(
+  const exactMatch = uniqueOptions.some(
     (o) =>
       o.id.toLowerCase() === trimmedQuery.toLowerCase() ||
       o.label.toLowerCase() === trimmedQuery.toLowerCase(),
@@ -108,7 +120,19 @@ export function SearchSelect({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- commit uses latest query via refs would be overkill; query captured on each open cycle
   }, [allowCustom, isControlledQuery, internalQuery]);
 
-  const showDropdown = isOpen;
+  const showDropdown = isOpen && !(lockInputWhenSelected && selectedId);
+  const inputLocked = lockInputWhenSelected && Boolean(selectedId);
+
+  const handleInputChange = (val: string) => {
+    if (inputLocked) return;
+    if (isControlledQuery) {
+      onChange?.(val);
+    } else {
+      setInternalQuery(val);
+    }
+    setIsOpen(true);
+  };
+
   const showClear = Boolean(selectedId || displayValue.trim());
 
   const handleClear = () => {
@@ -121,15 +145,6 @@ export function SearchSelect({
     onClear?.();
   };
 
-  const handleInputChange = (val: string) => {
-    if (isControlledQuery) {
-      onChange?.(val);
-    } else {
-      setInternalQuery(val);
-    }
-    setIsOpen(true);
-  };
-
   return (
     <div ref={containerRef} className={cn("relative w-full", className)}>
       {label && <label className="mb-1 block text-xs font-semibold text-slate-700">{label}</label>}
@@ -138,8 +153,10 @@ export function SearchSelect({
         <input
           type="text"
           value={displayValue}
+          readOnly={inputLocked}
           onChange={(e) => handleInputChange(e.target.value)}
           onFocus={() => {
+            if (inputLocked) return;
             if (!isControlledQuery && selected) {
               setInternalQuery(selected.label);
             }
@@ -155,6 +172,7 @@ export function SearchSelect({
           className={cn(
             "h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 transition",
             showClear ? "pr-9" : "pr-3",
+            inputLocked && "cursor-default bg-slate-50 text-slate-700",
             inputClassName,
           )}
         />
@@ -193,9 +211,9 @@ export function SearchSelect({
                 : "No options available"}
             </p>
           )}
-          {matches.map((opt) => (
+          {matches.map((opt, index) => (
             <button
-              key={opt.id}
+              key={`${opt.id}-${index}`}
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
