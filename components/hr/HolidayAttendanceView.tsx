@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Calendar,
   Search,
@@ -14,11 +14,14 @@ import {
   Plus,
   SlidersHorizontal,
   X,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
+import { cn } from "@/lib/utils";
 
 export type PayrollStatus = "Pending Payroll Processing" | "Processed in Payroll" | "N/A";
 
@@ -159,13 +162,34 @@ export function HolidayAttendanceView() {
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
-  // Review Modal & Side Drawer State
+  // Review Modal & Side Drawer & Add Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [reviewingRecord, setReviewingRecord] = useState<HolidayAttendanceRecord | null>(null);
   const [viewingRecord, setViewingRecord] = useState<HolidayAttendanceRecord | null>(null);
 
   // Review Form State
   const [reviewRemarks, setReviewRemarks] = useState("");
+
+  // Add Manual Holiday Attendance Form State (With Searchable Combobox & Auto-Close)
+  const [addEmpId, setAddEmpId] = useState("");
+  const [addEmpQuery, setAddEmpQuery] = useState("");
+  const [isAddEmpComboboxOpen, setIsAddEmpComboboxOpen] = useState(false);
+  const addComboboxRef = useRef<HTMLDivElement>(null);
+  const [addHolidayName, setAddHolidayName] = useState("Independence Day (15 Aug)");
+  const [addWorkedHours, setAddWorkedHours] = useState("8.0");
+  const [addRemarks, setAddRemarks] = useState("");
+
+  // Close Employee Combobox Popover when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (addComboboxRef.current && !addComboboxRef.current.contains(event.target as Node)) {
+        setIsAddEmpComboboxOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Filtered Records
   const filteredRecords = useMemo(() => {
@@ -248,6 +272,42 @@ export function HolidayAttendanceView() {
     setToastMessage(`Rejected holiday work request for ${empName}.`);
   };
 
+  const handleSaveAddHolidayWork = (e: React.FormEvent) => {
+    e.preventDefault();
+    const empObj = INITIAL_HOLIDAY_RECORDS.find((x) => x.employeeId === addEmpId);
+    const parsedHours = parseFloat(addWorkedHours) || 8.0;
+    const monthlySalary = 30000;
+    const perDaySalary = Math.round(monthlySalary / 30); // ₹1,000/day
+    const rateMultiplier = 1.0; // Default 1.0x Holiday Pay Multiplier (1 Day Daily Salary)
+    const calculatedPay = Math.round(perDaySalary * rateMultiplier);
+
+    const newRecord: HolidayAttendanceRecord = {
+      id: `HA-${Math.floor(500 + Math.random() * 500)}`,
+      employeeId: addEmpId || "EMP-0101",
+      employeeName: empObj?.employeeName || "Rajesh Kumar",
+      department: empObj?.department || "Front Office",
+      designation: empObj?.designation || "Staff",
+      avatar: empObj?.avatar || "RK",
+      holidayName: addHolidayName.split("(")[0].trim(),
+      holidayDate: "15/08/2026",
+      attendanceStatus: "Present",
+      checkIn: "08:00 AM",
+      checkOut: "04:30 PM",
+      workedHours: parsedHours,
+      benefitType: "Additional Pay",
+      holidayPayAmount: calculatedPay,
+      payrollStatus: "Pending Payroll Processing",
+      approvalStatus: "Approved",
+      reviewedBy: "Neha Mehta (HR Admin)",
+      reviewedDate: new Date().toLocaleDateString("en-GB"),
+      remarks: addRemarks || "Manual holiday attendance entry verified and sent to Payroll.",
+    };
+
+    setRecords((prev) => [newRecord, ...prev]);
+    setIsAddModalOpen(false);
+    setToastMessage(`Added Holiday Work entry for ${newRecord.employeeName} (₹${calculatedPay.toLocaleString("en-IN")} forwarded to Payroll).`);
+  };
+
   return (
     <ModulePageShell
       eyebrow="Human Resource / Attendance & Leave"
@@ -265,11 +325,30 @@ export function HolidayAttendanceView() {
           <Button
             type="button"
             size="sm"
-            onClick={() => handleOpenReviewModal(records.find((r) => r.approvalStatus === "Pending") || records[0])}
+            onClick={() => {
+              setAddEmpId("");
+              setAddEmpQuery("");
+              setIsAddEmpComboboxOpen(false);
+              setAddHolidayName("Independence Day (15 Aug)");
+              setAddWorkedHours("8.0");
+              setAddRemarks("");
+              setIsAddModalOpen(true);
+            }}
             className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs cursor-pointer"
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Review Holiday Attendance
+            Add Holiday Entry
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => handleOpenReviewModal(records.find((r) => r.approvalStatus === "Pending") || records[0])}
+            className="rounded-xl text-xs font-bold bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50 shadow-xs cursor-pointer"
+          >
+            <Eye className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+            Review Pending ({records.filter((r) => r.approvalStatus === "Pending").length})
           </Button>
 
           <Button
@@ -719,6 +798,190 @@ export function HolidayAttendanceView() {
           </>
         )}
       </Drawer>
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL 2: MANUAL ADD HOLIDAY WORK ENTRY MODAL
+      ───────────────────────────────────────────────────────────── */}
+      {isAddModalOpen && (
+        <Modal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          title="Add Manual Holiday Work Entry"
+          description="Record an employee's worked hours on an official holiday for additional salary compensation."
+          size="md"
+        >
+          <form onSubmit={handleSaveAddHolidayWork} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Select Employee <span className="text-rose-500">*</span>
+              </label>
+
+              {/* Single Unified Searchable Employee Combobox */}
+              <div className="relative" ref={addComboboxRef}>
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={addEmpQuery}
+                  onFocus={() => setIsAddEmpComboboxOpen(true)}
+                  onChange={(e) => {
+                    setAddEmpQuery(e.target.value);
+                    setIsAddEmpComboboxOpen(true);
+                  }}
+                  placeholder="Type employee name, ID or department to search..."
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-xs font-semibold text-slate-900 shadow-2xs focus:border-emerald-500 focus:outline-none"
+                />
+                {addEmpQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddEmpQuery("");
+                      setAddEmpId("");
+                      setIsAddEmpComboboxOpen(true);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                )}
+
+                {/* Combobox Dropdown Results List */}
+                {isAddEmpComboboxOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl space-y-1 max-h-56 overflow-y-auto animate-in fade-in-50">
+                    {INITIAL_HOLIDAY_RECORDS.filter((staff) => {
+                      if (!addEmpQuery.trim()) return true;
+                      const q = addEmpQuery.toLowerCase().trim();
+                      return (
+                        staff.employeeName.toLowerCase().includes(q) ||
+                        staff.employeeId.toLowerCase().includes(q) ||
+                        staff.department.toLowerCase().includes(q) ||
+                        staff.designation.toLowerCase().includes(q)
+                      );
+                    }).length === 0 ? (
+                      <div className="p-3 text-center text-xs text-slate-400 font-medium">
+                        No matching employee found.
+                      </div>
+                    ) : (
+                      INITIAL_HOLIDAY_RECORDS.filter((staff) => {
+                        if (!addEmpQuery.trim()) return true;
+                        const q = addEmpQuery.toLowerCase().trim();
+                        return (
+                          staff.employeeName.toLowerCase().includes(q) ||
+                          staff.employeeId.toLowerCase().includes(q) ||
+                          staff.department.toLowerCase().includes(q) ||
+                          staff.designation.toLowerCase().includes(q)
+                        );
+                      }).map((staff) => (
+                        <div
+                          key={staff.employeeId}
+                          onClick={() => {
+                            setAddEmpId(staff.employeeId);
+                            setAddEmpQuery(`${staff.employeeName} (${staff.employeeId}) - ${staff.department}`);
+                            setIsAddEmpComboboxOpen(false);
+                          }}
+                          className={cn(
+                            "flex items-center justify-between p-2 rounded-xl cursor-pointer transition-colors hover:bg-slate-100/80 border border-transparent",
+                            addEmpId === staff.employeeId && "bg-emerald-50 text-emerald-900 border-emerald-200"
+                          )}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 font-bold text-[10px] shrink-0">
+                              {staff.avatar}
+                            </div>
+                            <div className="truncate">
+                              <p className="font-bold text-xs text-slate-900 truncate">
+                                {staff.employeeName} <span className="text-[10px] font-semibold text-emerald-700">({staff.employeeId})</span>
+                              </p>
+                              <p className="text-[10px] text-slate-500 truncate">{staff.designation} • {staff.department}</p>
+                            </div>
+                          </div>
+                          {addEmpId === staff.employeeId && <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-2" />}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Holiday Occasion <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={addHolidayName}
+                  onChange={(e) => setAddHolidayName(e.target.value)}
+                  className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
+                >
+                  <option value="Independence Day (15 Aug)">Independence Day (15 Aug)</option>
+                  <option value="Republic Day (26 Jan)">Republic Day (26 Jan)</option>
+                  <option value="Gandhi Jayanti (02 Oct)">Gandhi Jayanti (02 Oct)</option>
+                  <option value="Diwali Holiday (12 Nov)">Diwali Holiday (12 Nov)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Worked Hours <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="1"
+                  max="16"
+                  placeholder="e.g. 8.0"
+                  value={addWorkedHours}
+                  onChange={(e) => setAddWorkedHours(e.target.value)}
+                  required
+                  className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-bold text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-950 flex items-center justify-between">
+              <div>
+                <span className="font-bold block">Payroll Rule Applied:</span>
+                <p className="text-purple-900">
+                  Rate Multiplier: <strong>1.0x Normal Salary Rate</strong> (1 Day Full Pay = ₹1,000 for ₹30k/mo salary)
+                </p>
+              </div>
+              <DollarSign className="h-5 w-5 text-purple-700 shrink-0" />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Remarks / Note</label>
+              <textarea
+                rows={2}
+                placeholder="e.g. Worked extra shift for Independence Day banquet event..."
+                value={addRemarks}
+                onChange={(e) => setAddRemarks(e.target.value)}
+                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddModalOpen(false)}
+                className="rounded-xl text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white"
+              >
+                Forward to Payroll
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* MOBILE FILTERS BOTTOM SHEET MODAL */}
       {isMobileFilterOpen && (

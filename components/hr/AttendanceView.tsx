@@ -61,7 +61,7 @@ export const INITIAL_ATTENDANCE_RECORDS: AttendanceRecord[] = [
     avatar: "RK",
     photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
     shiftCode: "MS-01",
-    shiftName: "Morning Shift (A)",
+    shiftName: "Morning Shift (07:00 AM - 03:30 PM)",
     date: "08/08/2026",
     checkIn: "08:58 AM",
     checkOut: "05:30 PM",
@@ -81,7 +81,7 @@ export const INITIAL_ATTENDANCE_RECORDS: AttendanceRecord[] = [
     avatar: "AS",
     photoUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150",
     shiftCode: "GS-04",
-    shiftName: "General Office Shift",
+    shiftName: "General Shift (09:00 AM - 05:30 PM)",
     date: "08/08/2026",
     checkIn: "09:25 AM",
     checkOut: "05:30 PM",
@@ -97,11 +97,11 @@ export const INITIAL_ATTENDANCE_RECORDS: AttendanceRecord[] = [
     id: "ATT-103",
     employeeId: "EMP-0103",
     employeeName: "Chef Vikramjit Singh",
-    department: "Food & Beverage",
+    department: "Kitchen / Culinary",
     designation: "Executive Head Chef",
     avatar: "VS",
     shiftCode: "SS-05",
-    shiftName: "Split Shift (F&B)",
+    shiftName: "Split Shift (F&B Kitchen)",
     date: "08/08/2026",
     checkIn: "10:55 AM",
     checkOut: "11:00 PM",
@@ -119,8 +119,9 @@ export const INITIAL_ATTENDANCE_RECORDS: AttendanceRecord[] = [
     department: "Front Office",
     designation: "Guest Relations Executive",
     avatar: "PP",
+    photoUrl: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=150",
     shiftCode: "ES-02",
-    shiftName: "Evening Shift (B)",
+    shiftName: "Evening Shift (03:00 PM - 11:30 PM)",
     date: "08/08/2026",
     checkIn: "—",
     checkOut: "—",
@@ -133,31 +134,111 @@ export const INITIAL_ATTENDANCE_RECORDS: AttendanceRecord[] = [
   {
     id: "ATT-105",
     employeeId: "EMP-0105",
-    employeeName: "Arjun Verma",
-    department: "Food & Beverage",
-    designation: "Restaurant Captain",
-    avatar: "AV",
-    shiftCode: "ES-02",
-    shiftName: "Evening Shift (B)",
+    employeeName: "Suresh Babu",
+    department: "Maintenance & Eng.",
+    designation: "Chief Engineer",
+    avatar: "SB",
+    photoUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150",
+    shiftCode: "GS-04",
+    shiftName: "General Shift (09:00 AM - 05:30 PM)",
     date: "08/08/2026",
-    checkIn: "02:58 PM",
-    checkOut: "11:30 PM",
-    workedHours: 8.5,
+    checkIn: "08:50 AM",
+    checkOut: "05:40 PM",
+    workedHours: 8.8,
     expectedHours: 8.0,
     status: "Present",
-    inLocation: "Restaurant POS Terminal",
-    outLocation: "Restaurant POS Terminal",
+    inLocation: "Engineering Workshop Terminal",
+    outLocation: "Engineering Workshop Terminal",
     deviceType: "Biometric Reader",
   },
   {
     id: "ATT-106",
     employeeId: "EMP-0106",
-    employeeName: "Meera Nair",
+    employeeName: "Sunita Patel",
+    department: "Housekeeping",
+    designation: "Floor Supervisor",
+    avatar: "SP",
+    shiftCode: "MS-01",
+    shiftName: "Morning Shift (07:00 AM - 03:30 PM)",
+    date: "08/08/2026",
+    checkIn: "06:55 AM",
+    checkOut: "03:35 PM",
+    workedHours: 8.6,
+    expectedHours: 8.0,
+    status: "Present",
+    inLocation: "3rd Floor Linen Room Terminal",
+    outLocation: "3rd Floor Linen Room Terminal",
+    deviceType: "Biometric Reader",
+  },
+  {
+    id: "ATT-107",
+    employeeId: "EMP-0107",
+    employeeName: "Ramesh Verma",
     department: "Front Office",
-    designation: "Concierge Lead",
-    avatar: "MN",
+    designation: "Night Auditor",
+    avatar: "RV",
+    photoUrl: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150",
     shiftCode: "NS-03",
-    shiftName: "Night Shift (C)",
+    shiftName: "Night Shift (11:00 PM - 07:30 AM)",
+    date: "08/08/2026",
+    checkIn: "10:52 PM",
+    checkOut: "07:35 AM",
+    workedHours: 8.7,
+    expectedHours: 8.0,
+    status: "Present",
+    inLocation: "Front Desk Terminal #01",
+    outLocation: "Front Desk Terminal #01",
+    deviceType: "Biometric Reader",
+  },
+  {
+    id: "ATT-108",
+    employeeId: "EMP-0108",
+    employeeName: "Deepak Chawla",
+    department: "Kitchen / Culinary",
+    designation: "Commi 1 (Pastry)",
+    avatar: "DC",
+    photoUrl: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&q=80&w=150",
+    shiftCode: "MS-01",
+    shiftName: "Morning Shift (07:00 AM - 03:30 PM)",
+    date: "08/08/2026",
+    checkIn: "—",
+    checkOut: "—",
+    workedHours: 0.0,
+    expectedHours: 8.0,
+    status: "On Leave",
+    deviceType: "Manual Entry",
+    manualReason: "Approved Sick Leave (SL-109).",
+  },
+  {
+    id: "ATT-109",
+    employeeId: "EMP-0109",
+    employeeName: "Meenakshi Sundaram",
+    department: "HR & Admin",
+    designation: "HR Executive",
+    avatar: "MS",
+    photoUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150",
+    shiftCode: "GS-04",
+    shiftName: "General Shift (09:00 AM - 05:30 PM)",
+    date: "08/08/2026",
+    checkIn: "08:59 AM",
+    checkOut: "05:30 PM",
+    workedHours: 8.5,
+    expectedHours: 8.0,
+    status: "Present",
+    inLocation: "HR Admin Office Biometric",
+    outLocation: "HR Admin Office Biometric",
+    deviceType: "Biometric Reader",
+  },
+  {
+    id: "ATT-110",
+    employeeId: "EMP-0110",
+    employeeName: "Arun Joshi",
+    department: "F&B Service",
+    designation: "Captain / Waiter",
+    avatar: "AJ",
+    photoUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=150",
+    shiftCode: "ES-02",
+    shiftName: "Evening Shift (03:00 PM - 11:30 PM)",
     date: "08/08/2026",
     checkIn: "—",
     checkOut: "—",
@@ -165,7 +246,7 @@ export const INITIAL_ATTENDANCE_RECORDS: AttendanceRecord[] = [
     expectedHours: 0.0,
     status: "Weekly Off",
     deviceType: "Manual Entry",
-    manualReason: "Scheduled Sunday Weekly Off.",
+    manualReason: "Scheduled Weekly Off.",
   },
 ];
 
@@ -193,7 +274,11 @@ export function AttendanceView() {
   const [punchStatus, setPunchStatus] = useState<"Present" | "Late" | "Half Day">("Present");
   const [punchReason, setPunchReason] = useState("");
 
-  // Filtered Attendance Records
+  // Mode Filter Tab State (All Logs | Biometric Reader | Manual Overrides | Biometric Terminal Status)
+  const [attendanceMode, setAttendanceMode] = useState<"ALL" | "BIOMETRIC" | "MANUAL" | "TERMINALS">("ALL");
+  const [isSyncingBiometric, setIsSyncingBiometric] = useState(false);
+
+  // Filtered Attendance Records with Mode Filter
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
       const matchSearch =
@@ -205,9 +290,30 @@ export function AttendanceView() {
       const matchShift = selectedShift === "ALL" || r.shiftCode.startsWith(selectedShift);
       const matchStatus = selectedStatus === "ALL" || r.status === selectedStatus;
 
-      return matchSearch && matchDept && matchShift && matchStatus;
+      let matchMode = true;
+      if (attendanceMode === "BIOMETRIC") matchMode = r.deviceType === "Biometric Reader";
+      if (attendanceMode === "MANUAL") matchMode = r.isManualEntry === true || r.deviceType === "Manual Entry";
+
+      return matchSearch && matchDept && matchShift && matchStatus && matchMode;
     });
-  }, [records, searchTerm, selectedDepartment, selectedShift, selectedStatus]);
+  }, [records, searchTerm, selectedDepartment, selectedShift, selectedStatus, attendanceMode]);
+
+  // Biometric Terminal Hardware Statuses
+  const biometricTerminals = [
+    { id: "TERM-01", name: "Main Lobby Terminal #01", model: "eSSL SilkFB-100", ip: "192.168.1.201", status: "Online", lastSync: "1 min ago", totalLogsToday: 42, location: "Ground Floor Lobby" },
+    { id: "TERM-02", name: "Kitchen Staff Entry #02", model: "ZKTeco SpeedFace-V5L", ip: "192.168.1.202", status: "Online", lastSync: "2 mins ago", totalLogsToday: 28, location: "Basement Kitchen Door" },
+    { id: "TERM-03", name: "Housekeeping Office Terminal", model: "eSSL MB20", ip: "192.168.1.203", status: "Online", lastSync: "4 mins ago", totalLogsToday: 19, location: "1st Floor HK Store" },
+    { id: "TERM-04", name: "Engineering Workshop Terminal", model: "Matrix COSEC DOOR", ip: "192.168.1.204", status: "Offline", lastSync: "45 mins ago", totalLogsToday: 8, location: "Maintenance Block" },
+  ];
+
+  // Handle Trigger Biometric Sync Simulation
+  const handleSyncBiometrics = () => {
+    setIsSyncingBiometric(true);
+    setTimeout(() => {
+      setIsSyncingBiometric(false);
+      setToastMessage("✓ Biometric Sync Complete! 14 new punch logs fetched from 3 online devices.");
+    }, 1200);
+  };
 
   // KPI Metrics
   const metrics = useMemo(() => {
@@ -305,29 +411,17 @@ export function AttendanceView() {
             + Manual Punch-In / Out
           </Button>
 
-          {/* Placeholder Disabled Action Buttons (As Requested) */}
+          {/* Functional Biometric Sync Button */}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            disabled
-            onClick={() => setToastMessage("Bulk Attendance module opening...")}
-            className="rounded-xl text-xs font-bold bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-70"
+            onClick={handleSyncBiometrics}
+            disabled={isSyncingBiometric}
+            className="rounded-xl text-xs font-bold bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50 shadow-xs cursor-pointer"
           >
-            <Users className="mr-1.5 h-3.5 w-3.5" />
-            Bulk Attendance (Soon)
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled
-            onClick={() => setToastMessage("Biometric Sync module opening...")}
-            className="rounded-xl text-xs font-bold bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-70"
-          >
-            <Fingerprint className="mr-1.5 h-3.5 w-3.5" />
-            Biometric Sync (Soon)
+            <Fingerprint className={cn("mr-1.5 h-3.5 w-3.5 text-emerald-600", isSyncingBiometric && "animate-spin")} />
+            {isSyncingBiometric ? "Syncing Devices..." : "Sync Biometrics"}
           </Button>
 
           <Button
@@ -343,6 +437,34 @@ export function AttendanceView() {
         </div>
       }
     >
+      {/* MODE NAVIGATION SWITCHER TABS (All Logs | Biometric Reader | Manual Overrides | Biometric Terminals) */}
+      <div className="flex overflow-x-auto gap-2 mb-4 scrollbar-none">
+        {[
+          { id: "ALL", label: "All Attendance Logs", count: records.length },
+          { id: "BIOMETRIC", label: "Biometric Hardware Logs", count: records.filter((r) => r.deviceType === "Biometric Reader").length },
+          { id: "MANUAL", label: "Manual Override Logs", count: records.filter((r) => r.isManualEntry || r.deviceType === "Manual Entry").length },
+          { id: "TERMINALS", label: "Biometric Device Status", count: "3/4 Online" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setAttendanceMode(tab.id as any)}
+            className={cn(
+              "flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border",
+              attendanceMode === tab.id
+                ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            )}
+          >
+            <span>{tab.label}</span>
+            <span className={cn(
+              "px-1.5 py-0.5 rounded-md text-[10px] font-black",
+              attendanceMode === tab.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
+            )}>
+              {tab.count}
+            </span>
+          </button>
+        ))}
+      </div>
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: 4 KPI SUMMARY CARDS
       ───────────────────────────────────────────────────────────── */}
@@ -420,7 +542,10 @@ export function AttendanceView() {
                 <option value="ALL">All Departments</option>
                 <option value="Front Office">Front Office</option>
                 <option value="Housekeeping">Housekeeping</option>
-                <option value="Food & Beverage">Food &amp; Beverage</option>
+                <option value="Kitchen / Culinary">Kitchen / Culinary</option>
+                <option value="F&B Service">F&amp;B Service</option>
+                <option value="Maintenance & Eng.">Maintenance &amp; Eng.</option>
+                <option value="HR & Admin">HR &amp; Admin</option>
               </select>
 
               <select
@@ -477,8 +602,90 @@ export function AttendanceView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 3: MAIN DESKTOP TABLE & MOBILE CARDS
+          SECTION 3: BIOMETRIC TERMINAL HARDWARE MONITOR (When TERMINALS tab active)
       ───────────────────────────────────────────────────────────── */}
+      {attendanceMode === "TERMINALS" ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Fingerprint className="h-4 w-4 text-emerald-600" />
+                Hotel Property Biometric Hardware Terminals
+              </h3>
+              <p className="text-xs text-slate-500">Live network connectivity and sync logs from eSSL, ZKTeco &amp; Matrix readers.</p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSyncBiometrics}
+              disabled={isSyncingBiometric}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+            >
+              <Zap className="mr-1.5 h-3.5 w-3.5" />
+              Force Ping &amp; Sync All
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {biometricTerminals.map((dev) => (
+              <div key={dev.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className={cn(
+                      "flex h-9 w-9 items-center justify-center rounded-xl font-bold text-xs shrink-0 border",
+                      dev.status === "Online"
+                        ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                        : "bg-rose-100 text-rose-800 border-rose-300"
+                    )}>
+                      <Fingerprint className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs text-slate-900">{dev.name}</h4>
+                      <p className="text-[10px] text-slate-500">{dev.model} • IP: <span className="font-mono">{dev.ip}</span></p>
+                    </div>
+                  </div>
+
+                  <span className={cn(
+                    "px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
+                    dev.status === "Online"
+                      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                      : "bg-rose-100 text-rose-800 border-rose-200"
+                  )}>
+                    {dev.status === "Online" ? "🟢 Online" : "🔴 Offline"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-[10px] text-slate-400 font-semibold block uppercase">Location</span>
+                    <span className="font-bold text-slate-800 text-[11px] truncate block">{dev.location}</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-[10px] text-slate-400 font-semibold block uppercase">Last Sync</span>
+                    <span className="font-bold text-slate-800 text-[11px]">{dev.lastSync}</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-100">
+                    <span className="text-[10px] text-emerald-800 font-semibold block uppercase">Punches Today</span>
+                    <span className="font-extrabold text-emerald-900 text-xs">{dev.totalLogsToday} Scans</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 text-[11px]">
+                  <span className="text-slate-400 font-medium">Device ID: <strong className="text-slate-700">{dev.id}</strong></span>
+                  <button
+                    type="button"
+                    onClick={() => setToastMessage(`Testing connection with ${dev.ip}... Status: 200 OK`)}
+                    className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer"
+                  >
+                    Test Ping Connection &rarr;
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Desktop Table View */}
       <div className="hidden sm:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -632,6 +839,8 @@ export function AttendanceView() {
           </div>
         ))}
       </div>
+        </>
+      )}
 
       {/* ─────────────────────────────────────────────────────────────
           MODAL: MANUAL PUNCH-IN / PUNCH-OUT MODAL (Functioning)

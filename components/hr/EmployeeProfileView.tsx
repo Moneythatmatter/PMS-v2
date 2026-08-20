@@ -213,6 +213,8 @@ const SAMPLE_ACTIVITIES: ActivityLogItem[] = [
 export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string }) {
   const [selectedEmpId, setSelectedEmpId] = useState<string | null>(initialEmpId || "emp-101");
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
+  const [isAttendanceExpanded, setIsAttendanceExpanded] = useState<boolean>(false);
+  const [attendanceDateQuery, setAttendanceDateQuery] = useState<string>("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Activity Log Filter States
@@ -950,12 +952,64 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                   </div>
                 </div>
 
-                {/* Last 7 Days Attendance Table */}
+                {/* 30 Days Attendance Log (Expandable Format) */}
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3 text-xs">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
-                    <Clock className="h-4 w-4 text-emerald-600" />
-                    Last 7 Days Attendance Log
-                  </h3>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-emerald-600" />
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                          Attendance Log
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                            {attendanceDateQuery.trim()
+                              ? "Filtered Log"
+                              : isAttendanceExpanded
+                              ? "30 Days Log"
+                              : "Last 7 Days"}
+                          </span>
+                        </h3>
+                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                          {attendanceDateQuery.trim()
+                            ? `Showing search results for date matching "${attendanceDateQuery}"`
+                            : isAttendanceExpanded
+                            ? "Showing complete 30-day attendance record for current month"
+                            : "Showing recent 7 days attendance summary. Expand to view full 30 days."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Date Search Input */}
+                      <div className="relative">
+                        <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={attendanceDateQuery}
+                          onChange={(e) => setAttendanceDateQuery(e.target.value)}
+                          placeholder="Search date (e.g. 05 Aug or Jul 2026)..."
+                          className="h-8 w-52 rounded-xl border border-slate-300 bg-white pl-8 pr-7 text-xs font-medium text-slate-800 shadow-2xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                        {attendanceDateQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setAttendanceDateQuery("")}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsAttendanceExpanded(!isAttendanceExpanded)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 shadow-2xs transition-all cursor-pointer"
+                      >
+                        <span>{isAttendanceExpanded ? "Collapse to 7 Days" : "Expand 30 Days Attendance"}</span>
+                        <ChevronDown className={cn("h-4 w-4 text-slate-500 transition-transform duration-200", isAttendanceExpanded && "rotate-180")} />
+                      </button>
+                    </div>
+                  </div>
 
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
@@ -978,31 +1032,84 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                           { date: "03 Aug 2026", shift: "Weekly Off", in: "-", out: "-", hrs: "0.0 Hrs", status: "Weekly Off" },
                           { date: "02 Aug 2026", shift: "Morning Shift", in: "09:00 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
                           { date: "01 Aug 2026", shift: "Morning Shift", in: "08:59 AM", out: "05:05 PM", hrs: "8.1 Hrs", status: "Present" },
-                        ].map((row, i) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="py-2.5 px-3 font-semibold text-slate-800">{row.date}</td>
-                            <td className="py-2.5 px-3 text-slate-600">{row.shift}</td>
-                            <td className="py-2.5 px-3 text-slate-700 font-mono">{row.in}</td>
-                            <td className="py-2.5 px-3 text-slate-700 font-mono">{row.out}</td>
-                            <td className="py-2.5 px-3 text-slate-700 font-medium">{row.hrs}</td>
-                            <td className="py-2.5 px-3">
-                              <span
-                                className={cn(
-                                  "px-2 py-0.5 rounded-full text-[10px] font-bold border",
-                                  row.status === "Present"
-                                    ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                    : row.status === "Late"
-                                    ? "bg-amber-100 text-amber-800 border-amber-200"
-                                    : "bg-slate-100 text-slate-700 border-slate-200"
-                                )}
-                              >
-                                {row.status}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
+                          { date: "31 Jul 2026", shift: "Morning Shift", in: "08:56 AM", out: "05:01 PM", hrs: "8.0 Hrs", status: "Present" },
+                          { date: "30 Jul 2026", shift: "Morning Shift", in: "09:20 AM", out: "05:30 PM", hrs: "8.1 Hrs", status: "Late" },
+                          { date: "29 Jul 2026", shift: "Morning Shift", in: "08:50 AM", out: "05:00 PM", hrs: "8.1 Hrs", status: "Present" },
+                          { date: "28 Jul 2026", shift: "Morning Shift", in: "08:54 AM", out: "05:05 PM", hrs: "8.1 Hrs", status: "Present" },
+                          { date: "27 Jul 2026", shift: "Weekly Off", in: "-", out: "-", hrs: "0.0 Hrs", status: "Weekly Off" },
+                          { date: "26 Jul 2026", shift: "Morning Shift", in: "08:58 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
+                          { date: "25 Jul 2026", shift: "Morning Shift", in: "09:02 AM", out: "05:10 PM", hrs: "8.1 Hrs", status: "Present" },
+                          { date: "24 Jul 2026", shift: "Morning Shift", in: "08:50 AM", out: "05:00 PM", hrs: "8.1 Hrs", status: "Present" },
+                          { date: "23 Jul 2026", shift: "Morning Shift", in: "08:55 AM", out: "05:05 PM", hrs: "8.1 Hrs", status: "Present" },
+                          { date: "22 Jul 2026", shift: "Casual Leave", in: "-", out: "-", hrs: "0.0 Hrs", status: "Leave" },
+                          { date: "21 Jul 2026", shift: "Morning Shift", in: "08:57 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
+                          { date: "20 Jul 2026", shift: "Weekly Off", in: "-", out: "-", hrs: "0.0 Hrs", status: "Weekly Off" },
+                          { date: "19 Jul 2026", shift: "Morning Shift", in: "08:52 AM", out: "05:05 PM", hrs: "8.2 Hrs", status: "Present" },
+                          { date: "18 Jul 2026", shift: "Morning Shift", in: "08:58 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
+                          { date: "17 Jul 2026", shift: "Morning Shift", in: "08:55 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
+                          { date: "16 Jul 2026", shift: "Morning Shift", in: "09:00 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
+                          { date: "15 Jul 2026", shift: "Morning Shift", in: "08:48 AM", out: "05:00 PM", hrs: "8.2 Hrs", status: "Present" },
+                          { date: "14 Jul 2026", shift: "Morning Shift", in: "-", out: "-", hrs: "0.0 Hrs", status: "Absent" },
+                          { date: "13 Jul 2026", shift: "Weekly Off", in: "-", out: "-", hrs: "0.0 Hrs", status: "Weekly Off" },
+                          { date: "12 Jul 2026", shift: "Morning Shift", in: "08:56 AM", out: "05:02 PM", hrs: "8.1 Hrs", status: "Present" },
+                          { date: "11 Jul 2026", shift: "Morning Shift", in: "08:54 AM", out: "05:05 PM", hrs: "8.1 Hrs", status: "Present" },
+                          { date: "10 Jul 2026", shift: "Morning Shift", in: "08:58 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
+                          { date: "09 Jul 2026", shift: "Morning Shift", in: "08:50 AM", out: "05:00 PM", hrs: "8.1 Hrs", status: "Present" },
+                        ]
+                          .filter((row) => {
+                            if (!attendanceDateQuery.trim()) return true;
+                            const q = attendanceDateQuery.toLowerCase().trim();
+                            return (
+                              row.date.toLowerCase().includes(q) ||
+                              row.shift.toLowerCase().includes(q) ||
+                              row.status.toLowerCase().includes(q)
+                            );
+                          })
+                          .slice(0, attendanceDateQuery.trim() ? 30 : isAttendanceExpanded ? 30 : 7)
+                          .map((row, i) => (
+                            <tr key={i} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-2.5 px-3 font-semibold text-slate-800">{row.date}</td>
+                              <td className="py-2.5 px-3 text-slate-600">{row.shift}</td>
+                              <td className="py-2.5 px-3 text-slate-700 font-mono">{row.in}</td>
+                              <td className="py-2.5 px-3 text-slate-700 font-mono">{row.out}</td>
+                              <td className="py-2.5 px-3 text-slate-700 font-medium">{row.hrs}</td>
+                              <td className="py-2.5 px-3">
+                                <span
+                                  className={cn(
+                                    "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                                    row.status === "Present"
+                                      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                      : row.status === "Late"
+                                      ? "bg-amber-100 text-amber-800 border-amber-200"
+                                      : row.status === "Absent"
+                                      ? "bg-rose-100 text-rose-800 border-rose-200"
+                                      : row.status === "Leave"
+                                      ? "bg-purple-100 text-purple-800 border-purple-200"
+                                      : "bg-slate-100 text-slate-700 border-slate-200"
+                                  )}
+                                >
+                                  {row.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Expand / Collapse Footer Banner */}
+                  <div className="pt-2 text-center border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsAttendanceExpanded(!isAttendanceExpanded)}
+                      className="text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      {isAttendanceExpanded ? (
+                        <>Show Fewer Days (Collapse to 7)</>
+                      ) : (
+                        <>View Full 30 Days Attendance Log ({30 - 7} More Days available) &rarr;</>
+                      )}
+                    </button>
                   </div>
                 </section>
               </div>
@@ -1150,32 +1257,39 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
 
                   {/* Bank & Statutory Details Box (Bank, UAN, PF, ESIC) */}
                   <div className="space-y-2 rounded-xl border border-slate-200 p-4 bg-slate-50/70">
-                    <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-2">
-                      Bank &amp; Statutory Registrations
+                    <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-2 flex items-center justify-between">
+                      <span>Bank &amp; Statutory Registrations</span>
+                      <span className="text-[10px] text-slate-400 font-normal italic">PAN &amp; Bank Required</span>
                     </p>
                     <div className="flex justify-between py-1 border-b border-slate-200">
                       <span className="text-slate-600">Bank Name:</span>
-                      <span className="font-bold text-slate-900">HDFC Bank Ltd</span>
+                      <span className="font-bold text-slate-900">{employee.bankName || "HDFC Bank Ltd"}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-200">
                       <span className="text-slate-600">Account Number (Masked):</span>
-                      <span className="font-mono font-bold text-slate-900">•••• •••• 4821</span>
+                      <span className="font-mono font-bold text-slate-900">{employee.bankAccount ? `•••• ${employee.bankAccount.slice(-4)}` : "•••• •••• 4821"}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-200">
                       <span className="text-slate-600">IFSC Code:</span>
                       <span className="font-mono font-bold text-slate-900">{employee.ifscCode || "HDFC0001234"}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-600">UAN (Universal Account No):</span>
-                      <span className="font-mono font-bold text-slate-900">101293847501</span>
+                      <span className="text-slate-600">PAN Number:</span>
+                      <span className="font-mono font-bold text-slate-900">{employee.panNumber || "ABCDE1234F"}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-600">Provident Fund (PF) No:</span>
-                      <span className="font-mono font-bold text-slate-900">MH/BAN/0048271/000/0101</span>
+                      <span className="text-slate-600 flex items-center gap-1">
+                        UAN (PF) Number:
+                        <span className="text-[9px] font-normal text-slate-400 italic">(Optional)</span>
+                      </span>
+                      <span className="font-mono font-bold text-slate-900">{employee.uanNumber || "101293847501"}</span>
                     </div>
                     <div className="flex justify-between py-1">
-                      <span className="text-slate-600">ESIC Registration No:</span>
-                      <span className="font-mono font-bold text-slate-900">31000482910001</span>
+                      <span className="text-slate-600 flex items-center gap-1">
+                        ESIC Registration No:
+                        <span className="text-[9px] font-normal text-slate-400 italic">(Optional)</span>
+                      </span>
+                      <span className="font-mono font-bold text-slate-900">{employee.esicNumber || "31000482910001"}</span>
                     </div>
                   </div>
                 </div>

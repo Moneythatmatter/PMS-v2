@@ -39,6 +39,14 @@ export const humanResourcesNavItems: ModuleNavItem[] = [
     ],
   },
   {
+    label: "Approvals",
+    href: "/human-resources/approvals",
+    icon: "shield-check",
+    children: [
+      { label: "Approval Matrix", href: "/human-resources/approvals/approval-matrix", icon: "git-branch" },
+    ],
+  },
+  {
     label: "Grievances",
     href: "/human-resources/grievances",
     icon: "message-square-warning",

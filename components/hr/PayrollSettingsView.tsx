@@ -96,11 +96,14 @@ export function PayrollSettingsView() {
   const [enableOvertime, setEnableOvertime] = useState(true);
   const [minOtHours, setMinOtHours] = useState(1.0);
   const [otCalcMethod, setOtCalcMethod] = useState("Multiplier");
-  const [otMultiplier, setOtMultiplier] = useState(1.5);
+  const [otMultiplier, setOtMultiplier] = useState(1.0);
+  const [weeklyOffOtMultiplier, setWeeklyOffOtMultiplier] = useState(1.5);
+  const [emergencyCallInMultiplier, setEmergencyCallInMultiplier] = useState(1.5);
+  const [nightDifferentialMultiplier, setNightDifferentialMultiplier] = useState(1.25);
 
   // Tab 4: Holiday Work Rules State
   const [holidayBenefitType] = useState("Additional Pay Only");
-  const [holidayPayMultiplier, setHolidayPayMultiplier] = useState(2.0);
+  const [holidayPayMultiplier, setHolidayPayMultiplier] = useState(1.0);
 
   // Tab 5: Deduction Rules State
   const [enablePF, setEnablePF] = useState(true);
@@ -495,10 +498,10 @@ export function PayrollSettingsView() {
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
               <div>
                 <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <Timer className="h-4 w-4 text-emerald-700" /> Overtime (OT) Calculation Rules
+                  <Timer className="h-4 w-4 text-emerald-700" /> Overtime (OT) Calculation & Rate Multipliers
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Directly integrated with the Overtime Management module to calculate approved OT compensation.
+                  Manage overtime pay multipliers across all OT classifications. These rates directly govern calculation in Overtime Management.
                 </p>
               </div>
 
@@ -517,53 +520,155 @@ export function PayrollSettingsView() {
                 </div>
 
                 {enableOvertime && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-xl border border-slate-200 bg-white">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Minimum OT Threshold</label>
-                      <select
-                        value={minOtHours}
-                        onChange={(e) => setMinOtHours(Number(e.target.value))}
-                        className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
-                      >
-                        <option value={0.5}>0.5 Hour (30 Mins)</option>
-                        <option value={1.0}>1.0 Hour (Default)</option>
-                        <option value={2.0}>2.0 Hours</option>
-                      </select>
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl border border-slate-200 bg-white">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Minimum OT Threshold</label>
+                        <select
+                          value={minOtHours}
+                          onChange={(e) => setMinOtHours(Number(e.target.value))}
+                          className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
+                        >
+                          <option value={0.5}>0.5 Hour (30 Mins)</option>
+                          <option value={1.0}>1.0 Hour (Default)</option>
+                          <option value={2.0}>2.0 Hours</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Base Rate Calculation</label>
+                        <select
+                          value={otCalcMethod}
+                          onChange={(e) => setOtCalcMethod(e.target.value)}
+                          className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
+                        >
+                          <option value="Multiplier">Hourly Rate × OT Multiplier (Standard)</option>
+                          <option value="Hourly Rate">Standard Single Rate (1.0x Flat)</option>
+                          <option value="Fixed Amount">Fixed Amount per Hour (₹150/hr)</option>
+                        </select>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Calculation Method</label>
-                      <select
-                        value={otCalcMethod}
-                        onChange={(e) => setOtCalcMethod(e.target.value)}
-                        className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold text-slate-800"
-                      >
-                        <option value="Multiplier">Hourly Rate Multiplier (1.5x)</option>
-                        <option value="Hourly Rate">Standard Hourly Rate (1.0x)</option>
-                        <option value="Fixed Amount">Fixed Amount per Hour (₹150/hr)</option>
-                      </select>
-                    </div>
+                    {/* OVERTIME TYPE RATE MULTIPLIERS MANAGEMENT TABLE */}
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <DollarSign className="h-4 w-4 text-emerald-700" /> Overtime Classification Multiplier Rates
+                          </h4>
+                          <p className="text-[11px] text-slate-500">
+                            Configure the exact rate multiplier for each OT type used in Assign Overtime.
+                          </p>
+                        </div>
+                      </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">OT Rate Multiplier</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min={1.0}
-                        max={3.0}
-                        value={otMultiplier}
-                        onChange={(e) => setOtMultiplier(Number(e.target.value))}
-                        className="w-full text-xs rounded-xl border border-slate-200 p-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
-                      />
+                      <div className="overflow-x-auto bg-white rounded-xl border border-slate-200">
+                        <table className="w-full text-left text-xs text-slate-700">
+                          <thead className="bg-slate-100/70 text-[11px] font-bold uppercase text-slate-600 border-b border-slate-200">
+                            <tr>
+                              <th className="py-2.5 px-3">Overtime Type</th>
+                              <th className="py-2.5 px-3">Category</th>
+                              <th className="py-2.5 px-3">Multiplier Rate</th>
+                              <th className="py-2.5 px-3">Rate Breakdown (₹30k Salary = ₹1,000/day = ₹125/hr)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-medium">
+                            <tr className="hover:bg-slate-50">
+                              <td className="py-2.5 px-3 font-bold text-slate-900">Regular OT</td>
+                              <td className="py-2.5 px-3 text-slate-500 text-[11px]">Extra Hours after regular shift</td>
+                              <td className="py-2.5 px-3">
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    step="0.05"
+                                    min="1.0"
+                                    max="3.0"
+                                    value={otMultiplier}
+                                    onChange={(e) => setOtMultiplier(Number(e.target.value))}
+                                    className="w-20 rounded-lg border border-slate-300 p-1 text-xs font-bold text-emerald-800 text-center"
+                                  />
+                                  <span className="font-bold text-slate-600">x</span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 font-bold text-emerald-700">
+                                ₹{(125 * otMultiplier).toFixed(2)}/hr <span className="text-[10px] text-slate-500 font-medium">(₹{((125 * otMultiplier) / 60).toFixed(2)}/min)</span>
+                              </td>
+                            </tr>
+                            <tr className="hover:bg-slate-50">
+                              <td className="py-2.5 px-3 font-bold text-slate-900">Weekly Off OT</td>
+                              <td className="py-2.5 px-3 text-slate-500 text-[11px]">Working on scheduled Weekly Off day</td>
+                              <td className="py-2.5 px-3">
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    step="0.05"
+                                    min="1.0"
+                                    max="3.0"
+                                    value={weeklyOffOtMultiplier}
+                                    onChange={(e) => setWeeklyOffOtMultiplier(Number(e.target.value))}
+                                    className="w-20 rounded-lg border border-slate-300 p-1 text-xs font-bold text-emerald-800 text-center"
+                                  />
+                                  <span className="font-bold text-slate-600">x</span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 font-bold text-emerald-700">
+                                ₹{(125 * weeklyOffOtMultiplier).toFixed(2)}/hr <span className="text-[10px] text-slate-500 font-medium">(₹{((125 * weeklyOffOtMultiplier) / 60).toFixed(2)}/min)</span>
+                              </td>
+                            </tr>
+                            <tr className="hover:bg-slate-50">
+                              <td className="py-2.5 px-3 font-bold text-slate-900">Emergency Call-In OT</td>
+                              <td className="py-2.5 px-3 text-slate-500 text-[11px]">Urgent unplanned hotel callback</td>
+                              <td className="py-2.5 px-3">
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    step="0.05"
+                                    min="1.0"
+                                    max="3.0"
+                                    value={emergencyCallInMultiplier}
+                                    onChange={(e) => setEmergencyCallInMultiplier(Number(e.target.value))}
+                                    className="w-20 rounded-lg border border-slate-300 p-1 text-xs font-bold text-emerald-800 text-center"
+                                  />
+                                  <span className="font-bold text-slate-600">x</span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 font-bold text-emerald-700">
+                                ₹{(125 * emergencyCallInMultiplier).toFixed(2)}/hr <span className="text-[10px] text-slate-500 font-medium">(₹{((125 * emergencyCallInMultiplier) / 60).toFixed(2)}/min)</span>
+                              </td>
+                            </tr>
+                            <tr className="hover:bg-slate-50">
+                              <td className="py-2.5 px-3 font-bold text-slate-900">Night Differential OT</td>
+                              <td className="py-2.5 px-3 text-slate-500 text-[11px]">Late night shift overtime (11 PM - 6 AM)</td>
+                              <td className="py-2.5 px-3">
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    step="0.05"
+                                    min="1.0"
+                                    max="3.0"
+                                    value={nightDifferentialMultiplier}
+                                    onChange={(e) => setNightDifferentialMultiplier(Number(e.target.value))}
+                                    className="w-20 rounded-lg border border-slate-300 p-1 text-xs font-bold text-emerald-800 text-center"
+                                  />
+                                  <span className="font-bold text-slate-600">x</span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 font-bold text-emerald-700">
+                                ₹{(125 * nightDifferentialMultiplier).toFixed(2)}/hr <span className="text-[10px] text-slate-500 font-medium">(₹{((125 * nightDifferentialMultiplier) / 60).toFixed(2)}/min)</span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
 
                 <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/70 text-xs text-amber-950 flex items-center justify-between">
                   <div>
-                    <span className="font-bold block">Overtime Pay Calculation Example:</span>
+                    <span className="font-bold block">Live Overtime Multipliers Active:</span>
                     <p className="text-amber-900">
-                      Standard Hourly Rate = <strong>₹100/hr</strong> | OT Rate ({otMultiplier}x) = <strong>₹{100 * otMultiplier}/hr</strong>
+                      Regular: <strong>{otMultiplier}x</strong> | Weekly Off: <strong>{weeklyOffOtMultiplier}x</strong> | Emergency: <strong>{emergencyCallInMultiplier}x</strong> | Night Diff: <strong>{nightDifferentialMultiplier}x</strong>
                     </p>
                   </div>
                   <Timer className="h-5 w-5 text-amber-700 shrink-0" />
@@ -607,9 +712,10 @@ export function PayrollSettingsView() {
                       onChange={(e) => setHolidayPayMultiplier(Number(e.target.value))}
                       className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-bold text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
                     >
-                      <option value={1.0}>1.0x Normal Salary Rate</option>
+                      <option value={1.0}>1.0x Normal Salary Rate (Default: 1 Day Pay)</option>
+                      <option value={1.25}>1.25x Normal Salary Rate</option>
                       <option value={1.5}>1.5x Normal Salary Rate</option>
-                      <option value={2.0}>2.0x Double Salary Rate (Default)</option>
+                      <option value={2.0}>2.0x Double Salary Rate</option>
                     </select>
                   </div>
                 </div>
@@ -982,21 +1088,68 @@ export function PayrollSettingsView() {
             className="w-full p-4 flex items-center justify-between text-left font-bold text-slate-900 text-xs bg-slate-50/50"
           >
             <span className="flex items-center gap-2">
-              <Timer className="h-4 w-4 text-emerald-700" /> Overtime Rules
+              <Timer className="h-4 w-4 text-emerald-700" /> Overtime Multiplier Rules
             </span>
             {mobileOpenTab === "overtime" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
           {mobileOpenTab === "overtime" && (
             <div className="p-4 space-y-3 text-xs border-t border-slate-100">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">OT Multiplier</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={otMultiplier}
-                  onChange={(e) => setOtMultiplier(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-200 p-2.5 font-bold"
-                />
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-700">Regular OT Rate</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      step="0.05"
+                      value={otMultiplier}
+                      onChange={(e) => setOtMultiplier(Number(e.target.value))}
+                      className="w-16 rounded-lg border border-slate-300 p-1 text-xs font-bold text-center"
+                    />
+                    <span className="font-bold">x</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-700">Weekly Off OT Rate</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      step="0.05"
+                      value={weeklyOffOtMultiplier}
+                      onChange={(e) => setWeeklyOffOtMultiplier(Number(e.target.value))}
+                      className="w-16 rounded-lg border border-slate-300 p-1 text-xs font-bold text-center"
+                    />
+                    <span className="font-bold">x</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-700">Emergency Call-In Rate</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      step="0.05"
+                      value={emergencyCallInMultiplier}
+                      onChange={(e) => setEmergencyCallInMultiplier(Number(e.target.value))}
+                      className="w-16 rounded-lg border border-slate-300 p-1 text-xs font-bold text-center"
+                    />
+                    <span className="font-bold">x</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-700">Night Differential Rate</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      step="0.05"
+                      value={nightDifferentialMultiplier}
+                      onChange={(e) => setNightDifferentialMultiplier(Number(e.target.value))}
+                      className="w-16 rounded-lg border border-slate-300 p-1 text-xs font-bold text-center"
+                    />
+                    <span className="font-bold">x</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}

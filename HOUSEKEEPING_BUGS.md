@@ -14,3 +14,11 @@
 ## /housekeeping/maintenance-requests page
 1. Image or videos can't be uploaded
 2. Maintenance data not persisting across page refreshes, make sure the data is saved in db
+
+
+
+
+HK_ROOMS SCHEMA -->
+
+1. ID is currently room no., it should be uuid
+2. 
