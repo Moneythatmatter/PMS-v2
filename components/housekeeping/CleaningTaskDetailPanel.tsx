@@ -159,17 +159,17 @@ export function CleaningTaskDetailPanel({
       )}
 
       {task.status === "COMPLETED" && (
-        <Button
-          className="w-full bg-blue-700 hover:bg-blue-800 text-white"
-          disabled={actionBusy}
-          onClick={() =>
-            void runTaskAction(() =>
-              hkTaskService.approve(task.id, { approvedBy: "Supervisor" }),
-            )
-          }
-        >
-          Approve & Release Room
-        </Button>
+        <div className="space-y-3">
+          <p className="text-xs text-blue-700 font-medium rounded-lg bg-blue-50 px-3 py-2 leading-relaxed">
+            Cleaning is finished. Supervisor must pass or reject this task on the{" "}
+            <strong>Cleaning Inspection</strong> page — inspection is not done here.
+          </p>
+          <Link href={`/housekeeping/operations/inspection?room=${encodeURIComponent(task.roomNo ?? task.roomId)}`}>
+            <Button className="w-full bg-blue-700 hover:bg-blue-800 text-white">
+              Open Cleaning Inspection →
+            </Button>
+          </Link>
+        </div>
       )}
 
       {task.status === "APPROVED" && (

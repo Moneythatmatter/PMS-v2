@@ -6,7 +6,7 @@ import { matchesRoomKey } from "../../roomUtils";
 export async function syncTaskForRoom(
   rooms: HKRoom[],
   roomKey: string,
-  action: "assign-start" | "complete" | "approve",
+  action: "assign-start" | "complete" | "approve" | "reject",
   meta?: { staff?: string; notes?: string; approvedBy?: string },
 ): Promise<void> {
   const match = rooms.find((r) => matchesRoomKey(r, roomKey));
@@ -33,6 +33,13 @@ export async function syncTaskForRoom(
     if (action === "approve" && task.status === "COMPLETED") {
       await hkTaskService.approve(task.id, {
         approvedBy: meta?.approvedBy ?? meta?.staff,
+      });
+      return;
+    }
+
+    if (action === "reject" && task.status === "COMPLETED") {
+      await hkTaskService.cancel(task.id, {
+        notes: meta?.notes ?? "Inspection rejected — reclean required",
       });
     }
   } catch (err) {

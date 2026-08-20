@@ -31,7 +31,7 @@ const quickLinks = [
     hint: "Dirty & in progress",
   },
   {
-    label: "Inspection",
+    label: "Cleaning Inspection",
     href: "/housekeeping/operations/inspection",
     icon: ClipboardCheck,
     hint: "Supervisor sign-off",

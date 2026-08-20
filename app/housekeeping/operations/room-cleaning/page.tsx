@@ -35,11 +35,10 @@ import { OperationsToolbar } from "@/components/housekeeping/OperationsToolbar";
 
 const STATUS_TABS = [
   { id: "all", label: "All" },
-  { id: "active", label: "Active" },
-  { id: "PENDING", label: "Pending" },
-  { id: "ASSIGNED", label: "Assigned" },
+  { id: "open", label: "Open" },
+  { id: "pending", label: "Pending" },
   { id: "IN_PROGRESS", label: "In Progress" },
-  { id: "COMPLETED", label: "Awaiting Approval" },
+  { id: "COMPLETED", label: "Awaiting Inspection" },
   { id: "APPROVED", label: "Approved" },
   { id: "CANCELLED", label: "Cancelled" },
 ];
@@ -69,7 +68,7 @@ export default function RoomCleaningOperations() {
   const [createRoomId, setCreateRoomId] = useState("");
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("active");
+  const [statusFilter, setStatusFilter] = useState("pending");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const reloadTasks = async () => {
@@ -111,8 +110,10 @@ export default function RoomCleaningOperations() {
         (task.assignedToName ?? task.assignedTo ?? "").toLowerCase().includes(q);
 
       let matchStatus = true;
-      if (statusFilter === "active") {
+      if (statusFilter === "open") {
         matchStatus = isActiveTask(task);
+      } else if (statusFilter === "pending") {
+        matchStatus = task.status === "PENDING" || task.status === "ASSIGNED";
       } else if (statusFilter !== "all") {
         matchStatus = task.status === statusFilter;
       }
@@ -151,7 +152,7 @@ export default function RoomCleaningOperations() {
       <FOPageHeader
         eyebrow="Operations"
         title="Cleaning Tasks"
-        description="Housekeeping work orders from checkout, requests, and manual scheduling."
+        description="Create tasks, assign housekeepers, and mark cleaning complete. Pass/fail inspection is done on Cleaning Inspection."
         badge={
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-650">
             <ListTodo className="h-4 w-4 text-emerald-600" />
@@ -182,9 +183,9 @@ export default function RoomCleaningOperations() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatMiniCard label="Total Tasks" value={stats.total} icon={ListTodo} accent="#64748b" />
-        <StatMiniCard label="Pending / Assigned" value={stats.pending} accent="#94a3b8" icon={Clock} />
+        <StatMiniCard label="Pending" value={stats.pending} accent="#94a3b8" icon={Clock} />
         <StatMiniCard label="In Progress" value={stats.inProgress} accent="#f59e0b" icon={Sparkles} />
-        <StatMiniCard label="Awaiting Approval" value={stats.awaiting} accent="#3b82f6" icon={ClipboardList} />
+        <StatMiniCard label="Awaiting Inspection" value={stats.awaiting} accent="#3b82f6" icon={ClipboardList} />
         <StatMiniCard label="Approved" value={stats.approved} accent="#10b981" icon={CheckCircle2} />
       </div>
 
@@ -198,6 +199,16 @@ export default function RoomCleaningOperations() {
         activeStatusTab={statusFilter}
         onStatusTabChange={setStatusFilter}
       />
+
+      <p className="text-[11px] text-slate-500 -mt-2">
+        <strong className="font-semibold text-slate-600">Workflow:</strong> Create task → Assign → Start → Mark complete →{" "}
+        <Link href="/housekeeping/operations/inspection" className="text-emerald-700 hover:underline font-semibold">
+          Cleaning Inspection
+        </Link>{" "}
+        (pass or reject).{" "}
+        <strong className="font-semibold text-slate-600">Pending</strong> = not started ·{" "}
+        <strong className="font-semibold text-slate-600">Awaiting Inspection</strong> = ready for supervisor
+      </p>
 
       {loading ? (
         <p className="text-center text-sm text-slate-500 py-12">Loading tasks…</p>

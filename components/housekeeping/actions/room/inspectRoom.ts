@@ -85,6 +85,7 @@ export const inspectRoom = (
       dispatchers.setHistory,
     );
   } else {
+    void syncTaskForRoom(roomsSnapshot, roomKey, "reject", { notes: remarks });
     logAudit(
       "Inspection",
       "Inspection Rejected",
