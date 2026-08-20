@@ -19,7 +19,6 @@ import {
 } from "@/components/frontoffice/ui";
 
 const BED_TYPES = ["King", "Queen", "Twin", "Single"] as const;
-const ROOM_STATUSES = ["Vacant", "Reserved", "Occupied", "Dirty", "Maintenance", "Blocked"] as const;
 
 function formatUpdatedAt(value?: string) {
   if (!value) return "—";
@@ -43,7 +42,6 @@ export function RoomsView() {
   const [roomNo, setRoomNo] = useState("");
   const [roomType, setRoomType] = useState<string>(roomTypes[0] ?? "Standard");
   const [floor, setFloor] = useState("1st Floor");
-  const [status, setStatus] = useState<string>("Vacant");
   const [maxOccupancy, setMaxOccupancy] = useState("2");
   const [bedType, setBedType] = useState<string>("Queen");
   const [isActive, setIsActive] = useState(true);
@@ -101,7 +99,6 @@ export function RoomsView() {
     setRoomNo("");
     setRoomType(roomTypes[0] ?? "Standard");
     setFloor("1st Floor");
-    setStatus("Vacant");
     setMaxOccupancy("2");
     setBedType("Queen");
     setIsActive(true);
@@ -117,7 +114,6 @@ export function RoomsView() {
     setRoomNo(row.roomNo);
     setRoomType(row.roomType ?? "Standard");
     setFloor(row.floor ?? "");
-    setStatus(row.status ?? "Vacant");
     setMaxOccupancy(String(row.maxOccupancy ?? 2));
     setBedType(row.bedType ?? "Queen");
     setIsActive(row.isActive !== false);
@@ -136,7 +132,6 @@ export function RoomsView() {
         roomNo: roomNo.trim(),
         roomType: roomType.trim(),
         floor: floor.trim(),
-        status,
         maxOccupancy: parseInt(maxOccupancy, 10) || 2,
         bedType,
         isActive,
@@ -210,7 +205,6 @@ export function RoomsView() {
               <th className="px-4 py-3">Floor</th>
               <th className="px-4 py-3">Max Occ.</th>
               <th className="px-4 py-3">Bed</th>
-              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Active</th>
               <th className="px-4 py-3">Updated</th>
             </tr>
@@ -227,9 +221,6 @@ export function RoomsView() {
                 <td className="px-4 py-3 text-slate-600">{row.floor ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-600">{row.maxOccupancy ?? 2}</td>
                 <td className="px-4 py-3 text-slate-600">{row.bedType ?? "—"}</td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={row.status ?? "Vacant"} />
-                </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={row.isActive === false ? "Inactive" : "Active"} />
                 </td>
@@ -264,7 +255,6 @@ export function RoomsView() {
               ["Floor", preview.floor ?? "—"],
               ["Max Occupancy", String(preview.maxOccupancy ?? 2)],
               ["Bed Type", preview.bedType ?? "—"],
-              ["Inventory Status", preview.status ?? "Vacant"],
               ["Active", preview.isActive === false ? "No" : "Yes"],
               ["Updated", formatUpdatedAt(preview.updatedAt)],
             ].map(([label, value]) => (
@@ -311,13 +301,6 @@ export function RoomsView() {
               </SelectInput>
             </FormField>
           </div>
-          <FormField label="Inventory Status">
-            <SelectInput value={status} onChange={(e) => setStatus(e.target.value)}>
-              {ROOM_STATUSES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </SelectInput>
-          </FormField>
           <FormField label="Active">
             <SelectInput value={isActive ? "yes" : "no"} onChange={(e) => setIsActive(e.target.value === "yes")}>
               <option value="yes">Yes</option>

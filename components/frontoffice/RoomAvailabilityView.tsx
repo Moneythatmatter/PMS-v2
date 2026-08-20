@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BedDouble,
@@ -11,10 +11,11 @@ import {
   DoorOpen,
   Layers,
   Lock,
+  Plus,
   Sparkles,
+  Wrench,
 } from "lucide-react";
-import type { RoomAvailabilityRow } from "@/app/data/frontoffice/modules";
-import { floors, roomTypes } from "@/app/data/frontoffice/constants";
+import type { RoomAvailabilityRow, RoomDayStatus } from "@/app/data/frontoffice/modules";
 import { roomService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
@@ -22,10 +23,11 @@ import {
   FOPageHeader,
   Modal,
   SelectInput,
+  SearchInput,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 
-type DayStatus = "booked" | "available" | "blocked";
+type DayStatus = RoomDayStatus;
 type AvailabilityFilter = "all" | "vacant" | "occupied";
 
 function startOfDay(d: Date): Date {
@@ -49,12 +51,25 @@ function addDays(d: Date, n: number): Date {
   return next;
 }
 
-/** Monday of the week containing `date`. */
-function startOfWeek(date: Date): Date {
+/** First day of the month containing `date`. */
+function startOfMonth(date: Date): Date {
   const d = startOfDay(date);
-  const day = d.getDay(); // 0 Sun … 6 Sat
-  const diff = day === 0 ? -6 : 1 - day;
-  return addDays(d, diff);
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function formatMonthTitle(startIso: string): string {
+  return parseIsoDate(startIso).toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function formatMonthDay(iso: string): string {
+  return String(parseIsoDate(iso).getDate());
+}
+
+function compareFloorLabel(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
 function formatDayName(iso: string): string {
@@ -68,26 +83,40 @@ function formatDayLabel(iso: string): string {
   });
 }
 
-function formatWeekRange(startIso: string, days: string[]): string {
-  if (days.length === 0) return startIso;
-  const start = parseIsoDate(days[0]);
-  const end = parseIsoDate(days[days.length - 1]);
-  const sameMonth = start.getMonth() === end.getMonth();
-  const sameYear = start.getFullYear() === end.getFullYear();
-  if (sameMonth && sameYear) {
-    return `${start.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}`;
-  }
-  return `${formatDayLabel(days[0])} – ${formatDayLabel(days[days.length - 1])}`;
-}
-
 function nextDayIso(iso: string): string {
   return toIsoDate(addDays(parseIsoDate(iso), 1));
+}
+
+function isBookableStatus(status: DayStatus, day: string, today: string): boolean {
+  return (status === "available" || status === "dirty") && day >= today;
+}
+
+function normalizeDateRange(
+  startDay: string,
+  endDay: string,
+  gridDays: string[],
+): { checkIn: string; checkOut: string; days: string[] } {
+  const start = startDay <= endDay ? startDay : endDay;
+  const end = startDay <= endDay ? endDay : startDay;
+  const days = gridDays.filter((d) => d >= start && d <= end);
+  return {
+    checkIn: start,
+    checkOut: nextDayIso(end),
+    days,
+  };
+}
+
+function isDayInRange(day: string, startDay: string, endDay: string): boolean {
+  const start = startDay <= endDay ? startDay : endDay;
+  const end = startDay <= endDay ? endDay : startDay;
+  return day >= start && day <= end;
 }
 
 const statusConfig: Record<
   DayStatus,
   {
     label: string;
+    description: string;
     cell: string;
     dot: string;
     legend: string;
@@ -95,27 +124,63 @@ const statusConfig: Record<
   }
 > = {
   available: {
-    label: "Available",
+    label: "Vacant",
+    description: "Open for booking",
     cell: "bg-emerald-50 border-emerald-200/80 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 hover:shadow-sm",
-    dot: "bg-emerald-400",
-    legend: "bg-emerald-100 border-emerald-200",
+    dot: "bg-emerald-500",
+    legend: "bg-emerald-100 border-emerald-300",
     ring: "ring-emerald-300/50",
   },
-  booked: {
-    label: "Booked",
-    cell: "bg-gradient-to-br from-emerald-500 to-emerald-600 border-emerald-400 text-white shadow-sm shadow-emerald-200/60 hover:from-emerald-600 hover:to-emerald-700 hover:shadow-md hover:shadow-emerald-200/80",
-    dot: "bg-emerald-500",
-    legend: "bg-emerald-500 border-emerald-400",
-    ring: "ring-emerald-300/60",
+  reserved: {
+    label: "Reserved",
+    description: "Future booking on calendar",
+    cell: "bg-sky-100 border-sky-300 text-sky-800 hover:bg-sky-200 hover:border-sky-400 hover:shadow-sm",
+    dot: "bg-sky-500",
+    legend: "bg-sky-100 border-sky-400",
+    ring: "ring-sky-300/60",
+  },
+  occupied: {
+    label: "Occupied",
+    description: "Checked-in guest in room",
+    cell: "bg-gradient-to-br from-violet-500 to-violet-600 border-violet-400 text-white shadow-sm shadow-violet-200/60 hover:from-violet-600 hover:to-violet-700",
+    dot: "bg-violet-500",
+    legend: "bg-violet-500 border-violet-400",
+    ring: "ring-violet-300/60",
+  },
+  dirty: {
+    label: "Dirty",
+    description: "Needs housekeeping — still sellable",
+    cell: "bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100 hover:border-amber-400 hover:shadow-sm",
+    dot: "bg-amber-500",
+    legend: "bg-amber-100 border-amber-400",
+    ring: "ring-amber-300/50",
+  },
+  maintenance: {
+    label: "Maintenance",
+    description: "Out of order / under repair",
+    cell: "bg-orange-50 border-orange-300 text-orange-800 hover:bg-orange-100 hover:border-orange-400",
+    dot: "bg-orange-500",
+    legend: "bg-orange-100 border-orange-400",
+    ring: "ring-orange-300/50",
   },
   blocked: {
     label: "Blocked",
-    cell: "bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200/80",
+    description: "Not available for sale",
+    cell: "bg-slate-100 border-slate-300 text-slate-500 hover:bg-slate-200/80",
     dot: "bg-slate-400",
-    legend: "bg-slate-200 border-slate-300",
+    legend: "bg-slate-200 border-slate-400",
     ring: "ring-slate-300/50",
   },
 };
+
+const LEGEND_ORDER: DayStatus[] = [
+  "available",
+  "reserved",
+  "occupied",
+  "dirty",
+  "maintenance",
+  "blocked",
+];
 
 const statCards = [
   { key: "rooms", label: "Rooms Shown", icon: DoorOpen, gradient: "from-slate-500 to-slate-700", bg: "bg-slate-50" },
@@ -128,7 +193,13 @@ function rowHasStatus(row: RoomAvailabilityRow, status: DayStatus) {
   return Object.values(row.days).some((d) => d === status);
 }
 
-interface CellSelection {
+function rowHasBooking(row: RoomAvailabilityRow) {
+  return Object.values(row.days).some(
+    (d) => d === "reserved" || d === "occupied",
+  );
+}
+
+interface DetailCell {
   room: string;
   day: string;
   status: DayStatus;
@@ -136,34 +207,55 @@ interface CellSelection {
   floor: string;
 }
 
+interface BookingDraft {
+  room: string;
+  type: string;
+  floor: string;
+  bedType?: string;
+  checkIn: string;
+  checkOut: string;
+  days: string[];
+}
+
 export function RoomAvailabilityView() {
   const router = useRouter();
   const todayIso = toIsoDate(new Date());
-  const currentWeekStart = toIsoDate(startOfWeek(new Date()));
-  const [weekStart, setWeekStart] = useState(currentWeekStart);
+  const currentMonthStart = toIsoDate(startOfMonth(new Date()));
+  const [monthStart, setMonthStart] = useState(currentMonthStart);
   const [visibleDays, setVisibleDays] = useState<string[]>([]);
   const [rows, setRows] = useState<RoomAvailabilityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [roomType, setRoomType] = useState("all");
   const [floor, setFloor] = useState("all");
+  const [search, setSearch] = useState("");
   const [availFilter, setAvailFilter] = useState<AvailabilityFilter>("all");
-  const [selectedCell, setSelectedCell] = useState<CellSelection | null>(null);
+  const [detailCell, setDetailCell] = useState<DetailCell | null>(null);
+  const [bookingDraft, setBookingDraft] = useState<BookingDraft | null>(null);
+  const [dragState, setDragState] = useState<{
+    room: string;
+    type: string;
+    floor: string;
+    bedType?: string;
+    startDay: string;
+    endDay: string;
+  } | null>(null);
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
+  const isDraggingRef = useRef(false);
 
-  const weekOffset = Math.round(
-    (parseIsoDate(weekStart).getTime() - parseIsoDate(currentWeekStart).getTime()) /
-      (7 * 24 * 60 * 60 * 1000),
-  );
-  const isCurrentWeek = weekOffset === 0;
-  const canGoPrev = weekOffset > 0;
+  const isCurrentMonth = monthStart === currentMonthStart;
+
+  const gridDays = useMemo(() => {
+    if (!isCurrentMonth) return visibleDays;
+    return visibleDays.filter((d) => d >= todayIso);
+  }, [visibleDays, isCurrentMonth, todayIso]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setLoading(true);
-        const data = await roomService.availability(weekStart);
+        const data = await roomService.availability(monthStart);
         if (!cancelled) {
           setRows(data.rows);
           setVisibleDays(data.days?.length ? data.days : []);
@@ -178,59 +270,186 @@ export function RoomAvailabilityView() {
     return () => {
       cancelled = true;
     };
-  }, [weekStart]);
+  }, [monthStart]);
 
-  const handleCreateBooking = () => {
-    if (!selectedCell) return;
-    if (selectedCell.day < todayIso) return;
-    const params = new URLSearchParams({
-      room: selectedCell.room,
-      roomType: selectedCell.type,
-      checkIn: selectedCell.day,
-      checkOut: nextDayIso(selectedCell.day),
+  const openBookingDraft = useCallback(
+    (draft: BookingDraft) => {
+      setDetailCell(null);
+      setBookingDraft(draft);
+    },
+    [],
+  );
+
+  const finalizeDragSelection = useCallback(
+    (state: NonNullable<typeof dragState>) => {
+      const row = rows.find((r) => r.room === state.room);
+      if (!row) return;
+
+      const range = normalizeDateRange(state.startDay, state.endDay, gridDays);
+      if (range.days.length === 0) return;
+
+      openBookingDraft({
+        room: state.room,
+        type: state.type,
+        floor: state.floor,
+        bedType: row.bedType,
+        checkIn: range.checkIn,
+        checkOut: range.checkOut,
+        days: range.days,
+      });
+    },
+    [rows, gridDays, todayIso, openBookingDraft],
+  );
+
+  useEffect(() => {
+    const onMouseUp = () => {
+      if (!isDraggingRef.current || !dragState) return;
+      finalizeDragSelection(dragState);
+      setDragState(null);
+      isDraggingRef.current = false;
+    };
+    window.addEventListener("mouseup", onMouseUp);
+    return () => window.removeEventListener("mouseup", onMouseUp);
+  }, [dragState, finalizeDragSelection]);
+
+  const handleCellMouseDown = (
+    row: RoomAvailabilityRow,
+    day: string,
+    status: DayStatus,
+  ) => {
+    if (isBookableStatus(status, day, todayIso)) {
+      isDraggingRef.current = true;
+      setDragState({
+        room: row.room,
+        type: row.type,
+        floor: row.floor,
+        bedType: row.bedType,
+        startDay: day,
+        endDay: day,
+      });
+      return;
+    }
+    setBookingDraft(null);
+    setDetailCell({
+      room: row.room,
+      day,
+      status,
+      type: row.type,
+      floor: row.floor,
     });
-    setSelectedCell(null);
+  };
+
+  const handleCellMouseEnter = (row: RoomAvailabilityRow, day: string) => {
+    setHoveredCell(`${row.room}-${day}`);
+    if (!isDraggingRef.current || !dragState || dragState.room !== row.room) return;
+    setDragState((prev) => (prev ? { ...prev, endDay: day } : null));
+  };
+
+  const handleRoomLabelClick = (row: RoomAvailabilityRow) => {
+    const firstBookable = gridDays.find((d) =>
+      isBookableStatus((row.days[d] ?? "available") as DayStatus, d, todayIso),
+    );
+    if (!firstBookable) {
+      setDetailCell({
+        room: row.room,
+        day: gridDays[0] ?? todayIso,
+        status: (row.days[gridDays[0] ?? ""] ?? "blocked") as DayStatus,
+        type: row.type,
+        floor: row.floor,
+      });
+      return;
+    }
+    openBookingDraft({
+      room: row.room,
+      type: row.type,
+      floor: row.floor,
+      bedType: row.bedType,
+      checkIn: firstBookable,
+      checkOut: nextDayIso(firstBookable),
+      days: [firstBookable],
+    });
+  };
+
+  const handleConfirmBooking = () => {
+    if (!bookingDraft || bookingConflict) return;
+    const params = new URLSearchParams({
+      room: bookingDraft.room,
+      roomType: bookingDraft.type,
+      checkIn: bookingDraft.checkIn,
+      checkOut: bookingDraft.checkOut,
+    });
+    setBookingDraft(null);
     router.push(`/frontoffice/reservation/new?${params.toString()}`);
   };
 
   const handleViewReservation = () => {
-    if (!selectedCell) return;
-    const params = new URLSearchParams({ room: selectedCell.room });
-    setSelectedCell(null);
+    if (!detailCell) return;
+    const params = new URLSearchParams({ room: detailCell.room });
+    setDetailCell(null);
     router.push(`/frontoffice/reservation/all-bookings?${params.toString()}`);
   };
 
-  const goPrevWeek = () => {
-    if (!canGoPrev) return;
-    const prev = toIsoDate(addDays(parseIsoDate(weekStart), -7));
-    setWeekStart(prev < currentWeekStart ? currentWeekStart : prev);
+  const bookingConflict = useMemo(() => {
+    if (!bookingDraft) return null;
+    const row = rows.find((r) => r.room === bookingDraft.room);
+    if (!row) return null;
+    const bad = bookingDraft.days.filter(
+      (d) => !isBookableStatus((row.days[d] ?? "available") as DayStatus, d, todayIso),
+    );
+    if (bad.length === 0) return null;
+    return `${bad.length} night${bad.length !== 1 ? "s" : ""} in your selection ${
+      bad.length !== 1 ? "are" : "is"
+    } not available. Drag only vacant or dirty dates.`;
+  }, [bookingDraft, rows, todayIso]);
+
+  const bookingNights = bookingDraft?.days.length ?? 0;
+
+  const goPrevMonth = () => {
+    const d = parseIsoDate(monthStart);
+    setMonthStart(toIsoDate(new Date(d.getFullYear(), d.getMonth() - 1, 1)));
   };
 
-  const goNextWeek = () => {
-    setWeekStart(toIsoDate(addDays(parseIsoDate(weekStart), 7)));
+  const goNextMonth = () => {
+    const d = parseIsoDate(monthStart);
+    setMonthStart(toIsoDate(new Date(d.getFullYear(), d.getMonth() + 1, 1)));
   };
 
   const goToday = () => {
-    setWeekStart(currentWeekStart);
+    setMonthStart(currentMonthStart);
   };
 
   const onCalendarPick = (value: string) => {
     if (!value) return;
-    const monday = toIsoDate(startOfWeek(parseIsoDate(value)));
-    setWeekStart(monday < currentWeekStart ? currentWeekStart : monday);
+    setMonthStart(toIsoDate(startOfMonth(parseIsoDate(value))));
   };
 
+  const floorOptions = useMemo(() => {
+    const values = new Set(rows.map((r) => r.floor).filter(Boolean));
+    return [...values].sort(compareFloorLabel);
+  }, [rows]);
+
+  const roomTypeOptions = useMemo(() => {
+    const values = new Set(rows.map((r) => r.type).filter(Boolean));
+    return [...values].sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
     return rows.filter((row) => {
       const typeMatch = roomType === "all" || row.type === roomType;
       const floorMatch = floor === "all" || row.floor === floor;
       const availMatch =
         availFilter === "all" ||
         (availFilter === "vacant" && rowHasStatus(row, "available")) ||
-        (availFilter === "occupied" && rowHasStatus(row, "booked"));
-      return typeMatch && floorMatch && availMatch;
+        (availFilter === "occupied" && rowHasBooking(row));
+      const searchMatch =
+        !q ||
+        [row.room, row.floor, row.type, row.bedType]
+          .filter(Boolean)
+          .some((field) => String(field).toLowerCase().includes(q));
+      return typeMatch && floorMatch && availMatch && searchMatch;
     });
-  }, [rows, roomType, floor, availFilter]);
+  }, [rows, roomType, floor, availFilter, search]);
 
   const groupedByFloor = useMemo(() => {
     const groups: Record<string, typeof filtered> = {};
@@ -238,25 +457,40 @@ export function RoomAvailabilityView() {
       if (!groups[row.floor]) groups[row.floor] = [];
       groups[row.floor].push(row);
     });
-    return groups;
+    return Object.keys(groups)
+      .sort(compareFloorLabel)
+      .map((floorName) => [floorName, groups[floorName]] as const);
   }, [filtered]);
 
   const stats = useMemo(() => {
     let available = 0;
-    let booked = 0;
+    let reserved = 0;
+    let occupied = 0;
+    let dirty = 0;
+    let maintenance = 0;
     let blocked = 0;
     filtered.forEach((row) => {
-      visibleDays.forEach((d) => {
+      gridDays.forEach((d) => {
         const status = row.days[d];
         if (status === "available") available++;
-        else if (status === "booked") booked++;
+        else if (status === "reserved") reserved++;
+        else if (status === "occupied") occupied++;
+        else if (status === "dirty") dirty++;
+        else if (status === "maintenance") maintenance++;
         else blocked++;
       });
     });
-    const total = available + booked + blocked;
+    const booked = reserved + occupied;
+    const total = available + booked + dirty + maintenance + blocked;
     const occupancy = total > 0 ? Math.round((booked / total) * 100) : 0;
-    return { available, booked, blocked, occupancy, rooms: filtered.length };
-  }, [filtered, visibleDays]);
+    return {
+      available,
+      booked,
+      blocked: blocked + maintenance,
+      occupancy,
+      rooms: filtered.length,
+    };
+  }, [filtered, gridDays]);
 
   const statValues: Record<(typeof statCards)[number]["key"], string | number> = {
     rooms: stats.rooms,
@@ -283,7 +517,7 @@ export function RoomAvailabilityView() {
       <FOPageHeader
         eyebrow="Front Office"
         title="Room Availability"
-        description="Visual tape chart — scan inventory, spot gaps, and plan allocations at a glance."
+        description="Monthly tape chart — scan inventory by floor, spot gaps, and plan allocations."
         badge={
           <div className="flex items-center gap-3 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-green-50 px-4 py-2.5">
             <div className="relative flex h-10 w-10 items-center justify-center">
@@ -342,8 +576,14 @@ export function RoomAvailabilityView() {
       </div>
 
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search room, floor, type, bed…"
+              className="min-w-[200px] flex-1 sm:max-w-xs"
+            />
             <div className="relative">
               <Layers className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <SelectInput
@@ -352,7 +592,7 @@ export function RoomAvailabilityView() {
                 className="h-10 w-full rounded-xl border-slate-200 pl-9 sm:w-44"
               >
                 <option value="all">All Room Types</option>
-                {roomTypes.map((t) => (
+                {roomTypeOptions.map((t) => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </SelectInput>
@@ -365,7 +605,7 @@ export function RoomAvailabilityView() {
                 className="h-10 w-full rounded-xl border-slate-200 pl-9 sm:w-40"
               >
                 <option value="all">All Floors</option>
-                {floors.map((f) => (
+                {floorOptions.map((f) => (
                   <option key={f} value={f}>{f}</option>
                 ))}
               </SelectInput>
@@ -389,15 +629,16 @@ export function RoomAvailabilityView() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3 lg:border-t-0 lg:pt-0">
-            {(Object.entries(statusConfig) as [DayStatus, typeof statusConfig.available][]).map(
-              ([key, cfg]) => (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-3">
+            {LEGEND_ORDER.map((key) => {
+              const cfg = statusConfig[key];
+              return (
                 <div key={key} className="flex items-center gap-2 text-xs text-slate-600">
-                  <span className={cn("h-3 w-5 rounded-md border", cfg.legend)} />
-                  {cfg.label}
+                  <span className={cn("h-3.5 w-5 shrink-0 rounded-md border", cfg.legend)} />
+                  <span className="font-medium text-slate-700">{cfg.label}</span>
                 </div>
-              ),
-            )}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -410,12 +651,14 @@ export function RoomAvailabilityView() {
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-900">
-                {formatWeekRange(weekStart, visibleDays)}
+                {formatMonthTitle(monthStart)}
               </p>
               <p className="text-[11px] text-slate-400">
-                {visibleDays.length > 0
-                  ? `${formatDayLabel(visibleDays[0])} – ${formatDayLabel(visibleDays[visibleDays.length - 1])}`
-                  : "7-day rolling view"}
+                {gridDays.length > 0
+                  ? isCurrentMonth
+                    ? `From today · ${formatDayLabel(gridDays[0])} – ${formatDayLabel(gridDays[gridDays.length - 1])}`
+                    : `${gridDays.length}-day month view · ${formatDayLabel(gridDays[0])} – ${formatDayLabel(gridDays[gridDays.length - 1])}`
+                  : "Monthly calendar view"}
                 {loading ? " · Updating…" : ""}
               </p>
             </div>
@@ -425,27 +668,23 @@ export function RoomAvailabilityView() {
             <label className="relative flex items-center">
               <CalendarDays className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-slate-400" />
               <input
-                type="date"
-                min={currentWeekStart}
-                value={weekStart}
-                onChange={(e) => onCalendarPick(e.target.value)}
+                type="month"
+                value={monthStart.slice(0, 7)}
+                onChange={(e) => {
+                  if (!e.target.value) return;
+                  onCalendarPick(`${e.target.value}-01`);
+                }}
                 className="h-9 rounded-xl border border-slate-200 bg-white pl-8 pr-2 text-xs font-medium text-slate-700 outline-none transition-colors hover:border-emerald-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                aria-label="Pick week start date"
+                aria-label="Pick month"
               />
             </label>
 
             <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-0.5">
               <button
                 type="button"
-                onClick={goPrevWeek}
-                disabled={!canGoPrev}
-                className={cn(
-                  "rounded-lg p-2 transition-colors",
-                  canGoPrev
-                    ? "text-slate-400 hover:bg-slate-50 hover:text-slate-700"
-                    : "cursor-not-allowed text-slate-200",
-                )}
-                aria-label="Previous week"
+                onClick={goPrevMonth}
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                aria-label="Previous month"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -454,21 +693,19 @@ export function RoomAvailabilityView() {
                 onClick={goToday}
                 className={cn(
                   "min-w-[4.5rem] rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
-                  isCurrentWeek
+                  isCurrentMonth
                     ? "bg-emerald-700 text-white shadow-sm"
                     : "text-emerald-700 hover:bg-emerald-50",
                 )}
-                title={isCurrentWeek ? "Current week" : "Jump back to this week"}
+                title={isCurrentMonth ? "Current month" : "Jump to this month"}
               >
-                {isCurrentWeek
-                  ? "Today"
-                  : `+${weekOffset} week${weekOffset === 1 ? "" : "s"}`}
+                {isCurrentMonth ? "Today" : "This month"}
               </button>
               <button
                 type="button"
-                onClick={goNextWeek}
+                onClick={goNextMonth}
                 className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-700"
-                aria-label="Next week"
+                aria-label="Next month"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -482,8 +719,8 @@ export function RoomAvailabilityView() {
             description="Try changing room type, floor, or availability filter."
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] border-collapse text-sm">
+          <div className="overflow-x-auto select-none">
+            <table className="w-full min-w-[960px] border-collapse text-sm">
               <thead>
                 <tr>
                   <th className="sticky left-0 z-20 min-w-[120px] border-b border-r border-slate-100 bg-slate-50/95 px-4 py-3 text-left backdrop-blur-sm">
@@ -491,7 +728,7 @@ export function RoomAvailabilityView() {
                       Room
                     </span>
                   </th>
-                  {visibleDays.map((d) => {
+                  {gridDays.map((d) => {
                     const isToday = d === todayIso;
                     const dayName = formatDayName(d);
                     const isWeekend = dayName === "Sat" || dayName === "Sun";
@@ -499,28 +736,28 @@ export function RoomAvailabilityView() {
                       <th
                         key={d}
                         className={cn(
-                          "min-w-[76px] border-b border-slate-100 px-1 py-3 text-center",
+                          "min-w-[34px] border-b border-slate-100 px-0.5 py-2 text-center",
                           isToday && "bg-emerald-50/80",
                           isWeekend && !isToday && "bg-slate-50/60",
                         )}
                       >
                         <span
                           className={cn(
-                            "block text-[11px] font-semibold",
-                            isToday ? "text-emerald-700" : "text-slate-600",
+                            "block text-[9px] font-medium uppercase",
+                            isToday ? "text-emerald-700" : "text-slate-400",
                           )}
                         >
-                          {dayName}
+                          {dayName.slice(0, 1)}
                         </span>
                         <span
                           className={cn(
-                            "mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium",
+                            "mt-0.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full text-[10px] font-semibold",
                             isToday
                               ? "bg-emerald-700 text-white"
-                              : "text-slate-400",
+                              : "text-slate-600",
                           )}
                         >
-                          {formatDayLabel(d)}
+                          {formatMonthDay(d)}
                         </span>
                       </th>
                     );
@@ -528,11 +765,11 @@ export function RoomAvailabilityView() {
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(groupedByFloor).map(([floorName, floorRows]) => (
+                {groupedByFloor.map(([floorName, floorRows]) => (
                   <Fragment key={floorName}>
                     <tr>
                       <td
-                        colSpan={visibleDays.length + 1}
+                        colSpan={gridDays.length + 1}
                         className="sticky left-0 bg-slate-50/90 px-4 py-2 backdrop-blur-sm"
                       >
                         <div className="flex items-center gap-2">
@@ -555,7 +792,11 @@ export function RoomAvailabilityView() {
                         )}
                       >
                         <td className="sticky left-0 z-10 border-r border-slate-100 bg-inherit px-4 py-2.5 backdrop-blur-sm">
-                          <div className="flex items-center gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => handleRoomLabelClick(row)}
+                            className="flex w-full items-center gap-2.5 rounded-lg text-left transition-colors hover:bg-emerald-50/80"
+                          >
                             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-700 transition-colors group-hover/row:bg-emerald-100 group-hover/row:text-emerald-800">
                               {row.room}
                             </div>
@@ -565,59 +806,66 @@ export function RoomAvailabilityView() {
                               </p>
                               <p className="truncate text-[10px] text-slate-400">
                                 {row.floor}
+                                {row.bedType ? ` · ${row.bedType}` : ""}
                               </p>
                             </div>
-                          </div>
+                          </button>
                         </td>
-                        {visibleDays.map((d) => {
+                        {gridDays.map((d) => {
                           const status = (row.days[d] ?? "available") as DayStatus;
                           const cfg = statusConfig[status];
                           const cellKey = `${row.room}-${d}`;
                           const isToday = d === todayIso;
                           const isHovered = hoveredCell === cellKey;
+                          const inDragPreview =
+                            dragState?.room === row.room &&
+                            isDayInRange(d, dragState.startDay, dragState.endDay);
+                          const inBookingPreview =
+                            bookingDraft?.room === row.room &&
+                            bookingDraft.days.includes(d);
 
                           return (
                             <td
                               key={d}
                               className={cn(
-                                "px-1.5 py-2.5 text-center",
+                                "px-0.5 py-2 text-center",
                                 isToday && "bg-emerald-50/40",
                               )}
                             >
                               <button
                                 type="button"
-                                onClick={() =>
-                                  setSelectedCell({
-                                    room: row.room,
-                                    day: d,
-                                    status,
-                                    type: row.type,
-                                    floor: row.floor,
-                                  })
-                                }
-                                onMouseEnter={() => setHoveredCell(cellKey)}
-                                onMouseLeave={() => setHoveredCell(null)}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleCellMouseDown(row, d, status);
+                                }}
+                                onMouseEnter={() => handleCellMouseEnter(row, d)}
                                 aria-label={`Room ${row.room}, ${formatDayLabel(d)}: ${cfg.label}`}
                                 className={cn(
-                                  "relative mx-auto flex h-9 w-full max-w-[58px] items-center justify-center rounded-xl border transition-all duration-200",
+                                  "relative mx-auto flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border transition-all duration-150",
                                   cfg.cell,
-                                  isHovered && "scale-105 ring-2",
-                                  isHovered && cfg.ring,
-                                  selectedCell?.room === row.room &&
-                                    selectedCell?.day === d &&
-                                    "ring-2 ring-offset-1",
+                                  isHovered && !inDragPreview && "scale-105 ring-2",
+                                  isHovered && !inDragPreview && cfg.ring,
+                                  inDragPreview &&
+                                    "z-10 scale-105 bg-emerald-200/90 ring-2 ring-emerald-500 ring-offset-1",
+                                  inBookingPreview &&
+                                    !inDragPreview &&
+                                    "ring-2 ring-emerald-600 ring-offset-1",
                                 )}
                               >
-                                {status === "booked" && (
+                                {status === "occupied" && (
                                   <span className="h-1.5 w-1.5 rounded-full bg-white/90 shadow-sm" />
                                 )}
-                                {status === "blocked" && (
-                                  <Lock className="h-3 w-3 opacity-60" />
+                                {status === "reserved" && (
+                                  <span className="h-1.5 w-1.5 rounded-full bg-sky-600/80" />
                                 )}
-                                {status === "available" && isHovered && (
-                                  <span className="text-[9px] font-semibold opacity-70">
-                                    Open
-                                  </span>
+                                {status === "maintenance" && (
+                                  <Wrench className="h-2.5 w-2.5 opacity-70" />
+                                )}
+                                {status === "blocked" && (
+                                  <Lock className="h-2.5 w-2.5 opacity-60" />
+                                )}
+                                {status === "dirty" && (
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-600/70" />
                                 )}
                               </button>
                             </td>
@@ -634,40 +882,98 @@ export function RoomAvailabilityView() {
 
         {filtered.length > 0 && (
           <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-2.5 text-center text-[11px] text-slate-400 sm:px-5">
-            Click any cell for details · Past weeks are hidden · Center label shows Today or +N weeks ahead
+            Click or drag across vacant dates to create a booking · click occupied cells for details
           </div>
         )}
       </div>
 
       <Modal
-        open={!!selectedCell}
-        onClose={() => setSelectedCell(null)}
-        title={selectedCell ? `Room ${selectedCell.room}` : ""}
+        open={!!bookingDraft}
+        onClose={() => setBookingDraft(null)}
+        title={bookingDraft ? `Create Booking · Room ${bookingDraft.room}` : ""}
         description={
-          selectedCell
-            ? `${formatDayName(selectedCell.day)} ${formatDayLabel(selectedCell.day)} · ${selectedCell.type}`
+          bookingDraft
+            ? `${bookingDraft.type} · ${bookingDraft.floor}`
             : undefined
         }
         size="sm"
         footer={
           <>
-            <Button variant="outline" onClick={() => setSelectedCell(null)}>
+            <Button variant="outline" onClick={() => setBookingDraft(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-700 hover:bg-emerald-800"
+              onClick={handleConfirmBooking}
+              disabled={!!bookingConflict || bookingNights === 0}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Continue to Reservation
+            </Button>
+          </>
+        }
+      >
+        {bookingDraft && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-800">
+                Selected stay
+              </p>
+              <p className="mt-2 text-lg font-bold text-slate-900">
+                {formatDayLabel(bookingDraft.checkIn)} →{" "}
+                {formatDayLabel(bookingDraft.checkOut)}
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                {bookingNights} night{bookingNights !== 1 ? "s" : ""} · Room{" "}
+                {bookingDraft.room}
+                {bookingDraft.bedType ? ` · ${bookingDraft.bedType} bed` : ""}
+              </p>
+            </div>
+
+            {bookingNights > 1 && (
+              <div className="flex flex-wrap gap-1.5">
+                {bookingDraft.days.map((d) => (
+                  <span
+                    key={d}
+                    className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800"
+                  >
+                    {formatDayLabel(d)}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {bookingConflict ? (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+                {bookingConflict}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-600">
+                Drag on the grid to adjust dates, then continue to complete guest
+                details on the reservation form.
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!detailCell}
+        onClose={() => setDetailCell(null)}
+        title={detailCell ? `Room ${detailCell.room}` : ""}
+        description={
+          detailCell
+            ? `${formatDayName(detailCell.day)} ${formatDayLabel(detailCell.day)} · ${detailCell.type}`
+            : undefined
+        }
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDetailCell(null)}>
               Close
             </Button>
-            {selectedCell?.status === "available" && selectedCell.day >= todayIso && (
-              <Button
-                className="bg-emerald-700 hover:bg-emerald-800"
-                onClick={handleCreateBooking}
-              >
-                Create Booking
-              </Button>
-            )}
-            {selectedCell?.status === "available" && selectedCell.day < todayIso && (
-              <Button variant="outline" disabled>
-                Past date
-              </Button>
-            )}
-            {selectedCell?.status === "booked" && (
+            {(detailCell?.status === "reserved" ||
+              detailCell?.status === "occupied") && (
               <Button
                 className="bg-emerald-700 hover:bg-emerald-800"
                 onClick={handleViewReservation}
@@ -675,52 +981,50 @@ export function RoomAvailabilityView() {
                 View Reservation
               </Button>
             )}
-            {selectedCell?.status === "blocked" && (
-              <Button variant="outline" onClick={() => setSelectedCell(null)}>
-                Unblock Room
+            {(detailCell?.status === "blocked" ||
+              detailCell?.status === "maintenance") && (
+              <Button variant="outline" onClick={() => setDetailCell(null)}>
+                Close
               </Button>
             )}
           </>
         }
       >
-        {selectedCell && (
+        {detailCell && (
           <div className="space-y-4">
             <div
               className={cn(
                 "flex items-center gap-3 rounded-xl border p-4",
-                selectedCell.status === "available" && "border-emerald-200 bg-emerald-50",
-                selectedCell.status === "booked" && "border-emerald-200 bg-emerald-50",
-                selectedCell.status === "blocked" && "border-slate-200 bg-slate-50",
+                detailCell.status === "available" && "border-emerald-200 bg-emerald-50",
+                detailCell.status === "reserved" && "border-sky-200 bg-sky-50",
+                detailCell.status === "occupied" && "border-violet-200 bg-violet-50",
+                detailCell.status === "dirty" && "border-amber-200 bg-amber-50",
+                detailCell.status === "maintenance" && "border-orange-200 bg-orange-50",
+                detailCell.status === "blocked" && "border-slate-200 bg-slate-50",
               )}
             >
               <span
                 className={cn(
                   "h-3 w-3 rounded-full",
-                  statusConfig[selectedCell.status].dot,
+                  statusConfig[detailCell.status].dot,
                 )}
               />
               <div>
                 <p className="font-semibold text-slate-900">
-                  {statusConfig[selectedCell.status].label}
+                  {statusConfig[detailCell.status].label}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {selectedCell.floor} · {selectedCell.type}
+                  {detailCell.floor} · {detailCell.type}
                 </p>
               </div>
             </div>
-            {selectedCell.status === "booked" && (
+            <p className="text-sm text-slate-600">
+              {statusConfig[detailCell.status].description}
+            </p>
+            {(detailCell.status === "reserved" ||
+              detailCell.status === "occupied") && (
               <p className="text-sm text-slate-600">
-                This slot is occupied. View the linked reservation for guest details and folio.
-              </p>
-            )}
-            {selectedCell.status === "available" && (
-              <p className="text-sm text-slate-600">
-                This room is open for the selected date. You can create a new reservation or assign a walk-in guest.
-              </p>
-            )}
-            {selectedCell.status === "blocked" && (
-              <p className="text-sm text-slate-600">
-                Room is blocked for maintenance or out-of-order. Unblock when ready to sell.
+                View the linked reservation for guest details and folio.
               </p>
             )}
           </div>

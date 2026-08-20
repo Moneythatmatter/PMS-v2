@@ -33,7 +33,7 @@ import {
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
-import { isDepartingOnDate, isDepartingToday, todayIso } from "@/lib/reservation-dates";
+import { isDepartingToday, todayIso } from "@/lib/reservation-dates";
 import { CheckoutInvoiceDrawer } from "@/components/frontoffice/CheckoutInvoice";
 
 type Step = "find" | "review" | "pay" | "done";
@@ -57,6 +57,13 @@ const BILL_LINES: { key: BillLineKey; label: string; splittable: boolean }[] = [
   { key: "gst", label: "Tax (GST)", splittable: false },
 ];
 
+
+function formatRoomLabel(room?: string): string {
+  const value = String(room ?? "").trim();
+  if (!value || value === "TBA") return "TBA";
+  if (/^[0-9a-f-]{36}$/i.test(value)) return "TBA";
+  return value;
+}
 
 function mapInHouseToFolio(g: {
   id: string;
@@ -83,7 +90,7 @@ function mapInHouseToFolio(g: {
     guestName: g.guestName,
     phone: "",
     email: g.email,
-    room: g.room,
+    room: formatRoomLabel(g.room),
     roomType: g.roomType,
     checkIn: g.checkIn,
     checkOut: g.checkOut,
@@ -114,7 +121,6 @@ export function CheckOutView() {
   const prefillBookingKey =
     searchParams.get("bookingId") ?? searchParams.get("booking") ?? "";
   const prefillAttempted = useRef<string | null>(null);
-  const departureDateInputRef = useRef<HTMLInputElement>(null);
 
   const [folios, setFolios] = useState<CheckoutFolio[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,7 +138,6 @@ export function CheckOutView() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
-  const [departureDate, setDepartureDate] = useState(() => todayIso());
 
   useEffect(() => {
     let cancelled = false;
@@ -158,23 +163,14 @@ export function CheckOutView() {
     [folios],
   );
 
-  const departingOnSelectedDate = useMemo(
-    () => folios.filter((f) => isDepartingOnDate(f, departureDate)),
-    [folios, departureDate],
-  );
-
-  const isSelectedDateToday = departureDate === todayIso();
-
-  const departureSectionTitle = useMemo(() => {
-    if (isSelectedDateToday) return "Departing Today";
-    const d = new Date(`${departureDate}T12:00:00`);
-    if (Number.isNaN(d.getTime())) return "Departures";
-    return `Departing ${d.toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    })}`;
-  }, [departureDate, isSelectedDateToday]);
+  const checkedInGuests = useMemo(() => {
+    return [...folios].sort((a, b) => {
+      const aDeparting = isDepartingToday(a) ? 0 : 1;
+      const bDeparting = isDepartingToday(b) ? 0 : 1;
+      if (aDeparting !== bDeparting) return aDeparting - bDeparting;
+      return String(a.checkOut ?? "").localeCompare(String(b.checkOut ?? ""));
+    });
+  }, [folios]);
 
   const billBreakdown = useMemo(() => {
     if (!selected) return null;
@@ -245,7 +241,7 @@ export function CheckOutView() {
         f.id.toLowerCase() === query ||
         f.bookingId.toLowerCase() === query ||
         f.guestName.toLowerCase().includes(query) ||
-        f.room.toLowerCase() === query,
+        formatRoomLabel(f.room).toLowerCase() === query,
     );
     if (!found) {
       setLookupError("No in-house guest found. Try BK-0, James Wilson, or room 112.");
@@ -375,9 +371,15 @@ export function CheckOutView() {
           <div className="flex items-center gap-2 rounded-2xl border border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50 px-4 py-2.5">
             <Users className="h-4 w-4 text-orange-600" />
             <div>
-              <p className="text-xs font-medium text-slate-500">Departing today</p>
+              <p className="text-xs font-medium text-slate-500">Checked in</p>
               <p className="text-sm font-semibold text-slate-800">
-                {departingToday.length} guest{departingToday.length !== 1 ? "s" : ""}
+                {folios.length} guest{folios.length !== 1 ? "s" : ""}
+                {departingToday.length > 0 && (
+                  <span className="font-normal text-orange-600">
+                    {" "}
+                    · {departingToday.length} out today
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -513,58 +515,27 @@ export function CheckOutView() {
               <div className="mb-4 flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-orange-900">
-                    {departureSectionTitle}
+                    Checked-In Guests
                   </p>
-                  {!isSelectedDateToday && (
-                    <button
-                      type="button"
-                      onClick={() => setDepartureDate(todayIso())}
-                      className="mt-0.5 text-[11px] font-medium text-orange-700 hover:underline"
-                    >
-                      Back to today
-                    </button>
-                  )}
+                  <p className="mt-0.5 text-[11px] text-orange-700/80">
+                    All in-house bookings · select to check out
+                  </p>
                 </div>
-                <div className="relative flex shrink-0 items-center gap-2">
-                  <input
-                    ref={departureDateInputRef}
-                    type="date"
-                    value={departureDate}
-                    onChange={(e) => setDepartureDate(e.target.value || todayIso())}
-                    className="sr-only"
-                    tabIndex={-1}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const input = departureDateInputRef.current;
-                      if (!input) return;
-                      if (typeof input.showPicker === "function") input.showPicker();
-                      else input.click();
-                    }}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-orange-200 bg-white text-orange-700 shadow-sm transition hover:bg-orange-50"
-                    title="Pick departure date"
-                    aria-label="Pick departure date"
-                  >
-                    <Calendar className="h-4 w-4" />
-                  </button>
-                  <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-700">
-                    {departingOnSelectedDate.length}
-                  </span>
-                </div>
+                <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-700">
+                  {checkedInGuests.length}
+                </span>
               </div>
 
               <div className="space-y-2">
-                {departingOnSelectedDate.length === 0 ? (
+                {checkedInGuests.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-orange-200 bg-white/70 px-3 py-6 text-center text-sm text-slate-500">
-                    {isSelectedDateToday
-                      ? "No guests scheduled to check out today"
-                      : "No guests scheduled to check out on this date"}
+                    No checked-in guests right now
                   </p>
                 ) : (
-                  departingOnSelectedDate.map((f) => {
+                  checkedInGuests.map((f) => {
                   const t = computeCheckoutTotals(f);
                   const isSelected = selected?.id === f.id;
+                  const leavingToday = isDepartingToday(f);
                   return (
                     <button
                       key={f.id}
@@ -585,9 +556,14 @@ export function CheckOutView() {
                           <div className="flex items-center gap-1.5">
                             <p className="truncate font-semibold text-slate-900">{f.guestName}</p>
                             {f.isVip && <Crown className="h-3.5 w-3.5 text-amber-500" />}
+                            {leavingToday && (
+                              <span className="shrink-0 rounded-full bg-orange-200 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800">
+                                Out today
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-slate-500">
-                            {f.bookingId} · Room {f.room}
+                            {f.bookingId} · Room {formatRoomLabel(f.room)}
                             {f.checkOut ? ` · Out ${f.checkOut}` : ""}
                           </p>
                           <p className="mt-1 text-xs font-semibold text-orange-700">
@@ -612,7 +588,7 @@ export function CheckOutView() {
                 </div>
                 <p className="mt-4 text-base font-semibold text-slate-700">No guest selected</p>
                 <p className="mt-1 max-w-xs text-sm text-slate-500">
-                  Look up a guest or pick a departure date to review folio and settle payment.
+                  Look up a guest or pick from the checked-in list to review folio and settle payment.
                 </p>
               </div>
             ) : totals && (

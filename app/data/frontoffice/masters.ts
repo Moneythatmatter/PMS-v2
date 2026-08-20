@@ -18,7 +18,6 @@ export interface RoomMaster {
   roomNo: string;
   roomType: string;
   floor?: string;
-  status?: string;
   maxOccupancy?: number;
   bedType?: string;
   isActive?: boolean;

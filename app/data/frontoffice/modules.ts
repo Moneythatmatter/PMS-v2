@@ -20,11 +20,20 @@ export interface InHouseGuest {
   children: number;
 }
 
+export type RoomDayStatus =
+  | "available"
+  | "reserved"
+  | "occupied"
+  | "dirty"
+  | "maintenance"
+  | "blocked";
+
 export interface RoomAvailabilityRow {
   room: string;
   type: string;
   floor: string;
-  days: Record<string, "booked" | "available" | "blocked">;
+  bedType?: string;
+  days: Record<string, RoomDayStatus>;
 }
 
 export interface RoomStatusCard {

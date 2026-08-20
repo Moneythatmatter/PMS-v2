@@ -6,6 +6,7 @@ export type RoomDto = RoomMaster;
 
 export type RoomAvailabilityResponse = {
   start: string;
+  month: string;
   days: string[];
   rows: RoomAvailabilityRow[];
 };
@@ -20,10 +21,10 @@ export const roomService = {
     api.post<RoomDto>(foPath("/rooms"), body),
   update: (id: string, body: Partial<RoomDto>) =>
     api.put<RoomDto>(foPath(`/rooms/${id}`), body),
-  availability: (start?: string) =>
+  availability: (month?: string) =>
     api.get<RoomAvailabilityResponse>(
       foPath(
-        `/rooms/availability${start ? `?start=${encodeURIComponent(start)}` : ""}`,
+        `/rooms/availability${month ? `?start=${encodeURIComponent(month)}` : ""}`,
       ),
     ),
   status: () => api.get<RoomStatusCard[]>(foPath("/rooms/status")),
