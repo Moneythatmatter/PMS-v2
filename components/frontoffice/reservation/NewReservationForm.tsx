@@ -335,8 +335,9 @@ export function NewReservationForm() {
         }
       } catch {
         if (!cancelled) {
-          setAvailableRoomNos([]);
-          setRoomsByType({});
+          setAllRoomNos([]);
+          setAllRoomsByType({});
+          setReservations([]);
         }
       }
     })();

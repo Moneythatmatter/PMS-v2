@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { computeCheckoutTotals, computeCheckoutBills } from "@/app/data";
 import type { CheckoutFolio, SplittableChargeKey } from "@/app/data/frontoffice/checkout";
-import { paymentModes } from "@/app/data/frontoffice/constants";
+import { paymentModes, reservationPaymentModesNeedingExternalRef } from "@/app/data/frontoffice/constants";
 import { reservationService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
@@ -33,7 +33,7 @@ import {
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
-import { isDepartingToday, todayIso } from "@/lib/reservation-dates";
+import { isDepartingOnDate, isDepartingToday, todayIso } from "@/lib/reservation-dates";
 import { CheckoutInvoiceDrawer } from "@/components/frontoffice/CheckoutInvoice";
 
 type Step = "find" | "review" | "pay" | "done";
@@ -116,6 +116,8 @@ function getInitials(name?: string) {
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
+type DepartureFilter = "all" | "today" | "date";
+
 export function CheckOutView() {
   const searchParams = useSearchParams();
   const prefillBookingKey =
@@ -130,7 +132,10 @@ export function CheckOutView() {
   const [selected, setSelected] = useState<CheckoutFolio | null>(null);
   const [discount, setDiscount] = useState(0);
   const [paymentMode, setPaymentMode] = useState("UPI");
+  const [externalReference, setExternalReference] = useState("");
   const [amountReceived, setAmountReceived] = useState(0);
+  const [departureFilter, setDepartureFilter] = useState<DepartureFilter>("all");
+  const [departureDate, setDepartureDate] = useState(todayIso());
   const [invoiceNos, setInvoiceNos] = useState<Record<string, string>>({});
   const [activeInvoiceBillId, setActiveInvoiceBillId] = useState<string | null>(null);
   const [splitBilling, setSplitBilling] = useState(false);
@@ -172,6 +177,22 @@ export function CheckOutView() {
     });
   }, [folios]);
 
+  const filteredCheckedInGuests = useMemo(() => {
+    if (departureFilter === "today") {
+      return checkedInGuests.filter((f) => isDepartingToday(f));
+    }
+    if (departureFilter === "date" && departureDate) {
+      return checkedInGuests.filter((f) => isDepartingOnDate(f, departureDate));
+    }
+    return checkedInGuests;
+  }, [checkedInGuests, departureFilter, departureDate]);
+
+  const showExternalReference = reservationPaymentModesNeedingExternalRef.has(
+    paymentMode,
+  );
+  const externalReferenceRequired =
+    showExternalReference && amountReceived > 0;
+
   const billBreakdown = useMemo(() => {
     if (!selected) return null;
     return computeCheckoutBills(
@@ -198,6 +219,7 @@ export function CheckOutView() {
     setSearch(folio.bookingId);
     setDiscount(folio.discount);
     setPaymentMode("UPI");
+    setExternalReference("");
     setAmountReceived(computeCheckoutTotals(folio).pending);
     setLookupError("");
     setCompleted(false);
@@ -322,10 +344,19 @@ export function CheckOutView() {
       setLookupError(`Amount received (${formatINR(amountReceived)}) is less than pending balance (${formatINR(totals.pending)}).`);
       return;
     }
+    if (externalReferenceRequired && !externalReference.trim()) {
+      setLookupError(
+        paymentMode === "UPI"
+          ? "Enter the UPI transaction ID from your payment app."
+          : "Enter the card authorization or bank reference for this payment.",
+      );
+      return;
+    }
     try {
       await reservationService.checkOut(selected.id, {
         paymentMode,
         amountReceived,
+        externalReference: externalReference.trim() || undefined,
       });
       setFolios((prev) => prev.filter((f) => f.id !== selected.id));
       setCompleted(true);
@@ -418,7 +449,11 @@ export function CheckOutView() {
                 size="sm"
                 className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
                 onClick={handleCheckout}
-                disabled={!paymentMode || amountReceived < (totals?.pending ?? 0)}
+                disabled={
+                  !paymentMode ||
+                  amountReceived < (totals?.pending ?? 0) ||
+                  (externalReferenceRequired && !externalReference.trim())
+                }
               >
                 <LogOut className="h-3.5 w-3.5" />
                 Complete Checkout
@@ -522,17 +557,65 @@ export function CheckOutView() {
                   </p>
                 </div>
                 <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-700">
-                  {checkedInGuests.length}
+                  {filteredCheckedInGuests.length}
                 </span>
               </div>
 
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDepartureFilter("all")}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                    departureFilter === "all"
+                      ? "bg-orange-600 text-white shadow-sm"
+                      : "bg-white/80 text-orange-800 hover:bg-white",
+                  )}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDepartureFilter("today");
+                    setDepartureDate(todayIso());
+                  }}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                    departureFilter === "today"
+                      ? "bg-orange-600 text-white shadow-sm"
+                      : "bg-white/80 text-orange-800 hover:bg-white",
+                  )}
+                >
+                  Today
+                </button>
+                <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-orange-200/80 bg-white/90 px-2.5 py-1.5 sm:flex-none">
+                  <Calendar className="h-3.5 w-3.5 shrink-0 text-orange-600" />
+                  <input
+                    type="date"
+                    value={departureDate}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setDepartureDate(next);
+                      setDepartureFilter(next ? "date" : "all");
+                    }}
+                    className="min-w-0 flex-1 bg-transparent text-xs font-medium text-slate-700 focus:outline-none"
+                    aria-label="Filter by checkout date"
+                  />
+                </label>
+              </div>
+
               <div className="space-y-2">
-                {checkedInGuests.length === 0 ? (
+                {filteredCheckedInGuests.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-orange-200 bg-white/70 px-3 py-6 text-center text-sm text-slate-500">
-                    No checked-in guests right now
+                    {departureFilter === "all"
+                      ? "No checked-in guests right now"
+                      : departureFilter === "today"
+                        ? "No guests checking out today"
+                        : `No guests checking out on ${departureDate}`}
                   </p>
                 ) : (
-                  checkedInGuests.map((f) => {
+                  filteredCheckedInGuests.map((f) => {
                   const t = computeCheckoutTotals(f);
                   const isSelected = selected?.id === f.id;
                   const leavingToday = isDepartingToday(f);
@@ -782,7 +865,13 @@ export function CheckOutView() {
                     <FormField label="Payment Mode">
                       <SelectInput
                         value={paymentMode}
-                        onChange={(e) => setPaymentMode(e.target.value)}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setPaymentMode(next);
+                          if (!reservationPaymentModesNeedingExternalRef.has(next)) {
+                            setExternalReference("");
+                          }
+                        }}
                         className="rounded-xl"
                       >
                         {paymentModes.map((m) => (
@@ -799,6 +888,29 @@ export function CheckOutView() {
                         className="rounded-xl"
                       />
                     </FormField>
+                    {showExternalReference && (
+                      <FormField
+                        label="External Reference ID"
+                        required={externalReferenceRequired}
+                        className="sm:col-span-2"
+                        helperText={
+                          paymentMode === "UPI"
+                            ? "Paste the UPI transaction ID from your payment app"
+                            : "Paste the card authorization or bank reference"
+                        }
+                      >
+                        <TextInput
+                          value={externalReference}
+                          placeholder={
+                            paymentMode === "UPI"
+                              ? "e.g. UPI987654321"
+                              : "e.g. AUTH123456 or bank ref"
+                          }
+                          onChange={(e) => setExternalReference(e.target.value)}
+                          className="rounded-xl border-emerald-300 ring-1 ring-emerald-100 focus:border-emerald-500"
+                        />
+                      </FormField>
+                    )}
                   </div>
                   {amountReceived > totals.pending && (
                     <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
@@ -815,7 +927,11 @@ export function CheckOutView() {
                 <Button
                   className="h-12 w-full gap-2 bg-emerald-700 hover:bg-emerald-800 lg:hidden"
                   onClick={handleCheckout}
-                  disabled={!paymentMode || amountReceived < totals.pending}
+                  disabled={
+                    !paymentMode ||
+                    amountReceived < totals.pending ||
+                    (externalReferenceRequired && !externalReference.trim())
+                  }
                 >
                   <LogOut className="h-4 w-4" />
                   Complete Checkout — {formatINR(totals.pending)}
