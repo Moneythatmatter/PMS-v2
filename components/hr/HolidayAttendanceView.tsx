@@ -155,11 +155,12 @@ export function HolidayAttendanceView() {
   const [records, setRecords] = useState<HolidayAttendanceRecord[]>(INITIAL_HOLIDAY_RECORDS);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Filters State
+  // Single-Line Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedHoliday, setSelectedHoliday] = useState("ALL");
   const [selectedDepartment, setSelectedDepartment] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   // Review Modal & Side Drawer & Add Modal State
@@ -398,46 +399,63 @@ export function HolidayAttendanceView() {
         />
       </div>
 
-      {/* Workflow Guidance Banner */}
-      <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-xs text-emerald-900 flex items-start gap-3">
-        <Info className="h-5 w-5 text-emerald-700 shrink-0 mt-0.5" />
-        <div>
-          <span className="font-bold">Holiday Attendance Workflow:</span> Verify Attendance &rarr; Approve Holiday Work &rarr; Send to Payroll &rarr; Calculate Holiday Pay &rarr; Include in Salary Processing.
-        </div>
-      </div>
-
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 2: FILTERS TOOLBAR & MOBILE TRIGGER
+          SECTION 2: FILTERS TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs mb-5 space-y-3">
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2 flex-1">
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search Employee or Holiday..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-slate-50/50 font-medium text-slate-800"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
+          {/* Full-width Rounded Search Input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search Employee or Holiday..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
 
-            {/* Desktop Filters */}
-            <div className="hidden sm:flex items-center gap-2">
+          {/* Filters Toggle Button (Right) */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
+              <span>Filters</span>
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileFilterOpen(true)}
+              className="md:hidden p-2 rounded-full border border-slate-200 bg-white text-slate-700"
+            >
+              <SlidersHorizontal className="h-4 w-4 text-emerald-700" />
+            </button>
+          </div>
+        </div>
+
+        {/* Collapsible Secondary Filters Drawer Bar */}
+        {showFilterPanel && (
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in-50">
+            <div className="flex flex-wrap items-center gap-2.5">
               <select
                 value={selectedHoliday}
                 onChange={(e) => setSelectedHoliday(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Holidays</option>
                 <option value="Independence Day">Independence Day (15 Aug)</option>
@@ -449,7 +467,7 @@ export function HolidayAttendanceView() {
               <select
                 value={selectedDepartment}
                 onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Departments</option>
                 <option value="Front Office">Front Office</option>
@@ -460,39 +478,29 @@ export function HolidayAttendanceView() {
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Approval Statuses</option>
-                <option value="Pending">🟡 Pending</option>
-                <option value="Approved">🟢 Approved</option>
-                <option value="Rejected">🔴 Rejected</option>
+                <option value="Pending">Pending</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected</option>
               </select>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm("");
-                  setSelectedHoliday("ALL");
-                  setSelectedDepartment("ALL");
-                  setSelectedStatus("ALL");
-                }}
-                className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl hover:bg-slate-50 transition"
-              >
-                Reset
-              </button>
             </div>
-          </div>
 
-          {/* Mobile Filter Button */}
-          <button
-            type="button"
-            onClick={() => setIsMobileFilterOpen(true)}
-            className="sm:hidden px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 flex items-center gap-1.5"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Filters
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm("");
+                setSelectedHoliday("ALL");
+                setSelectedDepartment("ALL");
+                setSelectedStatus("ALL");
+              }}
+              className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
@@ -512,7 +520,6 @@ export function HolidayAttendanceView() {
                 <th className="py-3 px-4">Holiday Pay</th>
                 <th className="py-3 px-4">Approval Status</th>
                 <th className="py-3 px-4">Payroll Status</th>
-                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -541,19 +548,15 @@ export function HolidayAttendanceView() {
                     <p className="text-[10px] text-slate-500 font-mono">{r.holidayDate}</p>
                   </td>
 
-                  <td className="py-3 px-4">
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      🟢 {r.workedHours} Hrs ({r.checkIn} - {r.checkOut})
-                    </span>
+                  <td className="py-3 px-4 font-black text-slate-900">
+                    + {r.workedHours} Hrs ({r.checkIn} - {r.checkOut})
                   </td>
 
-                  <td className="py-3 px-4">
-                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-1 w-fit">
-                      <DollarSign className="h-3 w-3" /> Additional Pay
-                    </span>
+                  <td className="py-3 px-4 font-bold text-purple-900">
+                    Additional Pay
                   </td>
 
-                  <td className="py-3 px-4 font-bold text-slate-900">
+                  <td className="py-3 px-4 font-black text-emerald-800 text-xs">
                     ₹{r.holidayPayAmount.toLocaleString("en-IN")}
                   </td>
 
@@ -562,39 +565,7 @@ export function HolidayAttendanceView() {
                   </td>
 
                   <td className="py-3 px-4">
-                    {r.payrollStatus === "Processed in Payroll" && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                        Processed
-                      </span>
-                    )}
-                    {r.payrollStatus === "Pending Payroll Processing" && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                        Pending Payroll
-                      </span>
-                    )}
-                    {r.payrollStatus === "N/A" && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium text-slate-400">
-                        N/A
-                      </span>
-                    )}
-                  </td>
-
-                  <td
-                    className="py-3 px-4 text-right"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenReviewModal(r)}
-                        className="rounded-xl text-xs font-bold bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50"
-                      >
-                        <Eye className="mr-1 h-3.5 w-3.5" />
-                        {r.approvalStatus === "Pending" ? "Review" : "View"}
-                      </Button>
-                    </div>
+                    <StatusBadge status={r.payrollStatus} />
                   </td>
                 </tr>
               ))}

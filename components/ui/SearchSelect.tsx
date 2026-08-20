@@ -73,18 +73,18 @@ export function SearchSelect({
     const q = query.toLowerCase().trim();
     if (!q) return true;
     return (
-      opt.label.toLowerCase().includes(q) ||
-      opt.id.toLowerCase().includes(q) ||
-      (opt.sublabel && opt.sublabel.toLowerCase().includes(q)) ||
-      (opt.hint && opt.hint.toLowerCase().includes(q))
+      (opt.label ? opt.label.toLowerCase().includes(q) : false) ||
+      (opt.id ? opt.id.toLowerCase().includes(q) : false) ||
+      (opt.sublabel ? opt.sublabel.toLowerCase().includes(q) : false) ||
+      (opt.hint ? opt.hint.toLowerCase().includes(q) : false)
     );
   });
 
   const trimmedQuery = query.trim();
   const exactMatch = uniqueOptions.some(
     (o) =>
-      o.id.toLowerCase() === trimmedQuery.toLowerCase() ||
-      o.label.toLowerCase() === trimmedQuery.toLowerCase(),
+      (o.id ? o.id.toLowerCase() : "") === trimmedQuery.toLowerCase() ||
+      (o.label ? o.label.toLowerCase() : "") === trimmedQuery.toLowerCase(),
   );
   const canCommitCustom = allowCustom && trimmedQuery.length > 0 && !exactMatch;
 

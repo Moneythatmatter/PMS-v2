@@ -36,6 +36,7 @@ import {
   UserX,
   AlertCircle,
   ArrowRight,
+  SlidersHorizontal,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Modal } from "@/components/ui/Modal";
@@ -335,6 +336,7 @@ export function ShiftManagementView() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>("ALL");
   const [selectedShiftType, setSelectedShiftType] = useState<string>("ALL");
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
+  const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
 
   // Modals & Drawers State
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -804,67 +806,116 @@ export function ShiftManagementView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 2: STREAMLINED SINGLE-LINE FILTERS TOOLBAR & VIEW TOGGLE
+          SECTION 2: STREAMLINED STANDARDIZED TOOLBAR & VIEW TOGGLE
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs mb-5 space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Single Line Search & Dropdowns (UI Improvement) */}
-          <div className="flex flex-wrap items-center gap-2 flex-1">
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search Employee..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-slate-50/50 font-medium text-slate-800"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          {/* Full-width Rounded Search Input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search Employee, Shift Code..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Right-aligned Filter Dropdown & View Mode Switcher */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
+              <span>Filters</span>
+            </Button>
+
+            {/* View Mode Switcher Pills */}
+            <div className="flex items-center border border-slate-200 rounded-full p-0.5 bg-slate-50 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-bold rounded-full transition flex items-center gap-1.5 cursor-pointer",
+                  viewMode === "table"
+                    ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
+                    : "text-slate-500 hover:text-slate-800"
+                )}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span>Table View</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("roster")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-bold rounded-full transition flex items-center gap-1.5 cursor-pointer",
+                  viewMode === "roster"
+                    ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
+                    : "text-slate-500 hover:text-slate-800"
+                )}
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                <span>Weekly Roster</span>
+              </button>
             </div>
+          </div>
+        </div>
 
-            <select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
-            >
-              <option value="ALL">All Departments</option>
-              <option value="Front Office">Front Office</option>
-              <option value="Housekeeping">Housekeeping</option>
-              <option value="Food & Beverage">Food &amp; Beverage</option>
-              <option value="Accounts">Accounts</option>
-            </select>
+        {/* Collapsible Secondary Filters Drawer Bar */}
+        {showFilterPanel && (
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in-50">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <select
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
+              >
+                <option value="ALL">All Departments</option>
+                <option value="Front Office">Front Office</option>
+                <option value="Housekeeping">Housekeeping</option>
+                <option value="Food & Beverage">Food &amp; Beverage</option>
+                <option value="Accounts">Accounts</option>
+              </select>
 
-            <select
-              value={selectedShiftType}
-              onChange={(e) => setSelectedShiftType(e.target.value)}
-              className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
-            >
-              <option value="ALL">All Shifts</option>
-              {MASTER_SHIFTS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+              <select
+                value={selectedShiftType}
+                onChange={(e) => setSelectedShiftType(e.target.value)}
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
+              >
+                <option value="ALL">All Shifts</option>
+                {MASTER_SHIFTS.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
 
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="Active">🟢 Active</option>
-              <option value="Upcoming">🟡 Upcoming</option>
-              <option value="Inactive">🔴 Inactive</option>
-            </select>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Upcoming">Upcoming</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
 
             <button
               type="button"
@@ -874,42 +925,12 @@ export function ShiftManagementView() {
                 setSelectedShiftType("ALL");
                 setSelectedStatus("ALL");
               }}
-              className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl hover:bg-slate-50 transition"
+              className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
             >
-              Reset
+              Reset Filters
             </button>
           </div>
-
-          {/* View Mode Toggle: Table View vs Weekly Roster Matrix (Improvement #8) */}
-          <div className="flex items-center border border-slate-200 rounded-xl p-0.5 bg-slate-50">
-            <button
-              type="button"
-              onClick={() => setViewMode("table")}
-              className={cn(
-                "px-3 py-1.5 text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer",
-                viewMode === "table"
-                  ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
-                  : "text-slate-500 hover:text-slate-800"
-              )}
-            >
-              <Layers className="h-3.5 w-3.5" />
-              <span>Table View</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("roster")}
-              className={cn(
-                "px-3 py-1.5 text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer",
-                viewMode === "roster"
-                  ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
-                  : "text-slate-500 hover:text-slate-800"
-              )}
-            >
-              <CalendarDays className="h-3.5 w-3.5" />
-              <span>Weekly Roster View ⭐</span>
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
@@ -928,7 +949,6 @@ export function ShiftManagementView() {
                   <th className="py-3 px-4">Effective To</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Assigned By / On</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -976,13 +996,13 @@ export function ShiftManagementView() {
                       </div>
                     </td>
 
-                    {/* Effective From / To (Improvement #9) */}
+                    {/* Effective From / To */}
                     <td className="py-3 px-4 font-medium text-slate-700">{a.effectiveFrom}</td>
                     <td className="py-3 px-4 font-medium text-slate-700">
                       {a.effectiveTo ? (
                         a.effectiveTo
                       ) : (
-                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[10px]">
+                        <span className="text-slate-600 font-semibold text-[11px]">
                           Until Further Notice
                         </span>
                       )}
@@ -991,86 +1011,26 @@ export function ShiftManagementView() {
                     {/* Status Badge */}
                     <td className="py-3 px-4">
                       {a.status === "Active" && (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          🟢 Active
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Active
                         </span>
                       )}
                       {a.status === "Upcoming" && (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                          🟡 Upcoming
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
+                          Upcoming
                         </span>
                       )}
                       {(a.status === "Expired" || a.status === "Inactive") && (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                          🔴 Inactive
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-300">
+                          Inactive
                         </span>
                       )}
                     </td>
 
-                    {/* Assigned By & Assigned On Columns (UI Improvement) */}
+                    {/* Assigned By & Assigned On Columns */}
                     <td className="py-3 px-4 text-xs">
                       <p className="font-semibold text-slate-800">{a.assignedBy}</p>
                       <p className="text-[10px] text-slate-400">{a.assignedOn}</p>
-                    </td>
-
-                    {/* Action Column: View, History, Quick Change, Edit, End Assignment */}
-                    <td
-                      className="py-3 px-4 text-right"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setViewingAssignment(a)}
-                          title="View Details"
-                          className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setHistoryTarget(a);
-                            setIsHistoryModalOpen(true);
-                          }}
-                          title="View Shift Assignment History"
-                          className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition"
-                        >
-                          <History className="h-4 w-4" />
-                        </button>
-
-                        {/* Quick Shift Change Button (Improvement #5) */}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenQuickChange(a)}
-                          title="Quick Shift Change"
-                          className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg transition font-bold"
-                        >
-                          <Zap className="h-4 w-4 text-amber-500 fill-amber-400" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSingleAssign(a)}
-                          title="Edit Shift Assignment"
-                          className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-
-                        {/* End Assignment (Improvement #4 - Replaced Delete) */}
-                        {a.status === "Active" && (
-                          <button
-                            type="button"
-                            onClick={() => handleEndAssignment(a.id, a.employeeName)}
-                            title="End Assignment"
-                            className="px-2 py-1 text-[10px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition"
-                          >
-                            End
-                          </button>
-                        )}
-                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1684,28 +1644,66 @@ export function ShiftManagementView() {
               </div>
             </div>
 
-            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => handleOpenSingleAssign(viewingAssignment)}
-                className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold h-9"
-              >
-                <Edit2 className="mr-1 h-3.5 w-3.5" /> Edit Shift
-              </Button>
+            <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    const target = viewingAssignment;
+                    setViewingAssignment(null);
+                    handleOpenSingleAssign(target);
+                  }}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold h-9 cursor-pointer"
+                >
+                  <Edit2 className="mr-1 h-3.5 w-3.5" /> Edit Shift
+                </Button>
 
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setHistoryTarget(viewingAssignment);
-                  setIsHistoryModalOpen(true);
-                }}
-                className="flex-1 text-slate-700 bg-white border-slate-300 rounded-xl text-xs font-bold h-9"
-              >
-                <History className="mr-1 h-3.5 w-3.5" /> Shift History
-              </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    const target = viewingAssignment;
+                    setViewingAssignment(null);
+                    handleOpenQuickChange(target);
+                  }}
+                  className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold h-9 cursor-pointer"
+                >
+                  <Zap className="mr-1 h-3.5 w-3.5 text-amber-600 fill-amber-500" /> Quick Swap
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setHistoryTarget(viewingAssignment);
+                    setIsHistoryModalOpen(true);
+                  }}
+                  className="flex-1 text-slate-700 bg-white border-slate-300 rounded-xl text-xs font-bold h-9 cursor-pointer"
+                >
+                  <History className="mr-1 h-3.5 w-3.5" /> View History
+                </Button>
+
+                {viewingAssignment.status === "Active" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const targetId = viewingAssignment.id;
+                      const targetName = viewingAssignment.employeeName;
+                      setViewingAssignment(null);
+                      handleEndAssignment(targetId, targetName);
+                    }}
+                    className="flex-1 text-rose-700 bg-rose-50 hover:bg-rose-100 border-rose-200 rounded-xl text-xs font-bold h-9 cursor-pointer"
+                  >
+                    End Assignment
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>

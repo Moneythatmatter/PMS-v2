@@ -26,10 +26,11 @@ import {
   Repeat,
   Calendar,
   Layers,
+  SlidersHorizontal,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Modal } from "@/components/ui/Modal";
-import { Button } from "@/components/ui/Button";
+import { Modal, Button, StatusBadge } from "@/components/ui";
+import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
 import { cn } from "@/lib/utils";
 
 export interface WeeklyOffAssignment {
@@ -185,6 +186,8 @@ export function WeeklyOffView() {
   const [selectedType, setSelectedType] = useState("ALL");
   const [selectedDay, setSelectedDay] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   // Modals & Drawers state
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -484,117 +487,122 @@ export function WeeklyOffView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          INTEGRATION RULES NOTICE BANNER
-      ───────────────────────────────────────────────────────────── */}
-      <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-xs text-emerald-900 flex items-start gap-3">
-        <Info className="h-5 w-5 text-emerald-700 shrink-0 mt-0.5" />
-        <div>
-          <span className="font-bold">Attendance &amp; Overtime Rules:</span> Weekly Off assignments define scheduled rest days. If an employee punch log is detected on their assigned Weekly Off, Attendance flags the day as <span className="font-bold">WORKED ON WEEKLY OFF</span> and automatically calculates <span className="font-bold text-emerald-950 underline">Overtime (2.0x Rate)</span> or <span className="font-bold text-emerald-950 underline">Comp-Off Eligibility</span>.
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
           SECTION 2: FILTERS TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs mb-5 space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          {/* Full-width Rounded Search Input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search Employee Name, ID or Off Day..."
+              placeholder="Search Employee, ID or Off Day..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-slate-50/50 font-medium text-slate-800"
+              className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
             />
             {searchTerm && (
               <button
                 type="button"
                 onClick={() => setSearchTerm("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setSearchTerm("");
-              setSelectedDepartment("ALL");
-              setSelectedType("ALL");
-              setSelectedDay("ALL");
-              setSelectedStatus("ALL");
-            }}
-            className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl hover:bg-slate-50 transition self-end md:self-auto"
-          >
-            Reset Filters
-          </button>
-        </div>
-
-        {/* Dropdown Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 pt-2 border-t border-slate-100">
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Department</label>
-            <select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="w-full text-xs rounded-xl border border-slate-200 py-1.5 px-2.5 bg-white font-medium"
+          {/* Filters Toggle Button (Right) */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
             >
-              <option value="ALL">All Departments</option>
-              <option value="Front Office">Front Office</option>
-              <option value="Housekeeping">Housekeeping</option>
-              <option value="Food & Beverage">Food &amp; Beverage</option>
-              <option value="Kitchen">Kitchen</option>
-              <option value="HR">HR</option>
-              <option value="Accounts">Accounts</option>
-            </select>
-          </div>
+              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
+              <span>Filters</span>
+            </Button>
 
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Weekly Off Type</label>
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full text-xs rounded-xl border border-slate-200 py-1.5 px-2.5 bg-white font-medium"
+            <button
+              type="button"
+              onClick={() => setIsMobileFilterOpen(true)}
+              className="md:hidden p-2 rounded-full border border-slate-200 bg-white text-slate-700"
             >
-              <option value="ALL">All Off Types</option>
-              <option value="Fixed">Fixed Schedule</option>
-              <option value="Rotational">Rotational Shift Off</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Day of Week</label>
-            <select
-              value={selectedDay}
-              onChange={(e) => setSelectedDay(e.target.value)}
-              className="w-full text-xs rounded-xl border border-slate-200 py-1.5 px-2.5 bg-white font-medium"
-            >
-              <option value="ALL">All Days</option>
-              {DAYS_OF_WEEK.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Status</label>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full text-xs rounded-xl border border-slate-200 py-1.5 px-2.5 bg-white font-medium"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="Active">🟢 Active</option>
-              <option value="Upcoming">🟡 Upcoming</option>
-              <option value="Expired">🔴 Expired</option>
-            </select>
+              <SlidersHorizontal className="h-4 w-4 text-emerald-700" />
+            </button>
           </div>
         </div>
+
+        {/* Collapsible Secondary Filters Drawer Bar */}
+        {showFilterPanel && (
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in-50">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <select
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
+              >
+                <option value="ALL">All Departments</option>
+                <option value="Front Office">Front Office</option>
+                <option value="Housekeeping">Housekeeping</option>
+                <option value="Food & Beverage">Food &amp; Beverage</option>
+                <option value="Kitchen">Kitchen</option>
+                <option value="HR">HR</option>
+                <option value="Accounts">Accounts</option>
+              </select>
+
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value)}
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
+              >
+                <option value="ALL">All Off Types</option>
+                <option value="Fixed">Fixed Schedule</option>
+                <option value="Rotational">Rotational Shift Off</option>
+              </select>
+
+              <select
+                value={selectedDay}
+                onChange={(e) => setSelectedDay(e.target.value)}
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
+              >
+                <option value="ALL">All Days</option>
+                {DAYS_OF_WEEK.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Upcoming">Upcoming</option>
+                <option value="Expired">Expired</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm("");
+                setSelectedDepartment("ALL");
+                setSelectedType("ALL");
+                setSelectedDay("ALL");
+                setSelectedStatus("ALL");
+              }}
+              className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
@@ -612,7 +620,6 @@ export function WeeklyOffView() {
                 <th className="py-3 px-4">Effective From</th>
                 <th className="py-3 px-4">Effective To</th>
                 <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -624,23 +631,12 @@ export function WeeklyOffView() {
                 >
                   {/* Employee Info */}
                   <td className="py-3 px-4">
-                    <div className="flex items-center gap-2.5">
-                      {a.photoUrl ? (
-                        <img
-                          src={a.photoUrl}
-                          alt={a.employeeName}
-                          className="h-8 w-8 rounded-xl object-cover border border-slate-200 shrink-0"
-                        />
-                      ) : (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-700 text-white font-bold text-xs shrink-0">
-                          {a.avatar}
-                        </div>
-                      )}
-                      <div>
-                        <p className="font-bold text-slate-900">{a.employeeName}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">{a.employeeId}</p>
-                      </div>
-                    </div>
+                    <HREmployeeCell
+                      name={a.employeeName}
+                      id={a.employeeId}
+                      avatar={a.avatar}
+                      photoUrl={a.photoUrl}
+                    />
                   </td>
 
                   {/* Department */}
@@ -653,13 +649,13 @@ export function WeeklyOffView() {
                   <td className="py-3 px-4">
                     <span
                       className={cn(
-                        "px-2.5 py-0.5 rounded-lg text-[11px] font-bold border",
+                        "px-2.5 py-0.5 rounded-lg text-xs font-bold border",
                         a.type === "Fixed"
-                          ? "bg-blue-100 text-blue-800 border-blue-200"
+                          ? "bg-slate-100 text-slate-800 border-slate-200"
                           : "bg-amber-100 text-amber-800 border-amber-200"
                       )}
                     >
-                      {a.type === "Fixed" ? "📌 Fixed Schedule" : "🔄 Rotational Off"}
+                      {a.type === "Fixed" ? "Fixed Schedule" : "Rotational Off"}
                     </span>
                   </td>
 
@@ -670,9 +666,9 @@ export function WeeklyOffView() {
                         {a.days.map((day) => (
                           <span
                             key={day}
-                            className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200 text-[11px]"
+                            className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 text-xs"
                           >
-                            🌴 {day}
+                            {day}
                           </span>
                         ))}
                       </div>
@@ -688,56 +684,7 @@ export function WeeklyOffView() {
 
                   {/* Status Badge */}
                   <td className="py-3 px-4">
-                    {a.status === "Active" && (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        🟢 Active
-                      </span>
-                    )}
-                    {a.status === "Upcoming" && (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                        🟡 Upcoming
-                      </span>
-                    )}
-                    {a.status === "Expired" && (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                        🔴 Expired
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Actions Column */}
-                  <td
-                    className="py-3 px-4 text-right"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setViewingAssignment(a)}
-                        title="View Details"
-                        className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSingleAssign(a)}
-                        title="Edit Weekly Off"
-                        className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveAssignment(a.id, a.employeeName)}
-                        title="Remove Weekly Off"
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+                    <StatusBadge status={a.status} />
                   </td>
                 </tr>
               ))}

@@ -290,20 +290,30 @@ export function EmployeeListView() {
       </div>
 
       {/* Toolbar, Search Bar & Bulk Actions */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xs">
-        <div className="flex items-center gap-2">
+      <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs">
+        {/* Full-width Rounded Search Input */}
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by code, name, role, email..."
+            className="w-full pl-10 pr-4 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
+          />
+        </div>
+
+        {/* Right-aligned Filters Pill Button */}
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => setShowFilters(!showFilters)}
-            className="rounded-xl border-slate-200 text-xs font-semibold gap-1.5 hidden md:inline-flex bg-white text-slate-700 cursor-pointer"
+            className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
           >
-            <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-600" />
-            <span>{showFilters ? "Hide Filters" : "Filter Employees"}</span>
-            <ChevronDown
-              className={cn("h-3.5 w-3.5 transition-transform duration-200", showFilters && "rotate-180")}
-            />
+            <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
+            <span>Filters</span>
           </Button>
 
           <Button
@@ -331,7 +341,7 @@ export function EmployeeListView() {
               </Button>
 
               {showBulkMenu && (
-                <div className="absolute left-0 top-full mt-1.5 z-30 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl text-xs space-y-0.5 animate-in fade-in-50">
+                <div className="absolute right-0 top-full mt-1.5 z-30 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl text-xs space-y-0.5 animate-in fade-in-50">
                   <button
                     onClick={() => handleBulkAction("Assign Shift")}
                     className="w-full rounded-lg px-2.5 py-1.5 text-left font-medium text-slate-700 hover:bg-slate-100 flex items-center gap-2 cursor-pointer"
@@ -367,18 +377,6 @@ export function EmployeeListView() {
               )}
             </div>
           )}
-        </div>
-
-        {/* Search Input */}
-        <div className="relative flex-1 sm:w-72">
-          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by code, name, role, email..."
-            className="h-8 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-800 focus:border-emerald-500 focus:outline-none"
-          />
         </div>
       </div>
 
@@ -459,13 +457,12 @@ export function EmployeeListView() {
                 <th className="px-3 py-2.5 w-32">Shift</th>
                 <th className="px-3.5 py-2.5 text-right w-28">Salary (₹)</th>
                 <th className="px-3 py-2.5 text-center w-24">Status</th>
-                <th className="px-3 py-2.5 text-center w-20">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-slate-400 font-medium">
+                  <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
                     No employees found matching the filter criteria.
                   </td>
                 </tr>
@@ -575,37 +572,28 @@ export function EmployeeListView() {
                             {row.status}
                           </span>
                         </td>
-                        {/* Action Column */}
-                        <td className="px-3 py-2.5 text-center">
-                          <a
-                            href={`/human-resources/employees/profile?id=${row.id}`}
-                            className="inline-flex items-center justify-center p-1.5 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 transition-colors cursor-pointer"
-                            title="Open Employee Profile"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </a>
-                        </td>
                       </tr>
 
-                      {/* INLINE EXPANDED ROW STATS PANEL (PocketHRMS Style) */}
+                      {/* INLINE EXPANDED ROW STATS PANEL (Clean & Modern) */}
                       {activePopoverRow && (
-                        <tr className="bg-gradient-to-r from-slate-50 via-emerald-50/40 to-slate-50 border-b-2 border-emerald-300 animate-in fade-in-50">
-                          <td colSpan={9} className="p-3.5 sm:p-4">
-                            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
-                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-700 text-white font-bold text-xs shadow-2xs">
+                        <tr className="bg-slate-50/80 border-b border-slate-200 animate-in fade-in-50">
+                          <td colSpan={8} className="p-4">
+                            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
+                              {/* Header Row */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-700 text-white font-bold text-xs shadow-2xs">
                                     {row.avatar}
                                   </div>
                                   <div>
-                                    <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
+                                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
                                       {row.name}
-                                      <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                                      <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 border border-slate-200">
                                         {row.empCode}
                                       </span>
                                     </h4>
                                     <p className="text-[11px] text-slate-500 font-medium">
-                                      {row.designation} • <span className="text-emerald-700">{row.department}</span>
+                                      {row.designation} • <span className="text-emerald-700 font-semibold">{row.department}</span>
                                     </p>
                                   </div>
                                 </div>
@@ -613,58 +601,59 @@ export function EmployeeListView() {
                                 <div className="flex items-center gap-2">
                                   <a
                                     href={`/human-resources/employees/profile?id=${row.id}`}
-                                    className="px-3 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition-colors cursor-pointer"
+                                    className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
                                   >
-                                    View Full Profile &rarr;
+                                    <span>View Full Profile</span>
+                                    <span>&rarr;</span>
                                   </a>
                                   <button
                                     type="button"
                                     onClick={() => setActivePopoverEmpId(null)}
-                                    className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                    className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
                                   >
                                     <X className="h-4 w-4" />
                                   </button>
                                 </div>
                               </div>
 
-                              {/* Horizontal Statistics Row */}
+                              {/* Simplified Clean Statistics Grid */}
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                                 {/* 1. Leave Summary */}
-                                <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200 space-y-1">
-                                  <span className="text-[10px] font-bold uppercase text-blue-800 tracking-wider block">
-                                    🏖️ Leave Summary
+                                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                                  <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block">
+                                    Leave Balance
                                   </span>
-                                  <p className="text-base font-black text-blue-950">16 / 24 Days Left</p>
-                                  <p className="text-[11px] font-medium text-blue-700">8 Days Used this year</p>
+                                  <p className="text-sm font-extrabold text-slate-900 mt-1">16 / 24 Days Left</p>
+                                  <p className="text-[11px] font-medium text-slate-500 mt-0.5">8 Days Used this year</p>
                                 </div>
 
                                 {/* 2. Attendance Summary */}
-                                <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 space-y-1">
-                                  <span className="text-[10px] font-bold uppercase text-emerald-800 tracking-wider block">
-                                    ⏰ Attendance Rate
+                                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                                  <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block">
+                                    Attendance Rate
                                   </span>
-                                  <p className="text-base font-black text-emerald-950">96.2% Present</p>
-                                  <p className="text-[11px] font-medium text-emerald-700">24 / 26 Working Days</p>
+                                  <p className="text-sm font-extrabold text-emerald-700 mt-1">96.2% Present</p>
+                                  <p className="text-[11px] font-medium text-slate-500 mt-0.5">24 / 26 Working Days</p>
                                 </div>
 
                                 {/* 3. Payroll / Gross Salary */}
-                                <div className="p-3 rounded-xl bg-purple-50/80 border border-purple-200 space-y-1">
-                                  <span className="text-[10px] font-bold uppercase text-purple-800 tracking-wider block">
-                                    💰 Gross Salary
+                                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                                  <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block">
+                                    Gross Salary
                                   </span>
-                                  <p className="text-base font-black text-purple-950">₹{row.salary.toLocaleString("en-IN")}</p>
-                                  <p className="text-[11px] font-semibold text-purple-800">
+                                  <p className="text-sm font-extrabold text-slate-900 mt-1">₹{row.salary.toLocaleString("en-IN")}</p>
+                                  <p className="text-[11px] font-medium text-slate-500 mt-0.5">
                                     Net Pay: ₹{Math.round(row.salary * 0.88).toLocaleString("en-IN")}
                                   </p>
                                 </div>
 
                                 {/* 4. Income Tax TDS */}
-                                <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 space-y-1">
-                                  <span className="text-[10px] font-bold uppercase text-amber-800 tracking-wider block">
-                                    📄 Income Tax (TDS)
+                                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                                  <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block">
+                                    Income Tax (TDS)
                                   </span>
-                                  <p className="text-base font-black text-amber-950">₹{Math.round(row.salary * 0.05).toLocaleString("en-IN")}</p>
-                                  <p className="text-[11px] font-medium text-amber-700">Tax Calculated till July 2026</p>
+                                  <p className="text-sm font-extrabold text-slate-900 mt-1">₹{Math.round(row.salary * 0.05).toLocaleString("en-IN")}</p>
+                                  <p className="text-[11px] font-medium text-slate-500 mt-0.5">Calculated till July 2026</p>
                                 </div>
                               </div>
                             </div>

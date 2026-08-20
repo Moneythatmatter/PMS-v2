@@ -264,12 +264,13 @@ export function ApprovalMatrixView() {
   const [workflows, setWorkflows] = useState<ApprovalWorkflow[]>(INITIAL_APPROVAL_WORKFLOWS);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Filters State
+  // Single-Line Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedModule, setSelectedModule] = useState<string>("ALL");
   const [selectedRequestType, setSelectedRequestType] = useState<string>("ALL");
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
   const [selectedLevels, setSelectedLevels] = useState<string>("ALL");
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   // Modals & Drawers State
@@ -584,29 +585,63 @@ export function ApprovalMatrixView() {
       {/* ─────────────────────────────────────────────────────────────
           SECTION 2: REUSABLE FILTER BAR TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs mb-5 space-y-3">
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2 flex-1">
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search workflow or request type..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-slate-50/50 font-medium text-slate-800"
-              />
-            </div>
+          {/* Full-width Rounded Search Input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search workflow or request type..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
 
-            {/* Desktop Filters */}
-            <div className="hidden sm:flex items-center gap-2 flex-wrap">
+          {/* Filters Toggle Button (Right) */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
+              <span>Filters</span>
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileFilterOpen(true)}
+              className="md:hidden p-2 rounded-full border border-slate-200 bg-white text-slate-700"
+            >
+              <SlidersHorizontal className="h-4 w-4 text-emerald-700" />
+            </button>
+          </div>
+        </div>
+
+        {/* Collapsible Secondary Filters Drawer Bar */}
+        {showFilterPanel && (
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in-50">
+            <div className="flex flex-wrap items-center gap-2.5">
               <select
                 value={selectedModule}
                 onChange={(e) => {
                   setSelectedModule(e.target.value);
                   setSelectedRequestType("ALL");
                 }}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All HR Modules</option>
                 <option value="Leave Management">Leave Management</option>
@@ -621,7 +656,7 @@ export function ApprovalMatrixView() {
               <select
                 value={selectedLevels}
                 onChange={(e) => setSelectedLevels(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Approval Levels</option>
                 <option value="1">1 Level Approval</option>
@@ -632,39 +667,29 @@ export function ApprovalMatrixView() {
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Statuses</option>
-                <option value="Active">🟢 Active</option>
-                <option value="Inactive">⚪ Inactive</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
               </select>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm("");
-                  setSelectedModule("ALL");
-                  setSelectedRequestType("ALL");
-                  setSelectedStatus("ALL");
-                  setSelectedLevels("ALL");
-                }}
-                className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl hover:bg-slate-50 transition"
-              >
-                Reset Filters
-              </button>
             </div>
-          </div>
 
-          {/* Mobile Filter Trigger */}
-          <button
-            type="button"
-            onClick={() => setIsMobileFilterOpen(true)}
-            className="sm:hidden px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 flex items-center gap-1.5"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Filters
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm("");
+                setSelectedModule("ALL");
+                setSelectedRequestType("ALL");
+                setSelectedStatus("ALL");
+                setSelectedLevels("ALL");
+              }}
+              className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
@@ -682,7 +707,6 @@ export function ApprovalMatrixView() {
                 <th className="py-3.5 px-4">Current Approver Chain</th>
                 <th className="py-3.5 px-4">Effective From</th>
                 <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -747,66 +771,6 @@ export function ApprovalMatrixView() {
 
                     <td className="py-3.5 px-4">
                       <StatusBadge status={wf.status} />
-                    </td>
-
-                    <td
-                      className="py-3.5 px-4 text-right"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setViewingWorkflow(wf)}
-                          className="rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                        >
-                          <Eye className="h-3.5 w-3.5 mr-1 text-slate-500" /> View
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleOpenEditModal(wf)}
-                          className="rounded-xl text-xs font-semibold text-blue-800 border-blue-300 hover:bg-blue-50"
-                        >
-                          <Edit2 className="h-3.5 w-3.5 mr-1 text-blue-600" /> Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDuplicateWorkflow(wf)}
-                          className="rounded-xl text-xs font-semibold text-purple-800 border-purple-300 hover:bg-purple-50"
-                        >
-                          <Copy className="h-3.5 w-3.5 text-purple-600" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleToggleStatus(wf)}
-                          className={cn(
-                            "rounded-xl text-xs font-semibold",
-                            wf.status === "Active"
-                              ? "text-amber-800 border-amber-300 hover:bg-amber-50"
-                              : "text-emerald-800 border-emerald-300 hover:bg-emerald-50"
-                          )}
-                          title={wf.status === "Active" ? "Deactivate" : "Activate"}
-                        >
-                          <Power className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteWorkflow(wf)}
-                          className="rounded-xl text-xs font-semibold text-rose-700 border-rose-300 hover:bg-rose-50"
-                          title="Delete Workflow"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
                     </td>
                   </tr>
                 ))
@@ -1115,47 +1079,47 @@ export function ApprovalMatrixView() {
             </div>
 
             {/* DYNAMIC LIVE WORKFLOW PREVIEW DIAGRAM */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white space-y-2">
-              <span className="text-[10px] uppercase font-black text-amber-400 tracking-wider block">
-                Live Approval Workflow Preview
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+              <span className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider block">
+                Workflow Routing Preview
               </span>
-              <div className="flex items-center gap-2 overflow-x-auto py-2">
-                <div className="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-slate-300 text-xs">
-                  Employee Request
-                </div>
-                <ArrowRight className="h-4 w-4 text-amber-400 flex-shrink-0" />
+              <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-slate-800">
+                <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700">
+                  Request
+                </span>
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
 
-                <div className="px-3 py-1.5 rounded-xl bg-blue-950 border border-blue-700 font-bold text-blue-300 text-xs">
-                  Level 1: {level1.approverRoleOrUser}
-                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  L1: {level1.approverRoleOrUser}
+                </span>
 
                 {formLevelsCount >= 2 && (
                   <>
-                    <ArrowRight className="h-4 w-4 text-amber-400 flex-shrink-0" />
-                    <div className="px-3 py-1.5 rounded-xl bg-purple-950 border border-purple-700 font-bold text-purple-300 text-xs">
-                      Level 2: {level2.approverRoleOrUser}
-                    </div>
+                    <ArrowRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      L2: {level2.approverRoleOrUser}
+                    </span>
                   </>
                 )}
 
                 {formLevelsCount >= 3 && (
                   <>
-                    <ArrowRight className="h-4 w-4 text-amber-400 flex-shrink-0" />
-                    <div className="px-3 py-1.5 rounded-xl bg-amber-950 border border-amber-700 font-bold text-amber-300 text-xs">
-                      Level 3: {level3.approverRoleOrUser}
-                    </div>
+                    <ArrowRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      L3: {level3.approverRoleOrUser}
+                    </span>
                   </>
                 )}
 
-                <ArrowRight className="h-4 w-4 text-amber-400 flex-shrink-0" />
-                <div className="px-3 py-1.5 rounded-xl bg-emerald-950 border border-emerald-600 font-bold text-emerald-400 text-xs flex items-center gap-1">
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-700 text-white border border-emerald-800 flex items-center gap-1">
                   <CheckCircle2 className="h-3.5 w-3.5" /> Approved
-                </div>
+                </span>
               </div>
             </div>
 
             {/* STEP 5: DATES & STATUS */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
                   Effective From <span className="text-rose-500">*</span>
@@ -1165,7 +1129,7 @@ export function ApprovalMatrixView() {
                   required
                   value={formEffectiveFrom}
                   onChange={(e) => setFormEffectiveFrom(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 p-2 font-semibold text-slate-900 bg-white"
+                  className="w-full rounded-xl border border-slate-200 p-2 font-semibold text-slate-900 bg-white text-xs"
                 />
               </div>
 
@@ -1175,7 +1139,7 @@ export function ApprovalMatrixView() {
                   type="date"
                   value={formEffectiveTo}
                   onChange={(e) => setFormEffectiveTo(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 p-2 font-semibold text-slate-900 bg-white"
+                  className="w-full rounded-xl border border-slate-200 p-2 font-semibold text-slate-900 bg-white text-xs"
                 />
               </div>
 
@@ -1184,10 +1148,10 @@ export function ApprovalMatrixView() {
                 <select
                   value={formStatus}
                   onChange={(e) => setFormStatus(e.target.value as WorkflowStatus)}
-                  className="w-full rounded-xl border border-slate-200 p-2 font-bold text-slate-900 bg-white"
+                  className="w-full rounded-xl border border-slate-200 p-2 font-bold text-slate-900 bg-white text-xs"
                 >
-                  <option value="Active">🟢 Active</option>
-                  <option value="Inactive">⚪ Inactive</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
                 </select>
               </div>
             </div>
@@ -1199,14 +1163,14 @@ export function ApprovalMatrixView() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsFormModalOpen(false)}
-                className="rounded-xl text-xs"
+                className="rounded-full text-xs font-bold px-4"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 size="sm"
-                className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white"
+                className="rounded-full text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white px-5 cursor-pointer"
               >
                 {editingWorkflow ? "Update Workflow Version" : "Save Approval Workflow"}
               </Button>
@@ -1221,20 +1185,47 @@ export function ApprovalMatrixView() {
       <Drawer
         isOpen={Boolean(viewingWorkflow)}
         onClose={() => setViewingWorkflow(null)}
-        title="Workflow Configuration &amp; Version History"
+        title="Workflow Configuration & Version History"
         icon={<GitBranch className="h-5 w-5 text-emerald-700" />}
+        footer={
+          viewingWorkflow ? (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  const wf = viewingWorkflow;
+                  setViewingWorkflow(null);
+                  handleOpenEditModal(wf);
+                }}
+                className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-full text-xs font-bold h-9 cursor-pointer"
+              >
+                <Edit2 className="mr-1 h-3.5 w-3.5" /> Edit Workflow
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleToggleStatus(viewingWorkflow)}
+                className="rounded-full border-slate-200 text-xs font-bold h-9 cursor-pointer"
+              >
+                <Power className="mr-1 h-3.5 w-3.5" /> {viewingWorkflow.status === "Active" ? "Deactivate" : "Activate"}
+              </Button>
+            </div>
+          ) : undefined
+        }
       >
         {viewingWorkflow && (
           <div className="space-y-4 text-xs">
             {/* Header Card */}
-            <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-1.5">
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-1.5">
               <div className="flex justify-between items-center">
-                <span className="text-[10px] text-slate-400 font-mono font-bold">{viewingWorkflow.code}</span>
+                <span className="text-[10px] text-slate-500 font-mono font-bold">{viewingWorkflow.code}</span>
                 <StatusBadge status={viewingWorkflow.status} />
               </div>
-              <h3 className="text-base font-black text-amber-400">{viewingWorkflow.module}</h3>
-              <p className="text-xs text-slate-300">
-                Request Type: <strong>{viewingWorkflow.requestType}</strong> • Version: <strong>v{viewingWorkflow.version}</strong>
+              <h3 className="text-base font-extrabold text-slate-900">{viewingWorkflow.module}</h3>
+              <p className="text-xs text-slate-600 font-medium">
+                Request Type: <strong className="text-slate-800">{viewingWorkflow.requestType}</strong> • Version: <strong>v{viewingWorkflow.version}</strong>
               </p>
             </div>
 
