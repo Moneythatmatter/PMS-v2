@@ -30,6 +30,7 @@ export const salesMarketingNavItems: ModuleNavItem[] = [
     icon: "megaphone",
     children: [
       { label: "Campaigns", href: "/sales-marketing/marketing/campaigns", icon: "target" },
+      { label: "Ads Management", href: "/sales-marketing/marketing/ads", icon: "globe" },
       { label: "Promos & Discounts", href: "/sales-marketing/marketing/promo-codes", icon: "ticket" },
     ],
   },
