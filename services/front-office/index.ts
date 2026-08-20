@@ -36,3 +36,4 @@ export {
   dayClosingService,
   reportService,
 } from "./closing";
+export { billingFolioService, billingTransactionService } from "../billing";

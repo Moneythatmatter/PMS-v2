@@ -26,7 +26,17 @@ export const bookingSources = [
   "Corporate",
 ] as const;
 
-export const paymentModes = ["Cash", "UPI", "Card", "Bank", "Split Payment"] as const;
+export const paymentModes = ["Cash", "UPI", "Card", "Bank Transfer", "Cheque"] as const;
+
+export const paymentMethodsRequiringReference = new Set([
+  "UPI",
+  "Card",
+  "Bank Transfer",
+  "Cheque",
+]);
+
+/** Reservation advance — manual payment ref from external UPI/card terminal (no gateway). */
+export const reservationPaymentModesNeedingExternalRef = new Set(["UPI", "Card"]);
 
 export const reservationStatuses = [
   "Reserved",

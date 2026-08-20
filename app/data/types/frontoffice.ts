@@ -116,6 +116,8 @@ export interface ReservationBooking {
   totalAmount?: number;
   advancePaid?: number;
   paymentMode?: string;
+  /** UPI / card / bank ref — stored on transactions.external_reference */
+  externalReference?: string;
   specialRequests?: string;
   createdAt?: string;
   bookedBy?: string;

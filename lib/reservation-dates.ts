@@ -22,6 +22,23 @@ function normalizeToIso(dateValue?: string): string | null {
   return null;
 }
 
+export { normalizeToIso };
+
+/** True when two stays share at least one night (checkout mornings are free). */
+export function staysOverlap(
+  checkInA: string,
+  checkOutA: string,
+  checkInB: string,
+  checkOutB: string,
+): boolean {
+  const aIn = normalizeToIso(checkInA);
+  const aOut = normalizeToIso(checkOutA);
+  const bIn = normalizeToIso(checkInB);
+  const bOut = normalizeToIso(checkOutB);
+  if (!aIn || !aOut || !bIn || !bOut) return false;
+  return aIn < bOut && aOut > bIn;
+}
+
 export function matchesDate(dateValue: string | undefined, isoDate: string) {
   const value = String(dateValue ?? "").trim();
   if (!value || !isoDate) return false;
