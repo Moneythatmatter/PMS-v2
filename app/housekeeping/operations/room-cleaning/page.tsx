@@ -3,14 +3,21 @@
 import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
-import { hkTaskService } from "@/services/housekeeping";
+import { hkGuestRequestService, hkTaskService } from "@/services/housekeeping";
 import { roomService, type RoomDto } from "@/services/front-office/rooms";
 import type { HKTask } from "@/components/housekeeping/HousekeepingTypes";
+import type { GuestRequestDto } from "@/components/housekeeping/guestRequestUtils";
+import {
+  formatGuestRequestTypeLabel,
+  isCleaningGuestRequest,
+  isOpenGuestRequest,
+} from "@/components/housekeeping/guestRequestUtils";
 import {
   formatTaskTypeLabel,
   formatTaskStatusLabel,
   taskStatusTone,
   isActiveTask,
+  isTaskOverdue,
 } from "@/components/housekeeping/taskUtils";
 import { CleaningTaskDetailPanel } from "@/components/housekeeping/CleaningTaskDetailPanel";
 import { CreateCleaningTaskForm } from "@/components/housekeeping/CreateCleaningTaskForm";
@@ -23,6 +30,7 @@ import {
   Plus,
   ListTodo,
   ArrowRight,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -37,8 +45,9 @@ const STATUS_TABS = [
   { id: "all", label: "All" },
   { id: "open", label: "Open" },
   { id: "pending", label: "Pending" },
+  { id: "guest-requests", label: "Guest Requests" },
   { id: "IN_PROGRESS", label: "In Progress" },
-  { id: "COMPLETED", label: "Awaiting Inspection" },
+  { id: "PENDING_INSPECTION", label: "Awaiting Inspection" },
   { id: "APPROVED", label: "Approved" },
   { id: "CANCELLED", label: "Cancelled" },
 ];
@@ -62,34 +71,48 @@ export default function RoomCleaningOperations() {
   const { staff } = useHousekeeping();
 
   const [tasks, setTasks] = useState<HKTask[]>([]);
+  const [guestRequests, setGuestRequests] = useState<GuestRequestDto[]>([]);
   const [foRooms, setFoRooms] = useState<RoomDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createFormKey, setCreateFormKey] = useState(0);
   const [createRoomId, setCreateRoomId] = useState("");
+  const [createFromRequest, setCreateFromRequest] = useState<GuestRequestDto | null>(
+    null,
+  );
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const reloadTasks = async () => {
-    const taskList = await hkTaskService.list();
+    const [taskList, requestList] = await Promise.all([
+      hkTaskService.list(),
+      hkGuestRequestService.list("?requestType=CLEANING"),
+    ]);
     setTasks(taskList);
+    setGuestRequests(requestList);
   };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [taskList, roomList] = await Promise.all([
+        const [taskList, requestList, roomList] = await Promise.all([
           hkTaskService.list(),
+          hkGuestRequestService.list("?requestType=CLEANING"),
           roomService.list(),
         ]);
         if (!cancelled) {
           setTasks(taskList);
+          setGuestRequests(requestList);
           setFoRooms(roomList);
         }
       } catch {
-        if (!cancelled) setTasks([]);
+        if (!cancelled) {
+          setTasks([]);
+          setGuestRequests([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -122,25 +145,74 @@ export default function RoomCleaningOperations() {
     });
   }, [tasks, search, statusFilter]);
 
+  const linkedRequestIds = useMemo(
+    () =>
+      new Set(
+        tasks.map((task) => task.requestId).filter(Boolean) as string[],
+      ),
+    [tasks],
+  );
+
+  const openCleaningRequests = useMemo(() => {
+    return guestRequests.filter(
+      (request) =>
+        isCleaningGuestRequest(request) &&
+        isOpenGuestRequest(request) &&
+        !linkedRequestIds.has(request.id),
+    );
+  }, [guestRequests, linkedRequestIds]);
+
+  const filteredGuestRequests = useMemo(() => {
+    const q = search.toLowerCase();
+    return openCleaningRequests.filter((request) => {
+      if (!q) return true;
+      return (
+        (request.requestNumber ?? "").toLowerCase().includes(q) ||
+        (request.roomNo ?? request.roomId).toLowerCase().includes(q) ||
+        request.description.toLowerCase().includes(q) ||
+        (request.guestName ?? "").toLowerCase().includes(q) ||
+        (request.bookingNo ?? request.bookingId ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [openCleaningRequests, search]);
+
   const stats = useMemo(() => {
     return {
       total: tasks.length,
       pending: tasks.filter((t) => t.status === "PENDING" || t.status === "ASSIGNED").length,
       inProgress: tasks.filter((t) => t.status === "IN_PROGRESS").length,
-      awaiting: tasks.filter((t) => t.status === "COMPLETED").length,
+      awaiting: tasks.filter(
+        (t) => t.status === "PENDING_INSPECTION" || t.status === "COMPLETED",
+      ).length,
       approved: tasks.filter((t) => t.status === "APPROVED").length,
+      guestRequests: openCleaningRequests.length,
     };
-  }, [tasks]);
+  }, [tasks, openCleaningRequests]);
 
   const selectedTask = useMemo(
     () => tasks.find((t) => t.id === selectedTaskId) ?? null,
     [tasks, selectedTaskId],
   );
 
+  const openCreateDrawer = (options?: {
+    roomId?: string;
+    guestRequest?: GuestRequestDto | null;
+  }) => {
+    setCreateFromRequest(options?.guestRequest ?? null);
+    setCreateRoomId(options?.roomId ?? "");
+    setCreateFormKey((key) => key + 1);
+    setCreateOpen(true);
+  };
+
   const handleCreateTaskSuccess = async () => {
     await reloadTasks();
     setCreateOpen(false);
     setCreateRoomId("");
+    setCreateFromRequest(null);
+  };
+
+  const openCreateFromRequest = (request: GuestRequestDto) => {
+    openCreateDrawer({ guestRequest: request });
   };
 
   const openTask = (task: HKTask) => {
@@ -167,12 +239,7 @@ export default function RoomCleaningOperations() {
               </Button>
             </Link>
             <Button
-              onClick={() => {
-                if (!createRoomId && foRooms[0]?.id) {
-                  setCreateRoomId(foRooms[0].id);
-                }
-                setCreateOpen(true);
-              }}
+              onClick={() => openCreateDrawer()}
               className="bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1.5"
             >
               <Plus className="h-4 w-4" /> Create Task
@@ -181,10 +248,11 @@ export default function RoomCleaningOperations() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatMiniCard label="Total Tasks" value={stats.total} icon={ListTodo} accent="#64748b" />
         <StatMiniCard label="Pending" value={stats.pending} accent="#94a3b8" icon={Clock} />
         <StatMiniCard label="In Progress" value={stats.inProgress} accent="#f59e0b" icon={Sparkles} />
+        <StatMiniCard label="Guest Requests" value={stats.guestRequests} accent="#8b5cf6" icon={MessageSquare} />
         <StatMiniCard label="Awaiting Inspection" value={stats.awaiting} accent="#3b82f6" icon={ClipboardList} />
         <StatMiniCard label="Approved" value={stats.approved} accent="#10b981" icon={CheckCircle2} />
       </div>
@@ -192,7 +260,7 @@ export default function RoomCleaningOperations() {
       <OperationsToolbar
         search={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search task #, room, type, staff…"
+        searchPlaceholder="Search task #, room, guest request, staff…"
         activeFilterCount={0}
         onOpenFilters={() => {}}
         statusTabs={STATUS_TABS}
@@ -210,8 +278,100 @@ export default function RoomCleaningOperations() {
         <strong className="font-semibold text-slate-600">Awaiting Inspection</strong> = ready for supervisor
       </p>
 
+      {!loading && statusFilter !== "guest-requests" && openCleaningRequests.length > 0 && (
+        <div className="rounded-2xl border border-violet-200 bg-violet-50/30 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800">Open guest cleaning requests</h3>
+              <p className="text-[11px] text-slate-500">
+                Room-cleaning requests from guests — create a task to assign housekeeping.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="text-xs"
+              onClick={() => setStatusFilter("guest-requests")}
+            >
+              View all ({openCleaningRequests.length})
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {openCleaningRequests.slice(0, 3).map((request) => (
+              <div
+                key={request.id}
+                className="rounded-xl border border-violet-100 bg-white p-4 text-left"
+              >
+                <p className="text-xs font-bold text-slate-800">
+                  {request.requestNumber ?? request.id.slice(0, 8)} · Room{" "}
+                  {request.roomNo ?? request.roomId}
+                </p>
+                <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">
+                  {request.description}
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-3 h-8 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px]"
+                  onClick={() => openCreateFromRequest(request)}
+                >
+                  Create task
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading ? (
-        <p className="text-center text-sm text-slate-500 py-12">Loading tasks…</p>
+        <p className="text-center text-sm text-slate-500 py-12">Loading…</p>
+      ) : statusFilter === "guest-requests" ? (
+        filteredGuestRequests.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-10 text-center">
+            <MessageSquare className="mx-auto h-10 w-10 text-slate-300" />
+            <h3 className="mt-3 text-sm font-bold text-slate-800">No open cleaning guest requests</h3>
+            <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
+              Guest room-cleaning requests from in-house bookings appear here until a cleaning task is created.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {filteredGuestRequests.map((request) => (
+              <div
+                key={request.id}
+                className="rounded-xl border border-violet-200 bg-white p-5 text-left ring-1 ring-violet-100/60"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">
+                      {request.requestNumber ?? request.id.slice(0, 8)}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Room {request.roomNo ?? request.roomId} ·{" "}
+                      {formatGuestRequestTypeLabel(request.requestType)}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-700">
+                    {request.status.replace(/_/g, " ")}
+                  </span>
+                </div>
+
+                <p className="mt-3 text-xs text-slate-700 line-clamp-3">{request.description}</p>
+
+                <div className="mt-4 space-y-1 text-[11px] text-slate-500">
+                  {request.guestName && <p>Guest: {request.guestName}</p>}
+                  {request.bookingNo && <p>Booking: {request.bookingNo}</p>}
+                  <p>Priority: {request.priority}</p>
+                </div>
+
+                <Button
+                  className="mt-4 w-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs"
+                  onClick={() => openCreateFromRequest(request)}
+                >
+                  Create cleaning task
+                </Button>
+              </div>
+            ))}
+          </div>
+        )
       ) : filteredTasks.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-10 text-center">
           <Sparkles className="mx-auto h-10 w-10 text-slate-300" />
@@ -220,7 +380,7 @@ export default function RoomCleaningOperations() {
             Tasks are created on guest check-out or manually for deep cleans and special work.
           </p>
           <Button
-            onClick={() => setCreateOpen(true)}
+            onClick={() => openCreateDrawer()}
             className="mt-4 bg-emerald-700 hover:bg-emerald-800 text-white"
           >
             <Plus className="mr-1.5 h-4 w-4" /> Create Cleaning Task
@@ -231,6 +391,7 @@ export default function RoomCleaningOperations() {
           {filteredTasks.map((task) => {
             const tone = taskStatusTone(task.status);
             const inProgress = task.status === "IN_PROGRESS";
+            const overdue = isTaskOverdue(task);
             return (
               <button
                 key={task.id}
@@ -238,7 +399,11 @@ export default function RoomCleaningOperations() {
                 onClick={() => openTask(task)}
                 className={cn(
                   "rounded-xl border bg-white p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md",
-                  inProgress ? "border-amber-200 ring-2 ring-amber-100/50" : "border-slate-200",
+                  overdue
+                    ? "border-red-200 ring-2 ring-red-100/60"
+                    : inProgress
+                      ? "border-amber-200 ring-2 ring-amber-100/50"
+                      : "border-slate-200",
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -250,15 +415,22 @@ export default function RoomCleaningOperations() {
                       Room {task.roomNo ?? task.roomId} · {formatTaskTypeLabel(task.taskType)}
                     </p>
                   </div>
-                  <span
-                    className={cn(
-                      "shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide",
-                      statusPillClass(tone),
-                      inProgress && "animate-pulse",
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide",
+                        statusPillClass(tone),
+                        inProgress && "animate-pulse",
+                      )}
+                    >
+                      {formatTaskStatusLabel(task.status)}
+                    </span>
+                    {overdue && (
+                      <span className="rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-red-700">
+                        Overdue
+                      </span>
                     )}
-                  >
-                    {formatTaskStatusLabel(task.status)}
-                  </span>
+                  </div>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
@@ -283,13 +455,28 @@ export default function RoomCleaningOperations() {
       {/* Create Task Drawer */}
       <Drawer
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Create Cleaning Task"
-        description="Assign work to a room — booking is optional (e.g. deep clean on vacant room)."
+        onClose={() => {
+          setCreateOpen(false);
+          setCreateFromRequest(null);
+          setCreateRoomId("");
+        }}
+        title={
+          createFromRequest
+            ? `Create task — ${createFromRequest.requestNumber ?? createFromRequest.id.slice(0, 8)}`
+            : "Create Cleaning Task"
+        }
+        description={
+          createFromRequest
+            ? "Schedule and create a cleaning task from this guest request."
+            : "Select a room, set the schedule, and create one cleaning task."
+        }
       >
         <CreateCleaningTaskForm
+          key={createFormKey}
           foRooms={foRooms}
           initialRoomId={createRoomId}
+          sourceGuestRequest={createFromRequest}
+          lockRoom={Boolean(createFromRequest)}
           onCreated={() => void handleCreateTaskSuccess()}
         />
       </Drawer>

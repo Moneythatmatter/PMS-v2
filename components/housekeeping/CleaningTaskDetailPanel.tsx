@@ -5,7 +5,15 @@ import Link from "next/link";
 import { Play, CheckCircle2 } from "lucide-react";
 import { hkTaskService } from "@/services/housekeeping";
 import type { HKStaff, HKTask } from "./HousekeepingTypes";
-import { formatTaskStatusLabel, formatTaskTypeLabel } from "./taskUtils";
+import {
+  formatTaskStatusLabel,
+  formatTaskTypeLabel,
+  isTaskOverdue,
+} from "./taskUtils";
+import {
+  formatScheduleDate,
+  formatScheduleTime,
+} from "@/lib/hk-task-schedule";
 import { Button } from "@/components/ui/Button";
 import { SelectInput, FormField } from "@/components/frontoffice/ui";
 
@@ -91,6 +99,42 @@ export function CleaningTaskDetailPanel({
             <span className="font-semibold text-slate-700">{task.bookingNo}</span>
           </div>
         )}
+        {task.requestId && (
+          <div className="flex justify-between gap-4">
+            <span className="text-slate-400 shrink-0">Guest request</span>
+            <span className="text-right font-semibold text-slate-700">
+              {task.requestNumber ?? task.requestId.slice(0, 8)}
+              {task.requestDescription
+                ? ` — ${task.requestDescription}`
+                : ""}
+            </span>
+          </div>
+        )}
+        {(task.scheduledDate || task.scheduledStartAt || task.dueAt) && (
+          <div className="space-y-1.5 border-t border-slate-100 pt-2">
+            {task.scheduledDate && (
+              <div className="flex justify-between">
+                <span className="text-slate-400">Cleaning date</span>
+                <span className="font-semibold text-slate-700">
+                  {formatScheduleDate(task.scheduledDate)}
+                </span>
+              </div>
+            )}
+            {(task.scheduledStartAt || task.dueAt) && (
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-400 shrink-0">Time window</span>
+                <span className="text-right font-semibold text-slate-700">
+                  {formatScheduleTime(task.scheduledStartAt)}
+                  {" – "}
+                  {formatScheduleTime(task.dueAt)}
+                </span>
+              </div>
+            )}
+            {isTaskOverdue(task) && (
+              <p className="text-[11px] font-semibold text-red-600">Overdue</p>
+            )}
+          </div>
+        )}
         {task.notes && (
           <div className="pt-2 border-t border-slate-100 text-slate-600">
             <strong>Notes:</strong> {task.notes}
@@ -158,7 +202,7 @@ export function CleaningTaskDetailPanel({
         </Button>
       )}
 
-      {task.status === "COMPLETED" && (
+      {task.status === "PENDING_INSPECTION" && (
         <div className="space-y-3">
           <p className="text-xs text-blue-700 font-medium rounded-lg bg-blue-50 px-3 py-2 leading-relaxed">
             Cleaning is finished. Supervisor must pass or reject this task on the{" "}

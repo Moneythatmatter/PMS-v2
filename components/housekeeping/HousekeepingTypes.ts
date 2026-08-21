@@ -223,15 +223,17 @@ export type HkTaskType =
   | "CHECKOUT_CLEANING"
   | "REGULAR_CLEANING"
   | "DEEP_CLEANING"
-  | "INSPECTION"
+  | "GUEST_REQUEST"
   | "TURNDOWN"
-  | "SPECIAL_REQUEST";
+  | "INSPECTION"
+  | "OTHER";
 
 export type HkTaskStatus =
   | "PENDING"
   | "ASSIGNED"
   | "IN_PROGRESS"
   | "COMPLETED"
+  | "PENDING_INSPECTION"
   | "APPROVED"
   | "CANCELLED";
 
@@ -242,6 +244,7 @@ export interface HKTask {
   taskNumber?: string;
   roomId: string;
   bookingId?: string | null;
+  requestId?: string | null;
   taskType: HkTaskType;
   status: HkTaskStatus;
   assignedTo?: string | null;
@@ -255,8 +258,14 @@ export interface HKTask {
   approvedBy?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  scheduledDate?: string | null;
+  scheduledStartAt?: string | null;
+  dueAt?: string | null;
+  isOverdue?: boolean;
   roomNo?: string;
   bookingNo?: string;
+  requestNumber?: string;
+  requestDescription?: string;
   assignedToName?: string;
   createdByName?: string;
   approvedByName?: string;
