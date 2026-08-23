@@ -5,6 +5,11 @@ import { BedDouble, Building2, Sparkles, Wrench } from "lucide-react";
 import type { RoomStatusCard } from "@/app/data/frontoffice/modules";
 import { floors, roomStatuses } from "@/app/data/frontoffice/constants";
 import { roomService } from "@/services/front-office";
+import { hkRoomService } from "@/services/housekeeping";
+import {
+  foStatusToHkEnum,
+  hkHousekeepingToHkEnum,
+} from "@/components/housekeeping/roomUtils";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -103,24 +108,25 @@ export function RoomStatusView() {
   const handleSave = async () => {
     if (!selectedRoom) return;
     try {
-      const body: Partial<{ status: string }> = {};
+      const roomKey = selectedRoom.id ?? selectedRoom.roomNo;
       if (actionType === "status" && newStatus) {
-        body.status = newStatus;
+        await hkRoomService.update(roomKey, {
+          status: foStatusToHkEnum(newStatus),
+        });
+      } else if (actionType === "hk" && newHk) {
+        await hkRoomService.update(roomKey, {
+          status: hkHousekeepingToHkEnum(newHk),
+        });
       }
-      if (actionType === "hk" && newHk) {
-        body.status = newHk === "Dirty" ? "Dirty" : newHk === "In Progress" ? "Maintenance" : "Vacant";
-      }
-      const updated = await roomService.update(selectedRoom.id ?? selectedRoom.roomNo, body);
       const data = await roomService.status();
       setRooms(data);
       setToast(
         actionType === "hk"
           ? `Housekeeping updated for Room ${selectedRoom.roomNo}.`
           : actionType === "status"
-            ? `Room ${selectedRoom.roomNo} status changed to ${body.status ?? newStatus}.`
+            ? `Room ${selectedRoom.roomNo} status changed to ${newStatus}.`
             : `Room ${selectedRoom.roomNo} assigned successfully.`,
       );
-      void updated;
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Failed to update room");
     }

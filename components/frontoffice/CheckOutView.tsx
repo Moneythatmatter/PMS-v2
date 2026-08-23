@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { computeCheckoutTotals, computeCheckoutBills } from "@/app/data";
 import type { CheckoutFolio, SplittableChargeKey } from "@/app/data/frontoffice/checkout";
-import { paymentModes } from "@/app/data/frontoffice/constants";
+import { paymentModes, reservationPaymentModesNeedingExternalRef } from "@/app/data/frontoffice/constants";
 import { reservationService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
@@ -58,6 +58,13 @@ const BILL_LINES: { key: BillLineKey; label: string; splittable: boolean }[] = [
 ];
 
 
+function formatRoomLabel(room?: string): string {
+  const value = String(room ?? "").trim();
+  if (!value || value === "TBA") return "TBA";
+  if (/^[0-9a-f-]{36}$/i.test(value)) return "TBA";
+  return value;
+}
+
 function mapInHouseToFolio(g: {
   id: string;
   bookingNo?: string;
@@ -83,7 +90,7 @@ function mapInHouseToFolio(g: {
     guestName: g.guestName,
     phone: "",
     email: g.email,
-    room: g.room,
+    room: formatRoomLabel(g.room),
     roomType: g.roomType,
     checkIn: g.checkIn,
     checkOut: g.checkOut,
@@ -109,12 +116,13 @@ function getInitials(name?: string) {
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
+type DepartureFilter = "all" | "today" | "date";
+
 export function CheckOutView() {
   const searchParams = useSearchParams();
   const prefillBookingKey =
     searchParams.get("bookingId") ?? searchParams.get("booking") ?? "";
   const prefillAttempted = useRef<string | null>(null);
-  const departureDateInputRef = useRef<HTMLInputElement>(null);
 
   const [folios, setFolios] = useState<CheckoutFolio[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,7 +132,10 @@ export function CheckOutView() {
   const [selected, setSelected] = useState<CheckoutFolio | null>(null);
   const [discount, setDiscount] = useState(0);
   const [paymentMode, setPaymentMode] = useState("UPI");
+  const [externalReference, setExternalReference] = useState("");
   const [amountReceived, setAmountReceived] = useState(0);
+  const [departureFilter, setDepartureFilter] = useState<DepartureFilter>("all");
+  const [departureDate, setDepartureDate] = useState(todayIso());
   const [invoiceNos, setInvoiceNos] = useState<Record<string, string>>({});
   const [activeInvoiceBillId, setActiveInvoiceBillId] = useState<string | null>(null);
   const [splitBilling, setSplitBilling] = useState(false);
@@ -132,7 +143,6 @@ export function CheckOutView() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
-  const [departureDate, setDepartureDate] = useState(() => todayIso());
 
   useEffect(() => {
     let cancelled = false;
@@ -158,23 +168,30 @@ export function CheckOutView() {
     [folios],
   );
 
-  const departingOnSelectedDate = useMemo(
-    () => folios.filter((f) => isDepartingOnDate(f, departureDate)),
-    [folios, departureDate],
+  const checkedInGuests = useMemo(() => {
+    return [...folios].sort((a, b) => {
+      const aDeparting = isDepartingToday(a) ? 0 : 1;
+      const bDeparting = isDepartingToday(b) ? 0 : 1;
+      if (aDeparting !== bDeparting) return aDeparting - bDeparting;
+      return String(a.checkOut ?? "").localeCompare(String(b.checkOut ?? ""));
+    });
+  }, [folios]);
+
+  const filteredCheckedInGuests = useMemo(() => {
+    if (departureFilter === "today") {
+      return checkedInGuests.filter((f) => isDepartingToday(f));
+    }
+    if (departureFilter === "date" && departureDate) {
+      return checkedInGuests.filter((f) => isDepartingOnDate(f, departureDate));
+    }
+    return checkedInGuests;
+  }, [checkedInGuests, departureFilter, departureDate]);
+
+  const showExternalReference = reservationPaymentModesNeedingExternalRef.has(
+    paymentMode,
   );
-
-  const isSelectedDateToday = departureDate === todayIso();
-
-  const departureSectionTitle = useMemo(() => {
-    if (isSelectedDateToday) return "Departing Today";
-    const d = new Date(`${departureDate}T12:00:00`);
-    if (Number.isNaN(d.getTime())) return "Departures";
-    return `Departing ${d.toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    })}`;
-  }, [departureDate, isSelectedDateToday]);
+  const externalReferenceRequired =
+    showExternalReference && amountReceived > 0;
 
   const billBreakdown = useMemo(() => {
     if (!selected) return null;
@@ -202,6 +219,7 @@ export function CheckOutView() {
     setSearch(folio.bookingId);
     setDiscount(folio.discount);
     setPaymentMode("UPI");
+    setExternalReference("");
     setAmountReceived(computeCheckoutTotals(folio).pending);
     setLookupError("");
     setCompleted(false);
@@ -245,7 +263,7 @@ export function CheckOutView() {
         f.id.toLowerCase() === query ||
         f.bookingId.toLowerCase() === query ||
         f.guestName.toLowerCase().includes(query) ||
-        f.room.toLowerCase() === query,
+        formatRoomLabel(f.room).toLowerCase() === query,
     );
     if (!found) {
       setLookupError("No in-house guest found. Try BK-0, James Wilson, or room 112.");
@@ -326,10 +344,19 @@ export function CheckOutView() {
       setLookupError(`Amount received (${formatINR(amountReceived)}) is less than pending balance (${formatINR(totals.pending)}).`);
       return;
     }
+    if (externalReferenceRequired && !externalReference.trim()) {
+      setLookupError(
+        paymentMode === "UPI"
+          ? "Enter the UPI transaction ID from your payment app."
+          : "Enter the card authorization or bank reference for this payment.",
+      );
+      return;
+    }
     try {
       await reservationService.checkOut(selected.id, {
         paymentMode,
         amountReceived,
+        externalReference: externalReference.trim() || undefined,
       });
       setFolios((prev) => prev.filter((f) => f.id !== selected.id));
       setCompleted(true);
@@ -375,9 +402,15 @@ export function CheckOutView() {
           <div className="flex items-center gap-2 rounded-2xl border border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50 px-4 py-2.5">
             <Users className="h-4 w-4 text-orange-600" />
             <div>
-              <p className="text-xs font-medium text-slate-500">Departing today</p>
+              <p className="text-xs font-medium text-slate-500">Checked in</p>
               <p className="text-sm font-semibold text-slate-800">
-                {departingToday.length} guest{departingToday.length !== 1 ? "s" : ""}
+                {folios.length} guest{folios.length !== 1 ? "s" : ""}
+                {departingToday.length > 0 && (
+                  <span className="font-normal text-orange-600">
+                    {" "}
+                    · {departingToday.length} out today
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -416,7 +449,11 @@ export function CheckOutView() {
                 size="sm"
                 className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
                 onClick={handleCheckout}
-                disabled={!paymentMode || amountReceived < (totals?.pending ?? 0)}
+                disabled={
+                  !paymentMode ||
+                  amountReceived < (totals?.pending ?? 0) ||
+                  (externalReferenceRequired && !externalReference.trim())
+                }
               >
                 <LogOut className="h-3.5 w-3.5" />
                 Complete Checkout
@@ -513,58 +550,75 @@ export function CheckOutView() {
               <div className="mb-4 flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-orange-900">
-                    {departureSectionTitle}
+                    Checked-In Guests
                   </p>
-                  {!isSelectedDateToday && (
-                    <button
-                      type="button"
-                      onClick={() => setDepartureDate(todayIso())}
-                      className="mt-0.5 text-[11px] font-medium text-orange-700 hover:underline"
-                    >
-                      Back to today
-                    </button>
-                  )}
+                  <p className="mt-0.5 text-[11px] text-orange-700/80">
+                    All in-house bookings · select to check out
+                  </p>
                 </div>
-                <div className="relative flex shrink-0 items-center gap-2">
+                <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-700">
+                  {filteredCheckedInGuests.length}
+                </span>
+              </div>
+
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDepartureFilter("all")}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                    departureFilter === "all"
+                      ? "bg-orange-600 text-white shadow-sm"
+                      : "bg-white/80 text-orange-800 hover:bg-white",
+                  )}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDepartureFilter("today");
+                    setDepartureDate(todayIso());
+                  }}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                    departureFilter === "today"
+                      ? "bg-orange-600 text-white shadow-sm"
+                      : "bg-white/80 text-orange-800 hover:bg-white",
+                  )}
+                >
+                  Today
+                </button>
+                <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-orange-200/80 bg-white/90 px-2.5 py-1.5 sm:flex-none">
+                  <Calendar className="h-3.5 w-3.5 shrink-0 text-orange-600" />
                   <input
-                    ref={departureDateInputRef}
                     type="date"
                     value={departureDate}
-                    onChange={(e) => setDepartureDate(e.target.value || todayIso())}
-                    className="sr-only"
-                    tabIndex={-1}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const input = departureDateInputRef.current;
-                      if (!input) return;
-                      if (typeof input.showPicker === "function") input.showPicker();
-                      else input.click();
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setDepartureDate(next);
+                      setDepartureFilter(next ? "date" : "all");
                     }}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-orange-200 bg-white text-orange-700 shadow-sm transition hover:bg-orange-50"
-                    title="Pick departure date"
-                    aria-label="Pick departure date"
-                  >
-                    <Calendar className="h-4 w-4" />
-                  </button>
-                  <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-700">
-                    {departingOnSelectedDate.length}
-                  </span>
-                </div>
+                    className="min-w-0 flex-1 bg-transparent text-xs font-medium text-slate-700 focus:outline-none"
+                    aria-label="Filter by checkout date"
+                  />
+                </label>
               </div>
 
               <div className="space-y-2">
-                {departingOnSelectedDate.length === 0 ? (
+                {filteredCheckedInGuests.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-orange-200 bg-white/70 px-3 py-6 text-center text-sm text-slate-500">
-                    {isSelectedDateToday
-                      ? "No guests scheduled to check out today"
-                      : "No guests scheduled to check out on this date"}
+                    {departureFilter === "all"
+                      ? "No checked-in guests right now"
+                      : departureFilter === "today"
+                        ? "No guests checking out today"
+                        : `No guests checking out on ${departureDate}`}
                   </p>
                 ) : (
-                  departingOnSelectedDate.map((f) => {
+                  filteredCheckedInGuests.map((f) => {
                   const t = computeCheckoutTotals(f);
                   const isSelected = selected?.id === f.id;
+                  const leavingToday = isDepartingToday(f);
                   return (
                     <button
                       key={f.id}
@@ -585,9 +639,14 @@ export function CheckOutView() {
                           <div className="flex items-center gap-1.5">
                             <p className="truncate font-semibold text-slate-900">{f.guestName}</p>
                             {f.isVip && <Crown className="h-3.5 w-3.5 text-amber-500" />}
+                            {leavingToday && (
+                              <span className="shrink-0 rounded-full bg-orange-200 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800">
+                                Out today
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-slate-500">
-                            {f.bookingId} · Room {f.room}
+                            {f.bookingId} · Room {formatRoomLabel(f.room)}
                             {f.checkOut ? ` · Out ${f.checkOut}` : ""}
                           </p>
                           <p className="mt-1 text-xs font-semibold text-orange-700">
@@ -612,7 +671,7 @@ export function CheckOutView() {
                 </div>
                 <p className="mt-4 text-base font-semibold text-slate-700">No guest selected</p>
                 <p className="mt-1 max-w-xs text-sm text-slate-500">
-                  Look up a guest or pick a departure date to review folio and settle payment.
+                  Look up a guest or pick from the checked-in list to review folio and settle payment.
                 </p>
               </div>
             ) : totals && (
@@ -806,7 +865,13 @@ export function CheckOutView() {
                     <FormField label="Payment Mode">
                       <SelectInput
                         value={paymentMode}
-                        onChange={(e) => setPaymentMode(e.target.value)}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setPaymentMode(next);
+                          if (!reservationPaymentModesNeedingExternalRef.has(next)) {
+                            setExternalReference("");
+                          }
+                        }}
                         className="rounded-xl"
                       >
                         {paymentModes.map((m) => (
@@ -823,6 +888,29 @@ export function CheckOutView() {
                         className="rounded-xl"
                       />
                     </FormField>
+                    {showExternalReference && (
+                      <FormField
+                        label="External Reference ID"
+                        required={externalReferenceRequired}
+                        className="sm:col-span-2"
+                        helperText={
+                          paymentMode === "UPI"
+                            ? "Paste the UPI transaction ID from your payment app"
+                            : "Paste the card authorization or bank reference"
+                        }
+                      >
+                        <TextInput
+                          value={externalReference}
+                          placeholder={
+                            paymentMode === "UPI"
+                              ? "e.g. UPI987654321"
+                              : "e.g. AUTH123456 or bank ref"
+                          }
+                          onChange={(e) => setExternalReference(e.target.value)}
+                          className="rounded-xl border-emerald-300 ring-1 ring-emerald-100 focus:border-emerald-500"
+                        />
+                      </FormField>
+                    )}
                   </div>
                   {amountReceived > totals.pending && (
                     <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
@@ -839,7 +927,11 @@ export function CheckOutView() {
                 <Button
                   className="h-12 w-full gap-2 bg-emerald-700 hover:bg-emerald-800 lg:hidden"
                   onClick={handleCheckout}
-                  disabled={!paymentMode || amountReceived < totals.pending}
+                  disabled={
+                    !paymentMode ||
+                    amountReceived < totals.pending ||
+                    (externalReferenceRequired && !externalReference.trim())
+                  }
                 >
                   <LogOut className="h-4 w-4" />
                   Complete Checkout — {formatINR(totals.pending)}

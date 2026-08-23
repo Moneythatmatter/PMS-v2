@@ -1,5 +1,11 @@
 import type { HousekeepingRequest } from "@/app/data/frontoffice/modules";
 
+export const OPEN_GUEST_REQUEST_STATUSES = new Set([
+  "PENDING",
+  "ASSIGNED",
+  "IN_PROGRESS",
+]);
+
 /** API shape from guest_requests table. */
 export interface GuestRequestDto {
   id: string;
@@ -21,6 +27,24 @@ export interface GuestRequestDto {
   roomNo?: string;
   bookingNo?: string;
   guestName?: string;
+}
+
+export function isOpenGuestRequest(row: Pick<GuestRequestDto, "status">): boolean {
+  return OPEN_GUEST_REQUEST_STATUSES.has(String(row.status ?? "").toUpperCase());
+}
+
+export function isCleaningGuestRequest(
+  row: Pick<GuestRequestDto, "requestType">,
+): boolean {
+  return String(row.requestType ?? "").toUpperCase() === "CLEANING";
+}
+
+export function formatGuestRequestTypeLabel(type?: string | null): string {
+  if (!type) return "Request";
+  return type
+    .split("_")
+    .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
+    .join(" ");
 }
 
 function uiPriority(priority?: string): HousekeepingRequest["priority"] {

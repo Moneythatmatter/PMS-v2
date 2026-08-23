@@ -19,6 +19,37 @@ function isHkEnum(value: string): value is HkRoomStatusEnum {
   return (HK_ENUMS as string[]).includes(value);
 }
 
+/** Map Front Office room status labels to hk_rooms enum for API writes. */
+export function foStatusToHkEnum(status: string): HkRoomStatusEnum {
+  switch (status.trim()) {
+    case "Vacant":
+    case "Clean":
+      return "INSPECTED";
+    case "Dirty":
+      return "DIRTY";
+    case "Maintenance":
+      return "INSPECTING";
+    case "Blocked":
+      return "OUT_OF_SERVICE";
+    default:
+      return "DIRTY";
+  }
+}
+
+/** Map housekeeping dropdown values to hk_rooms enum. */
+export function hkHousekeepingToHkEnum(value: string): HkRoomStatusEnum {
+  switch (value.trim()) {
+    case "Dirty":
+      return "DIRTY";
+    case "In Progress":
+      return "INSPECTING";
+    case "Clean":
+    case "Inspected":
+    default:
+      return "CLEAN";
+  }
+}
+
 /** Map legacy UI status labels to DB enum for API writes. */
 export function uiStatusToHkEnum(status: HKRoom["status"]): HkRoomStatusEnum {
   switch (status) {

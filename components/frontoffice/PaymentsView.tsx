@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -13,13 +13,21 @@ import {
   RefreshCw,
   User,
 } from "lucide-react";
-import type { InHouseGuest, PaymentRecord } from "@/app/data/frontoffice/modules";
-import { paymentModes } from "@/app/data/frontoffice/constants";
-import { paymentService, reservationService } from "@/services/front-office";
+import type { InHouseGuest } from "@/app/data/frontoffice/modules";
+import {
+  paymentModes,
+  reservationPaymentModesNeedingExternalRef,
+} from "@/app/data/frontoffice/constants";
+import {
+  billingFolioService,
+  billingTransactionService,
+} from "@/services/front-office";
+import { reservationService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
   Drawer,
+  EmptyState,
   FOSearchToolbar,
   FormField,
   FOPageHeader,
@@ -28,24 +36,33 @@ import {
   TextInput,
   formatINR,
 } from "@/components/frontoffice/ui";
+import {
+  type FrontOfficePaymentRow,
+  type FrontOfficePaymentType,
+  mapFrontOfficeTransactions,
+} from "@/components/frontoffice/paymentUtils";
 import { cn } from "@/lib/utils";
 
-type PaymentType = PaymentRecord["type"];
-
-const typeStyles: Record<PaymentType, string> = {
+const typeStyles: Record<FrontOfficePaymentType, string> = {
   Payment: "bg-emerald-50 text-emerald-700",
   Refund: "bg-red-50 text-red-700",
   Advance: "bg-emerald-50 text-emerald-800",
 };
 
-const statusStyles: Record<PaymentRecord["status"], string> = {
+const statusStyles: Record<FrontOfficePaymentRow["status"], string> = {
   Completed: "bg-emerald-50 text-emerald-700",
   Pending: "bg-amber-50 text-amber-700",
   Refunded: "bg-slate-100 text-slate-600",
 };
 
+function isToday(value: string): boolean {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.toDateString() === new Date().toDateString();
+}
+
 export function PaymentsView() {
-  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [payments, setPayments] = useState<FrontOfficePaymentRow[]>([]);
   const [guests, setGuests] = useState<InHouseGuest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,66 +70,102 @@ export function PaymentsView() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; variant: "success" | "error" } | null>(
+    null,
+  );
   const [recordOpen, setRecordOpen] = useState(false);
-  const [previewPayment, setPreviewPayment] = useState<PaymentRecord | null>(null);
+  const [previewPayment, setPreviewPayment] = useState<FrontOfficePaymentRow | null>(
+    null,
+  );
+  const [submitting, setSubmitting] = useState(false);
 
   const [guestName, setGuestName] = useState("");
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState("UPI");
-  const [paymentType, setPaymentType] = useState<PaymentType>("Payment");
+  const [paymentType, setPaymentType] = useState<FrontOfficePaymentType>("Payment");
   const [txnRef, setTxnRef] = useState("");
+
+  const loadPayments = useCallback(async () => {
+    const [transactions, folios, inHouse] = await Promise.all([
+      billingTransactionService.list(),
+      billingFolioService.list(),
+      reservationService.inHouse(),
+    ]);
+    setPayments(mapFrontOfficeTransactions(transactions, folios));
+    setGuests(inHouse as InHouseGuest[]);
+    return { transactions, folios, inHouse };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setLoading(true);
-        const [pay, inHouse] = await Promise.all([
-          paymentService.list(),
-          reservationService.inHouse(),
-        ]);
+        const { inHouse } = await loadPayments();
         if (!cancelled) {
-          setPayments(pay);
-          setGuests(inHouse as InHouseGuest[]);
           if (inHouse.length > 0) setGuestName(inHouse[0].guestName);
           setError(null);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load payments");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [loadPayments]);
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
     let rows = payments.filter((p) => {
       const matchesType = typeFilter === "all" || p.type === typeFilter;
       const matchesMode = modeFilter === "all" || p.mode === modeFilter;
-      const matchesSearch =
-        p.guestName.toLowerCase().includes(q) ||
-        p.id.toLowerCase().includes(q) ||
-        p.transactionNo.toLowerCase().includes(q);
+      const haystack = [
+        p.guestName,
+        p.transactionNumber,
+        p.externalReference,
+        p.room,
+        p.id,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const matchesSearch = !q || haystack.includes(q);
       return matchesType && matchesMode && matchesSearch;
     });
-    if (sortBy === "amount-desc") rows = [...rows].sort((a, b) => b.amount - a.amount);
-    if (sortBy === "guest") rows = [...rows].sort((a, b) => a.guestName.localeCompare(b.guestName));
+
+    rows = [...rows].sort((a, b) => {
+      switch (sortBy) {
+        case "amount-desc":
+          return b.amount - a.amount;
+        case "guest":
+          return a.guestName.localeCompare(b.guestName);
+        case "newest":
+        default:
+          return (
+            new Date(b.transactionDate).getTime() -
+            new Date(a.transactionDate).getTime()
+          );
+      }
+    });
+
     return rows;
   }, [payments, search, typeFilter, modeFilter, sortBy]);
 
   const stats = useMemo(() => {
     const completed = payments.filter((p) => p.status === "Completed");
-    const collected = completed
-      .filter((p) => p.type !== "Refund")
+    const collectedToday = completed
+      .filter((p) => p.type !== "Refund" && isToday(p.transactionDate))
       .reduce((s, p) => s + p.amount, 0);
     const refunded = payments
       .filter((p) => p.type === "Refund")
       .reduce((s, p) => s + p.amount, 0);
     const pending = payments.filter((p) => p.status === "Pending").length;
-    return { collected, refunded, pending, total: payments.length };
+    return { collectedToday, refunded, pending, total: payments.length };
   }, [payments]);
 
   const resetForm = () => {
@@ -131,33 +184,70 @@ export function PaymentsView() {
   const handleSubmit = async () => {
     const parsed = parseFloat(amount);
     if (!parsed || parsed <= 0) {
-      setToast("Please enter a valid amount.");
+      setToast({ message: "Please enter a valid amount.", variant: "error" });
       return;
     }
+
     const guest = guests.find((g) => g.guestName === guestName);
-    try {
-      const newPayment = await paymentService.create({
-        guestName,
-        room: guest?.room,
-        amount: parsed,
-        mode,
-        type: paymentType,
-        transactionNo: txnRef || `TXN${Date.now().toString().slice(-6)}`,
-        date: new Date().toLocaleDateString("en-IN", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        }),
-        status: paymentType === "Refund" ? "Refunded" : "Completed",
+    if (!guest) {
+      setToast({ message: "Select a guest to record payment.", variant: "error" });
+      return;
+    }
+
+    if (paymentType === "Refund") {
+      setToast({
+        message: "Refunds are not available yet. Process from Guest Folio.",
+        variant: "error",
       });
-      setPayments((prev) => [newPayment, ...prev]);
+      return;
+    }
+
+    if (
+      reservationPaymentModesNeedingExternalRef.has(mode) &&
+      !txnRef.trim()
+    ) {
+      setToast({
+        message:
+          mode === "UPI"
+            ? "Enter UPI transaction ID from your payment app."
+            : "Enter card auth / reference from POS or bank.",
+        variant: "error",
+      });
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const payload = {
+        amount: parsed,
+        paymentMethod: mode,
+        bookingId: guest.id,
+        externalReference: txnRef.trim() || null,
+      };
+
+      if (paymentType === "Advance") {
+        await billingTransactionService.recordReservationAdvance({
+          ...payload,
+          bookingId: guest.id,
+        });
+      } else {
+        await billingTransactionService.recordFrontOfficePayment(payload);
+      }
+
+      await loadPayments();
       setRecordOpen(false);
       resetForm();
-      setToast(
-        `${paymentType} of ${formatINR(parsed)} recorded for ${guestName}.`,
-      );
+      setToast({
+        message: `${paymentType} of ${formatINR(parsed)} recorded for ${guestName}.`,
+        variant: "success",
+      });
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Failed to record payment");
+      setToast({
+        message: e instanceof Error ? e.message : "Failed to record payment",
+        variant: "error",
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -168,17 +258,21 @@ export function PaymentsView() {
           value={guestName}
           onChange={(e) => setGuestName(e.target.value)}
         >
-          {guests.map((g) => (
-            <option key={g.id} value={g.guestName}>
-              {g.guestName} — Room {g.room}
-            </option>
-          ))}
+          {guests.length === 0 ? (
+            <option value="">No in-house guests</option>
+          ) : (
+            guests.map((g) => (
+              <option key={g.id} value={g.guestName}>
+                {g.guestName} — Room {g.room}
+              </option>
+            ))
+          )}
         </SelectInput>
       </FormField>
 
       <FormField label="Transaction Type" required>
         <div className="flex rounded-xl bg-slate-100/80 p-1">
-          {(["Payment", "Advance", "Refund"] as PaymentType[]).map((t) => (
+          {(["Payment", "Advance", "Refund"] as FrontOfficePaymentType[]).map((t) => (
             <button
               key={t}
               type="button"
@@ -215,9 +309,27 @@ export function PaymentsView() {
         </SelectInput>
       </FormField>
 
-      <FormField label="Transaction Reference">
+      <FormField
+        label={
+          reservationPaymentModesNeedingExternalRef.has(mode)
+            ? "External Reference ID"
+            : "Transaction Reference"
+        }
+        required={reservationPaymentModesNeedingExternalRef.has(mode)}
+        helperText={
+          reservationPaymentModesNeedingExternalRef.has(mode)
+            ? "Payment taken outside PMS — paste UPI or card transaction ID"
+            : "Optional for cash payments"
+        }
+      >
         <TextInput
-          placeholder="Optional — auto-generated if blank"
+          placeholder={
+            mode === "UPI"
+              ? "e.g. UPI987654321"
+              : mode === "Card"
+                ? "e.g. AUTH123456"
+                : "Optional"
+          }
           value={txnRef}
           onChange={(e) => setTxnRef(e.target.value)}
         />
@@ -225,24 +337,29 @@ export function PaymentsView() {
     </div>
   );
 
-  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (loading) return <p className="text-sm text-slate-500">Loading payments…</p>;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   return (
     <div className="space-y-5">
       {toast && (
-        <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       <FOPageHeader
         eyebrow="Front Office"
         title="Payments"
-        description="Record payments, advances, and refunds. View transaction history."
+        description="Record payments, advances, and refunds. View all front office transactions."
         action={
           <Button
             size="sm"
             className="bg-emerald-700 hover:bg-emerald-800"
             onClick={openRecord}
+            disabled={guests.length === 0}
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Record Payment
@@ -253,7 +370,7 @@ export function PaymentsView() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatMiniCard
           label="Collected Today"
-          value={formatINR(stats.collected)}
+          value={formatINR(stats.collectedToday)}
           accent="#10b981"
           icon={IndianRupee}
           sublabel="Completed payments"
@@ -271,7 +388,7 @@ export function PaymentsView() {
       <FOSearchToolbar
         search={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search by guest, payment ID, or transaction no…"
+        searchPlaceholder="Search by guest, transaction no, or external ref…"
         filterPills={{
           active: typeFilter,
           onChange: setTypeFilter,
@@ -283,14 +400,19 @@ export function PaymentsView() {
           ],
         }}
         hasActiveAdvancedFilters={modeFilter !== "all" || sortBy !== "newest"}
-        onClearAdvancedFilters={() => { setModeFilter("all"); setSortBy("newest"); }}
+        onClearAdvancedFilters={() => {
+          setModeFilter("all");
+          setSortBy("newest");
+        }}
         advancedFilters={
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <FormField label="Payment Mode">
               <SelectInput value={modeFilter} onChange={(e) => setModeFilter(e.target.value)}>
                 <option value="all">All modes</option>
                 {paymentModes.map((m) => (
-                  <option key={m} value={m}>{m}</option>
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
                 ))}
               </SelectInput>
             </FormField>
@@ -303,7 +425,7 @@ export function PaymentsView() {
             </FormField>
             <FormField label="Showing">
               <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
-                {filtered.length} of {payments.length} transactions
+                {filtered.length} of {payments.length} front office transactions
               </div>
             </FormField>
           </div>
@@ -311,163 +433,167 @@ export function PaymentsView() {
       />
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-          <h2 className="mb-4 text-sm font-semibold text-slate-900">
-            Payment History
-          </h2>
+        <h2 className="mb-4 text-sm font-semibold text-slate-900">Payment History</h2>
 
-          {/* Mobile cards */}
-          <div className="space-y-3 md:hidden">
-            {filtered.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setPreviewPayment(r)}
-                className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-slate-900">{r.guestName}</p>
-                    <p className="font-mono text-xs text-slate-400">{r.id}</p>
-                  </div>
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                      typeStyles[r.type],
-                    )}
-                  >
-                    {r.type}
-                  </span>
-                </div>
-                <div className="mt-2 flex items-center justify-between text-sm">
-                  <span
-                    className={cn(
-                      "font-semibold",
-                      r.type === "Refund" ? "text-red-600" : "text-slate-900",
-                    )}
-                  >
-                    {r.type === "Refund" ? "−" : ""}
-                    {formatINR(r.amount)}
-                  </span>
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                      statusStyles[r.status],
-                    )}
-                  >
-                    {r.status}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  {r.mode} · {r.date}
-                </p>
-              </button>
-            ))}
-          </div>
-
-          {/* Desktop table */}
-          <div className="hidden md:block">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-500">
-                    <th className="pb-3 pr-4">Payment ID</th>
-                    <th className="pb-3 pr-4">Guest</th>
-                    <th className="pb-3 pr-4">Type</th>
-                    <th className="pb-3 pr-4">Amount</th>
-                    <th className="pb-3 pr-4">Mode</th>
-                    <th className="pb-3 pr-4">Transaction No</th>
-                    <th className="pb-3 pr-4">Status</th>
-                    <th className="pb-3 pr-4">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((r) => (
-                    <tr
-                      key={r.id}
-                      onClick={() => setPreviewPayment(r)}
-                      className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-emerald-50/40"
+        {filtered.length === 0 ? (
+          <EmptyState
+            title="No transactions yet"
+            description="Front office payments and reservation advances appear here once recorded."
+          />
+        ) : (
+          <>
+            <div className="space-y-3 md:hidden">
+              {filtered.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setPreviewPayment(r)}
+                  className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-slate-900">{r.guestName}</p>
+                      <p className="font-mono text-xs text-slate-400">{r.transactionNumber}</p>
+                    </div>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                        typeStyles[r.type],
+                      )}
                     >
-                      <td className="py-3.5 pr-4">
-                        <span className="font-mono text-xs">{r.id}</span>
-                      </td>
-                      <td className="py-3.5 pr-4">
-                        <div>
-                          <p className="font-medium text-slate-900">{r.guestName}</p>
-                          {r.room && (
-                            <p className="text-xs text-slate-400">Room {r.room}</p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3.5 pr-4">
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            typeStyles[r.type],
-                          )}
-                        >
-                          {r.type}
-                        </span>
-                      </td>
-                      <td className="py-3.5 pr-4">
-                        <span
-                          className={cn(
-                            "font-semibold",
-                            r.type === "Refund" ? "text-red-600" : "text-slate-900",
-                          )}
-                        >
-                          {r.type === "Refund" ? "−" : ""}
-                          {formatINR(r.amount)}
-                        </span>
-                      </td>
-                      <td className="py-3.5 pr-4">{r.mode}</td>
-                      <td className="py-3.5 pr-4">
-                        <span className="font-mono text-xs text-slate-600">
-                          {r.transactionNo}
-                        </span>
-                      </td>
-                      <td className="py-3.5 pr-4">
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            statusStyles[r.status],
-                          )}
-                        >
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="py-3.5 pr-4">{r.date}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      {r.type}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-sm">
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        r.type === "Refund" ? "text-red-600" : "text-slate-900",
+                      )}
+                    >
+                      {r.type === "Refund" ? "−" : ""}
+                      {formatINR(r.amount)}
+                    </span>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                        statusStyles[r.status],
+                      )}
+                    >
+                      {r.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {r.mode} · {r.date}
+                  </p>
+                </button>
+              ))}
             </div>
-          </div>
-        </div>
 
-      {/* Record payment drawer */}
+            <div className="hidden md:block">
+              <div className="max-h-[min(520px,calc(100vh-420px))] overflow-auto rounded-lg border border-slate-100">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_rgb(241,245,249)]">
+                    <tr className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      <th className="px-4 py-3">Transaction No</th>
+                      <th className="px-4 py-3">Guest</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Amount</th>
+                      <th className="px-4 py-3">Mode</th>
+                      <th className="px-4 py-3">External Ref</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((r) => (
+                      <tr
+                        key={r.id}
+                        onClick={() => setPreviewPayment(r)}
+                        className="cursor-pointer border-t border-slate-50 hover:bg-emerald-50/40"
+                      >
+                        <td className="px-4 py-3.5">
+                          <span className="font-mono text-xs font-medium text-slate-800">
+                            {r.transactionNumber}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div>
+                            <p className="font-medium text-slate-900">{r.guestName}</p>
+                            {r.room && (
+                              <p className="text-xs text-slate-400">Room {r.room}</p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                              typeStyles[r.type],
+                            )}
+                          >
+                            {r.type}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={cn(
+                              "font-semibold",
+                              r.type === "Refund" ? "text-red-600" : "text-slate-900",
+                            )}
+                          >
+                            {r.type === "Refund" ? "−" : ""}
+                            {formatINR(r.amount)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">{r.mode}</td>
+                        <td className="px-4 py-3.5">
+                          <span className="font-mono text-xs text-slate-600">
+                            {r.externalReference ?? "—"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                              statusStyles[r.status],
+                            )}
+                          >
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">{r.date}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
       <Drawer
         open={recordOpen}
         onClose={() => setRecordOpen(false)}
         title="Record Payment"
-        description="Collect payment, advance, or process a refund."
+        description="Collect payment or advance for an in-house guest."
         width="md"
         footer={
           <>
-            <Button variant="outline" onClick={() => setRecordOpen(false)}>
+            <Button variant="outline" onClick={() => setRecordOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSubmit}>
-              {paymentType === "Refund" ? (
-                <>
-                  <RefreshCw className="mr-1.5 h-4 w-4" />
-                  Process Refund
-                </>
-              ) : (
-                <>
-                  <IndianRupee className="mr-1.5 h-4 w-4" />
-                  Collect {paymentType}
-                </>
-              )}
+            <Button
+              className="bg-emerald-700 hover:bg-emerald-800"
+              onClick={handleSubmit}
+              disabled={submitting || guests.length === 0}
+            >
+              {submitting
+                ? "Recording…"
+                : paymentType === "Refund"
+                  ? "Process Refund"
+                  : `Collect ${paymentType}`}
             </Button>
           </>
         }
@@ -475,11 +601,10 @@ export function PaymentsView() {
         {recordForm}
       </Drawer>
 
-      {/* Preview drawer */}
       <Drawer
         open={!!previewPayment}
         onClose={() => setPreviewPayment(null)}
-        title={previewPayment?.id ?? ""}
+        title={previewPayment?.transactionNumber ?? ""}
         description={
           previewPayment
             ? `${previewPayment.type} · ${previewPayment.guestName}`
@@ -557,7 +682,12 @@ export function PaymentsView() {
                 {
                   icon: Hash,
                   label: "Transaction No",
-                  value: previewPayment.transactionNo,
+                  value: previewPayment.transactionNumber,
+                },
+                {
+                  icon: Hash,
+                  label: "External Ref",
+                  value: previewPayment.externalReference ?? "—",
                 },
                 { icon: Calendar, label: "Date", value: previewPayment.date },
               ].map(({ icon: Icon, label, value }) => (

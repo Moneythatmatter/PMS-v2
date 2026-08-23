@@ -30,14 +30,14 @@ export async function syncTaskForRoom(
       return;
     }
 
-    if (action === "approve" && task.status === "COMPLETED") {
+    if (action === "approve" && (task.status === "PENDING_INSPECTION" || task.status === "COMPLETED")) {
       await hkTaskService.approve(task.id, {
         approvedBy: meta?.approvedBy ?? meta?.staff,
       });
       return;
     }
 
-    if (action === "reject" && task.status === "COMPLETED") {
+    if (action === "reject" && (task.status === "PENDING_INSPECTION" || task.status === "COMPLETED")) {
       await hkTaskService.cancel(task.id, {
         notes: meta?.notes ?? "Inspection rejected — reclean required",
       });

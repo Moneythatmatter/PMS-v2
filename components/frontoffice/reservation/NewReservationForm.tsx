@@ -16,6 +16,7 @@ import {
   bookingSources as fallbackBookingSources,
   mealPlans,
   paymentModes,
+  reservationPaymentModesNeedingExternalRef,
   tariffPlans,
   roomTypes,
 } from "@/app/data/frontoffice/constants";
@@ -49,6 +50,12 @@ import {
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
+import type { ReservationBooking } from "@/app/data/types/frontoffice";
+import { normalizeToIso } from "@/lib/reservation-dates";
+import {
+  filterRoomsForStay,
+  isRoomSellableStatus,
+} from "@/lib/room-availability";
 
 function nightsBetween(checkIn: string, checkOut: string) {
   if (!checkIn || !checkOut) return 0;
@@ -146,10 +153,11 @@ export function NewReservationForm() {
     : "";
 
   const [savedBookingNo, setSavedBookingNo] = useState<string | null>(null);
-  const [availableRoomNos, setAvailableRoomNos] = useState<string[]>([]);
+  const [allRoomNos, setAllRoomNos] = useState<string[]>([]);
+  const [reservations, setReservations] = useState<ReservationBooking[]>([]);
   const [tariffByPlanMap, setTariffByPlanMap] = useState<Record<string, number>>({});
   const [baseRateByRoomMap, setBaseRateByRoomMap] = useState<Record<string, number>>({});
-  const [roomsByType, setRoomsByType] = useState<Record<string, string[]>>({});
+  const [allRoomsByType, setAllRoomsByType] = useState<Record<string, string[]>>({});
   const [roomTypeOptions, setRoomTypeOptions] = useState<string[]>(() => [
     ...roomTypes,
   ]);
@@ -188,6 +196,7 @@ export function NewReservationForm() {
     source: "",
     advancePaid: 0,
     paymentMode: "",
+    externalReference: "",
     // Linked guest fields
     guestId: "",
     nationality: "",
@@ -240,27 +249,33 @@ export function NewReservationForm() {
     let cancelled = false;
     (async () => {
       try {
-        const [roomCards, roomTypesData, tariffPlansData, sourcesData] =
+        const [roomCards, roomTypesData, tariffPlansData, sourcesData, reservationList] =
           await Promise.all([
             roomService.status(),
             roomTypeService.list().catch(() => []),
             tariffPlanService.list().catch(() => []),
             bookingSourceService.list().catch(() => []),
+            reservationService.list().catch(() => []),
           ]);
         if (cancelled) return;
 
-        // Same source/rules as Room Status: only Vacant rooms are assignable
+        setReservations(reservationList);
+
+        // Include all sellable rooms; availability for the stay is checked against reservations.
         const byType: Record<string, string[]> = {};
         const nos: string[] = [];
         for (const r of roomCards) {
-          if (String(r.status || "").trim().toLowerCase() !== "vacant") continue;
+          if (!isRoomSellableStatus(r.status)) continue;
           nos.push(r.roomNo);
           const key = r.type || "Other";
           if (!byType[key]) byType[key] = [];
           byType[key].push(r.roomNo);
         }
-        setAvailableRoomNos(nos);
-        setRoomsByType(byType);
+        for (const key of Object.keys(byType)) {
+          byType[key].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        }
+        setAllRoomNos(nos.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
+        setAllRoomsByType(byType);
 
         const roomRates: Record<string, number> = {};
         const typeNames: string[] = [];
@@ -320,8 +335,9 @@ export function NewReservationForm() {
         }
       } catch {
         if (!cancelled) {
-          setAvailableRoomNos([]);
-          setRoomsByType({});
+          setAllRoomNos([]);
+          setAllRoomsByType({});
+          setReservations([]);
         }
       }
     })();
@@ -365,9 +381,42 @@ export function NewReservationForm() {
   const pendingAmount = Math.max(0, totalAmount - form.advancePaid);
 
   const filteredRooms = useMemo(() => {
-    if (!form.roomType) return availableRoomNos;
-    return roomsByType[form.roomType] ?? [];
-  }, [form.roomType, availableRoomNos, roomsByType]);
+    const pool = form.roomType ? (allRoomsByType[form.roomType] ?? []) : allRoomNos;
+    if (!form.checkIn || !form.checkOut) return pool;
+
+    const checkIn = normalizeToIso(form.checkIn);
+    const checkOut = normalizeToIso(form.checkOut);
+    if (!checkIn || !checkOut || checkOut <= checkIn) return [];
+
+    return filterRoomsForStay(pool, reservations, checkIn, checkOut);
+  }, [form.roomType, form.checkIn, form.checkOut, allRoomsByType, allRoomNos, reservations]);
+
+  const roomSelectOptions = useMemo(() => {
+    const rooms = [...filteredRooms];
+    if (form.roomNumber && !rooms.includes(form.roomNumber)) {
+      rooms.unshift(form.roomNumber);
+    }
+    return rooms;
+  }, [filteredRooms, form.roomNumber]);
+
+  const roomAvailabilityWarning = useMemo(() => {
+    if (!form.roomType || !form.checkIn || !form.checkOut) return null;
+
+    const checkIn = normalizeToIso(form.checkIn);
+    const checkOut = normalizeToIso(form.checkOut);
+    if (!checkIn || !checkOut || checkOut <= checkIn) return null;
+
+    if (form.roomNumber) {
+      if (filteredRooms.includes(form.roomNumber)) return null;
+      return `Room ${form.roomNumber} is not available for the selected dates. Choose another room or leave blank to save as TBA.`;
+    }
+
+    if (filteredRooms.length === 0) {
+      return `No ${form.roomType} rooms available for these dates — booking will be saved as TBA.`;
+    }
+
+    return null;
+  }, [form.roomType, form.checkIn, form.checkOut, form.roomNumber, filteredRooms]);
 
   const completion = useMemo(() => {
     const fields = [
@@ -395,6 +444,9 @@ export function NewReservationForm() {
     setForm((prev) => {
       const next = { ...prev, [field]: value };
       if (field === "roomType") next.roomNumber = "";
+      if (field === "paymentMode" && !reservationPaymentModesNeedingExternalRef.has(String(value))) {
+        next.externalReference = "";
+      }
       if (field === "checkIn" && typeof value === "string") {
         if (next.checkOut && next.checkOut <= value) {
           next.checkOut = getNextDayString(value);
@@ -429,6 +481,7 @@ export function NewReservationForm() {
       source: prev.source,
       advancePaid: prev.advancePaid,
       paymentMode: prev.paymentMode,
+      externalReference: prev.externalReference,
       notes: prev.notes,
     }));
     setErrors((prev) => {
@@ -549,6 +602,24 @@ export function NewReservationForm() {
       next.checkOut = "Check-out date must be after check-in date";
     }
     if (!form.roomType) next.roomType = "Required";
+    if (form.advancePaid > 0) {
+      if (!form.paymentMode.trim()) {
+        next.paymentMode = "Required when advance is collected";
+      }
+      if (
+        form.paymentMode.trim() &&
+        reservationPaymentModesNeedingExternalRef.has(form.paymentMode) &&
+        !form.externalReference.trim()
+      ) {
+        next.externalReference =
+          form.paymentMode === "UPI"
+            ? "Required — enter UPI transaction ID from your payment app"
+            : "Required — enter card auth / reference from POS or bank";
+      }
+    }
+    if (form.advancePaid > totalAmount && totalAmount > 0) {
+      next.advancePaid = "Advance cannot exceed total amount";
+    }
     Object.assign(next, checkGuestUniqueness());
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -608,7 +679,8 @@ export function NewReservationForm() {
         roomRate,
         totalAmount,
         advancePaid: form.advancePaid,
-        paymentMode: form.paymentMode || "Cash",
+        paymentMode: form.paymentMode || undefined,
+        externalReference: form.externalReference.trim() || undefined,
         balance: pendingAmount,
         status: "Reserved",
         bookedBy: currentUser.name,
@@ -628,6 +700,12 @@ export function NewReservationForm() {
       setToast(e instanceof Error ? e.message : "Failed to save reservation");
     }
   };
+
+  const showExternalReference = reservationPaymentModesNeedingExternalRef.has(
+    form.paymentMode,
+  );
+  const externalReferenceRequired =
+    form.advancePaid > 0 && showExternalReference;
 
   const guestName = [form.firstName, form.lastName].filter(Boolean).join(" ") || "Guest";
 
@@ -819,6 +897,38 @@ export function NewReservationForm() {
                   />
                 )}
               </FormField>
+            </SectionCard>
+
+            <SectionCard icon={BedDouble} title="Booking Details" description="Stay dates, room allocation, tariff, and booking type">
+              <FormField label="Check-in Date" required>
+                <TextInput
+                  className={inputClass}
+                  type="date"
+                  min={todayStr}
+                  value={form.checkIn}
+                  onChange={(e) => update("checkIn", e.target.value)}
+                />
+                {errors.checkIn && <p className="text-xs text-red-500">{errors.checkIn}</p>}
+              </FormField>
+              <FormField label="Check-out Date" required>
+                <TextInput
+                  className={inputClass}
+                  type="date"
+                  min={form.checkIn || todayStr}
+                  value={form.checkOut}
+                  onChange={(e) => update("checkOut", e.target.value)}
+                />
+                {errors.checkOut && <p className="text-xs text-red-500">{errors.checkOut}</p>}
+              </FormField>
+              <FormField label="Nights">
+                <TextInput className={cn(inputClass, "bg-slate-50")} type="number" value={nights} readOnly />
+              </FormField>
+              <FormField label="Adults">
+                <TextInput className={inputClass} type="number" min={1} value={form.adults} onChange={(e) => update("adults", Number(e.target.value))} />
+              </FormField>
+              <FormField label="Children">
+                <TextInput className={inputClass} type="number" min={0} value={form.children} onChange={(e) => update("children", Number(e.target.value))} />
+              </FormField>
               <FormField label="Booking Type" required>
                 <SearchSelect
                   options={[...bookingTypeOptions]}
@@ -863,38 +973,6 @@ export function NewReservationForm() {
                   {errors.companyName && <p className="text-xs text-red-500">{errors.companyName}</p>}
                 </FormField>
               )}
-            </SectionCard>
-
-            <SectionCard icon={BedDouble} title="Booking Details" description="Stay dates, room allocation, and tariff plan">
-              <FormField label="Check-in Date" required>
-                <TextInput
-                  className={inputClass}
-                  type="date"
-                  min={todayStr}
-                  value={form.checkIn}
-                  onChange={(e) => update("checkIn", e.target.value)}
-                />
-                {errors.checkIn && <p className="text-xs text-red-500">{errors.checkIn}</p>}
-              </FormField>
-              <FormField label="Check-out Date" required>
-                <TextInput
-                  className={inputClass}
-                  type="date"
-                  min={form.checkIn || todayStr}
-                  value={form.checkOut}
-                  onChange={(e) => update("checkOut", e.target.value)}
-                />
-                {errors.checkOut && <p className="text-xs text-red-500">{errors.checkOut}</p>}
-              </FormField>
-              <FormField label="Nights">
-                <TextInput className={cn(inputClass, "bg-slate-50")} type="number" value={nights} readOnly />
-              </FormField>
-              <FormField label="Adults">
-                <TextInput className={inputClass} type="number" min={1} value={form.adults} onChange={(e) => update("adults", Number(e.target.value))} />
-              </FormField>
-              <FormField label="Children">
-                <TextInput className={inputClass} type="number" min={0} value={form.children} onChange={(e) => update("children", Number(e.target.value))} />
-              </FormField>
               <FormField label="Room Type" required>
                 <SearchSelect
                   options={roomTypeOptions.map((t) => ({ id: t, label: t }))}
@@ -908,7 +986,7 @@ export function NewReservationForm() {
               </FormField>
               <FormField label="Room Number">
                 <SearchSelect
-                  options={filteredRooms.map((r) => ({
+                  options={roomSelectOptions.map((r) => ({
                     id: r,
                     label: `Room ${r}`,
                     hint: form.roomType || undefined,
@@ -916,16 +994,16 @@ export function NewReservationForm() {
                   selectedId={form.roomNumber || null}
                   placeholder={
                     form.roomType
-                      ? "Search vacant room…"
+                      ? "Search available room…"
                       : "Select a room type first…"
                   }
                   inputClassName={inputClass}
                   onSelect={(opt) => update("roomNumber", opt.id)}
                   onClear={() => update("roomNumber", "")}
                 />
-                {form.roomType && filteredRooms.length === 0 && (
+                {roomAvailabilityWarning && (
                   <p className="text-xs text-amber-600">
-                    No vacant {form.roomType} rooms — booking will be saved as TBA.
+                    {roomAvailabilityWarning}
                   </p>
                 )}
               </FormField>
@@ -975,24 +1053,76 @@ export function NewReservationForm() {
               </FormField>
             </SectionCard>
 
-            <SectionCard icon={CreditCard} title="Payment" description="Advance collection and pending balance">
+            <SectionCard
+              icon={CreditCard}
+              title="Payment"
+              description="Collect advance manually — no payment gateway; enter external transaction ID for UPI / card"
+            >
               <FormField label="Advance Paid">
-                <TextInput className={inputClass} type="number" min={0} value={form.advancePaid} onChange={(e) => update("advancePaid", Number(e.target.value))} />
+                <TextInput
+                  className={inputClass}
+                  type="number"
+                  min={0}
+                  value={form.advancePaid}
+                  onChange={(e) => update("advancePaid", Number(e.target.value))}
+                />
+                {errors.advancePaid && (
+                  <p className="text-xs text-red-500">{errors.advancePaid}</p>
+                )}
               </FormField>
               <FormField label="Payment Mode">
                 <SearchSelect
                   options={paymentModes.map((m) => ({ id: m, label: m }))}
                   selectedId={form.paymentMode || null}
-                  placeholder="Search payment mode…"
+                  placeholder="Select payment mode…"
                   inputClassName={inputClass}
                   onSelect={(opt) => update("paymentMode", opt.id)}
-                  onClear={() => update("paymentMode", "")}
+                  onClear={() => {
+                    update("paymentMode", "");
+                    update("externalReference", "");
+                  }}
                 />
-                {errors.paymentMode && <p className="text-xs text-red-500">{errors.paymentMode}</p>}
+                {errors.paymentMode && (
+                  <p className="text-xs text-red-500">{errors.paymentMode}</p>
+                )}
               </FormField>
               <FormField label="Pending Amount">
-                <TextInput className={cn(inputClass, "bg-slate-50 font-semibold")} type="number" value={pendingAmount} readOnly />
+                <TextInput
+                  className={cn(inputClass, "bg-slate-50 font-semibold")}
+                  type="number"
+                  value={pendingAmount}
+                  readOnly
+                />
               </FormField>
+              {showExternalReference && (
+                <FormField
+                  label="External Reference ID"
+                  required={externalReferenceRequired}
+                  className="sm:col-span-2 lg:col-span-3"
+                  helperText={
+                    form.advancePaid > 0
+                      ? "Payment was taken outside the PMS — paste the UPI or card transaction ID here"
+                      : "Enter advance amount above — then paste the UPI / card transaction ID from your payment app"
+                  }
+                >
+                  <TextInput
+                    className={cn(
+                      inputClass,
+                      "border-emerald-300 ring-1 ring-emerald-100 focus:border-emerald-500",
+                    )}
+                    value={form.externalReference}
+                    placeholder={
+                      form.paymentMode === "UPI"
+                        ? "e.g. UPI987654321"
+                        : "e.g. AUTH123456 or bank ref"
+                    }
+                    onChange={(e) => update("externalReference", e.target.value)}
+                  />
+                  {errors.externalReference && (
+                    <p className="text-xs text-red-500">{errors.externalReference}</p>
+                  )}
+                </FormField>
+              )}
             </SectionCard>
           </div>
 
@@ -1031,10 +1161,25 @@ export function NewReservationForm() {
                       <span>{formatINR(totalAmount)}</span>
                     </div>
                     {form.advancePaid > 0 && (
-                      <div className="flex justify-between text-emerald-600">
-                        <span>Advance paid</span>
-                        <span>− {formatINR(form.advancePaid)}</span>
-                      </div>
+                      <>
+                        <div className="flex justify-between text-emerald-600">
+                          <span>Advance amount</span>
+                          <span>− {formatINR(form.advancePaid)}</span>
+                        </div>
+                        {form.paymentMode && (
+                          <div className="flex justify-between text-slate-500 text-xs">
+                            <span>Payment method</span>
+                            <span>{form.paymentMode}</span>
+                          </div>
+                        )}
+                        {form.externalReference.trim() &&
+                          reservationPaymentModesNeedingExternalRef.has(form.paymentMode) && (
+                          <div className="flex justify-between text-slate-500 text-xs">
+                            <span>External ref</span>
+                            <span className="truncate max-w-[140px]">{form.externalReference}</span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

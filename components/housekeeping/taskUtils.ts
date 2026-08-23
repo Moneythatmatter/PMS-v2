@@ -4,8 +4,23 @@ const ACTIVE_TASK_STATUSES = new Set([
   "PENDING",
   "ASSIGNED",
   "IN_PROGRESS",
-  "COMPLETED",
+  "PENDING_INSPECTION",
 ]);
+
+const OVERDUE_EXCLUDED_STATUSES = new Set([
+  "COMPLETED",
+  "APPROVED",
+  "CANCELLED",
+]);
+
+export function isTaskOverdue(
+  task: Pick<HKTask, "dueAt" | "status" | "isOverdue">,
+): boolean {
+  if (task.isOverdue) return true;
+  if (!task.dueAt) return false;
+  if (OVERDUE_EXCLUDED_STATUSES.has(task.status)) return false;
+  return new Date(task.dueAt).getTime() < Date.now();
+}
 
 export function isActiveTask(task: HKTask): boolean {
   return ACTIVE_TASK_STATUSES.has(task.status);
@@ -16,6 +31,7 @@ export function taskToRoomStatus(task: HKTask): HKRoom["status"] {
   switch (task.status) {
     case "IN_PROGRESS":
       return "Cleaning";
+    case "PENDING_INSPECTION":
     case "COMPLETED":
       return "Inspection Pending";
     case "PENDING":
@@ -99,6 +115,7 @@ export function formatTaskStatusLabel(status?: string): string {
       return "Pending";
     case "IN_PROGRESS":
       return "In Progress";
+    case "PENDING_INSPECTION":
     case "COMPLETED":
       return "Awaiting Inspection";
     case "APPROVED":
@@ -121,6 +138,7 @@ export function taskStatusTone(
   switch (status) {
     case "IN_PROGRESS":
       return "amber";
+    case "PENDING_INSPECTION":
     case "COMPLETED":
       return "blue";
     case "APPROVED":
@@ -227,7 +245,7 @@ export function buildInspectionQueue(
     } as HKRoom);
 
   for (const task of tasks) {
-    if (task.status === "COMPLETED") {
+    if (task.status === "PENDING_INSPECTION" || task.status === "COMPLETED") {
       push(roomForTask(task), task, "awaiting");
     } else if (task.status === "IN_PROGRESS") {
       push(roomForTask(task), task, "cleaning");
@@ -264,7 +282,9 @@ export function inspectionStats(
     details?: string;
   }[],
 ) {
-  const pending = tasks.filter((t) => t.status === "COMPLETED").length;
+  const pending = tasks.filter(
+    (t) => t.status === "PENDING_INSPECTION" || t.status === "COMPLETED",
+  ).length;
   const passedEntries = history.filter(
     (h) =>
       h.category === "Inspection" &&

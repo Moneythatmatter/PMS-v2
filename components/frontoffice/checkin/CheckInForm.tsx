@@ -196,10 +196,16 @@ export function CheckInForm() {
         if (cancelled) return;
         setPmsBookings(bookings);
 
-        // Same source/rules as Room Status: only Vacant rooms are newly assignable.
-        // Pre-assigned room for this booking is kept via availableRoomNumbers.
+        // Assignable rooms: not blocked/maintenance; operational status comes from hk_rooms.
         const assignable = roomCards
-          .filter((r) => String(r.status || "").trim().toLowerCase() === "vacant")
+          .filter((r) => {
+            const status = String(r.status || "").trim().toLowerCase();
+            return (
+              status !== "blocked" &&
+              status !== "maintenance" &&
+              status !== "occupied"
+            );
+          })
           .map((r) => ({
             roomNo: r.roomNo,
             roomType: r.type,
