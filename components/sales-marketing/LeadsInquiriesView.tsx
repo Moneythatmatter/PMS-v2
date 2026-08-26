@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   UserPlus,
   Search,
   Filter,
-  SlidersHorizontal,
   Plus,
   Phone,
   Mail,
@@ -14,668 +14,816 @@ import {
   DollarSign,
   UserCheck,
   Clock,
-  Sparkles,
-  ChevronRight,
   Eye,
   Edit2,
   CheckCircle2,
-  AlertCircle,
   FileText,
-  MapPin,
   Tag,
   ArrowRight,
-  ExternalLink,
-  ShieldAlert,
   Send,
-  User,
   Users,
   AlertTriangle,
-  RotateCcw,
   X,
-  FileCheck,
-  Check,
+  Sparkles,
   Layers,
-  HelpCircle,
+  Upload,
+  FileSpreadsheet,
+  Save,
+  Check,
+  ExternalLink,
+  Kanban,
+  History,
+  RotateCcw,
+  CheckCircle,
+  XCircle,
   MessageSquare,
+  MapPin,
+  Briefcase,
+  Share2,
+  Info,
+  Lock,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { cn } from "@/lib/utils";
+import { INITIAL_CENTRAL_LEADS, CentralLeadItem } from "@/app/data/centralLeadData";
 
 // ─────────────────────────────────────────────────────────────
-// ENHANCED TYPES & SCHEMAS FOR HOTEL LEAD MANAGEMENT
+// VERSION 1 HOTEL PMS CRM TYPES & SCHEMAS
 // ─────────────────────────────────────────────────────────────
 
 export type LeadStatus =
   | "New"
-  | "Working"
-  | "Qualified"
-  | "Unqualified"
-  | "Nurturing"
-  | "Converted"
-  | "Lost"
-  | "Closed";
-
-export type SalesStage =
-  | "New Inquiry"
   | "Contacted"
-  | "Requirement Captured"
-  | "Site Visit Scheduled"
-  | "Proposal / Quote Sent"
+  | "Qualified"
+  | "In Pipeline"
+  | "Won"
+  | "Lost";
+
+export type PipelineStage =
+  | "Qualification"
+  | "Requirement Analysis"
+  | "Quotation / Proposal"
   | "Negotiation"
-  | "Approval"
-  | "Confirmed / Won"
-  | "Closed / Lost";
+  | "Tentative Booking"
+  | "Final Decision"
+  | "Won"
+  | "Lost"
+  | "Not in Pipeline";
+
+export type LeadType =
+  | "Wedding"
+  | "Banquet Event"
+  | "Corporate Booking"
+  | "Conference"
+  | "Room Booking"
+  | "Restaurant Event"
+  | "Travel Group";
 
 export type LeadSource =
+  | "Walk-In"
+  | "Phone Call"
   | "Website"
-  | "Direct Call"
-  | "Walk-in"
-  | "Email"
   | "WhatsApp"
-  | "Google"
-  | "Social Media"
-  | "OTA / Travel Partner"
-  | "Corporate Referral"
-  | "Existing Corporate Account"
+  | "Email"
+  | "Referral"
+  | "Marketing Campaign"
   | "Travel Agent"
-  | "Event Planner"
-  | "Wedding Planner"
-  | "Campaign"
-  | "Other";
+  | "Corporate Reference"
+  | "Google Ads"
+  | "Meta Ads"
+  | "Direct Inquiry";
 
-export type EnquiryType =
-  | "Corporate Room Block"
-  | "Individual Stay"
-  | "Group Stay"
-  | "Banquet Wedding"
-  | "Conference & Seminar"
-  | "Social Event / Birthday"
-  | "Long Stay";
+export type LeadPriority = "High" | "Medium" | "Low";
 
-export type LeadPriority = "Hot Lead" | "Warm" | "Cold";
-
-// Room Stay Requirement Schema
-export interface RoomStayRequirement {
-  checkInDate: string;
-  checkOutDate: string;
-  numberOfNights: number;
-  numberOfRooms: number;
-  numberOfAdults: number;
-  numberOfChildren?: number;
-  roomType: string;
-  mealPlan: string; // CP, MAP, AP, EP
-  ratePreference?: string;
+export interface ActivityTimelineItem {
+  action: string;
+  user: string;
+  date: string;
+  note?: string;
+  type?: "Phone Call" | "Follow-up" | "Meeting" | "Site Visit" | "Email" | "WhatsApp" | "Note" | "Stage Change";
+  status?: "Scheduled" | "Completed" | "Cancelled";
+  venue?: string;
+  nextFollowupDate?: string;
 }
 
-// Banquet / Event Requirement Schema
-export interface BanquetEventRequirement {
-  eventName: string;
-  eventDate: string;
-  eventEndDate?: string;
-  expectedPax: number;
-  preferredVenue: string;
-  alternateVenue?: string;
-  eventTiming?: string; // Morning, Evening, Full Day
-  foodRequirement?: string; // Buffet, Fixed Menu, Live Counters
-  beverageRequirement?: string;
-  roomsRequiredCount?: number;
-  avRequirement?: string;
+export interface InternalNoteItem {
+  id: string;
+  text: string;
+  user: string;
+  date: string;
 }
 
-// B2B Qualification (Need, Budget, Authority, Timeline, Fit)
-export interface LeadQualification {
-  need: string;
-  budget: string;
-  authority: string; // Decision Maker Name / Title
-  timeline: string;
-  fit: string; // Capacity / Product Match
-  decisionMakerName?: string;
-  competitorHotel?: string;
-}
-
-// Full Enterprise Hotel Lead Record Schema
-export interface CompleteHotelLead {
+export interface HotelLeadItem {
   id: string;
   leadName: string;
-  leadStatus: LeadStatus;
-  salesStage: SalesStage;
-  leadScore: number; // 0 - 100
-  scoreCategory: "Cold" | "Warm" | "Hot" | "Very Hot";
+  companyName?: string;
+  mobile: string;
+  email?: string;
+  preferredContactMethod?: "Phone" | "WhatsApp" | "Email";
+
+  // Inquiry & Commercial Info
+  leadType: LeadType;
+  leadSource: LeadSource;
+  inquiryDate?: string;
+  expectedEventDate?: string;
+  guestCount?: number;
+  expectedRoomNights?: number;
+  expectedRevenue: string; // e.g. "₹8,90,000"
+  rawRevenue: number;
+  assignedExecutive: string;
   priority: LeadPriority;
+  status: LeadStatus;
+  pipelineStage: PipelineStage;
 
-  // Identity & Ownership
-  companyName: string;
-  corporateAccountId?: string;
-  contactPerson: string;
-  phone: string;
-  email: string;
-  leadOwner: string; // Salesperson responsible
-  createdBy: string;
-  lastAssignedBy?: string;
+  // Extended Requirement Fields (Added for Progressive Sales Flow)
+  customerRequirement: string;
+  venuePreference?: string;
+  mealRequirement?: string;
+  roomRequirement?: string;
+  specialRequirements?: string;
+  additionalNotes?: string;
 
-  // Source & Campaign
-  source: LeadSource;
-  campaign?: string;
+  // Marketing & Tariff Attribution
+  createdDate: string;
+  campaignId?: string | null;
+  campaignName?: string | null;
+  promotionCode?: string | null;
+  rateTariff?: string | null;
 
-  // Requirement & Financials
-  enquiryType: EnquiryType;
-  paxOrRooms?: string;
-  estimatedValue: string; // Formatted e.g. "₹18,50,000"
-  calculatedRoomNights?: number;
-  roomRequirement?: RoomStayRequirement;
-  banquetRequirement?: BanquetEventRequirement;
-  qualification?: LeadQualification;
+  // Linked Records
+  opportunityId?: string | null;
+  bookingId?: string | null;
+  bookingType?: "Room Reservation" | "Banquet Event" | "F&B Booking" | null;
 
-  // Next Action & SLA
-  nextActionSubject?: string;
-  nextFollowupDate: string;
-  lastContactDate?: string;
-  lastContactMethod?: "Phone" | "Email" | "WhatsApp" | "Meeting" | "Site Visit";
-  createdAt: string; // e.g. "18 Aug 2026, 10:05 AM"
-  firstResponseTimeMinutes?: number;
-
-  // Lost / Nurture Details
-  lostReason?: string;
-  competitorLostTo?: string;
-  nurtureUntilDate?: string;
-  notes?: string;
-  tags?: string[];
+  // Timelines & Notes
+  activityTimeline: ActivityTimelineItem[];
+  internalNotes?: InternalNoteItem[];
 }
 
 // ─────────────────────────────────────────────────────────────
-// COMPREHENSIVE INITIAL SEED DATA
+// HELPER FORMATTERS FOR UNKNOWN VALUES (SECTION 5 & 6 RULES)
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_COMPLETE_LEADS: CompleteHotelLead[] = [
+/** Format missing text fields as 'Not Provided', 'Not Available', or 'Not Specified' */
+const formatValue = (val?: string | number | null, fallbackType: "PROVIDED" | "AVAILABLE" | "SPECIFIED" | "APPLICABLE" = "PROVIDED") => {
+  if (val !== undefined && val !== null && String(val).trim() !== "") {
+    return String(val);
+  }
+  switch (fallbackType) {
+    case "PROVIDED":
+      return "Not Provided";
+    case "AVAILABLE":
+      return "Not Available";
+    case "SPECIFIED":
+      return "Not Specified";
+    case "APPLICABLE":
+      return "Not Applicable";
+    default:
+      return "Not Provided";
+  }
+};
+
+/** Format Promotion / Promo Code separately from Rate / Tariff (Section 6 Rule) */
+const formatPromoCode = (code?: string | null) => {
+  if (code && code.trim() !== "" && code.trim().toLowerCase() !== "standard tariff") {
+    return code.trim();
+  }
+  return "Not Applied";
+};
+
+// ─────────────────────────────────────────────────────────────
+// DIRECT CSV SAMPLE IMPORT DATA
+// ─────────────────────────────────────────────────────────────
+
+const DIRECT_CSV_SAMPLE_ROWS = [
   {
-    id: "LD-501",
-    leadName: "TCS Q4 Executive Leadership Meet",
-    leadStatus: "Working",
-    salesStage: "Proposal / Quote Sent",
-    leadScore: 88,
-    scoreCategory: "Very Hot",
-    priority: "Hot Lead",
-    companyName: "TCS India Ltd",
-    contactPerson: "Sunil Verma (HR Head)",
-    phone: "+91 97110 44556",
-    email: "sunil.v@tcs.com",
-    leadOwner: "Jay Kumar",
-    createdBy: "Jay Kumar",
-    source: "Corporate Referral",
-    campaign: "Q3 Corporate Rate Drive",
-    enquiryType: "Corporate Room Block",
-    paxOrRooms: "45 Rooms / 3 Nights",
-    estimatedValue: "₹8,90,000",
-    calculatedRoomNights: 135,
-    roomRequirement: {
-      checkInDate: "15 Sep 2026",
-      checkOutDate: "18 Sep 2026",
-      numberOfNights: 3,
-      numberOfRooms: 45,
-      numberOfAdults: 45,
-      roomType: "Deluxe Executive Room",
-      mealPlan: "CP (Room + Breakfast)",
-    },
-    qualification: {
-      need: "Corporate leadership stay with high-speed WiFi and airport pickup.",
-      budget: "₹8,50,000 - ₹9,50,000",
-      authority: "Sunil Verma (HR VP)",
-      timeline: "Check-in 15 Sep 2026",
-      fit: "Perfect fit for Executive Tower block.",
-      decisionMakerName: "Sunil Verma",
-      competitorHotel: "Taj Deccan",
-    },
-    nextActionSubject: "Call Sunil Verma regarding corporate quotation & LRA rates",
-    nextFollowupDate: "Today, 03:00 PM",
-    lastContactDate: "17 Aug 2026",
-    lastContactMethod: "Phone",
-    createdAt: "16 Aug 2026, 09:30 AM",
-    firstResponseTimeMinutes: 14,
-    tags: ["VIP", "Corporate", "High Revenue"],
-    notes: "Requires LRA rate breakdown and 45 rooms block confirmation.",
+    "Full Name": "Amitabh Bachchan & Group",
+    "Phone Number": "+91 98111 22334",
+    Email: "amitabh.b@group.com",
+    "Company Name": "ABC Productions",
+    "Event Date": "2026-10-15",
+    "Guest Count": "250",
+    Budget: "1500000",
+    Notes: "Requires VVIP security and 40 luxury suites.",
   },
   {
-    id: "LD-502",
-    leadName: "Reddy & Sharma Wedding Reception",
-    leadStatus: "Working",
-    salesStage: "Site Visit Scheduled",
-    leadScore: 94,
-    scoreCategory: "Very Hot",
-    priority: "Hot Lead",
-    companyName: "Reddy Family",
-    contactPerson: "Pooja Hegde",
-    phone: "+91 99001 22334",
-    email: "pooja.reddy@gmail.com",
-    leadOwner: "Jay Kumar",
-    createdBy: "Front Desk Walk-in",
-    source: "Walk-in",
-    campaign: "Monsoon Wedding Special",
-    enquiryType: "Banquet Wedding",
-    paxOrRooms: "450 PAX",
-    estimatedValue: "₹24,00,000",
-    banquetRequirement: {
-      eventName: "Reddy & Sharma Grand Reception",
-      eventDate: "12 Nov 2026",
-      expectedPax: 450,
-      preferredVenue: "Grand Crystal Ballroom & Lawns",
-      foodRequirement: "Live North & South Indian Counters + Beverage Bar",
-      roomsRequiredCount: 30,
-    },
-    qualification: {
-      need: "Luxury wedding venue with accommodation for 60 outstation guests.",
-      budget: "₹25,00,000+",
-      authority: "Mr. K. V. Reddy (Father)",
-      timeline: "Wedding on 12 Nov 2026",
-      fit: "Fits Grand Ballroom perfectly.",
-      decisionMakerName: "Mr. K. V. Reddy",
-      competitorHotel: "Marriott Convention",
-    },
-    nextActionSubject: "Send revised food menu quotation and decor mockups",
-    nextFollowupDate: "Yesterday",
-    lastContactDate: "17 Aug 2026",
-    lastContactMethod: "Site Visit",
-    createdAt: "15 Aug 2026, 02:15 PM",
-    firstResponseTimeMinutes: 5,
-    tags: ["Wedding", "High Revenue", "Local"],
-    notes: "Site visit completed yesterday. Show decor samples.",
+    "Full Name": "Dr. Sameer Joshi",
+    "Phone Number": "+91 98220 33445",
+    Email: "dr.joshi@neurocon.org",
+    "Company Name": "Neurocon India",
+    "Event Date": "2026-11-20",
+    "Guest Count": "300",
+    Budget: "1200000",
+    Notes: "Annual Medical Symposium. Needs Auditorium + 2 breakout halls.",
   },
   {
-    id: "LD-503",
-    leadName: "IMA Annual Medical Conference",
-    leadStatus: "New",
-    salesStage: "Requirement Captured",
-    leadScore: 72,
-    scoreCategory: "Warm",
-    priority: "Warm",
-    companyName: "Indian Medical Association",
-    contactPerson: "Dr. K. S. Rao",
-    phone: "+91 98450 11223",
-    email: "drksrao@ima.org",
-    leadOwner: "Jay Kumar",
-    createdBy: "Website Bot",
-    source: "Website",
-    enquiryType: "Conference & Seminar",
-    paxOrRooms: "350 Delegates / 120 Rooms",
-    estimatedValue: "₹18,50,000",
-    calculatedRoomNights: 240,
-    nextActionSubject: "Send hall seating layouts and AV equipment quotation",
-    nextFollowupDate: "Today, 05:00 PM",
-    lastContactDate: "17 Aug 2026",
-    lastContactMethod: "Email",
-    createdAt: "17 Aug 2026, 11:00 AM",
-    firstResponseTimeMinutes: 28,
-    tags: ["MICE", "Conference"],
-    notes: "Needs 3 buffet meals and stall space for 20 pharma exhibitors.",
+    "Full Name": "Siddharth Malhotra",
+    "Phone Number": "+91 97330 44556",
+    Email: "sid.m@gmail.com",
+    "Company Name": "Malhotra Family",
+    "Event Date": "2026-12-05",
+    "Guest Count": "400",
+    Budget: "2800000",
+    Notes: "Destination Wedding package. Poolside Sangeet + Royal Lawn Reception.",
   },
 ];
 
 export function LeadsInquiriesView() {
-  const [leads, setLeads] = useState<CompleteHotelLead[]>(INITIAL_COMPLETE_LEADS);
+  const router = useRouter();
+
+  // Dataset State
+  const [leads, setLeads] = useState<HotelLeadItem[]>(INITIAL_CENTRAL_LEADS as any);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Search & Filter state
-  const [searchTerm, setSearchTerm] = useState("");
-  const [stageFilter, setStageFilter] = useState<string>("ALL");
+  // Search & Filter States
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [priorityFilter, setPriorityFilter] = useState<string>("ALL");
-  const [enquiryTypeFilter, setEnquiryTypeFilter] = useState<string>("ALL");
-  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const [leadTypeFilter, setLeadTypeFilter] = useState<string>("ALL");
+  const [sourceFilter, setSourceFilter] = useState<string>("ALL");
+  const [executiveFilter, setExecutiveFilter] = useState<string>("ALL");
 
-  // Saved Views State
-  const [activeSavedView, setActiveSavedView] = useState<string>("ALL_OPEN");
+  // Drawer & Modal States
+  const [viewingLead, setViewingLead] = useState<HotelLeadItem | null>(null);
+  const [editingLead, setEditingLead] = useState<HotelLeadItem | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  // Duplicate Check Alert State
-  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  // Drawer Tab State: OVERVIEW | TIMELINE | OPPORTUNITY | BOOKING | NOTES
+  const [activeDrawerTab, setActiveDrawerTab] = useState<"OVERVIEW" | "TIMELINE" | "OPPORTUNITY" | "BOOKING" | "NOTES">("OVERVIEW");
 
-  // Modals & Drawer State
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [viewingLead, setViewingLead] = useState<CompleteHotelLead | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<string>("OVERVIEW");
-  const [convertingLead, setConvertingLead] = useState<CompleteHotelLead | null>(null);
-  const [losingLead, setLosingLead] = useState<CompleteHotelLead | null>(null);
+  // Add Activity Modal State inside Drawer
+  const [isAddActivityModalOpen, setIsAddActivityModalOpen] = useState(false);
+  const [actTypeInput, setActTypeInput] = useState<ActivityTimelineItem["type"]>("Phone Call");
+  const [actDateInput, setActDateInput] = useState("2026-08-28");
+  const [actTimeInput, setActTimeInput] = useState("03:00 PM");
+  const [actNotesInput, setActNotesInput] = useState("");
+  const [actVenueInput, setActVenueInput] = useState("");
+  const [actNextFollowupInput, setActNextFollowupInput] = useState("2026-08-29");
 
-  // Lost Reason Inputs
-  const [lostReasonInput, setLostReasonInput] = useState("Price Too High");
-  const [competitorInput, setCompetitorInput] = useState("");
-  const [lostNotesInput, setLostNotesInput] = useState("");
+  // Quick Note Input State in Notes Tab
+  const [newNoteInput, setNewNoteInput] = useState("");
 
-  // Stepper Form Inputs for New Lead
-  const [formStep, setFormStep] = useState<number>(1); // Step 1: Basic | Step 2: Requirement | Step 3: Qualification
-  const [formLeadName, setFormLeadName] = useState("");
-  const [formCompanyName, setFormCompanyName] = useState("");
-  const [formContactPerson, setFormContactPerson] = useState("");
-  const [formPhone, setFormPhone] = useState("");
-  const [formEmail, setFormEmail] = useState("");
-  const [formEnquiryType, setFormEnquiryType] = useState<EnquiryType>("Corporate Room Block");
-  const [formSource, setFormSource] = useState<LeadSource>("Website");
-  const [formCampaign, setFormCampaign] = useState("");
-  const [formPriority, setFormPriority] = useState<LeadPriority>("Hot Lead");
-  const [formLeadOwner, setFormLeadOwner] = useState("Jay Kumar");
-
-  // Step 2 Requirement Inputs
-  const [formCheckIn, setFormCheckIn] = useState("");
-  const [formCheckOut, setFormCheckOut] = useState("");
-  const [formNumRooms, setFormNumRooms] = useState(10);
-  const [formNumNights, setFormNumNights] = useState(2);
-  const [formPax, setFormPax] = useState(100);
-  const [formVenue, setFormVenue] = useState("Grand Crystal Ballroom");
-  const [formEstValue, setFormEstValue] = useState("");
-  const [formNotes, setFormNotes] = useState("");
-
-  // Step 3 Qualification Inputs
-  const [formBudget, setFormBudget] = useState("");
-  const [formDecisionMaker, setFormDecisionMaker] = useState("");
-  const [formCompetitor, setFormCompetitor] = useState("");
+  // CSV Import Modal State
+  const [importStep, setImportStep] = useState<"UPLOAD" | "PREVIEW_MAP" | "SUMMARY">("UPLOAD");
+  const [importFileName, setImportFileName] = useState("");
+  const [csvSourcePlatform, setCsvSourcePlatform] = useState<LeadSource>("Direct Inquiry");
+  const [csvFieldMapping, setCsvFieldMapping] = useState({ fullName: "Full Name", phone: "Phone Number", email: "Email", company: "Company Name", budget: "Budget" });
+  const [templateSaved, setTemplateSaved] = useState(false);
 
   // ─────────────────────────────────────────────────────────────
-  // NO DOUBLE COUNTING: PIPELINE VALUE & KPI CALCULATIONS
+  // 1. FAST CREATE LEAD FORM STATE (BASIC INFO ONLY — SECTION 1)
   // ─────────────────────────────────────────────────────────────
-  const kpiSummary = useMemo(() => {
-    const activeLeads = leads.filter((l) => l.leadStatus !== "Converted" && l.leadStatus !== "Lost" && l.leadStatus !== "Closed");
+  const [createLeadName, setCreateLeadName] = useState("");
+  const [createMobile, setCreateMobile] = useState("");
+  const [createCompanyName, setCreateCompanyName] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createLeadType, setCreateLeadType] = useState<LeadType>("Wedding");
+  const [createLeadSource, setCreateLeadSource] = useState<LeadSource>("Direct Inquiry");
+  const [createRevenue, setCreateRevenue] = useState("");
+  const [createRequirement, setCreateRequirement] = useState("");
+
+  // Reset Fast Create Form
+  const resetCreateForm = () => {
+    setCreateLeadName("");
+    setCreateMobile("");
+    setCreateCompanyName("");
+    setCreateEmail("");
+    setCreateLeadType("Wedding");
+    setCreateLeadSource("Direct Inquiry");
+    setCreateRevenue("");
+    setCreateRequirement("");
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // 2. EDIT LEAD FORM STATE (PROGRESSIVE INFORMATION — SECTION 3)
+  // ─────────────────────────────────────────────────────────────
+  const [editName, setEditName] = useState("");
+  const [editMobile, setEditMobile] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editCompanyName, setEditCompanyName] = useState("");
+  const [editContactMethod, setEditContactMethod] = useState<"Phone" | "WhatsApp" | "Email">("Phone");
+
+  const [editLeadType, setEditLeadType] = useState<LeadType>("Wedding");
+  const [editEventDate, setEditEventDate] = useState("");
+  const [editGuestCount, setEditGuestCount] = useState("");
+  const [editRoomNights, setEditRoomNights] = useState("");
+  const [editRevenue, setEditRevenue] = useState("");
+  const [editPriority, setEditPriority] = useState<LeadPriority>("High");
+
+  const [editRequirement, setEditRequirement] = useState("");
+  const [editVenuePref, setEditVenuePref] = useState("");
+  const [editMealReq, setEditMealReq] = useState("");
+  const [editRoomReq, setEditRoomReq] = useState("");
+  const [editSpecialReq, setEditSpecialReq] = useState("");
+
+  const [editLeadSource, setEditLeadSource] = useState<LeadSource>("Direct Inquiry");
+  const [editCampaignName, setEditCampaignName] = useState("");
+  const [editCampaignId, setEditCampaignId] = useState("");
+  const [editPromoCode, setEditPromoCode] = useState("");
+  const [editRateTariff, setEditRateTariff] = useState("Standard Tariff");
+
+  // Populate Edit Modal Form State
+  const openEditModal = (lead: HotelLeadItem) => {
+    setEditingLead(lead);
+    setEditName(lead.leadName);
+    setEditMobile(lead.mobile);
+    setEditEmail(lead.email || "");
+    setEditCompanyName(lead.companyName || "");
+    setEditContactMethod(lead.preferredContactMethod || "Phone");
+
+    setEditLeadType(lead.leadType);
+    setEditEventDate(lead.expectedEventDate || "");
+    setEditGuestCount(lead.guestCount ? String(lead.guestCount) : "");
+    setEditRoomNights(lead.expectedRoomNights ? String(lead.expectedRoomNights) : "");
+    setEditRevenue(lead.rawRevenue ? String(lead.rawRevenue) : "");
+    setEditPriority(lead.priority);
+
+    setEditRequirement(lead.customerRequirement);
+    setEditVenuePref(lead.venuePreference || "");
+    setEditMealReq(lead.mealRequirement || "");
+    setEditRoomReq(lead.roomRequirement || "");
+    setEditSpecialReq(lead.specialRequirements || "");
+
+    setEditLeadSource(lead.leadSource);
+    setEditCampaignName(lead.campaignName || "");
+    setEditCampaignId(lead.campaignId || "");
+    setEditPromoCode(lead.promotionCode || "");
+    setEditRateTariff(lead.rateTariff || "Standard Tariff");
+  };
+
+  // Metrics Computation
+  const metrics = useMemo(() => {
+    const totalLeads = leads.length;
+    const newLeads = leads.filter((l) => l.status === "New").length;
+    const contactedLeads = leads.filter((l) => l.status === "Contacted").length;
+    const inPipelineLeads = leads.filter((l) => l.status === "In Pipeline").length;
+    const wonLeads = leads.filter((l) => l.status === "Won").length;
+    const totalPotentialRev = leads.reduce((acc, curr) => acc + (curr.rawRevenue || 0), 0);
+
     return {
-      totalActiveLeads: activeLeads.length,
-      hotProspects: activeLeads.filter((l) => l.priority === "Hot Lead" || l.scoreCategory === "Very Hot").length,
-      newThisMonth: leads.filter((l) => l.createdAt.includes("Aug 2026")).length,
-      totalPipelineValue: "₹83,40,000",
+      totalLeads,
+      newLeads,
+      contactedLeads,
+      inPipelineLeads,
+      wonLeads,
+      totalPotentialRev,
     };
   }, [leads]);
 
-  // ─────────────────────────────────────────────────────────────
-  // SAVED VIEWS & FILTERED LEADS
-  // ─────────────────────────────────────────────────────────────
+  // Filtered Leads Dataset
   const filteredLeads = useMemo(() => {
-    return leads.filter((l) => {
-      // 1. Saved View Filter
-      if (activeSavedView === "MY_LEADS" && l.leadOwner !== "Jay Kumar") return false;
-      if (activeSavedView === "HOT_PROSPECTS" && l.priority !== "Hot Lead") return false;
-      if (activeSavedView === "NO_NEXT_ACTION" && Boolean(l.nextActionSubject)) return false;
-      if (activeSavedView === "CORPORATE_LEADS" && l.enquiryType !== "Corporate Room Block") return false;
-      if (activeSavedView === "BANQUET_LEADS" && l.enquiryType !== "Banquet Wedding") return false;
-      if (activeSavedView === "LOST_LEADS" && l.leadStatus !== "Lost") return false;
-
-      // 2. Search Filter
-      const query = searchTerm.toLowerCase();
+    return leads.filter((item) => {
       const matchSearch =
-        l.leadName.toLowerCase().includes(query) ||
-        l.companyName.toLowerCase().includes(query) ||
-        l.contactPerson.toLowerCase().includes(query) ||
-        l.phone.toLowerCase().includes(query) ||
-        l.email.toLowerCase().includes(query) ||
-        l.id.toLowerCase().includes(query);
+        item.leadName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.companyName && item.companyName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        item.mobile.includes(searchQuery) ||
+        item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.campaignName && item.campaignName.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      // 3. Dropdown Filters
-      const matchStage = stageFilter === "ALL" || l.salesStage === stageFilter;
-      const matchStatus = statusFilter === "ALL" || l.leadStatus === statusFilter;
-      const matchPriority = priorityFilter === "ALL" || l.priority === priorityFilter;
-      const matchType = enquiryTypeFilter === "ALL" || l.enquiryType === enquiryTypeFilter;
+      const matchStatus = statusFilter === "ALL" || item.status === statusFilter;
+      const matchType = leadTypeFilter === "ALL" || item.leadType === leadTypeFilter;
+      const matchSource = sourceFilter === "ALL" || item.leadSource === sourceFilter;
+      const matchExec = executiveFilter === "ALL" || item.assignedExecutive === executiveFilter;
 
-      return matchSearch && matchStage && matchStatus && matchPriority && matchType;
+      return matchSearch && matchStatus && matchType && matchSource && matchExec;
     });
-  }, [leads, activeSavedView, searchTerm, stageFilter, statusFilter, priorityFilter, enquiryTypeFilter]);
+  }, [leads, searchQuery, statusFilter, leadTypeFilter, sourceFilter, executiveFilter]);
 
-  // Real-time Phone Duplicate Checking
-  const handlePhoneChange = (val: string) => {
-    setFormPhone(val);
-    if (val.length >= 8) {
-      const match = leads.find((l) => l.phone.includes(val));
-      if (match) {
-        setDuplicateWarning(`⚠️ Possible existing lead found: "${match.leadName}" (${match.companyName})`);
-      } else {
-        setDuplicateWarning(null);
-      }
-    } else {
-      setDuplicateWarning(null);
-    }
-  };
-
-  // Create Lead Submit
-  const handleSaveLeadSubmit = (e: React.FormEvent) => {
+  // Submit Fast Create Form (Basic Info Only)
+  const handleFastCreateLeadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formLeadName.trim()) return;
+    if (!createLeadName.trim() || !createMobile.trim()) {
+      setToastMessage("⚠️ Lead Name and Mobile Number are required!");
+      return;
+    }
 
-    const calculatedNights = formNumRooms * formNumNights;
+    const numRevenue = Number(createRevenue) || 0;
+    const formattedRev = numRevenue > 0 ? `₹${numRevenue.toLocaleString("en-IN")}` : "₹0";
 
-    const newLead: CompleteHotelLead = {
+    const newLead: HotelLeadItem = {
       id: `LD-${Math.floor(500 + Math.random() * 500)}`,
-      leadName: formLeadName.trim(),
-      leadStatus: "New",
-      salesStage: "New Inquiry",
-      leadScore: formPriority === "Hot Lead" ? 85 : 60,
-      scoreCategory: formPriority === "Hot Lead" ? "Hot" : "Warm",
-      priority: formPriority,
-      companyName: formCompanyName.trim() || "Independent Client",
-      contactPerson: formContactPerson.trim(),
-      phone: formPhone.trim() || "+91 98000 00000",
-      email: formEmail.trim() || "client@domain.com",
-      leadOwner: formLeadOwner,
-      createdBy: "Jay Kumar",
-      source: formSource,
-      campaign: formCampaign || undefined,
-      enquiryType: formEnquiryType,
-      paxOrRooms: formEnquiryType === "Banquet Wedding" ? `${formPax} PAX` : `${formNumRooms} Rooms`,
-      estimatedValue: formEstValue.trim() || "₹0",
-      calculatedRoomNights: calculatedNights > 0 ? calculatedNights : undefined,
-      nextActionSubject: "Initial qualification call & requirement confirmation",
-      nextFollowupDate: "Today, 04:00 PM",
-      createdAt: "18 Aug 2026, Just now",
-      firstResponseTimeMinutes: 0,
-      notes: formNotes.trim(),
-      qualification: {
-        need: formNotes.trim() || formLeadName,
-        budget: formBudget || "Unspecified",
-        authority: formDecisionMaker || formContactPerson,
-        timeline: formCheckIn || "TBD",
-        fit: "High Product Fit",
-        decisionMakerName: formDecisionMaker || formContactPerson,
-        competitorHotel: formCompetitor || undefined,
-      },
+      leadName: createLeadName.trim(),
+      companyName: createCompanyName.trim() || undefined,
+      mobile: createMobile.trim(),
+      email: createEmail.trim() || undefined,
+      preferredContactMethod: "Phone",
+      leadType: createLeadType,
+      leadSource: createLeadSource,
+      expectedRevenue: formattedRev,
+      rawRevenue: numRevenue,
+      assignedExecutive: "Jay Kumar",
+      priority: "High",
+      status: "New", // Default Status = New
+      pipelineStage: "Qualification",
+      customerRequirement: createRequirement.trim() || "Inquiry recorded.",
+      createdDate: "26 Aug 2026",
+      campaignId: null,
+      campaignName: null,
+      rateTariff: "Standard Tariff",
+      activityTimeline: [
+        { action: "Lead Record Created", user: "Jay Kumar", date: "26 Aug 2026, Just now", note: "Created via Fast Capture Form" },
+      ],
     };
 
     setLeads((prev) => [newLead, ...prev]);
-    setToastMessage(`✓ Created complete lead record "${newLead.leadName}".`);
-    setIsAddModalOpen(false);
-    setFormStep(1);
-    setDuplicateWarning(null);
+    setToastMessage(`✓ Lead "${newLead.leadName}" created! Status automatically set to "New".`);
+    setIsCreateModalOpen(false);
+    resetCreateForm();
   };
 
-  // Convert Lead Handler
-  const handleConvertLead = (lead: CompleteHotelLead) => {
-    setLeads((prev) =>
-      prev.map((l) =>
-        l.id === lead.id
-          ? { ...l, leadStatus: "Converted", salesStage: "Confirmed / Won", leadScore: 100 }
-          : l
-      )
-    );
-    setToastMessage(`🎉 Lead "${lead.leadName}" converted into Account & Opportunity!`);
-    setConvertingLead(null);
+  // Submit Edit Lead Form (Progressive Information Save)
+  const handleEditLeadSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLead) return;
+
+    const numRevenue = Number(editRevenue) || 0;
+    const formattedRev = numRevenue > 0 ? `₹${numRevenue.toLocaleString("en-IN")}` : "₹0";
+
+    const updated: HotelLeadItem = {
+      ...editingLead,
+      leadName: editName.trim(),
+      mobile: editMobile.trim(),
+      email: editEmail.trim() || undefined,
+      companyName: editCompanyName.trim() || undefined,
+      preferredContactMethod: editContactMethod,
+
+      leadType: editLeadType,
+      expectedEventDate: editEventDate.trim() || undefined,
+      guestCount: Number(editGuestCount) || undefined,
+      expectedRoomNights: Number(editRoomNights) || undefined,
+      expectedRevenue: formattedRev,
+      rawRevenue: numRevenue,
+      priority: editPriority,
+
+      customerRequirement: editRequirement.trim(),
+      venuePreference: editVenuePref.trim() || undefined,
+      mealRequirement: editMealReq.trim() || undefined,
+      roomRequirement: editRoomReq.trim() || undefined,
+      specialRequirements: editSpecialReq.trim() || undefined,
+
+      leadSource: editLeadSource,
+      campaignName: editCampaignName.trim() || undefined,
+      campaignId: editCampaignId.trim() || undefined,
+      promotionCode: editPromoCode.trim() || undefined,
+      rateTariff: editRateTariff.trim() || "Standard Tariff",
+
+      activityTimeline: [
+        { action: "Lead Details Updated", user: editingLead.assignedExecutive, date: "26 Aug 2026, Just now", note: "Updated progressive sales requirements via Edit Lead." },
+        ...(editingLead.activityTimeline || []),
+      ],
+    };
+
+    setLeads((prev) => prev.map((l) => (l.id === editingLead.id ? updated : l)));
+    setViewingLead(updated);
+    setEditingLead(null);
+    setToastMessage(`✓ Progressive information updated for "${updated.leadName}"!`);
   };
 
-  // Mark Lost Handler
-  const handleMarkLost = (lead: CompleteHotelLead) => {
-    setLeads((prev) =>
-      prev.map((l) =>
-        l.id === lead.id
-          ? {
-              ...l,
-              leadStatus: "Lost",
-              salesStage: "Closed / Lost",
-              lostReason: lostReasonInput,
-              competitorLostTo: competitorInput || undefined,
-              notes: lostNotesInput || l.notes,
-            }
-          : l
-      )
-    );
-    setToastMessage(`Marked lead "${lead.leadName}" as Lost.`);
-    setLosingLead(null);
+  // Contextual Status Actions
+  const handleMarkContacted = (lead: HotelLeadItem) => {
+    const updated: HotelLeadItem = {
+      ...lead,
+      status: "Contacted",
+      activityTimeline: [
+        { action: "Customer Contacted", user: lead.assignedExecutive, date: "26 Aug 2026, Just now", note: "Sales representative logged initial contact." },
+        ...(lead.activityTimeline || []),
+      ],
+    };
+    setLeads((prev) => prev.map((l) => (l.id === lead.id ? updated : l)));
+    setViewingLead(updated);
+    setToastMessage(`✓ Lead marked as "Contacted"!`);
+  };
+
+  const handleMoveToPipeline = (lead: HotelLeadItem) => {
+    const updated: HotelLeadItem = {
+      ...lead,
+      status: "In Pipeline",
+      pipelineStage: "Qualification",
+      opportunityId: lead.opportunityId || `OPP-${Math.floor(300 + Math.random() * 500)}`,
+      activityTimeline: [
+        { action: "Moved To Pipeline", user: lead.assignedExecutive, date: "26 Aug 2026, Just now", note: "Qualified lead moved to Deals & Sales Pipeline." },
+        ...(lead.activityTimeline || []),
+      ],
+    };
+    setLeads((prev) => prev.map((l) => (l.id === lead.id ? updated : l)));
+    setViewingLead(updated);
+    setToastMessage(`🚀 Lead moved to Deals & Pipeline! Status changed to "In Pipeline".`);
+  };
+
+  const handleReopenLead = (lead: HotelLeadItem) => {
+    const updated: HotelLeadItem = {
+      ...lead,
+      status: "New",
+      pipelineStage: "Qualification",
+      activityTimeline: [
+        { action: "Lead Reopened", user: lead.assignedExecutive, date: "26 Aug 2026, Just now", note: "Reopened from Lost status." },
+        ...(lead.activityTimeline || []),
+      ],
+    };
+    setLeads((prev) => prev.map((l) => (l.id === lead.id ? updated : l)));
+    setViewingLead(updated);
+    setToastMessage(`✓ Lead reopened! Status reset to "New".`);
+  };
+
+  // Add Activity Submit from Modal inside Drawer
+  const handleSaveActivityModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!viewingLead || !actNotesInput.trim()) return;
+
+    const newActivity: ActivityTimelineItem = {
+      type: actTypeInput,
+      action: `${actTypeInput}: ${actNotesInput.trim()}`,
+      user: viewingLead.assignedExecutive,
+      date: `${actDateInput}, ${actTimeInput}`,
+      note: actNotesInput.trim(),
+      status: "Completed",
+      venue: actVenueInput.trim() || undefined,
+      nextFollowupDate: actNextFollowupInput || undefined,
+    };
+
+    const updated: HotelLeadItem = {
+      ...viewingLead,
+      activityTimeline: [newActivity, ...(viewingLead.activityTimeline || [])],
+    };
+
+    setLeads((prev) => prev.map((l) => (l.id === viewingLead.id ? updated : l)));
+    setViewingLead(updated);
+    setIsAddActivityModalOpen(false);
+    setActNotesInput("");
+    setActVenueInput("");
+    setToastMessage(`✓ ${actTypeInput} logged for "${viewingLead.leadName}"!`);
+  };
+
+  // Add Internal Note in Notes Tab
+  const handleAddInternalNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!viewingLead || !newNoteInput.trim()) return;
+
+    const newNote: InternalNoteItem = {
+      id: `NOTE-${Date.now()}`,
+      text: newNoteInput.trim(),
+      user: viewingLead.assignedExecutive,
+      date: "26 Aug 2026, Just now",
+    };
+
+    const updated: HotelLeadItem = {
+      ...viewingLead,
+      internalNotes: [newNote, ...(viewingLead.internalNotes || [])],
+    };
+
+    setLeads((prev) => prev.map((l) => (l.id === viewingLead.id ? updated : l)));
+    setViewingLead(updated);
+    setNewNoteInput("");
+    setToastMessage(`✓ Internal note added.`);
+  };
+
+  // Route to Booking Module on Won Lead
+  const handleCreateBookingRoute = (lead: HotelLeadItem) => {
+    if (lead.leadType === "Room Booking") {
+      router.push(`/front-office/reservations?guestName=${encodeURIComponent(lead.leadName)}&mobile=${encodeURIComponent(lead.mobile)}&leadId=${lead.id}`);
+    } else if (lead.leadType === "Wedding" || lead.leadType === "Banquet Event" || lead.leadType === "Conference" || lead.leadType === "Corporate Booking") {
+      router.push(`/sales-marketing/banquets/bookings-enquiries?eventName=${encodeURIComponent(lead.leadName)}&pax=${lead.guestCount || 300}&revenue=${lead.rawRevenue || 0}&leadId=${lead.id}`);
+    } else {
+      router.push(`/food-beverages/outlet-billing?customer=${encodeURIComponent(lead.leadName)}`);
+    }
+  };
+
+  // Confirm Direct CSV Import
+  const handleConfirmDirectCsvImport = () => {
+    const newLeads: HotelLeadItem[] = DIRECT_CSV_SAMPLE_ROWS.map((row, idx) => {
+      const numRevenue = Number(row["Budget"]) || 500000;
+      return {
+        id: `LD-DIR-${Math.floor(700 + Math.random() * 200)}-${idx}`,
+        leadName: row["Full Name"],
+        companyName: row["Company Name"] || undefined,
+        mobile: row["Phone Number"],
+        email: row["Email"],
+        preferredContactMethod: "Phone",
+        leadType: "Banquet Event",
+        leadSource: csvSourcePlatform,
+        inquiryDate: "2026-08-26",
+        expectedEventDate: row["Event Date"],
+        guestCount: Number(row["Guest Count"]) || 150,
+        expectedRevenue: `₹${numRevenue.toLocaleString("en-IN")}`,
+        rawRevenue: numRevenue,
+        assignedExecutive: "Jay Kumar",
+        priority: "High",
+        status: "New",
+        pipelineStage: "Qualification",
+        customerRequirement: row["Notes"] || "Direct CSV import inquiry.",
+        createdDate: "26 Aug 2026",
+        campaignId: null,
+        campaignName: null,
+        activityTimeline: [
+          { action: `Lead Created (CSV Import - ${csvSourcePlatform})`, user: "Jay Kumar", date: "26 Aug 2026, Just now" },
+        ],
+      };
+    });
+
+    setLeads((prev) => [...newLeads, ...prev]);
+    setToastMessage(`🚀 Successfully imported ${newLeads.length} leads from ${importFileName || "Direct_Inquiries_Aug2026.csv"} via ${csvSourcePlatform}!`);
+    setIsImportModalOpen(false);
+    setImportStep("UPLOAD");
+    setImportFileName("");
+  };
+
+  // Helper for Status Badges Styling
+  const getStatusBadgeStyle = (status: LeadStatus) => {
+    switch (status) {
+      case "New":
+        return "bg-slate-100 text-slate-800 border-slate-200";
+      case "Contacted":
+        return "bg-blue-50 text-blue-800 border-blue-200";
+      case "Qualified":
+        return "bg-indigo-50 text-indigo-800 border-indigo-200";
+      case "In Pipeline":
+        return "bg-blue-100 text-blue-900 border-blue-200";
+      case "Won":
+        return "bg-emerald-100 text-emerald-900 border-emerald-200";
+      case "Lost":
+        return "bg-rose-100 text-rose-900 border-rose-200";
+      default:
+        return "bg-slate-100 text-slate-800 border-slate-200";
+    }
   };
 
   return (
     <ModulePageShell
       eyebrow="Sales & CRM Operations"
-      title="Leads & Inquiries Management"
-      description="Capture, qualify, track, and convert guest stay inquiries, corporate room block requests, and banquet wedding leads."
+      title="Leads & Inquiries"
+      description="Central Lead Management System: Fast capture, progressive sales editing, and lead conversion."
       breadcrumbs={[
         { label: "Sales & Marketing", href: "/sales-marketing/dashboard" },
-        { label: "Sales & CRM" },
+        { label: "Lead & Sales Management" },
         { label: "Leads & Inquiries" },
       ]}
       toast={toastMessage}
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => {
-            setFormStep(1);
-            setIsAddModalOpen(true);
-          }}
-          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5"
-        >
-          <UserPlus className="h-4 w-4" /> + Capture New Lead
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsImportModalOpen(true)}
+            className="rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer bg-white"
+          >
+            <Upload className="h-4 w-4" /> Import CSV
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              resetCreateForm();
+              setIsCreateModalOpen(true);
+            }}
+            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="h-4 w-4" /> Create Lead
+          </Button>
+        </div>
       }
     >
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 29: KPI CARDS (CORRECT PIPELINE VALUE LOGIC)
+          SECTION 1: KPI OVERVIEW CARDS
       ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         <HRKPICard
-          label="Total Active Leads"
-          value={`${kpiSummary.totalActiveLeads}`}
-          subtitle="Open Guest & Corporate Inquiries"
-          tone="emerald"
+          label="Total Inquiries"
+          value={`${metrics.totalLeads}`}
+          subtitle="All Central Leads"
+          tone="purple"
           icon={<Users className="h-5 w-5" />}
         />
         <HRKPICard
-          label="Hot Prospects"
-          value={`${kpiSummary.hotProspects}`}
-          subtitle="Score >= 80 (High Win Rate)"
-          tone="amber"
-          icon={<Sparkles className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="New Leads (This Month)"
-          value={`${kpiSummary.newThisMonth}`}
-          subtitle="August 2026 Inquiries"
-          tone="purple"
+          label="New Inquiries"
+          value={`${metrics.newLeads}`}
+          subtitle="Awaiting Contact"
+          tone="blue"
           icon={<UserPlus className="h-5 w-5" />}
         />
         <HRKPICard
-          label="Total Pipeline Value"
-          value={kpiSummary.totalPipelineValue}
-          subtitle="Open Qualified Revenue"
+          label="In Pipeline"
+          value={`${metrics.inPipelineLeads}`}
+          subtitle="Active Opportunities"
           tone="blue"
+          icon={<Kanban className="h-5 w-5" />}
+        />
+        <HRKPICard
+          label="Won Leads"
+          value={`${metrics.wonLeads}`}
+          subtitle="Converted Business"
+          tone="emerald"
+          icon={<CheckCircle2 className="h-5 w-5" />}
+        />
+        <HRKPICard
+          label="Pipeline Potential"
+          value={`₹${(metrics.totalPotentialRev / 100000).toFixed(1)}L`}
+          subtitle="Expected Business Value"
+          tone="emerald"
           icon={<DollarSign className="h-5 w-5" />}
         />
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 32: SAVED VIEWS BAR
+          SECTION 2: SEARCH & FILTERS TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-3 text-xs">
-        <span className="text-[10px] font-black uppercase text-slate-400 mr-1 shrink-0">Saved Views:</span>
-        {[
-          { id: "ALL_OPEN", label: "All Open Leads" },
-          { id: "MY_LEADS", label: "My Leads" },
-          { id: "HOT_PROSPECTS", label: "Hot Prospects" },
-          { id: "NO_NEXT_ACTION", label: "No Next Action Alert" },
-          { id: "CORPORATE_LEADS", label: "Corporate Leads" },
-          { id: "BANQUET_LEADS", label: "Banquet Leads" },
-          { id: "LOST_LEADS", label: "Lost Leads" },
-        ].map((view) => (
-          <button
-            key={view.id}
-            type="button"
-            onClick={() => setActiveSavedView(view.id)}
-            className={cn(
-              "px-3 py-1.5 rounded-xl font-bold transition shrink-0 border",
-              activeSavedView === view.id
-                ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-            )}
-          >
-            {view.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 31: SEARCH, FILTERS & ACTION BAR
-      ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs mb-4 flex flex-wrap items-center justify-between gap-3">
-        {/* Real-time Search */}
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by Lead Name, Company, Phone, Email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-slate-50/50 font-medium text-slate-800"
-          />
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search Lead Name, Company, Mobile, Lead ID, Campaign..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50/50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700"
+            />
+          </div>
         </div>
 
-        {/* Quick Dropdown Filters */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status Filter */}
           <select
-            value={stageFilter}
-            onChange={(e) => setStageFilter(e.target.value)}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
             className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
           >
-            <option value="ALL">All Sales Stages</option>
-            <option value="New Inquiry">New Inquiry</option>
-            <option value="Requirement Captured">Requirement Captured</option>
-            <option value="Site Visit Scheduled">Site Visit Scheduled</option>
-            <option value="Proposal / Quote Sent">Proposal / Quote Sent</option>
-            <option value="Negotiation">Negotiation</option>
-            <option value="Confirmed / Won">Confirmed / Won</option>
+            <option value="ALL">All Statuses</option>
+            <option value="New">New</option>
+            <option value="Contacted">Contacted</option>
+            <option value="Qualified">Qualified</option>
+            <option value="In Pipeline">In Pipeline</option>
+            <option value="Won">Won</option>
+            <option value="Lost">Lost</option>
           </select>
 
+          {/* Lead Type Filter */}
           <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
+            value={leadTypeFilter}
+            onChange={(e) => setLeadTypeFilter(e.target.value)}
             className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
           >
-            <option value="ALL">All Priorities</option>
-            <option value="Hot Lead">Hot Lead</option>
-            <option value="Warm">Warm</option>
-            <option value="Cold">Cold</option>
+            <option value="ALL">All Lead Types</option>
+            <option value="Wedding">Wedding</option>
+            <option value="Banquet Event">Banquet Event</option>
+            <option value="Corporate Booking">Corporate Booking</option>
+            <option value="Conference">Conference</option>
+            <option value="Room Booking">Room Booking</option>
+            <option value="Restaurant Event">Restaurant Event</option>
           </select>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setIsFilterPanelOpen(true)}
-            className="rounded-xl text-xs font-semibold text-slate-700 border-slate-300 bg-white shadow-xs"
+          {/* Source Filter */}
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
           >
-            <Filter className="h-3.5 w-3.5 mr-1.5 text-slate-500" /> Advanced Filter
-          </Button>
+            <option value="ALL">All Sources</option>
+            <option value="Google Ads">Google Ads</option>
+            <option value="Meta Ads">Meta Ads</option>
+            <option value="Marketing Campaign">Marketing Campaign</option>
+            <option value="Walk-In">Walk-In</option>
+            <option value="Phone Call">Phone Call</option>
+            <option value="Website">Website</option>
+            <option value="Direct Inquiry">Direct Inquiry</option>
+          </select>
+
+          {/* Executive Filter */}
+          <select
+            value={executiveFilter}
+            onChange={(e) => setExecutiveFilter(e.target.value)}
+            className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+          >
+            <option value="ALL">All Executives</option>
+            <option value="Jay Kumar">Jay Kumar</option>
+            <option value="Vikram Malhotra">Vikram Malhotra</option>
+            <option value="Ananya Roy">Ananya Roy</option>
+          </select>
         </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 3: HOTEL LEADS DATA TABLE
+          SECTION 3: CENTRAL LEADS TABLE
       ───────────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
             <thead className="bg-slate-50 text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
               <tr>
-                <th className="py-3 px-4">Lead / Event Title</th>
-                <th className="py-3 px-4">Company / Account</th>
-                <th className="py-3 px-4">Contact</th>
-                <th className="py-3 px-4">Enquiry Type</th>
-                <th className="py-3 px-4">Est. Value</th>
-                <th className="py-3 px-4">Lead Score</th>
-                <th className="py-3 px-4">Sales Stage</th>
-                <th className="py-3 px-4">Next Action &amp; Due Date</th>
-                <th className="py-3 px-4">Lead Owner</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                <th className="py-3 px-4 whitespace-nowrap">Lead ID</th>
+                <th className="py-3 px-4 whitespace-nowrap">Lead Name</th>
+                <th className="py-3 px-4">Contact Person / Company</th>
+                <th className="py-3 px-4 whitespace-nowrap">Lead Type</th>
+                <th className="py-3 px-4 whitespace-nowrap">Lead Source</th>
+                <th className="py-3 px-4 whitespace-nowrap">Campaign</th>
+                <th className="py-3 px-4 whitespace-nowrap">Event / Stay Date</th>
+                <th className="py-3 px-4 text-right whitespace-nowrap">Est. Value</th>
+                <th className="py-3 px-4 whitespace-nowrap">Executive</th>
+                <th className="py-3 px-4 text-center whitespace-nowrap">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -685,126 +833,56 @@ export function LeadsInquiriesView() {
                     key={lead.id}
                     onClick={() => {
                       setViewingLead(lead);
-                      setActiveDetailTab("OVERVIEW");
+                      setActiveDrawerTab("OVERVIEW");
                     }}
-                    className="hover:bg-slate-50/80 transition cursor-pointer"
+                    className="hover:bg-slate-50 transition cursor-pointer"
                   >
-                    <td className="py-3 px-4 font-bold text-slate-900">
-                      <p className="font-bold text-slate-900">{lead.leadName}</p>
-                      <p className="text-[10px] text-slate-400 font-mono">#{lead.id} • {lead.source}</p>
+                    <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
+                      #{lead.id}
                     </td>
-
-                    <td className="py-3 px-4 font-semibold text-slate-800">{lead.companyName}</td>
-
+                    <td className="py-3 px-4 font-bold text-slate-900">{lead.leadName}</td>
                     <td className="py-3 px-4">
-                      <p className="font-semibold text-slate-900">{lead.contactPerson}</p>
-                      <p className="text-[10px] text-slate-500 font-mono">{lead.phone}</p>
+                      <strong className="text-slate-900 block">{lead.mobile}</strong>
+                      <span className="text-[10px] text-slate-500 block">{formatValue(lead.companyName, "PROVIDED")}</span>
                     </td>
-
-                    <td className="py-3 px-4">
-                      <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded text-[11px] font-semibold border border-slate-200">
-                        {lead.enquiryType}
+                    <td className="py-3 px-4 whitespace-nowrap font-bold">
+                      <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded text-[10px] border border-slate-200">
+                        {lead.leadType}
                       </span>
                     </td>
-
-                    <td className="py-3 px-4 font-bold text-emerald-950 font-mono">
-                      {lead.estimatedValue}
-                    </td>
-
-                    {/* SECTION 14: LEAD SCORE BADGE */}
-                    <td className="py-3 px-4">
-                      <span
-                        className={cn(
-                          "px-2 py-0.5 rounded-md text-[10px] font-extrabold border font-mono",
-                          lead.leadScore >= 80
-                            ? "bg-emerald-100 text-emerald-900 border-emerald-200"
-                            : lead.leadScore >= 60
-                            ? "bg-blue-100 text-blue-900 border-blue-200"
-                            : "bg-slate-100 text-slate-700 border-slate-200"
-                        )}
-                      >
-                        {lead.leadScore} ({lead.scoreCategory})
-                      </span>
-                    </td>
-
-                    <td className="py-3 px-4 font-semibold text-slate-700">
-                      <span
-                        className={cn(
-                          "px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border",
-                          lead.salesStage === "Confirmed / Won"
-                            ? "bg-emerald-100 text-emerald-900 border-emerald-200"
-                            : lead.salesStage === "Closed / Lost"
-                            ? "bg-rose-100 text-rose-900 border-rose-200"
-                            : "bg-blue-100 text-blue-900 border-blue-200"
-                        )}
-                      >
-                        {lead.salesStage}
-                      </span>
-                    </td>
-
-                    {/* SECTION 21 & 25: NEXT ACTION & SALES RISK INDICATOR */}
-                    <td className="py-3 px-4">
-                      {lead.nextActionSubject ? (
-                        <div>
-                          <p className="font-bold text-slate-900 text-[11px] truncate max-w-[180px]">
-                            {lead.nextActionSubject}
-                          </p>
-                          <span className="text-[10px] text-slate-500 font-mono">{lead.nextFollowupDate}</span>
-                        </div>
-                      ) : (
-                        <span className="text-rose-600 font-extrabold flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
-                          <AlertTriangle className="h-3 w-3" /> No Action Scheduled
+                    <td className="py-3 px-4 whitespace-nowrap text-slate-600">{lead.leadSource}</td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      {lead.campaignName ? (
+                        <span className="text-slate-700 font-bold text-[10px] block truncate max-w-[130px]" title={lead.campaignName}>
+                          {lead.campaignName}
                         </span>
+                      ) : (
+                        <span className="text-slate-400 italic text-[10px]">Direct Inquiry</span>
                       )}
                     </td>
-
-                    {/* SECTION 4: LEAD OWNER */}
-                    <td className="py-3 px-4 text-slate-700 font-medium">{lead.leadOwner}</td>
-
-                    <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1">
-                        {lead.salesStage !== "Confirmed / Won" && lead.salesStage !== "Closed / Lost" && (
-                          <>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setConvertingLead(lead)}
-                              className="rounded-xl text-xs font-bold text-emerald-800 border-emerald-300 hover:bg-emerald-50"
-                            >
-                              <Sparkles className="h-3.5 w-3.5 mr-1" /> Convert
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setLosingLead(lead)}
-                              className="rounded-xl text-xs font-semibold text-rose-700 border-rose-200 hover:bg-rose-50"
-                            >
-                              Lost
-                            </Button>
-                          </>
+                    <td className="py-3 px-4 font-mono text-slate-600 whitespace-nowrap">
+                      {formatValue(lead.expectedEventDate, "PROVIDED")}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-extrabold text-slate-900 whitespace-nowrap">
+                      {lead.expectedRevenue}
+                    </td>
+                    <td className="py-3 px-4 text-slate-700">{lead.assignedExecutive}</td>
+                    <td className="py-3 px-4 text-center whitespace-nowrap">
+                      <span
+                        className={cn(
+                          "px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border inline-block",
+                          getStatusBadgeStyle(lead.status)
                         )}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setViewingLead(lead);
-                            setActiveDetailTab("OVERVIEW");
-                          }}
-                          className="rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                      >
+                        {lead.status}
+                      </span>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-500 text-xs">
-                    No leads found matching your active filters.
+                  <td colSpan={10} className="py-12 text-center text-slate-400 text-xs">
+                    No leads found matching your search or filters.
                   </td>
                 </tr>
               )}
@@ -814,512 +892,1488 @@ export function LeadsInquiriesView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 16: STEPPER CREATE LEAD MODAL (WITH DUPLICATE CHECK)
+          SECTION 4: REDESIGNED ZOHO-INSPIRED LEAD DETAILS DRAWER
       ───────────────────────────────────────────────────────────── */}
-      {isAddModalOpen && (
-        <Modal
-          isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-          title="Capture New Hotel Lead & Inquiry"
-          description="Log guest stay inquiries, corporate room block requests, or banquet wedding leads."
-          size="md"
+      {viewingLead && (
+        <Drawer
+          isOpen={Boolean(viewingLead)}
+          onClose={() => setViewingLead(null)}
+          title={`Lead Record — #${viewingLead.id}`}
         >
-          <form onSubmit={handleSaveLeadSubmit} className="space-y-4 text-xs">
-            {/* Step Navigation Tabs */}
-            <div className="flex border-b border-slate-200 pb-2 gap-2 text-xs font-bold">
+          <div className="space-y-4 text-xs p-1">
+            {/* 1. HEADER / IDENTITY SECTION */}
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs text-slate-900 space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h2 className="text-lg font-extrabold text-slate-900">{viewingLead.leadName}</h2>
+                    <span className="font-mono text-slate-500 text-xs font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                      Lead ID: #{viewingLead.id}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                    <span>Type: <strong className="text-slate-800 font-bold">{viewingLead.leadType}</strong></span>
+                    <span>•</span>
+                    <span>Source: <strong className="text-slate-800">{viewingLead.leadSource}</strong></span>
+                    {viewingLead.campaignName && (
+                      <>
+                        <span>•</span>
+                        <span>Campaign: <strong className="text-slate-900 font-bold">{viewingLead.campaignName}</strong></span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Status & Pipeline Badges */}
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Status:</span>
+                    <span className={cn("px-2.5 py-0.5 rounded-full text-[11px] font-black border", getStatusBadgeStyle(viewingLead.status))}>
+                      {viewingLead.status}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono">
+                    Stage: <strong className="text-slate-800">{viewingLead.pipelineStage}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. CONTEXTUAL ACTION BUTTONS BAR (ALWAYS INCLUDES [ EDIT LEAD ]) */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[11px] text-slate-500">
+                  Assigned Executive: <strong className="text-slate-900">{viewingLead.assignedExecutive}</strong>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {/* EDIT LEAD BUTTON (ALWAYS AVAILABLE FOR PROGRESSIVE DATA ENTRY) */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openEditModal(viewingLead)}
+                    className="rounded-xl text-xs font-bold px-3.5 py-1.5 bg-white border-slate-300 text-slate-800 hover:bg-slate-50 cursor-pointer shadow-2xs"
+                  >
+                    <Edit2 className="h-3.5 w-3.5 mr-1.5 text-emerald-700" /> Edit Lead
+                  </Button>
+
+                  {/* Status: NEW */}
+                  {viewingLead.status === "New" && (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleMarkContacted(viewingLead)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl px-3.5 py-1.5 cursor-pointer"
+                      >
+                        <Phone className="h-3.5 w-3.5 mr-1" /> Contact Lead
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleMoveToPipeline(viewingLead)}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl px-4 py-1.5 cursor-pointer"
+                      >
+                        <ArrowRight className="h-3.5 w-3.5 mr-1" /> Move To Pipeline
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Status: CONTACTED */}
+                  {viewingLead.status === "Contacted" && (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setActTypeInput("Follow-up");
+                          setIsAddActivityModalOpen(true);
+                        }}
+                        className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl px-3 py-1.5 cursor-pointer"
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-1" /> Add Follow-up
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleMoveToPipeline(viewingLead)}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl px-4 py-1.5 cursor-pointer"
+                      >
+                        <ArrowRight className="h-3.5 w-3.5 mr-1" /> Move To Pipeline
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Status: QUALIFIED */}
+                  {viewingLead.status === "Qualified" && (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setActTypeInput("Site Visit");
+                          setIsAddActivityModalOpen(true);
+                        }}
+                        className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl px-3 py-1.5 cursor-pointer"
+                      >
+                        <Calendar className="h-3.5 w-3.5 mr-1" /> Add Site Visit
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleMoveToPipeline(viewingLead)}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl px-4 py-1.5 cursor-pointer"
+                      >
+                        <ArrowRight className="h-3.5 w-3.5 mr-1" /> Move To Pipeline
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Status: IN PIPELINE (NEVER SHOW Move To Pipeline) */}
+                  {viewingLead.status === "In Pipeline" && (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => router.push("/sales-marketing/crm/pipeline")}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl px-3.5 py-1.5 cursor-pointer"
+                      >
+                        <Kanban className="h-3.5 w-3.5 mr-1" /> View Opportunity
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsAddActivityModalOpen(true)}
+                        className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl px-3 py-1.5 cursor-pointer"
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-1" /> Add Activity
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Status: WON */}
+                  {viewingLead.status === "Won" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleCreateBookingRoute(viewingLead)}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-extrabold rounded-xl px-5 py-1.5 cursor-pointer"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-1" /> Create Booking →
+                    </Button>
+                  )}
+
+                  {/* Status: LOST */}
+                  {viewingLead.status === "Lost" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleReopenLead(viewingLead)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl px-4 py-1.5 cursor-pointer"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-1" /> Reopen Lead
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. QUICK CONTACT & QUICK ACTIONS BAR */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Contact Person:</span>
+                  <strong className="text-slate-900 font-bold">{viewingLead.leadName}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Company:</span>
+                  <strong className="text-slate-900">{formatValue(viewingLead.companyName, "PROVIDED")}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Mobile Number:</span>
+                  <strong className="text-slate-900 font-mono">{viewingLead.mobile}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Email:</span>
+                  <strong className="text-slate-900 truncate block">{formatValue(viewingLead.email, "AVAILABLE")}</strong>
+                </div>
+              </div>
+
+              {/* Action Buttons: Call, WhatsApp, Email */}
+              <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">Quick Actions:</span>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`tel:${viewingLead.mobile}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setToastMessage(`📞 Dialing ${viewingLead.mobile}...`);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-800 text-[11px] font-bold hover:bg-slate-100 flex items-center gap-1 transition"
+                  >
+                    <Phone className="h-3 w-3 text-emerald-700" /> Call
+                  </a>
+                  <a
+                    href={`https://wa.me/${viewingLead.mobile.replace(/[^0-9]/g, "")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setToastMessage(`💬 Opening WhatsApp for ${viewingLead.mobile}...`);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-800 text-[11px] font-bold hover:bg-slate-100 flex items-center gap-1 transition"
+                  >
+                    <MessageSquare className="h-3 w-3 text-emerald-700" /> WhatsApp
+                  </a>
+                  <a
+                    href={`mailto:${viewingLead.email || ""}`}
+                    onClick={(e) => {
+                      if (!viewingLead.email) {
+                        e.preventDefault();
+                        setToastMessage("⚠️ No email address available for this lead.");
+                      }
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-800 text-[11px] font-bold hover:bg-slate-100 flex items-center gap-1 transition"
+                  >
+                    <Mail className="h-3 w-3 text-emerald-700" /> Email
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. IMMEDIATE NEXT ACTION BANNER */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1 text-slate-900">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider block text-slate-500">
+                ⚡ Immediate Next Action
+              </span>
+              <p className="font-bold text-xs">
+                {viewingLead.activityTimeline?.[0]?.nextFollowupDate
+                  ? `Next Follow-up scheduled for ${viewingLead.activityTimeline[0].nextFollowupDate}`
+                  : viewingLead.status === "New"
+                  ? "Call customer to verify event requirement & guest count"
+                  : viewingLead.status === "Contacted"
+                  ? "Send tariff quotation & schedule venue walkthrough"
+                  : viewingLead.status === "Qualified"
+                  ? "Conduct venue site visit & prepare commercial proposal"
+                  : viewingLead.status === "In Pipeline"
+                  ? "Negotiate package terms & confirm tentative booking hold"
+                  : viewingLead.status === "Won"
+                  ? "Click 'Create Booking →' to generate confirmed reservation record"
+                  : "Lead Closed Lost"}
+              </p>
+            </div>
+
+            {/* 5. HORIZONTAL TAB NAVIGATION SYSTEM */}
+            <div className="border-b border-slate-200 flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setFormStep(1)}
-                className={cn("px-3 py-1 rounded-xl transition", formStep === 1 ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700")}
+                onClick={() => setActiveDrawerTab("OVERVIEW")}
+                className={cn(
+                  "py-2 px-3 text-xs font-bold border-b-2 transition cursor-pointer",
+                  activeDrawerTab === "OVERVIEW"
+                    ? "border-emerald-700 text-emerald-900"
+                    : "border-transparent text-slate-500 hover:text-slate-900"
+                )}
               >
-                1. Basic Info
+                Overview
               </button>
+
               <button
                 type="button"
-                onClick={() => setFormStep(2)}
-                className={cn("px-3 py-1 rounded-xl transition", formStep === 2 ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700")}
+                onClick={() => setActiveDrawerTab("TIMELINE")}
+                className={cn(
+                  "py-2 px-3 text-xs font-bold border-b-2 transition cursor-pointer flex items-center gap-1",
+                  activeDrawerTab === "TIMELINE"
+                    ? "border-emerald-700 text-emerald-900"
+                    : "border-transparent text-slate-500 hover:text-slate-900"
+                )}
               >
-                2. Requirement
+                Activity Timeline
+                <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded-full text-[10px]">
+                  {(viewingLead.activityTimeline || []).length}
+                </span>
               </button>
+
               <button
                 type="button"
-                onClick={() => setFormStep(3)}
-                className={cn("px-3 py-1 rounded-xl transition", formStep === 3 ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700")}
+                onClick={() => setActiveDrawerTab("OPPORTUNITY")}
+                className={cn(
+                  "py-2 px-3 text-xs font-bold border-b-2 transition cursor-pointer flex items-center gap-1",
+                  activeDrawerTab === "OPPORTUNITY"
+                    ? "border-emerald-700 text-emerald-900"
+                    : "border-transparent text-slate-500 hover:text-slate-900"
+                )}
               >
-                3. Qualification
+                Opportunity / Deal
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveDrawerTab("BOOKING")}
+                className={cn(
+                  "py-2 px-3 text-xs font-bold border-b-2 transition cursor-pointer flex items-center gap-1",
+                  activeDrawerTab === "BOOKING"
+                    ? "border-emerald-700 text-emerald-900"
+                    : "border-transparent text-slate-500 hover:text-slate-900"
+                )}
+              >
+                Booking
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveDrawerTab("NOTES")}
+                className={cn(
+                  "py-2 px-3 text-xs font-bold border-b-2 transition cursor-pointer flex items-center gap-1",
+                  activeDrawerTab === "NOTES"
+                    ? "border-emerald-700 text-emerald-900"
+                    : "border-transparent text-slate-500 hover:text-slate-900"
+                )}
+              >
+                Notes
+                <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded-full text-[10px]">
+                  {(viewingLead.internalNotes || []).length}
+                </span>
               </button>
             </div>
 
-            {/* STEP 1: BASIC INFORMATION */}
-            {formStep === 1 && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Lead / Event Title <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. TCS Leadership Meet or Reddy Wedding..."
-                    value={formLeadName}
-                    onChange={(e) => setFormLeadName(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-white"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Company / Group Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. TCS India"
-                      value={formCompanyName}
-                      onChange={(e) => setFormCompanyName(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Contact Person Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Sunil Verma"
-                      value={formContactPerson}
-                      onChange={(e) => setFormContactPerson(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-white"
-                    />
+            {/* TAB 1: OVERVIEW */}
+            {activeDrawerTab === "OVERVIEW" && (
+              <div className="space-y-4">
+                {/* SECTION A — CONTACT */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <h4 className="font-extrabold text-slate-900 uppercase text-[10px] tracking-wider block border-b border-slate-200 pb-1">
+                    SECTION A — Contact Information
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div><span className="text-slate-400 text-[10px] block">Lead Name:</span><strong className="text-slate-900 font-bold">{viewingLead.leadName}</strong></div>
+                    <div><span className="text-slate-400 text-[10px] block">Company Name:</span><strong className="text-slate-900">{formatValue(viewingLead.companyName, "PROVIDED")}</strong></div>
+                    <div><span className="text-slate-400 text-[10px] block">Mobile Number:</span><strong className="text-slate-900 font-mono">{viewingLead.mobile}</strong></div>
+                    <div><span className="text-slate-400 text-[10px] block">Email Address:</span><strong className="text-slate-900">{formatValue(viewingLead.email, "AVAILABLE")}</strong></div>
+                    <div><span className="text-slate-400 text-[10px] block">Preferred Contact:</span><strong className="text-slate-900">{viewingLead.preferredContactMethod || "Phone"}</strong></div>
                   </div>
                 </div>
 
-                {/* SECTION 15: REAL-TIME DUPLICATE DETECTION */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Phone Number</label>
-                    <input
-                      type="text"
-                      placeholder="+91 98000 00000"
-                      value={formPhone}
-                      onChange={(e) => handlePhoneChange(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-white"
-                    />
-                    {duplicateWarning && (
-                      <p className="text-[10px] font-bold text-rose-600 pt-1">{duplicateWarning}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Email Address</label>
-                    <input
-                      type="email"
-                      placeholder="client@domain.com"
-                      value={formEmail}
-                      onChange={(e) => setFormEmail(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-white"
-                    />
+                {/* SECTION B — INQUIRY SUMMARY */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <h4 className="font-extrabold text-slate-900 uppercase text-[10px] tracking-wider block border-b border-slate-200 pb-1">
+                    SECTION B — Inquiry &amp; Commercial Summary
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div><span className="text-slate-400 text-[10px] block">Lead / Inquiry Type:</span><strong className="text-slate-900 font-bold">{viewingLead.leadType}</strong></div>
+                    <div><span className="text-slate-400 text-[10px] block">Expected Event / Stay Date:</span><strong className="text-slate-900 font-mono">{formatValue(viewingLead.expectedEventDate, "PROVIDED")}</strong></div>
+                    <div><span className="text-slate-400 text-[10px] block">Expected Guest Count (Pax):</span><strong className="text-slate-900 font-mono">{viewingLead.guestCount ? `${viewingLead.guestCount} Pax` : "Not Provided"}</strong></div>
+                    <div><span className="text-slate-400 text-[10px] block">Expected Rooms Required:</span><strong className="text-slate-900 font-mono">{viewingLead.expectedRoomNights ? `${viewingLead.expectedRoomNights} Rooms` : "Not Provided"}</strong></div>
+                    <div><span className="text-slate-400 text-[10px] block">Expected Revenue:</span><strong className="text-emerald-800 font-mono text-sm font-black">{viewingLead.expectedRevenue}</strong></div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] block">Priority:</span>
+                      <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold border inline-block", viewingLead.priority === "High" ? "bg-rose-50 text-rose-800 border-rose-200" : "bg-blue-50 text-blue-800 border-blue-200")}>
+                        {viewingLead.priority} Priority
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Enquiry Type</label>
-                    <select
-                      value={formEnquiryType}
-                      onChange={(e) => setFormEnquiryType(e.target.value as EnquiryType)}
-                      className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-slate-900 bg-white"
-                    >
-                      <option value="Corporate Room Block">Corporate Room Block</option>
-                      <option value="Banquet Wedding">Banquet Wedding</option>
-                      <option value="Conference & Seminar">Conference &amp; Seminar</option>
-                      <option value="Social Event / Birthday">Social Event / Birthday</option>
-                      <option value="Individual Stay">Individual Stay</option>
-                    </select>
-                  </div>
+                {/* SECTION C — REQUIREMENT */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <h4 className="font-extrabold text-slate-900 uppercase text-[10px] tracking-wider block border-b border-slate-200 pb-1">
+                    SECTION C — Customer Requirement
+                  </h4>
+                  <p className="text-slate-800 font-medium bg-white p-2.5 rounded-xl border border-slate-200 leading-relaxed text-[11px]">
+                    {viewingLead.customerRequirement || "Not Provided"}
+                  </p>
+                  {(viewingLead.venuePreference || viewingLead.mealRequirement || viewingLead.roomRequirement) && (
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-200">
+                      <div><span className="text-slate-400 text-[10px] block">Venue Preference:</span><strong className="text-slate-800">{formatValue(viewingLead.venuePreference, "SPECIFIED")}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Meal Requirement:</span><strong className="text-slate-800">{formatValue(viewingLead.mealRequirement, "SPECIFIED")}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Room Requirement:</span><strong className="text-slate-800">{formatValue(viewingLead.roomRequirement, "SPECIFIED")}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Special Requirements:</span><strong className="text-slate-800">{formatValue(viewingLead.specialRequirements, "SPECIFIED")}</strong></div>
+                    </div>
+                  )}
+                </div>
 
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Lead Source</label>
-                    <select
-                      value={formSource}
-                      onChange={(e) => setFormSource(e.target.value as LeadSource)}
-                      className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-slate-900 bg-white"
-                    >
-                      <option value="Website">Website</option>
-                      <option value="Direct Call">Direct Call</option>
-                      <option value="Walk-in">Walk-in</option>
-                      <option value="WhatsApp">WhatsApp</option>
-                      <option value="OTA / Travel Partner">OTA / Travel Partner</option>
-                      <option value="Corporate Referral">Corporate Referral</option>
-                    </select>
+                {/* SECTION D — MARKETING SOURCE & TARIFF (SECTION 6 PROMO VS TARIFF RULE) */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <h4 className="font-extrabold text-slate-900 uppercase text-[10px] tracking-wider block border-b border-slate-200 pb-1">
+                    SECTION D — Lead Source, Marketing &amp; Tariff Attribution
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div><span className="text-slate-400 text-[10px] block">Lead Source:</span><strong className="text-slate-900 font-bold">{viewingLead.leadSource}</strong></div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] block">Campaign Name:</span>
+                      {viewingLead.campaignName ? (
+                        <strong className="text-slate-900 font-bold">{viewingLead.campaignName}</strong>
+                      ) : (
+                        <span className="text-slate-400 italic">Direct Inquiry / Not Linked</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] block">Campaign ID:</span>
+                      <strong className="text-slate-800 font-mono">{formatValue(viewingLead.campaignId, "AVAILABLE")}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] block">Promotion / Promo Code:</span>
+                      <strong className="text-emerald-800 font-mono font-bold">{formatPromoCode(viewingLead.promotionCode)}</strong>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-400 text-[10px] block">Rate / Tariff Applied:</span>
+                      <strong className="text-slate-900 font-bold">{viewingLead.rateTariff || "Standard Tariff"}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SECTION E — HOTEL BUSINESS INFORMATION (TYPE-TAILORED) */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <h4 className="font-extrabold text-slate-900 uppercase text-[10px] tracking-wider block border-b border-slate-200 pb-1">
+                    SECTION E — Hotel Business Specifications ({viewingLead.leadType})
+                  </h4>
+
+                  {/* Wedding / Banquet Specifics */}
+                  {(viewingLead.leadType === "Wedding" || viewingLead.leadType === "Banquet Event") && (
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-400 text-[10px] block">Event Date:</span><strong className="text-slate-900 font-mono">{formatValue(viewingLead.expectedEventDate, "PROVIDED")}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Guest Count:</span><strong className="text-slate-900 font-mono">{viewingLead.guestCount ? `${viewingLead.guestCount} Pax` : "Not Provided"}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Venue Preference:</span><strong className="text-slate-900">{formatValue(viewingLead.venuePreference || "Grand Ballroom & Royal Lawn", "SPECIFIED")}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Rooms Required:</span><strong className="text-slate-900">{viewingLead.expectedRoomNights ? `${viewingLead.expectedRoomNights} Rooms Block` : "Not Provided"}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Food Requirement:</span><strong className="text-slate-900">{formatValue(viewingLead.mealRequirement || "Live North & South Indian Buffet", "SPECIFIED")}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Event Requirements:</span><strong className="text-slate-900">Stage Decor, DJ &amp; AV Setup</strong></div>
+                    </div>
+                  )}
+
+                  {/* Room Booking Specifics */}
+                  {viewingLead.leadType === "Room Booking" && (
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-400 text-[10px] block">Arrival Date:</span><strong className="text-slate-900 font-mono">{formatValue(viewingLead.expectedEventDate, "PROVIDED")}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Departure Date:</span><strong className="text-slate-900 font-mono">Not Specified</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Rooms Required:</span><strong className="text-slate-900">{viewingLead.expectedRoomNights ? `${viewingLead.expectedRoomNights} Rooms` : "Not Provided"}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Room Type Preference:</span><strong className="text-slate-900">{formatValue(viewingLead.roomRequirement || "Deluxe Suite", "SPECIFIED")}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Meal Requirement:</span><strong className="text-slate-900">Not Applicable</strong></div>
+                    </div>
+                  )}
+
+                  {/* Corporate / Conference Specifics */}
+                  {(viewingLead.leadType === "Corporate Booking" || viewingLead.leadType === "Conference") && (
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-400 text-[10px] block">Company Name:</span><strong className="text-slate-900">{formatValue(viewingLead.companyName, "PROVIDED")}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Room Nights Block:</span><strong className="text-slate-900 font-mono">{viewingLead.expectedRoomNights ? `${viewingLead.expectedRoomNights} Room Nights` : "Not Provided"}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Meeting Hall:</span><strong className="text-slate-900">{formatValue(viewingLead.venuePreference || "Executive Conference Hall A & B", "SPECIFIED")}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Expected Revenue:</span><strong className="text-emerald-800 font-mono font-bold">{viewingLead.expectedRevenue}</strong></div>
+                    </div>
+                  )}
+                </div>
+
+                {/* SECTION F — SALES INFORMATION */}
+                <div className="p-3.5 rounded-2xl bg-white border border-slate-200 space-y-2 shadow-2xs">
+                  <h4 className="font-extrabold text-slate-900 uppercase text-[10px] tracking-wider block border-b border-slate-200 pb-1">
+                    SECTION F — Sales Administration
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div><span className="text-slate-400 text-[10px] block">Assigned Executive:</span><strong className="text-slate-900 font-bold">{viewingLead.assignedExecutive}</strong></div>
+                    <div><span className="text-slate-400 text-[10px] block">Lead Created Date:</span><strong className="text-slate-900 font-mono">{viewingLead.createdDate}</strong></div>
+                    <div><span className="text-slate-400 text-[10px] block">Current Status:</span><strong className="text-slate-900">{viewingLead.status}</strong></div>
+                    <div><span className="text-slate-400 text-[10px] block">Pipeline Stage:</span><strong className="text-slate-900">{viewingLead.pipelineStage}</strong></div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* STEP 2: HOTEL-SPECIFIC REQUIREMENT */}
-            {formStep === 2 && (
+            {/* TAB 2: ACTIVITY TIMELINE */}
+            {activeDrawerTab === "TIMELINE" && (
               <div className="space-y-3">
-                {formEnquiryType === "Corporate Room Block" || formEnquiryType === "Individual Stay" ? (
-                  <div className="space-y-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    <span className="font-bold text-slate-900 text-xs block">Stay &amp; Room Block Requirements</span>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Check-in Date</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. 15 Sep 2026"
-                          value={formCheckIn}
-                          onChange={(e) => setFormCheckIn(e.target.value)}
-                          className="w-full rounded-xl border border-slate-200 p-2 bg-white"
-                        />
+                <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="font-bold text-slate-800 text-xs">Sales Activity History</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsAddActivityModalOpen(true)}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl px-3 py-1 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Log Activity
+                  </Button>
+                </div>
+
+                <div className="space-y-2 text-[11px]">
+                  {(viewingLead.activityTimeline || []).length > 0 ? (
+                    (viewingLead.activityTimeline || []).map((item, idx) => (
+                      <div key={idx} className="p-3 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                        <div className="flex justify-between items-center font-bold text-slate-900">
+                          <span className="text-emerald-800 flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-slate-400" />
+                            {item.action}
+                          </span>
+                          <span className="text-slate-400 font-mono text-[10px]">{item.date}</span>
+                        </div>
+                        <div className="text-slate-500 text-[10px]">Logged by: <strong className="text-slate-700">{item.user}</strong></div>
+                        {item.note && <p className="text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">{item.note}</p>}
                       </div>
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Number of Rooms</label>
-                        <input
-                          type="number"
-                          value={formNumRooms}
-                          onChange={(e) => setFormNumRooms(Number(e.target.value))}
-                          className="w-full rounded-xl border border-slate-200 p-2 bg-white"
-                        />
-                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 text-center text-slate-400 text-xs italic bg-slate-50 rounded-xl">
+                      No activity history recorded yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: OPPORTUNITY / DEAL */}
+            {activeDrawerTab === "OPPORTUNITY" && (
+              <div className="space-y-3">
+                {viewingLead.status === "In Pipeline" || viewingLead.status === "Won" ? (
+                  <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <span className="font-extrabold text-slate-900 text-xs">Linked Opportunity Record</span>
+                      <span className="font-mono text-emerald-800 font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-xs">
+                        #{viewingLead.opportunityId || "OPP-301"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-400 text-[10px] block">Deal Value:</span><strong className="text-emerald-900 font-mono text-sm font-black">{viewingLead.expectedRevenue}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Current Stage:</span><strong className="text-slate-900 font-bold">{viewingLead.pipelineStage}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Assigned Executive:</span><strong className="text-slate-800">{viewingLead.assignedExecutive}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Expected Close Date:</span><strong className="text-slate-800 font-mono">15 Sep 2026</strong></div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => router.push("/sales-marketing/crm/pipeline")}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl px-4 py-2 cursor-pointer shadow-xs"
+                      >
+                        <Kanban className="h-3.5 w-3.5 mr-1" /> View Opportunity in Pipeline →
+                      </Button>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-3 bg-purple-50/50 p-3 rounded-xl border border-purple-100">
-                    <span className="font-bold text-purple-950 text-xs block">Banquet &amp; Event Requirements</span>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Expected PAX</label>
-                        <input
-                          type="number"
-                          value={formPax}
-                          onChange={(e) => setFormPax(Number(e.target.value))}
-                          className="w-full rounded-xl border border-slate-200 p-2 bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-bold text-slate-700 mb-1">Preferred Venue</label>
-                        <input
-                          type="text"
-                          value={formVenue}
-                          onChange={(e) => setFormVenue(e.target.value)}
-                          className="w-full rounded-xl border border-slate-200 p-2 bg-white"
-                        />
-                      </div>
-                    </div>
+                  <div className="p-6 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                    <p className="text-slate-600 text-xs font-medium">This lead has not yet entered the sales pipeline.</p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleMoveToPipeline(viewingLead)}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl px-5 py-2 cursor-pointer shadow-xs"
+                    >
+                      <ArrowRight className="h-4 w-4 mr-1" /> Move To Pipeline Now
+                    </Button>
                   </div>
                 )}
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Estimated Value (₹)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. ₹8,90,000"
-                    value={formEstValue}
-                    onChange={(e) => setFormEstValue(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-emerald-950 bg-white"
-                  />
-                </div>
               </div>
             )}
 
-            {/* STEP 3: QUALIFICATION & B2B FIT */}
-            {formStep === 3 && (
+            {/* TAB 4: BOOKING */}
+            {activeDrawerTab === "BOOKING" && (
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Expected Budget</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ₹8,00,000 - ₹10,00,000"
-                      value={formBudget}
-                      onChange={(e) => setFormBudget(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 p-2 bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Decision Maker Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Sunil Verma (VP)"
-                      value={formDecisionMaker}
-                      onChange={(e) => setFormDecisionMaker(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 p-2 bg-white"
-                    />
-                  </div>
-                </div>
+                {viewingLead.status === "Won" ? (
+                  <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <span className="font-extrabold text-slate-900 text-xs">Confirmed Booking Record</span>
+                      <span className="font-mono text-emerald-800 font-bold bg-emerald-100 px-2.5 py-0.5 rounded-full text-xs">
+                        {viewingLead.bookingId || "BKT-2026-081"}
+                      </span>
+                    </div>
 
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Competitor Hotel (If Any)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Taj Deccan or Marriott"
-                    value={formCompetitor}
-                    onChange={(e) => setFormCompetitor(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 p-2 bg-white"
-                  />
-                </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-400 text-[10px] block">Booking Type:</span><strong className="text-slate-900 font-bold">{viewingLead.bookingType || "Banquet Event"}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Confirmed Revenue:</span><strong className="text-emerald-900 font-mono text-sm font-black">{viewingLead.expectedRevenue}</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Booking Status:</span><strong className="text-emerald-800 font-bold">Confirmed</strong></div>
+                      <div><span className="text-slate-400 text-[10px] block">Event Date:</span><strong className="text-slate-800 font-mono">{formatValue(viewingLead.expectedEventDate, "PROVIDED")}</strong></div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleCreateBookingRoute(viewingLead)}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl px-4 py-2 cursor-pointer shadow-xs"
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-1" /> View / Create Booking →
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-6 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                    <p className="text-slate-600 text-xs font-medium">Booking can be created once the deal is marked Won.</p>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Form Step Controls */}
-            <div className="flex justify-between items-center pt-3 border-t border-slate-100">
-              {formStep > 1 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setFormStep((prev) => prev - 1)}
-                  className="rounded-xl text-xs font-semibold"
-                >
-                  Previous Step
-                </Button>
-              ) : (
-                <div />
-              )}
+            {/* TAB 5: NOTES */}
+            {activeDrawerTab === "NOTES" && (
+              <div className="space-y-3">
+                {/* Quick Add Note Form */}
+                <form onSubmit={handleAddInternalNote} className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <label className="block text-xs font-bold text-slate-800">Add Internal Note:</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Enter internal sales notes (e.g. Customer prefers evening event, requested Jain menu)..."
+                    value={newNoteInput}
+                    onChange={(e) => setNewNoteInput(e.target.value)}
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl px-4 py-1 cursor-pointer"
+                    >
+                      Save Internal Note
+                    </Button>
+                  </div>
+                </form>
 
-              {formStep < 3 ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setFormStep((prev) => prev + 1)}
-                  className="rounded-xl text-xs font-bold bg-slate-900 text-white"
+                {/* Notes List */}
+                <div className="space-y-2 text-[11px]">
+                  {(viewingLead.internalNotes || []).length > 0 ? (
+                    (viewingLead.internalNotes || []).map((n) => (
+                      <div key={n.id} className="p-3 rounded-xl bg-white border border-slate-200 space-y-1 shadow-2xs">
+                        <div className="flex justify-between font-bold text-slate-900">
+                          <span className="text-slate-800">{n.user}</span>
+                          <span className="text-slate-400 font-mono text-[10px]">{n.date}</span>
+                        </div>
+                        <p className="text-slate-700 text-xs leading-relaxed">{n.text}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 text-center text-slate-400 text-xs italic bg-slate-50 rounded-xl">
+                      No internal notes recorded yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </Drawer>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SECTION 5: ADD ACTIVITY MODAL
+      ───────────────────────────────────────────────────────────── */}
+      {isAddActivityModalOpen && viewingLead && (
+        <Modal
+          isOpen={isAddActivityModalOpen}
+          onClose={() => setIsAddActivityModalOpen(false)}
+          title={`Log Sales Activity — #${viewingLead.id}`}
+        >
+          <form onSubmit={handleSaveActivityModal} className="space-y-3.5 text-xs p-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Activity Type *</label>
+                <select
+                  value={actTypeInput}
+                  onChange={(e) => setActTypeInput(e.target.value as any)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-bold bg-white"
                 >
-                  Next Step →
-                </Button>
-              ) : (
-                <Button
-                  type="submit"
-                  size="sm"
-                  className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white"
-                >
-                  Save &amp; Create Lead
-                </Button>
+                  <option value="Phone Call">Phone Call</option>
+                  <option value="Follow-up">Follow-up</option>
+                  <option value="Meeting">Meeting</option>
+                  <option value="Site Visit">Site Visit</option>
+                  <option value="Email">Email</option>
+                  <option value="WhatsApp">WhatsApp</option>
+                  <option value="Note">Note</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Date *</label>
+                <input
+                  type="date"
+                  required
+                  value={actDateInput}
+                  onChange={(e) => setActDateInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-semibold bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Time</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 03:00 PM"
+                  value={actTimeInput}
+                  onChange={(e) => setActTimeInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-mono bg-white"
+                />
+              </div>
+
+              {actTypeInput === "Site Visit" && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Venue for Visit</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Grand Ballroom"
+                    value={actVenueInput}
+                    onChange={(e) => setActVenueInput(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white"
+                  />
+                </div>
               )}
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Activity Notes *</label>
+              <textarea
+                rows={3}
+                required
+                placeholder="Enter details of conversation, outcome, or site visit feedback..."
+                value={actNotesInput}
+                onChange={(e) => setActNotesInput(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-slate-200 bg-white"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddActivityModalOpen(false)}
+                className="rounded-xl text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs px-4 cursor-pointer"
+              >
+                Save Activity
+              </Button>
             </div>
           </form>
         </Modal>
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 18 & 19: TABBED LEAD DETAIL DRAWER (TIMELINE & TABS)
+          SECTION 6: FAST CREATE LEAD MODAL (BASIC INFO ONLY — SECTION 1)
       ───────────────────────────────────────────────────────────── */}
-      <Drawer
-        isOpen={Boolean(viewingLead)}
-        onClose={() => setViewingLead(null)}
-        title="Complete Hotel Lead Record"
-      >
-        {viewingLead && (
-          <div className="space-y-4 text-xs">
-            {/* Header Identity Card */}
-            <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-1.5">
-              <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                <span>#{viewingLead.id} • {viewingLead.source}</span>
-                <span className="bg-emerald-800 text-white px-2 py-0.5 rounded font-bold">
-                  Score: {viewingLead.leadScore}/100
-                </span>
-              </div>
-              <h3 className="text-base font-black text-amber-400">{viewingLead.leadName}</h3>
-              <p className="text-xs text-slate-300">
-                Company: <strong>{viewingLead.companyName}</strong> • Owner: <strong>{viewingLead.leadOwner}</strong>
-              </p>
-            </div>
-
-            {/* Detail Navigation Tabs */}
-            <div className="flex border-b border-slate-200 pb-1 gap-2 font-bold text-xs">
-              {["OVERVIEW", "REQUIREMENT", "QUALIFICATION", "TIMELINE"].map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setActiveDetailTab(tab)}
-                  className={cn(
-                    "px-3 py-1 rounded-xl transition",
-                    activeDetailTab === tab ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700"
-                  )}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-
-            {/* TAB 1: OVERVIEW */}
-            {activeDetailTab === "OVERVIEW" && (
-              <div className="space-y-3">
-                <div className="p-3 rounded-xl border border-slate-200 bg-white space-y-2">
-                  <p className="text-slate-600">Contact: <strong>{viewingLead.contactPerson}</strong></p>
-                  <p className="text-slate-600">Phone: <strong className="font-mono text-slate-900">{viewingLead.phone}</strong></p>
-                  <p className="text-slate-600">Email: <strong className="text-slate-900">{viewingLead.email}</strong></p>
-                  <p className="text-slate-600">Est. Revenue: <strong className="font-mono text-emerald-700 font-bold">{viewingLead.estimatedValue}</strong></p>
-                  <p className="text-slate-600">Next Action: <strong>{viewingLead.nextActionSubject || "None"}</strong></p>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 2: HOTEL REQUIREMENT */}
-            {activeDetailTab === "REQUIREMENT" && (
-              <div className="space-y-3">
-                {viewingLead.roomRequirement && (
-                  <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-1">
-                    <span className="font-bold text-slate-900 block text-xs">Room Stay Requirement</span>
-                    <p>Check-in: <strong>{viewingLead.roomRequirement.checkInDate}</strong></p>
-                    <p>Rooms: <strong>{viewingLead.roomRequirement.numberOfRooms} Rooms</strong> ({viewingLead.calculatedRoomNights} Room Nights)</p>
-                    <p>Meal Plan: <strong>{viewingLead.roomRequirement.mealPlan}</strong></p>
-                  </div>
-                )}
-                {viewingLead.banquetRequirement && (
-                  <div className="p-3 rounded-xl border border-purple-200 bg-purple-50/50 space-y-1">
-                    <span className="font-bold text-purple-950 block text-xs">Banquet Wedding Requirement</span>
-                    <p>Event: <strong>{viewingLead.banquetRequirement.eventName}</strong></p>
-                    <p>PAX: <strong>{viewingLead.banquetRequirement.expectedPax} Guests</strong></p>
-                    <p>Venue: <strong>{viewingLead.banquetRequirement.preferredVenue}</strong></p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* TAB 3: QUALIFICATION */}
-            {activeDetailTab === "QUALIFICATION" && (
-              <div className="p-3 rounded-xl border border-slate-200 bg-white space-y-2">
-                <p>Need: <strong>{viewingLead.qualification?.need}</strong></p>
-                <p>Budget: <strong>{viewingLead.qualification?.budget}</strong></p>
-                <p>Decision Maker: <strong>{viewingLead.qualification?.decisionMakerName}</strong></p>
-                <p>Competitor Hotel: <strong>{viewingLead.qualification?.competitorHotel || "None"}</strong></p>
-              </div>
-            )}
-
-            {/* TAB 4: CHRONOLOGICAL ACTIVITY TIMELINE (SECTION 20) */}
-            {activeDetailTab === "TIMELINE" && (
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-3">
-                <span className="font-extrabold text-slate-900 block text-xs uppercase tracking-wider">Chronological Lead History</span>
-                <div className="space-y-2 text-[11px]">
-                  <div className="p-2 rounded bg-slate-50 border border-slate-200">
-                    <p className="font-bold text-slate-900">16 Aug 2026 — Lead Captured</p>
-                    <p className="text-slate-500">Captured via {viewingLead.source} by {viewingLead.createdBy}</p>
-                  </div>
-                  <div className="p-2 rounded bg-blue-50 border border-blue-200">
-                    <p className="font-bold text-blue-950">17 Aug 2026 — Phone Call Completed</p>
-                    <p className="text-blue-800">Requirement captured &amp; corporate LRA quote requested.</p>
-                  </div>
-                  <div className="p-2 rounded bg-emerald-50 border border-emerald-200">
-                    <p className="font-bold text-emerald-950">18 Aug 2026 — Next Follow-up Scheduled</p>
-                    <p className="text-emerald-800">{viewingLead.nextActionSubject}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Drawer>
-
-      {/* ─────────────────────────────────────────────────────────────
-          MODAL: CONVERT LEAD
-      ───────────────────────────────────────────────────────────── */}
-      {convertingLead && (
+      {isCreateModalOpen && (
         <Modal
-          isOpen={Boolean(convertingLead)}
-          onClose={() => setConvertingLead(null)}
-          title="Convert Lead to Active Deal Opportunity"
-          description={`Convert lead "${convertingLead.leadName}" into a qualified sales opportunity.`}
-          size="sm"
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          title="Create New Lead / Inquiry (Fast Capture)"
         >
-          <div className="space-y-4 text-xs pt-1">
-            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 space-y-1">
-              <p className="font-bold text-emerald-950 text-xs">🎉 Confirm Conversion</p>
-              <p className="text-emerald-800 text-[11px]">
-                Converting will mark the lead stage as <strong>Confirmed / Won</strong> and create an active Opportunity record in your sales pipeline.
-              </p>
+          <form onSubmit={handleFastCreateLeadSubmit} className="space-y-3.5 text-xs p-1">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 text-[11px]">
+              <strong>Fast Lead Capture:</strong> Enter basic lead information now (&lt;1 min). Additional event dates, guest counts, and venue preferences can be added later via <strong>[ Edit Lead ]</strong>.
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Lead Name *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Raj Sharma / Kapoor Wedding Inquiry"
+                value={createLeadName}
+                onChange={(e) => setCreateLeadName(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-slate-900 bg-white"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Mobile Number *</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="e.g. 9876543210"
+                  value={createMobile}
+                  onChange={(e) => setCreateMobile(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-mono font-bold text-slate-900 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Company / Family Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sharma Family / TCS"
+                  value={createCompanyName}
+                  onChange={(e) => setCreateCompanyName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-slate-900 bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  placeholder="e.g. raj@gmail.com"
+                  value={createEmail}
+                  onChange={(e) => setCreateEmail(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-slate-900 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Lead Type *</label>
+                <select
+                  value={createLeadType}
+                  onChange={(e) => setCreateLeadType(e.target.value as LeadType)}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-slate-900 bg-white"
+                >
+                  <option value="Wedding">Wedding</option>
+                  <option value="Banquet Event">Banquet Event</option>
+                  <option value="Corporate Booking">Corporate Booking</option>
+                  <option value="Conference">Conference</option>
+                  <option value="Room Booking">Room Booking</option>
+                  <option value="Restaurant Event">Restaurant Event</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Lead Source *</label>
+                <select
+                  value={createLeadSource}
+                  onChange={(e) => setCreateLeadSource(e.target.value as LeadSource)}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-slate-900 bg-white"
+                >
+                  <option value="Direct Inquiry">Direct Inquiry</option>
+                  <option value="Walk-In">Walk-In</option>
+                  <option value="Phone Call">Phone Call</option>
+                  <option value="Website">Website</option>
+                  <option value="Google Ads">Google Ads</option>
+                  <option value="Meta Ads">Meta Ads</option>
+                  <option value="Marketing Campaign">Marketing Campaign</option>
+                  <option value="Corporate Reference">Corporate Reference</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Est. Revenue (₹)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 1500000"
+                  value={createRevenue}
+                  onChange={(e) => setCreateRevenue(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-mono font-bold text-slate-900 bg-white"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Customer Requirements *</label>
+              <textarea
+                rows={3}
+                required
+                placeholder="Enter initial customer requirement details..."
+                value={createRequirement}
+                onChange={(e) => setCreateRequirement(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 p-2.5 text-slate-900 bg-white"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setConvertingLead(null)}
+                onClick={() => setIsCreateModalOpen(false)}
                 className="rounded-xl text-xs"
               >
                 Cancel
               </Button>
               <Button
-                type="button"
+                type="submit"
                 size="sm"
-                onClick={() => handleConvertLead(convertingLead)}
-                className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs px-5 shadow-xs cursor-pointer"
               >
-                Confirm Conversion
+                Create Lead Record
               </Button>
             </div>
-          </div>
+          </form>
         </Modal>
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 23: MARK LEAD LOST MODAL (WITH REASON & COMPETITOR)
+          SECTION 7: EDIT LEAD MODAL (PROGRESSIVE FORM — SECTIONS 2, 3, 4)
       ───────────────────────────────────────────────────────────── */}
-      {losingLead && (
+      {editingLead && (
         <Modal
-          isOpen={Boolean(losingLead)}
-          onClose={() => setLosingLead(null)}
-          title="Mark Lead as Lost"
-          description={`Record the reason for losing lead "${losingLead.leadName}".`}
-          size="sm"
+          isOpen={Boolean(editingLead)}
+          onClose={() => setEditingLead(null)}
+          title={`Edit Lead — #${editingLead.id}`}
+          maxWidth="lg"
         >
-          <div className="space-y-3 text-xs pt-1">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Reason for Loss <span className="text-rose-500">*</span></label>
-              <select
-                value={lostReasonInput}
-                onChange={(e) => setLostReasonInput(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-slate-900 bg-white"
-              >
-                <option value="Price Too High">Price Too High</option>
-                <option value="Competitor Selected">Competitor Selected</option>
-                <option value="Date Unavailable">Date Unavailable</option>
-                <option value="Customer Cancelled">Customer Cancelled</option>
-                <option value="Requirement Not Suitable">Requirement Not Suitable</option>
-                <option value="No Response">No Response</option>
-              </select>
+          <form onSubmit={handleEditLeadSubmit} className="space-y-4 text-xs p-1 pb-14 relative">
+            {/* SECTION 1: CONTACT INFORMATION */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <span className="font-extrabold text-[10px] text-slate-600 uppercase tracking-wider block border-b border-slate-200 pb-1">
+                Contact Information
+              </span>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Lead Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-2 font-bold bg-white text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Mobile Number *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editMobile}
+                    onChange={(e) => setEditMobile(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-2 font-mono font-bold bg-white text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Company / Family Name</label>
+                  <input
+                    type="text"
+                    value={editCompanyName}
+                    onChange={(e) => setEditCompanyName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">Preferred Contact Method</label>
+                  <select
+                    value={editContactMethod}
+                    onChange={(e) => setEditContactMethod(e.target.value as any)}
+                    className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900 font-bold"
+                  >
+                    <option value="Phone">Phone</option>
+                    <option value="WhatsApp">WhatsApp</option>
+                    <option value="Email">Email</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Competitor Hotel (If Applicable)</label>
-              <input
-                type="text"
-                placeholder="e.g. Taj Deccan or Marriott"
-                value={competitorInput}
-                onChange={(e) => setCompetitorInput(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-white"
-              />
+            {/* SECTION 2: INQUIRY INFORMATION */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <span className="font-extrabold text-[10px] text-slate-600 uppercase tracking-wider block border-b border-slate-200 pb-1">
+                Inquiry &amp; Commercial Specifications
+              </span>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Lead Type *</label>
+                  <select
+                    value={editLeadType}
+                    onChange={(e) => setEditLeadType(e.target.value as LeadType)}
+                    className="w-full rounded-xl border border-slate-300 p-2 font-bold bg-white text-slate-900"
+                  >
+                    <option value="Wedding">Wedding</option>
+                    <option value="Banquet Event">Banquet Event</option>
+                    <option value="Corporate Booking">Corporate Booking</option>
+                    <option value="Conference">Conference</option>
+                    <option value="Room Booking">Room Booking</option>
+                    <option value="Restaurant Event">Restaurant Event</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Expected Event / Stay Date</label>
+                  <input
+                    type="date"
+                    value={editEventDate}
+                    onChange={(e) => setEditEventDate(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Expected Guest Count (Pax)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 500"
+                    value={editGuestCount}
+                    onChange={(e) => setEditGuestCount(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Expected Rooms Required</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 20"
+                    value={editRoomNights}
+                    onChange={(e) => setEditRoomNights(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Expected Revenue (₹)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 2400000"
+                    value={editRevenue}
+                    onChange={(e) => setEditRevenue(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Priority</label>
+                  <select
+                    value={editPriority}
+                    onChange={(e) => setEditPriority(e.target.value as LeadPriority)}
+                    className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900 font-bold"
+                  >
+                    <option value="High">High Priority</option>
+                    <option value="Medium">Medium Priority</option>
+                    <option value="Low">Low Priority</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Notes</label>
-              <textarea
-                rows={2}
-                placeholder="Additional feedback..."
-                value={lostNotesInput}
-                onChange={(e) => setLostNotesInput(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 p-2.5 font-medium text-slate-900 bg-white"
-              />
+            {/* SECTION 3: REQUIREMENT INFORMATION */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <span className="font-extrabold text-[10px] text-slate-600 uppercase tracking-wider block border-b border-slate-200 pb-1">
+                Detailed Requirement Information
+              </span>
+              <div className="space-y-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Customer Requirements *</label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={editRequirement}
+                    onChange={(e) => setEditRequirement(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Venue Preference</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Grand Ballroom & Royal Lawn"
+                      value={editVenuePref}
+                      onChange={(e) => setEditVenuePref(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Meal / Food Requirement</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Veg + Non-Veg Buffet, Jain counter"
+                      value={editMealReq}
+                      onChange={(e) => setEditMealReq(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Room Requirement Details</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 20 Deluxe Rooms + 1 Bridal Suite"
+                      value={editRoomReq}
+                      onChange={(e) => setEditRoomReq(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Special Requirements</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Stage Decor, DJ & AV Setup"
+                      value={editSpecialReq}
+                      onChange={(e) => setEditSpecialReq(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 p-2 bg-white text-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            {/* SECTION 4: MARKETING / SOURCE (SECTION 4 CAMPAIGN DATA RULE) */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-1">
+                <span className="font-extrabold text-[10px] text-slate-600 uppercase tracking-wider block">
+                  Marketing Source &amp; Promo Attribution
+                </span>
+                {editingLead.campaignId && (
+                  <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                    <Lock className="h-3 w-3 text-slate-400" /> Campaign Attributed (Read-Only)
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Lead Source *</label>
+                  <select
+                    value={editLeadSource}
+                    disabled={Boolean(editingLead.campaignId)}
+                    onChange={(e) => setEditLeadSource(e.target.value as LeadSource)}
+                    className={cn(
+                      "w-full rounded-xl border border-slate-300 p-2 font-bold text-slate-900",
+                      editingLead.campaignId ? "bg-slate-100 cursor-not-allowed text-slate-500" : "bg-white"
+                    )}
+                  >
+                    <option value="Direct Inquiry">Direct Inquiry</option>
+                    <option value="Google Ads">Google Ads</option>
+                    <option value="Meta Ads">Meta Ads</option>
+                    <option value="Marketing Campaign">Marketing Campaign</option>
+                    <option value="Walk-In">Walk-In</option>
+                    <option value="Phone Call">Phone Call</option>
+                    <option value="Website">Website</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Campaign Name</label>
+                  <input
+                    type="text"
+                    disabled={Boolean(editingLead.campaignId)}
+                    value={editCampaignName}
+                    onChange={(e) => setEditCampaignName(e.target.value)}
+                    className={cn(
+                      "w-full rounded-xl border border-slate-300 p-2 font-semibold text-slate-900",
+                      editingLead.campaignId ? "bg-slate-100 cursor-not-allowed text-slate-500" : "bg-white"
+                    )}
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Campaign ID</label>
+                  <input
+                    type="text"
+                    disabled={Boolean(editingLead.campaignId)}
+                    value={editCampaignId}
+                    onChange={(e) => setEditCampaignId(e.target.value)}
+                    className={cn(
+                      "w-full rounded-xl border border-slate-300 p-2 font-mono text-slate-900",
+                      editingLead.campaignId ? "bg-slate-100 cursor-not-allowed text-slate-500" : "bg-white"
+                    )}
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Promotion / Promo Code</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. WEDDING10"
+                    value={editPromoCode}
+                    onChange={(e) => setEditPromoCode(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-2 font-mono text-slate-900 bg-white"
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">Rate / Tariff Applied</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Standard Tariff"
+                    value={editRateTariff}
+                    onChange={(e) => setEditRateTariff(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-2 font-bold text-slate-900 bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* STICKY FOOTER ACTIONS */}
+            <div className="sticky bottom-0 bg-white py-2.5 px-1 border-t border-slate-200 flex justify-end gap-2 shrink-0 z-20 shadow-md rounded-b-xl">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setLosingLead(null)}
-                className="rounded-xl text-xs"
+                onClick={() => setEditingLead(null)}
+                className="rounded-xl text-xs font-bold bg-white"
               >
                 Cancel
               </Button>
               <Button
-                type="button"
+                type="submit"
                 size="sm"
-                onClick={() => handleMarkLost(losingLead)}
-                className="rounded-xl text-xs font-bold bg-rose-700 text-white"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs px-5 shadow-xs cursor-pointer"
               >
-                Mark as Lost
+                Save Progressive Information
               </Button>
             </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SECTION 8: NATURAL 3-STEP CSV IMPORT MODAL (ALIGNED WITH CAMPAIGNS)
+      ───────────────────────────────────────────────────────────── */}
+      {isImportModalOpen && (
+        <Modal
+          isOpen={isImportModalOpen}
+          onClose={() => {
+            setIsImportModalOpen(false);
+            setImportStep("UPLOAD");
+            setImportFileName("");
+          }}
+          title="Import Leads & Inquiries from CSV File"
+          maxWidth="lg"
+        >
+          <div className="space-y-4 text-xs p-1">
+            {/* Workflow Progress Steps Bar */}
+            <div className="flex items-center justify-between bg-slate-100 p-2 rounded-xl text-[10px] font-bold text-slate-600">
+              <span className={cn("px-2.5 py-1 rounded-lg transition", importStep === "UPLOAD" ? "bg-emerald-700 text-white" : "bg-white text-slate-700 border border-slate-200")}>
+                1. Upload CSV
+              </span>
+              <span>→</span>
+              <span className={cn("px-2.5 py-1 rounded-lg transition", importStep === "PREVIEW_MAP" ? "bg-emerald-700 text-white" : "bg-white text-slate-700 border border-slate-200")}>
+                2. Map Fields &amp; Preview
+              </span>
+              <span>→</span>
+              <span className={cn("px-2.5 py-1 rounded-lg transition", importStep === "SUMMARY" ? "bg-emerald-700 text-white" : "bg-white text-slate-700 border border-slate-200")}>
+                3. Summary &amp; Confirm
+              </span>
+            </div>
+
+            {/* STEP 1: UPLOAD & PLATFORM SELECTION */}
+            {importStep === "UPLOAD" && (
+              <div className="space-y-4 text-center py-2">
+                <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 bg-slate-50 flex flex-col items-center justify-center space-y-2">
+                  <FileSpreadsheet className="h-10 w-10 text-emerald-700" />
+                  <h4 className="font-bold text-slate-900 text-xs">Upload Lead Export File (.csv)</h4>
+                  <p className="text-[11px] text-slate-500 max-w-xs">
+                    Supports standard CSV files exported from CRM systems, Google Ads, Meta Ads, or website webforms.
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      setImportFileName("Direct_Inquiries_Aug2026.csv");
+                      setImportStep("PREVIEW_MAP");
+                    }}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs mt-2 px-4 py-2 cursor-pointer shadow-xs"
+                  >
+                    <Upload className="h-3.5 w-3.5 mr-1.5" /> Select Direct_Inquiries_Aug2026.csv
+                  </Button>
+                </div>
+
+                <div className="text-left p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                  <span className="font-bold text-slate-800 block text-[11px]">Select Source Inquiry Channel / Platform:</span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {(["Direct Inquiry", "Google Ads", "Meta Ads", "Website", "Walk-In"] as const).map((plat) => (
+                      <label key={plat} className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 text-xs">
+                        <input
+                          type="radio"
+                          name="leadSourcePlatform"
+                          checked={csvSourcePlatform === plat}
+                          onChange={() => setCsvSourcePlatform(plat)}
+                          className="accent-emerald-700"
+                        />
+                        {plat}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: PREVIEW & FIELD MAPPING */}
+            {importStep === "PREVIEW_MAP" && (
+              <div className="space-y-4">
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
+                  <span className="font-bold text-emerald-950">File: {importFileName || "Direct_Inquiries_Aug2026.csv"}</span>
+                  <span className="text-[11px] text-emerald-900 font-bold bg-emerald-200 px-2 py-0.5 rounded">
+                    Source: {csvSourcePlatform}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-slate-900 block text-xs">Map CSV Column Fields → PMS Central Lead Fields</span>
+                    <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded">
+                      ✓ Auto-Mapped 5/5 Columns
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5 text-xs">
+                    <div>
+                      <label className="block text-slate-600 font-bold mb-1">Full Name Column</label>
+                      <select
+                        value={csvFieldMapping.fullName}
+                        onChange={(e) => setCsvFieldMapping({ ...csvFieldMapping, fullName: e.target.value })}
+                        className="w-full p-2 rounded-xl border border-slate-200 font-bold text-slate-900 bg-white"
+                      >
+                        <option value="Full Name">Full Name</option>
+                        <option value="Name">Name</option>
+                        <option value="Contact Name">Contact Name</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-600 font-bold mb-1">Phone Number Column</label>
+                      <select
+                        value={csvFieldMapping.phone}
+                        onChange={(e) => setCsvFieldMapping({ ...csvFieldMapping, phone: e.target.value })}
+                        className="w-full p-2 rounded-xl border border-slate-200 p-2 font-bold text-slate-900 bg-white"
+                      >
+                        <option value="Phone Number">Phone Number</option>
+                        <option value="Mobile">Mobile</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-600 font-bold mb-1">Email Column</label>
+                      <select
+                        value={csvFieldMapping.email}
+                        onChange={(e) => setCsvFieldMapping({ ...csvFieldMapping, email: e.target.value })}
+                        className="w-full p-2 rounded-xl border border-slate-200 font-bold text-slate-900 bg-white"
+                      >
+                        <option value="Email">Email</option>
+                        <option value="Email Address">Email Address</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-600 font-bold mb-1">Company Name Column</label>
+                      <select
+                        value={csvFieldMapping.company}
+                        onChange={(e) => setCsvFieldMapping({ ...csvFieldMapping, company: e.target.value })}
+                        className="w-full p-2 rounded-xl border border-slate-200 font-bold text-slate-900 bg-white"
+                      >
+                        <option value="Company Name">Company Name</option>
+                        <option value="Company">Company</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="pt-1 flex justify-between items-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTemplateSaved(true);
+                        setToastMessage("✓ Field mapping template saved for future lead CSV imports!");
+                      }}
+                      className="text-emerald-700 hover:text-emerald-800 font-bold text-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <Save className="h-3.5 w-3.5" /> Save Mapping Template
+                    </button>
+                    {templateSaved && <span className="text-[10px] text-emerald-800 font-bold">✓ Template Saved</span>}
+                  </div>
+                </div>
+
+                {/* CSV Rows Preview Table */}
+                <div className="space-y-1">
+                  <span className="font-bold text-slate-800 block text-[11px]">CSV Sample Data Preview (3 Records)</span>
+                  <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden text-[11px]">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-100 font-bold text-slate-700 border-b border-slate-200">
+                        <tr>
+                          <th className="p-2">Name</th>
+                          <th className="p-2">Phone</th>
+                          <th className="p-2">Budget</th>
+                          <th className="p-2">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
+                        {DIRECT_CSV_SAMPLE_ROWS.map((r, i) => (
+                          <tr key={i}>
+                            <td className="p-2 font-bold text-slate-900">{r["Full Name"]}</td>
+                            <td className="p-2 font-mono">{r["Phone Number"]}</td>
+                            <td className="p-2 font-mono">₹{Number(r["Budget"]).toLocaleString("en-IN")}</td>
+                            <td className="p-2 text-[10px] truncate max-w-[150px]">{r["Notes"]}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setImportStep("UPLOAD")}
+                    className="rounded-xl text-xs"
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setImportStep("SUMMARY")}
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs px-4 cursor-pointer"
+                  >
+                    Validate &amp; Preview Summary →
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 3: SUMMARY & CONFIRM */}
+            {importStep === "SUMMARY" && (
+              <div className="space-y-4">
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2 text-emerald-950">
+                  <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
+                    <span className="font-extrabold text-xs">Import Validation Summary</span>
+                    <span className="bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded text-[10px]">
+                      Ready for Import
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs pt-1">
+                    <div className="bg-white p-2 rounded-xl border border-emerald-200">
+                      <span className="text-[10px] text-slate-500 block">Total Rows</span>
+                      <strong className="text-slate-900 font-mono text-sm font-bold">3 Records</strong>
+                    </div>
+                    <div className="bg-white p-2 rounded-xl border border-emerald-200">
+                      <span className="text-[10px] text-slate-500 block">Clean Validation</span>
+                      <strong className="text-emerald-800 font-mono text-sm font-bold">3 Clean (100%)</strong>
+                    </div>
+                    <div className="bg-white p-2 rounded-xl border border-emerald-200">
+                      <span className="text-[10px] text-slate-500 block">Source Platform</span>
+                      <strong className="text-slate-900 text-xs font-bold">{csvSourcePlatform}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-slate-700 text-xs">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+                    <span>Auto-Attribution &amp; Default Status Rule:</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 pl-6">
+                    All {DIRECT_CSV_SAMPLE_ROWS.length} imported inquiries will be created as <strong>New Lead</strong> records, assigned to <strong>Jay Kumar</strong>, and tagged with source <strong>"{csvSourcePlatform}"</strong>.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setImportStep("PREVIEW_MAP")}
+                    className="rounded-xl text-xs"
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleConfirmDirectCsvImport}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-xl text-xs px-5 shadow-xs cursor-pointer"
+                  >
+                    Confirm &amp; Import {DIRECT_CSV_SAMPLE_ROWS.length} Leads →
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </Modal>
       )}
