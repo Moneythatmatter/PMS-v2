@@ -1,468 +1,314 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
+import Link from "next/link";
 import {
-  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   Download,
-  FileSpreadsheet,
-  IndianRupee,
   Layers,
-  Printer,
-  RefreshCw,
+  Minus,
+  Package,
+  Plus,
+  RotateCcw,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import {
-  TextInput,
-  SelectInput,
-  FormField,
+  AlertBanner,
+  FOPageHeader,
   StatMiniCard,
 } from "@/components/frontoffice/ui";
-import { FOSearchToolbar } from "@/components/frontoffice/ui/FOSearchToolbar";
-import { ModulePageShell } from "@/components/pms";
-import { ModuleDataTable } from "@/components/pms/ModuleDataTable";
-import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
-import type { ModuleColumn } from "@/components/pms/module-types";
 import { cn } from "@/lib/utils";
 import {
-  INITIAL_STOCK_LEDGER_RECORDS,
-  type StockLedgerRecord,
-  type TransactionType,
+  enrichLedgerRows,
+  LEDGER_TYPE_FILTERS,
+  matchesLedgerFilter,
+  type LedgerMovementType,
+  type LedgerTypeFilter,
 } from "@/app/data/stockLedgerData";
+import { usePsList } from "@/hooks/usePsResource";
+import {
+  psProductService,
+  psStockLedgerService,
+  psWarehouseService,
+} from "@/services/purchase-stores/index";
 
-function transactionBadge(type: TransactionType) {
-  const style =
-    type === "GRN" || type === "Opening Stock" || type === "Stock Transfer In"
-      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-      : type === "Department Issue"
-        ? "bg-blue-50 text-blue-700 ring-blue-200"
-        : type === "Stock Transfer Out"
-          ? "bg-amber-50 text-amber-700 ring-amber-200"
-          : type === "Vendor Return" || type === "Scrap"
-            ? "bg-red-50 text-red-700 ring-red-200"
-            : "bg-slate-100 text-slate-600 ring-slate-200";
-
+function movementBadge(type: LedgerMovementType) {
+  const styles: Record<LedgerMovementType, string> = {
+    GRN: "bg-emerald-50 text-emerald-700",
+    Issue: "bg-sky-50 text-sky-700",
+    "Transfer In": "bg-teal-50 text-teal-700",
+    "Transfer Out": "bg-amber-50 text-amber-800",
+    Adjustment: "bg-slate-100 text-slate-600",
+  };
   return (
-    <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium ring-1 ring-inset", style)}>
+    <span className={cn("inline-flex rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", styles[type])}>
       {type}
     </span>
   );
 }
 
+function splitDateTime(raw: string) {
+  const parts = raw.split(" ");
+  if (parts.length >= 3) {
+    return { date: parts[0], time: `${parts[1]} ${parts[2]}` };
+  }
+  return { date: raw, time: "" };
+}
+
+function parseRecordDate(raw: string): number {
+  const { date, time } = splitDateTime(raw);
+  const parsed = Date.parse(`${date} ${time}`);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 export default function StockLedgerPage() {
-  const [mounted, setMounted] = useState(false);
-  const [ledgerList, setLedgerList] = useState(INITIAL_STOCK_LEDGER_RECORDS);
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [warehouseFilter, setWarehouseFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("");
-  const [selectedRecord, setSelectedRecord] = useState<StockLedgerRecord | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const { data: products, loading: productsLoading } = usePsList(() => psProductService.list());
+  const { data: warehouses, loading: warehousesLoading } = usePsList(() => psWarehouseService.list());
+  const { data: ledgerRecords, loading: ledgerLoading } = usePsList(() => psStockLedgerService.list());
 
-  useEffect(() => setMounted(true), []);
+  const loading = productsLoading || warehousesLoading || ledgerLoading;
 
-  const filteredLedger = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return ledgerList.filter((rec) => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<LedgerTypeFilter>("all");
+  const [toastMessage, setToastMessage] = useState<{ text: string; variant: "success" | "info" | "error" } | null>(null);
+
+  const showToast = (text: string, variant: "success" | "info" | "error" = "success") => {
+    setToastMessage({ text, variant });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const enrichedRecords = useMemo(() => {
+    return enrichLedgerRows(ledgerRecords, products, warehouses)
+      .map((rec) => ({
+        ...rec,
+        unit: rec.materialUnit,
+        ...splitDateTime(rec.transactionDate),
+      }))
+      .sort((a, b) => parseRecordDate(b.transactionDate) - parseRecordDate(a.transactionDate));
+  }, [ledgerRecords, products, warehouses]);
+
+  const filteredRecords = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return enrichedRecords.filter((rec) => {
       const matchSearch =
         !q ||
         rec.transactionNo.toLowerCase().includes(q) ||
-        rec.referenceNo.toLowerCase().includes(q) ||
-        rec.itemCode.toLowerCase().includes(q) ||
-        rec.itemName.toLowerCase().includes(q) ||
-        rec.supplier.toLowerCase().includes(q);
-      const matchType = typeFilter === "all" || rec.transactionType === typeFilter;
-      const matchWarehouse =
-        warehouseFilter === "all" || rec.warehouse.toLowerCase().includes(warehouseFilter.toLowerCase());
-      const matchCategory =
-        categoryFilter === "all" || rec.category.toLowerCase().includes(categoryFilter.toLowerCase());
-      const matchDept =
-        departmentFilter === "all" || rec.department.toLowerCase().includes(departmentFilter.toLowerCase());
-      const matchDate = !dateFilter || rec.transactionDate.includes(dateFilter);
-      return matchSearch && matchType && matchWarehouse && matchCategory && matchDept && matchDate;
+        rec.materialId.toLowerCase().includes(q) ||
+        rec.materialCode.toLowerCase().includes(q) ||
+        rec.materialName.toLowerCase().includes(q) ||
+        rec.warehouseName.toLowerCase().includes(q) ||
+        rec.movementType.toLowerCase().includes(q);
+      return matchSearch && matchesLedgerFilter(rec, typeFilter);
     });
-  }, [ledgerList, search, typeFilter, warehouseFilter, categoryFilter, departmentFilter, dateFilter]);
+  }, [enrichedRecords, searchQuery, typeFilter]);
 
   const stats = useMemo(() => {
-    const stockIn = filteredLedger.reduce((sum, r) => sum + r.stockIn, 0);
-    const stockOut = filteredLedger.reduce((sum, r) => sum + r.stockOut, 0);
-    const value = filteredLedger.reduce((sum, r) => sum + r.transactionValue, 0);
-    const uniqueItems = new Set(filteredLedger.map((r) => r.itemCode)).size;
-    return { stockIn, stockOut, value, uniqueItems };
-  }, [filteredLedger]);
+    const movements = filteredRecords.length;
+    const stockIn = filteredRecords.reduce((sum, r) => sum + r.quantityIn, 0);
+    const stockOut = filteredRecords.reduce((sum, r) => sum + r.quantityOut, 0);
+    return { movements, stockIn, stockOut };
+  }, [filteredRecords]);
 
-  const columns: ModuleColumn[] = [
-    {
-      key: "transactionDate",
-      header: "When",
-      render: (r: StockLedgerRecord) => (
-        <span className="whitespace-nowrap text-[11px] font-medium text-slate-600">{r.transactionDate}</span>
-      ),
-    },
-    {
-      key: "transactionNo",
-      header: "Transaction",
-      render: (r: StockLedgerRecord) => (
-        <div className="min-w-0">
-          <p className="font-mono text-xs font-semibold text-slate-900">{r.transactionNo}</p>
-          <p className="truncate text-[11px] text-slate-500">{r.referenceNo}</p>
-        </div>
-      ),
-    },
-    {
-      key: "transactionType",
-      header: "Type",
-      render: (r: StockLedgerRecord) => transactionBadge(r.transactionType),
-    },
-    {
-      key: "itemName",
-      header: "Item",
-      render: (r: StockLedgerRecord) => (
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-900">{r.itemName}</p>
-          <p className="truncate text-[11px] text-slate-500">
-            {r.itemCode} · {r.category}
-          </p>
-        </div>
-      ),
-    },
-    {
-      key: "warehouse",
-      header: "Location",
-      render: (r: StockLedgerRecord) => (
-        <div className="min-w-0">
-          <p className="truncate text-xs font-medium text-slate-800">{r.warehouse}</p>
-          <p className="truncate text-[11px] text-slate-500">{r.department}</p>
-        </div>
-      ),
-    },
-    {
-      key: "stockIn",
-      header: "In / Out",
-      align: "right",
-      render: (r: StockLedgerRecord) => (
-        <div className="text-right text-xs">
-          {r.stockIn > 0 ? (
-            <p className="font-semibold text-emerald-700">+{r.stockIn}</p>
-          ) : r.stockOut > 0 ? (
-            <p className="font-semibold text-blue-700">-{r.stockOut}</p>
-          ) : (
-            <p className="text-slate-300">—</p>
-          )}
-          <p className="text-[11px] text-slate-500">{r.unit}</p>
-        </div>
-      ),
-    },
-    {
-      key: "balanceQty",
-      header: "Balance",
-      align: "right",
-      render: (r: StockLedgerRecord) => (
-        <span
-          className={cn(
-            "inline-flex rounded-md px-2 py-0.5 text-xs font-bold",
-            r.balanceQty < 0 ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-900",
-          )}
-        >
-          {r.balanceQty}
-        </span>
-      ),
-    },
-    {
-      key: "transactionValue",
-      header: "Value",
-      align: "right",
-      render: (r: StockLedgerRecord) => (
-        <span className="text-xs font-semibold text-slate-900">
-          ₹{r.transactionValue.toLocaleString("en-IN")}
-        </span>
-      ),
-    },
-  ];
+  const hasActiveFilters = Boolean(searchQuery) || typeFilter !== "all";
 
-  if (!mounted) return null;
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setTypeFilter("all");
+  };
+
+  const handleExportCSV = () => {
+    const headers = ["Date", "Time", "Transaction", "Type", "Material ID", "Material", "Warehouse", "In / Out", "Balance"];
+    const rows = filteredRecords.map((r) => {
+      const change =
+        r.quantityIn > 0 ? `+${r.quantityIn} ${r.unit}` : r.quantityOut > 0 ? `-${r.quantityOut} ${r.unit}` : "—";
+      return [
+        `"${r.date}"`,
+        `"${r.time}"`,
+        `"${r.transactionNo}"`,
+        `"${r.movementType}"`,
+        `"${r.materialId}"`,
+        `"${r.materialName}"`,
+        `"${r.warehouseName}"`,
+        `"${change}"`,
+        `${r.balanceQty} ${r.unit}`,
+      ];
+    });
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Movement_History_${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${filteredRecords.length} movement records.`, "info");
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">
+        Loading...
+      </div>
+    );
+  }
 
   return (
-    <ModulePageShell
-      eyebrow="Inventory"
-      title="Stock Ledger"
-      description="Track every stock movement — receipts, issues, transfers, and adjustments."
-      wrapChildren={false}
-      secondaryActions={
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setLedgerList([...INITIAL_STOCK_LEDGER_RECORDS]);
-            }}
-          >
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-            Refresh
-          </Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => alert("Exporting stock ledger…")}>
-            <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
-            Export
-          </Button>
+    <div className="min-h-screen space-y-6 bg-slate-50/50 p-4 sm:p-6 md:p-8">
+      {toastMessage && (
+        <div className="fixed top-5 right-5 z-50 max-w-md animate-in fade-in slide-in-from-top-3">
+          <AlertBanner variant={toastMessage.variant} message={toastMessage.text} onDismiss={() => setToastMessage(null)} />
         </div>
-      }
-    >
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatMiniCard label="Movements" value={filteredLedger.length} icon={Layers} sublabel="In view" />
-        <StatMiniCard
-          label="Stock In"
-          value={stats.stockIn.toLocaleString("en-IN")}
-          accent="#10b981"
-          icon={ArrowDownRight}
-          sublabel="Received / transferred in"
-        />
-        <StatMiniCard
-          label="Stock Out"
-          value={stats.stockOut.toLocaleString("en-IN")}
-          accent="#2563eb"
-          icon={ArrowUpRight}
-          sublabel="Issued / transferred out"
-        />
-        <StatMiniCard
-          label="Value"
-          value={`₹${stats.value.toLocaleString("en-IN")}`}
-          accent="#047857"
-          icon={IndianRupee}
-          sublabel={`${stats.uniqueItems} SKUs`}
-        />
-      </div>
-
-      <div className="mt-3">
-        <FOSearchToolbar
-          search={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Search transaction, item, supplier…"
-          filterPills={{
-            active: typeFilter,
-            onChange: setTypeFilter,
-            options: [
-              { id: "all", label: "All" },
-              { id: "GRN", label: "GRN" },
-              { id: "Department Issue", label: "Issues" },
-              { id: "Stock Transfer In", label: "Transfer In" },
-              { id: "Stock Transfer Out", label: "Transfer Out" },
-              { id: "Vendor Return", label: "Returns" },
-              { id: "Stock Adjustment", label: "Adjustments" },
-              { id: "Scrap", label: "Scrap" },
-            ],
-          }}
-          hasActiveAdvancedFilters={
-            warehouseFilter !== "all" ||
-            categoryFilter !== "all" ||
-            departmentFilter !== "all" ||
-            Boolean(dateFilter)
-          }
-          onClearAdvancedFilters={() => {
-            setWarehouseFilter("all");
-            setCategoryFilter("all");
-            setDepartmentFilter("all");
-            setDateFilter("");
-          }}
-          advancedFilters={
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <FormField label="Warehouse">
-                <SelectInput
-                  value={warehouseFilter}
-                  onChange={(e) => setWarehouseFilter(e.target.value)}
-                >
-                  <option value="all">All warehouses</option>
-                  <option value="Linen">Central Linen</option>
-                  <option value="Cold">Cold Room</option>
-                  <option value="Housekeeping">Housekeeping</option>
-                  <option value="Engineering">Engineering</option>
-                </SelectInput>
-              </FormField>
-              <FormField label="Category">
-                <SelectInput
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                >
-                  <option value="all">All categories</option>
-                  <option value="Linen">Linen</option>
-                  <option value="Dairy">Dairy</option>
-                  <option value="Chemicals">Chemicals</option>
-                  <option value="Engineering">Engineering</option>
-                </SelectInput>
-              </FormField>
-              <FormField label="Department">
-                <SelectInput
-                  value={departmentFilter}
-                  onChange={(e) => setDepartmentFilter(e.target.value)}
-                >
-                  <option value="all">All departments</option>
-                  <option value="Housekeeping">Housekeeping</option>
-                  <option value="Kitchen">Kitchen / F&B</option>
-                  <option value="Engineering">Engineering</option>
-                </SelectInput>
-              </FormField>
-              <FormField label="Date">
-                <TextInput
-                  type="date"
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                />
-              </FormField>
-            </div>
-          }
-        />
-      </div>
-
-      {filteredLedger.some((r) => r.balanceQty < 0) && (
-        <section className="mt-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-            <div>
-              <p className="text-sm font-semibold text-amber-950">Negative balances in view</p>
-              <p className="text-xs text-amber-800/80">
-                Review flagged movements — stock may need a physical count or adjustment.
-              </p>
-            </div>
-          </div>
-        </section>
       )}
 
-      <div className="mt-3 space-y-3">
-        <ModuleSelectionBar
-          count={selectedIds.size}
-          noun="movement"
-          onClear={() => setSelectedIds(new Set())}
-          actions={[
-            {
-              label: "View",
-              onClick: () => {
-                const first = filteredLedger.find((r) => selectedIds.has(r.id));
-                if (first) setSelectedRecord(first);
-              },
-            },
-            {
-              label: "Print",
-              icon: <Printer className="h-3.5 w-3.5" />,
-              onClick: () => {
-                const first = filteredLedger.find((r) => selectedIds.has(r.id));
-                if (first) alert(`Printing ${first.transactionNo}`);
-              },
-            },
-            {
-              label: "Download",
-              icon: <Download className="h-3.5 w-3.5" />,
-              onClick: () => {
-                const first = filteredLedger.find((r) => selectedIds.has(r.id));
-                if (first) alert(`Downloading ${first.transactionNo}`);
-              },
-            },
-          ]}
-        />
-        <ModuleDataTable
-          columns={columns}
-          rows={filteredLedger}
-          emptyMessage="No stock movements match your filters."
-          onRowClick={(r) => setSelectedRecord(r as StockLedgerRecord)}
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-          renderMobileCard={(r: StockLedgerRecord) => (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-mono text-xs font-bold text-slate-900">{r.transactionNo}</p>
-                {transactionBadge(r.transactionType)}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-900">{r.itemName}</p>
-                <p className="text-[11px] text-slate-500">
-                  {r.warehouse} · {r.transactionDate}
-                </p>
-              </div>
-              <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-xs">
-                <span className="text-slate-500">
-                  In <span className="font-semibold text-emerald-700">{r.stockIn}</span> · Out{" "}
-                  <span className="font-semibold text-blue-700">{r.stockOut}</span>
-                </span>
-                <span className="font-bold text-slate-900">
-                  Bal {r.balanceQty} {r.unit}
-                </span>
-              </div>
-            </div>
-          )}
-        />
+      <FOPageHeader
+        eyebrow="Purchase & Stores · Inventory"
+        title="Movement History"
+        description="What happened to your stock — receipts, issues, transfers, and adjustments."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/purchase-stores/inventory/stock">
+              <Button type="button" variant="outline" size="sm" className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100">
+                <Package className="h-4 w-4" /> Current Stock
+              </Button>
+            </Link>
+            <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100">
+              <Download className="h-4 w-4" /> Export CSV
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <StatMiniCard label="Movements" value={stats.movements} sublabel="In view" accent="#0f766e" icon={Layers} />
+        <StatMiniCard label="Stock In" value={stats.stockIn.toLocaleString("en-IN")} sublabel="Units received" accent="#16a34a" icon={ArrowDownRight} />
+        <StatMiniCard label="Stock Out" value={stats.stockOut.toLocaleString("en-IN")} sublabel="Units issued" accent="#dc2626" icon={ArrowUpRight} />
       </div>
 
-      {selectedRecord && (
-        <Drawer
-          open={Boolean(selectedRecord)}
-          onClose={() => setSelectedRecord(null)}
-          title={selectedRecord.transactionNo}
-          description={`${selectedRecord.transactionType} · ${selectedRecord.transactionDate}`}
-          width="lg"
-          footer={
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setSelectedRecord(null)}>
-                Close
-              </Button>
-              <Button type="button" onClick={() => alert(`Printing ${selectedRecord.transactionNo}`)}>
-                <Printer className="mr-1.5 h-3.5 w-3.5" />
-                Print
-              </Button>
-            </div>
-          }
-        >
-          <div className="space-y-4 p-1">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="Item">
-                <p className="text-sm font-semibold text-slate-900">{selectedRecord.itemName}</p>
-                <p className="text-xs text-slate-500">{selectedRecord.itemCode}</p>
-              </FormField>
-              <FormField label="Reference">
-                <p className="font-mono text-sm font-semibold text-emerald-800">{selectedRecord.referenceNo}</p>
-              </FormField>
-              <FormField label="Warehouse">
-                <p className="text-sm text-slate-800">{selectedRecord.warehouse}</p>
-                <p className="text-xs text-slate-500">{selectedRecord.store}</p>
-              </FormField>
-              <FormField label="Department / Supplier">
-                <p className="text-sm text-slate-800">{selectedRecord.department}</p>
-                <p className="text-xs text-slate-500">{selectedRecord.supplier}</p>
-              </FormField>
-              <FormField label="Batch">
-                <p className="font-mono text-sm text-slate-800">{selectedRecord.batchNo || "—"}</p>
-              </FormField>
-              <FormField label="Created by">
-                <p className="text-sm text-slate-800">{selectedRecord.createdBy}</p>
-                <p className="text-xs text-slate-500">Approved: {selectedRecord.approvedBy}</p>
-              </FormField>
-            </div>
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search transaction, material, warehouse..."
+              className="h-9.5 w-full rounded-xl border border-slate-200 bg-white pl-9.5 pr-3 text-xs sm:text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            />
+          </div>
 
-            <div className="grid grid-cols-3 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
-              <div>
-                <p className="text-[11px] text-slate-500">In</p>
-                <p className="text-lg font-bold text-emerald-700">+{selectedRecord.stockIn}</p>
-              </div>
-              <div>
-                <p className="text-[11px] text-slate-500">Out</p>
-                <p className="text-lg font-bold text-blue-700">-{selectedRecord.stockOut}</p>
-              </div>
-              <div>
-                <p className="text-[11px] text-slate-500">Balance</p>
-                <p className="text-lg font-bold text-slate-900">{selectedRecord.balanceQty}</p>
-              </div>
-            </div>
-
-            {selectedRecord.remarks && (
-              <FormField label="Remarks">
-                <p className="text-sm text-slate-700">{selectedRecord.remarks}</p>
-              </FormField>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {LEDGER_TYPE_FILTERS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setTypeFilter(opt.id)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                  typeFilter === opt.id
+                    ? "bg-emerald-700 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+            {hasActiveFilters && (
+              <Button type="button" variant="outline" size="sm" onClick={handleResetFilters} className="h-8 px-2.5 text-xs">
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
             )}
           </div>
-        </Drawer>
-      )}
-    </ModulePageShell>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+          <p className="text-xs font-medium text-slate-500">
+            {filteredRecords.length} movement{filteredRecords.length !== 1 ? "s" : ""}
+            {hasActiveFilters ? " matching filters" : ""}
+          </p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] text-left text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="py-3 px-4 w-[110px]">Date</th>
+                <th className="py-3 px-4">Transaction</th>
+                <th className="py-3 px-4">Material</th>
+                <th className="py-3 px-4">Warehouse</th>
+                <th className="py-3 px-4 text-right">Change</th>
+                <th className="py-3 px-4 text-right">Balance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+              {filteredRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-16 text-center">
+                    <p className="text-sm font-medium text-slate-500">No movements found</p>
+                    <p className="mt-1 text-xs text-slate-400">Try a different search or filter</p>
+                  </td>
+                </tr>
+              ) : (
+                filteredRecords.map((row) => {
+                  const isIn = row.quantityIn > 0;
+                  const isOut = row.quantityOut > 0;
+                  const changeQty = isIn ? row.quantityIn : row.quantityOut;
+
+                  return (
+                    <tr key={row.id} className="transition-colors hover:bg-slate-50/60">
+                      <td className="py-3 px-4 align-top">
+                        <p className="font-medium text-slate-800">{row.date}</p>
+                        {row.time && <p className="text-[10px] text-slate-400">{row.time}</p>}
+                      </td>
+
+                      <td className="py-3 px-4 align-top">
+                        <p className="font-mono text-xs font-semibold text-slate-900">{row.transactionNo}</p>
+                        <div className="mt-1">{movementBadge(row.movementType)}</div>
+                      </td>
+
+                      <td className="py-3 px-4 align-top">
+                        <p className="font-semibold text-slate-900 leading-snug">{row.materialName}</p>
+                        <p className="mt-0.5 font-mono text-[10px] text-slate-400">{row.materialId}</p>
+                      </td>
+
+                      <td className="py-3 px-4 align-top">
+                        <p className="text-slate-700 leading-snug">{row.warehouseName}</p>
+                      </td>
+
+                      <td className="py-3 px-4 align-top text-right">
+                        {isIn || isOut ? (
+                          <div className="inline-flex items-center gap-1">
+                            {isIn ? (
+                              <Plus className="h-3 w-3 text-emerald-600" />
+                            ) : (
+                              <Minus className="h-3 w-3 text-red-500" />
+                            )}
+                            <span className={cn("font-bold tabular-nums", isIn ? "text-emerald-700" : "text-red-600")}>
+                              {isIn ? "+" : "−"}{changeQty}
+                            </span>
+                            <span className="text-slate-400">{row.unit}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-4 align-top text-right">
+                        <span className="font-bold tabular-nums text-slate-900">{row.balanceQty}</span>
+                        <span className="ml-1 text-slate-400">{row.unit}</span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }

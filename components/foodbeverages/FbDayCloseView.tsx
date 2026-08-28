@@ -148,7 +148,7 @@ export function FbDayCloseView() {
             ? "No active covers on the floor"
             : `${openTables.length} table${openTables.length === 1 ? "" : "s"} still open`,
         mandatory: true,
-        href: "/food-beverages/restaurants/live-table-status",
+        href: "/food-beverages/restaurants/orders",
       },
       {
         id: "orders",
@@ -544,7 +544,7 @@ export function FbDayCloseView() {
                         {t.status} · {formatINR(Number(t.checkAmount ?? 0))}
                       </p>
                     </div>
-                    <Link href="/food-beverages/restaurants/live-table-status">
+                    <Link href="/food-beverages/restaurants/orders">
                       <Button size="sm" variant="outline" className="text-xs">
                         Settle
                       </Button>

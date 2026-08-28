@@ -103,12 +103,16 @@ export function ModuleRowDetail({
                 <span>{col.header}</span>
               </div>
               <div className="text-right">
-                {isStatus && value ? (
+                {isStatus && value && !col.render ? (
                   <ModuleStatusPill
                     status={String(value)}
                     style={statusStyle}
                     statusMap={statusMap}
                   />
+                ) : col.render ? (
+                  <div className="text-sm font-semibold text-slate-900">
+                    {col.render(row)}
+                  </div>
                 ) : (
                   <p className="text-sm font-semibold text-slate-900">
                     {formatValue(value, col.format)}

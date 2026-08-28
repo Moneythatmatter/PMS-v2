@@ -10,15 +10,15 @@ import {
   FormSection,
 } from "@/components/frontoffice/ui";
 import {
-  CATEGORY_MASTER_LIST,
-  UNIT_MASTER_LIST,
-  SUPPLIER_MASTER_LIST,
   STORAGE_TYPE_OPTIONS,
   TAX_TYPE_OPTIONS,
   type ProductItem,
   type ProductStatus,
   type StorageType,
   type TaxType,
+  type MasterCategory,
+  type MasterUnit,
+  type MasterSupplier,
 } from "@/app/data/productMasterData";
 import type { ProductValidationError } from "./productValidation";
 
@@ -27,6 +27,9 @@ interface ProductFormProps {
   setFormData: React.Dispatch<React.SetStateAction<Partial<ProductItem>>>;
   errors: ProductValidationError;
   onAutoGenerateCode: () => void;
+  categoryOptions: MasterCategory[];
+  unitOptions: MasterUnit[];
+  supplierOptions: MasterSupplier[];
 }
 
 export function ProductForm({
@@ -34,6 +37,9 @@ export function ProductForm({
   setFormData,
   errors,
   onAutoGenerateCode,
+  categoryOptions,
+  unitOptions,
+  supplierOptions,
 }: ProductFormProps) {
   const handleChange = (field: keyof ProductItem, value: any) => {
     setFormData((prev) => ({
@@ -85,7 +91,7 @@ export function ProductForm({
             className={errors.category ? "border-red-400 focus:border-red-500 focus:ring-red-200" : ""}
           >
             <option value="">Select Category Master…</option>
-            {CATEGORY_MASTER_LIST.map((cat) => (
+            {categoryOptions.map((cat) => (
               <option key={cat.id} value={cat.name}>
                 {cat.name}
               </option>
@@ -103,7 +109,7 @@ export function ProductForm({
             className={errors.unit ? "border-red-400 focus:border-red-500 focus:ring-red-200" : ""}
           >
             <option value="">Select Unit Master…</option>
-            {UNIT_MASTER_LIST.map((u) => (
+            {unitOptions.map((u) => (
               <option key={u.id} value={u.name}>
                 {u.name} ({u.symbol})
               </option>
@@ -140,7 +146,7 @@ export function ProductForm({
             onChange={(e) => handleChange("preferredSupplier", e.target.value)}
           >
             <option value="">Select Supplier Master…</option>
-            {SUPPLIER_MASTER_LIST.map((sup) => (
+            {supplierOptions.map((sup) => (
               <option key={sup.id} value={sup.name}>
                 {sup.name}
               </option>

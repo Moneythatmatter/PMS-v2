@@ -24,6 +24,7 @@ export type FbOrderStatus =
   | "Ready"
   | "Served"
   | "Settled"
+  | "Cancelled"
   | "Rejected";
 
 export interface FbOrderLine {
@@ -40,6 +41,7 @@ export interface FbOrder {
   lines: FbOrderLine[];
   amount: number;
   status: FbOrderStatus;
+  lifecycleStatus?: string;
   outletId: string;
   placedAt: string;
   server: string;
@@ -379,36 +381,76 @@ export function getKitchenOutletOptions(): FbOutlet[] {
 
 export const tableStatusStyles: Record<
   LiveTableStatus,
-  { bg: string; border: string; badge: string; label: string }
+  {
+    bg: string;
+    border: string;
+    badge: string;
+    label: string;
+    legendLabel: string;
+    legendSwatch: string;
+  }
 > = {
   Available: {
-    bg: "bg-emerald-50",
-    border: "border-emerald-200",
-    badge: "bg-emerald-100 text-emerald-800",
+    bg: "bg-white",
+    border: "border-slate-300",
+    badge: "bg-slate-100 text-slate-700",
     label: "Available",
+    legendLabel: "Blank Table",
+    legendSwatch: "bg-white border border-slate-300",
   },
   Reserved: {
-    bg: "bg-amber-50",
-    border: "border-amber-200",
-    badge: "bg-amber-100 text-amber-800",
+    bg: "bg-sky-200",
+    border: "border-sky-500",
+    badge: "bg-sky-100 text-sky-900",
     label: "Reserved",
+    legendLabel: "Running Table",
+    legendSwatch: "bg-sky-300 border border-sky-500",
   },
   Occupied: {
-    bg: "bg-red-50",
-    border: "border-red-200",
-    badge: "bg-red-100 text-red-800",
-    label: "Occupied",
+    bg: "bg-yellow-300",
+    border: "border-yellow-600",
+    badge: "bg-yellow-100 text-yellow-900",
+    label: "Running KOT",
+    legendLabel: "Running KOT",
+    legendSwatch: "bg-yellow-300 border border-yellow-600",
   },
   Billing: {
-    bg: "bg-violet-50",
-    border: "border-violet-200",
-    badge: "bg-violet-100 text-violet-800",
-    label: "Billing",
+    bg: "bg-emerald-300",
+    border: "border-emerald-600",
+    badge: "bg-emerald-100 text-emerald-900",
+    label: "Printed",
+    legendLabel: "Printed Table",
+    legendSwatch: "bg-emerald-400 border border-emerald-600",
   },
   Dirty: {
-    bg: "bg-slate-100",
-    border: "border-slate-300",
-    badge: "bg-slate-200 text-slate-700",
-    label: "Dirty",
+    bg: "bg-orange-200",
+    border: "border-orange-500",
+    badge: "bg-orange-100 text-orange-900",
+    label: "Paid",
+    legendLabel: "Paid Table",
+    legendSwatch: "bg-orange-300 border border-orange-500",
   },
 };
+
+export const tableStatusLegend: LiveTableStatus[] = [
+  "Available",
+  "Reserved",
+  "Occupied",
+  "Billing",
+  "Dirty",
+];
+
+export function formatTableDuration(mins: number) {
+  if (mins <= 0) return "0 Min";
+  if (mins < 60) return `${mins} Min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+export function formatTableAmount(amount: number) {
+  return `₹ ${amount.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}

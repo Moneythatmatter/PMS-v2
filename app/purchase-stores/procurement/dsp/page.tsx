@@ -27,12 +27,10 @@ import { ModuleColumn } from "@/components/pms/module-types";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 import { PurchaseFormCard } from "@/components/purchase-stores/ui/PurchaseFormCard";
 import { PurchaseAttachmentList } from "@/components/purchase-stores/ui/PurchaseAttachmentList";
-import {
-  INITIAL_DSP_RECORDS,
-  DSPRecord,
-  DSPItem,
-  DSPAttachment,
-} from "@/app/data/dspData";
+import { DocumentApprovalFooter } from "@/components/purchase-stores/ui/DocumentApprovalFooter";
+import type { DSPRecord, DSPItem, DSPAttachment } from "@/app/data/dspData";
+import { usePsList } from "@/hooks/usePsResource";
+import { psDspService } from "@/services/purchase-stores/index";
 
 export default function DirectStorePurchasesPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -40,8 +38,8 @@ export default function DirectStorePurchasesPage() {
     setIsMounted(true);
   }, []);
 
-  // Main DSP Dataset
-  const [dspList, setDspList] = useState<DSPRecord[]>(INITIAL_DSP_RECORDS);
+  const { data: dspList, loading, reload } = usePsList(() => psDspService.list(), []);
+  const [saving, setSaving] = useState(false);
 
   // Search & Filter State
   const [search, setSearch] = useState("");
@@ -151,11 +149,8 @@ export default function DirectStorePurchasesPage() {
   }, [dspList, search, departmentFilter, statusFilter]);
 
   // Save DSP Handler
-  const handleSaveDSP = (isSubmit: boolean) => {
-    const nextNum = `DSP-2026-00${dspList.length + 1}`;
-    const newRecord: DSPRecord = {
-      id: editDSP ? editDSP.id : `dsp-${Date.now()}`,
-      dspNumber: editDSP ? editDSP.dspNumber : nextNum,
+  const handleSaveDSP = async (isSubmit: boolean) => {
+    const newRecord: Partial<DSPRecord> = {
       purchaseDate: formDate,
       department: formDepartment,
       requesterName: formRequester,
@@ -174,27 +169,62 @@ export default function DirectStorePurchasesPage() {
       taxAmount: Math.round(totalAmountCalculated * 0.05),
       netAmount: Math.round(totalAmountCalculated * 0.95),
       totalAmount: totalAmountCalculated,
-      status: isSubmit ? "Approved" : "Draft",
+      status: isSubmit ? "Pending Approval" : "Draft",
       createdBy: formRequester,
       items: formItems,
       attachments: formAttachments,
       remarks: formReason,
-      activityTimeline: [
-        { stage: "Purchased", timestamp: "Today", note: `Created by ${formRequester}`, author: formRequester },
-      ],
+      activityTimeline: isSubmit
+        ? [
+            { stage: "Purchased", timestamp: "Today", note: `Created by ${formRequester}`, author: formRequester },
+            { stage: "Pending Approval", timestamp: "Today", note: "Awaiting manager approval", author: "System" },
+          ]
+        : [{ stage: "Draft", timestamp: "Today", note: `Saved by ${formRequester}`, author: formRequester }],
     };
 
-    if (editDSP) {
-      setDspList((prev) => prev.map((d) => (d.id === editDSP.id ? newRecord : d)));
-      setEditDSP(null);
-      setToast({ message: "Direct Store Purchase Updated Successfully", variant: "success" });
-    } else {
-      setDspList([newRecord, ...dspList]);
-      setCreateDrawerOpen(false);
-      setToast({
-        message: isSubmit ? "Direct Purchase Submitted & Approved" : "Direct Purchase Saved as Draft",
-        variant: "success",
-      });
+    setSaving(true);
+    try {
+      if (editDSP) {
+        await psDspService.update(editDSP.id, newRecord);
+        setEditDSP(null);
+        setToast({ message: "Direct Store Purchase Updated Successfully", variant: "success" });
+      } else {
+        await psDspService.create(newRecord);
+        setCreateDrawerOpen(false);
+        setToast({
+          message: isSubmit ? "Direct Purchase submitted for approval." : "Direct Purchase saved as draft.",
+          variant: "success",
+        });
+      }
+      await reload();
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Save failed", variant: "info" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleApproveDSP = async () => {
+    if (!selectedDSP) return;
+    try {
+      await psDspService.update(selectedDSP.id, { status: "Approved" });
+      await reload();
+      setToast({ message: `${selectedDSP.dspNumber} approved.`, variant: "success" });
+      setSelectedDSP(null);
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Approve failed", variant: "info" });
+    }
+  };
+
+  const handleRejectDSP = async () => {
+    if (!selectedDSP) return;
+    try {
+      await psDspService.update(selectedDSP.id, { status: "Rejected" });
+      await reload();
+      setToast({ message: `${selectedDSP.dspNumber} rejected.`, variant: "info" });
+      setSelectedDSP(null);
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Reject failed", variant: "info" });
     }
   };
 
@@ -211,6 +241,12 @@ export default function DirectStorePurchasesPage() {
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-extrabold uppercase rounded-full bg-amber-50 text-amber-800 border border-amber-200">
             Pending Approval
+          </span>
+        );
+      case "Rejected":
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 text-[9px] font-extrabold uppercase rounded-full bg-red-50 text-red-800 border border-red-200">
+            Rejected
           </span>
         );
       default:
@@ -394,6 +430,11 @@ export default function DirectStorePurchasesPage() {
 
       {/* CORE SHARED MODULE DATA TABLE */}
       <div className="space-y-3">
+        {loading ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+            Loading direct purchases…
+          </div>
+        ) : (
         <ModuleDataTable
           columns={columns}
           rows={filteredDSPs}
@@ -417,6 +458,7 @@ export default function DirectStorePurchasesPage() {
           </div>
         )}
         />
+        )}
       </div>
 
       {/* CREATE / EDIT DSP DRAWER */}
@@ -454,7 +496,7 @@ export default function DirectStorePurchasesPage() {
               onClick={() => handleSaveDSP(true)}
               className="h-9 px-5 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer"
             >
-              Submit Direct Purchase
+              Submit for Approval
             </Button>
           </div>
         }
@@ -643,14 +685,13 @@ export default function DirectStorePurchasesPage() {
           description={selectedDSP.dspNumber}
           width="lg"
           footer={
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setSelectedDSP(null)}
-              className="w-full h-9 text-xs font-semibold"
-            >
-              Close
-            </Button>
+            <DocumentApprovalFooter
+              showApprovalActions={selectedDSP.status === "Pending Approval"}
+              onApprove={handleApproveDSP}
+              onReject={handleRejectDSP}
+              onClose={() => setSelectedDSP(null)}
+              approveLabel="Approve Purchase"
+            />
           }
         >
           <div className="space-y-5">

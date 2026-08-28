@@ -36,92 +36,58 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
+import { DocumentApprovalFooter } from "@/components/purchase-stores/ui/DocumentApprovalFooter";
 import { ModuleDataTable } from "@/components/pms/ModuleDataTable";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import type { ModuleColumn } from "@/components/pms/module-types";
+import type { PurchaseRequisition, PRRequestedItem } from "@/app/data/purchaseRequisitionsData";
+import { usePsList } from "@/hooks/usePsResource";
+import { psRequisitionService, psProductService } from "@/services/purchase-stores/index";
 import {
-  INITIAL_PURCHASE_REQUISITIONS,
-  PurchaseRequisition,
-  PRRequestedItem,
-} from "@/app/data/purchaseRequisitionsData";
+  type MaterialCatalogItem,
+  prItemFromCatalog,
+  productsToCatalog,
+} from "@/app/data/procurementMaterial";
+import {
+  type PurchaseAttachmentRecord,
+  MAX_ATTACHMENT_BYTES,
+  attachmentFromApi,
+  attachmentToApiPayload,
+  createAttachmentFromFile,
+  revokeAttachmentUrls,
+} from "@/app/data/purchaseAttachmentUtils";
+import { PurchaseAttachmentPreviewModal } from "@/components/purchase-stores/ui/PurchaseAttachmentPreviewModal";
 
-// Enterprise Inventory Catalog Mock Item Interface
+/** Legacy alias — catalog rows are loaded from Product Master at runtime */
 export interface InventoryCatalogItem {
+  materialId: string;
+  productCode: string;
   itemCode: string;
   itemName: string;
+  productName: string;
   category: string;
   unit: string;
   estimatedPrice: number;
+  purchasePrice: number;
 }
 
-// Enterprise Attachment Interface for Drawer Form
-export interface PRFormAttachment {
-  id: string;
-  fileName: string;
-  fileType: "PDF" | "Excel" | "Word" | "Image" | "File";
-  fileSize: string;
-  uploadedBy: string;
-  uploadedOn: string;
+/** @deprecated Use PurchaseAttachmentRecord */
+export type PRFormAttachment = PurchaseAttachmentRecord;
+
+/** @deprecated Use Product Master via psProductService — kept for import compatibility */
+export const MOCK_INVENTORY_CATALOG: InventoryCatalogItem[] = [];
+
+/** @deprecated Empty — attachments come from user uploads */
+export const DEFAULT_FORM_ATTACHMENTS: PRFormAttachment[] = [];
+
+function toInventoryCatalogItem(c: MaterialCatalogItem): InventoryCatalogItem {
+  return {
+    ...c,
+    itemCode: c.productCode,
+    itemName: c.productName,
+    estimatedPrice: c.purchasePrice,
+  };
 }
-
-// 5 Static Mock Items per ERP Standard
-export const MOCK_INVENTORY_CATALOG: InventoryCatalogItem[] = [
-  {
-    itemCode: "INV-LIN-001",
-    itemName: "Bedsheet (King Size 300TC)",
-    category: "Linen",
-    unit: "Pieces",
-    estimatedPrice: 350,
-  },
-  {
-    itemCode: "INV-LIN-002",
-    itemName: "Pillow Cover (Satin Finish)",
-    category: "Linen",
-    unit: "Pieces",
-    estimatedPrice: 90,
-  },
-  {
-    itemCode: "INV-BTH-001",
-    itemName: "Bath Towel (750 GSM Plush)",
-    category: "Bath Linen",
-    unit: "Pieces",
-    estimatedPrice: 310,
-  },
-  {
-    itemCode: "INV-LIN-003",
-    itemName: "Blanket (Thermal Fleece)",
-    category: "Linen",
-    unit: "Units",
-    estimatedPrice: 1500,
-  },
-  {
-    itemCode: "INV-CHM-001",
-    itemName: "Cleaning Chemical (Taski R2)",
-    category: "Chemicals",
-    unit: "Canister",
-    estimatedPrice: 2500,
-  },
-];
-
-// Initial Form Attachments (Enterprise Mock)
-export const DEFAULT_FORM_ATTACHMENTS: PRFormAttachment[] = [
-  {
-    id: "att-1",
-    fileName: "Linen_Specification.pdf",
-    fileType: "PDF",
-    fileSize: "245 KB",
-    uploadedBy: "Amit Sharma",
-    uploadedOn: "18 Jul 2026",
-  },
-  {
-    id: "att-2",
-    fileName: "Vendor_Quotation.xlsx",
-    fileType: "Excel",
-    fileSize: "118 KB",
-    uploadedBy: "Amit Sharma",
-    uploadedOn: "18 Jul 2026",
-  },
-];
 
 export default function PurchaseRequisitionsPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -130,7 +96,8 @@ export default function PurchaseRequisitionsPage() {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get("create") === "true") {
-        setCreateModalOpen(true);
+        // Defer until product catalog is loaded (see effect below)
+        setPendingCreateFromUrl(true);
       }
     }
   }, []);
@@ -138,17 +105,13 @@ export default function PurchaseRequisitionsPage() {
   // Native File Input Reference
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Loading Simulation State
-  const [isLoading, setIsLoading] = useState(true);
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Main PR Data List State (Strictly 3 Initial Records)
-  const [prList, setPrList] = useState<PurchaseRequisition[]>(
-    INITIAL_PURCHASE_REQUISITIONS
+  const { data: prList, loading: isLoading, reload } = usePsList(() => psRequisitionService.list(), []);
+  const { data: products, loading: loadingProducts } = usePsList(() => psProductService.list(), []);
+  const inventoryCatalog = useMemo(
+    () => productsToCatalog(products).map(toInventoryCatalogItem),
+    [products],
   );
+  const [saving, setSaving] = useState(false);
 
   // Search & Filter State
   const [search, setSearch] = useState("");
@@ -168,6 +131,7 @@ export default function PurchaseRequisitionsPage() {
   const [selectedPR, setSelectedPR] = useState<PurchaseRequisition | null>(null);
   const [editPR, setEditPR] = useState<PurchaseRequisition | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [pendingCreateFromUrl, setPendingCreateFromUrl] = useState(false);
 
   // Inventory Item Selection Modal State
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
@@ -188,33 +152,28 @@ export default function PurchaseRequisitionsPage() {
   );
 
   // Form Attachments State
-  const [formAttachments, setFormAttachments] = useState<PRFormAttachment[]>(
-    DEFAULT_FORM_ATTACHMENTS
-  );
+  const [formAttachments, setFormAttachments] = useState<PRFormAttachment[]>([]);
+  const [previewAttachment, setPreviewAttachment] = useState<PRFormAttachment | null>(null);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
   // Dynamic Requested Items State
-  const [newItems, setNewItems] = useState<PRRequestedItem[]>([
-    {
-      id: "item-init-1",
-      item: "Bedsheet (King Size 300TC)",
-      category: "Linen",
-      quantity: 100,
-      unit: "Pieces",
-      estimatedPrice: 350,
-      total: 35000,
-      remarks: "High thread count 300TC for suite rooms",
-    },
-    {
-      id: "item-init-2",
-      item: "Pillow Cover (Satin Finish)",
-      category: "Linen",
-      quantity: 150,
-      unit: "Pieces",
-      estimatedPrice: 90,
-      total: 13500,
-      remarks: "Satin finish white covers",
-    },
-  ]);
+  const [newItems, setNewItems] = useState<PRRequestedItem[]>([]);
+
+  const openCreateRequisition = () => {
+    setEditPR(null);
+    const first = inventoryCatalog[0];
+    setNewItems(first ? [prItemFromCatalog(first, 1)] : []);
+    revokeAttachmentUrls(formAttachments);
+    setFormAttachments([]);
+    setCreateModalOpen(true);
+    setPendingCreateFromUrl(false);
+  };
+
+  useEffect(() => {
+    if (pendingCreateFromUrl && inventoryCatalog.length > 0) {
+      openCreateRequisition();
+    }
+  }, [pendingCreateFromUrl, inventoryCatalog]);
 
   // Sync Form State when Edit PR opens
   useEffect(() => {
@@ -227,14 +186,20 @@ export default function PurchaseRequisitionsPage() {
       setNewJustification(editPR.justification);
       setNewItems(editPR.requestedItems);
       setFormAttachments(
-        editPR.attachments.map((a) => ({
-          id: a.id,
-          fileName: a.fileName,
-          fileType: a.fileType === "pdf" ? "PDF" : a.fileType === "xlsx" ? "Excel" : "File",
-          fileSize: a.fileSize,
-          uploadedBy: editPR.requestedBy,
-          uploadedOn: editPR.requestDate,
-        }))
+        editPR.attachments.map((a) =>
+          attachmentFromApi(
+            {
+              id: a.id,
+              fileName: a.fileName,
+              fileSize: a.fileSize,
+              fileType: a.fileType,
+              dataUrl: a.dataUrl,
+              mimeType: a.mimeType,
+            },
+            editPR.requestedBy,
+            editPR.requestDate,
+          ),
+        ),
       );
     }
   }, [editPR]);
@@ -250,15 +215,16 @@ export default function PurchaseRequisitionsPage() {
 
   // Filtered Inventory Catalog inside Selection Modal
   const filteredInventoryCatalog = useMemo(() => {
-    return MOCK_INVENTORY_CATALOG.filter((item) => {
+    return inventoryCatalog.filter((item) => {
       const query = inventorySearch.toLowerCase();
       return (
         item.itemCode.toLowerCase().includes(query) ||
         item.itemName.toLowerCase().includes(query) ||
+        item.productCode.toLowerCase().includes(query) ||
         item.category.toLowerCase().includes(query)
       );
     });
-  }, [inventorySearch]);
+  }, [inventoryCatalog, inventorySearch]);
 
   // Dynamic Summary Metrics Calculation
   const metrics = useMemo(() => {
@@ -443,66 +409,87 @@ export default function PurchaseRequisitionsPage() {
   };
 
   // Row Action Handlers
-  const handleDuplicatePR = (pr: PurchaseRequisition) => {
-    const dupNumber = `PR-2026-00${prList.length + 1}`;
-    const duplicated: PurchaseRequisition = {
-      ...pr,
-      id: `pr-${Date.now()}`,
-      prNumber: dupNumber,
-      status: "Draft",
-      requestDate: "Today",
-    };
-    setPrList([duplicated, ...prList]);
-    setToast({ message: `Duplicated ${pr.prNumber} as new draft ${dupNumber}`, variant: "success" });
+  const handleDuplicatePR = async (pr: PurchaseRequisition) => {
+    try {
+      const { id: _id, prNumber: _num, ...rest } = pr;
+      await psRequisitionService.create({ ...rest, status: "Draft", requestDate: "Today" });
+      await reload();
+      setToast({ message: `Duplicated ${pr.prNumber} as new draft`, variant: "success" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Duplicate failed", variant: "info" });
+    }
   };
 
-  const handleCancelPR = (pr: PurchaseRequisition) => {
-    setPrList((prev) =>
-      prev.map((p) => (p.id === pr.id ? { ...p, status: "Cancelled" } : p))
-    );
-    setToast({ message: `Requisition ${pr.prNumber} has been cancelled.`, variant: "info" });
+  const handleCancelPR = async (pr: PurchaseRequisition) => {
+    try {
+      await psRequisitionService.update(pr.id, { status: "Cancelled" });
+      await reload();
+      setToast({ message: `Requisition ${pr.prNumber} has been cancelled.`, variant: "info" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Cancel failed", variant: "info" });
+    }
   };
 
-  // Native File Picker Select Handler
-  const handleNativeFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Native File Picker Select Handler — reads file as base64 for save + preview
+  const handleNativeFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const newAtts: PRFormAttachment[] = Array.from(files).map((file, idx) => {
-      let type: PRFormAttachment["fileType"] = "File";
-      const nameLower = file.name.toLowerCase();
-      if (nameLower.endsWith(".pdf")) type = "PDF";
-      else if (nameLower.endsWith(".xlsx") || nameLower.endsWith(".xls") || nameLower.endsWith(".csv")) type = "Excel";
-      else if (nameLower.endsWith(".doc") || nameLower.endsWith(".docx")) type = "Word";
-      else if (nameLower.match(/\.(jpg|jpeg|png|gif|webp)$/)) type = "Image";
+    const oversized = Array.from(files).filter((f) => f.size > MAX_ATTACHMENT_BYTES);
+    if (oversized.length > 0) {
+      setToast({
+        message: `${oversized.map((f) => f.name).join(", ")} exceeds 5 MB limit.`,
+        variant: "info",
+      });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
 
-      const sizeInKb = Math.round(file.size / 1024);
-      const fileSize = sizeInKb > 1024 ? `${(sizeInKb / 1024).toFixed(1)} MB` : `${sizeInKb} KB`;
-
-      return {
-        id: `att-file-${Date.now()}-${idx}`,
-        fileName: file.name,
-        fileType: type,
-        fileSize: fileSize,
-        uploadedBy: newRequester || "Amit Sharma",
-        uploadedOn: "18 Jul 2026",
-      };
-    });
-
-    setFormAttachments((prev) => [...prev, ...newAtts]);
-    setToast({ message: `Attached ${files.length} file(s).`, variant: "success" });
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    setUploadingAttachments(true);
+    try {
+      const newAtts = await Promise.all(
+        Array.from(files).map((file) =>
+          createAttachmentFromFile(file, newRequester || "Store User"),
+        ),
+      );
+      setFormAttachments((prev) => [...prev, ...newAtts]);
+      setToast({ message: `Attached ${files.length} file(s).`, variant: "success" });
+    } catch {
+      setToast({ message: "Failed to read file. Try again.", variant: "info" });
+    } finally {
+      setUploadingAttachments(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const handleRemoveAttachment = (id: string) => {
-    setFormAttachments((prev) => prev.filter((a) => a.id !== id));
+    setFormAttachments((prev) => {
+      const removed = prev.find((a) => a.id === id);
+      if (removed) revokeAttachmentUrls([removed]);
+      return prev.filter((a) => a.id !== id);
+    });
     setToast({ message: "Attachment removed.", variant: "info" });
   };
+
+  const handlePreviewAttachment = (att: PRFormAttachment) => {
+    if (!att.dataUrl && !att.previewUrl) {
+      setToast({ message: "No preview data for this file. Re-upload to preview.", variant: "info" });
+      return;
+    }
+    setPreviewAttachment(att);
+  };
+
+  const formAttachmentsRef = useRef(formAttachments);
+  formAttachmentsRef.current = formAttachments;
+
+  useEffect(() => {
+    return () => revokeAttachmentUrls(formAttachmentsRef.current);
+  }, []);
 
   // OPEN INVENTORY SELECTION MODAL
   const handleOpenInventoryModal = () => {
     setInventorySearch("");
-    setSelectedCatalogItem(MOCK_INVENTORY_CATALOG[0]);
+    setSelectedCatalogItem(inventoryCatalog[0] ?? null);
     setIsInventoryModalOpen(true);
   };
 
@@ -510,16 +497,7 @@ export default function PurchaseRequisitionsPage() {
   const handleConfirmAddInventoryItem = () => {
     if (!selectedCatalogItem) return;
 
-    const newItem: PRRequestedItem = {
-      id: `item-cat-${Date.now()}`,
-      item: selectedCatalogItem.itemName,
-      category: selectedCatalogItem.category,
-      quantity: 1,
-      unit: selectedCatalogItem.unit,
-      estimatedPrice: selectedCatalogItem.estimatedPrice,
-      total: selectedCatalogItem.estimatedPrice,
-      remarks: "",
-    };
+    const newItem = prItemFromCatalog(selectedCatalogItem, 1);
 
     setNewItems((prev) => [...prev, newItem]);
     setIsInventoryModalOpen(false);
@@ -557,88 +535,68 @@ export default function PurchaseRequisitionsPage() {
   };
 
   // SAVE / SUBMIT REQUISITION
-  const handleSaveRequisition = (isDraft: boolean) => {
+  const handleSaveRequisition = async (isDraft: boolean) => {
     const totalAmt = newItems.reduce((acc, i) => acc + i.quantity * i.estimatedPrice, 0);
+    const payload: Partial<PurchaseRequisition> = {
+      department: newDept,
+      requestedBy: newRequester,
+      requiredDate: newReqDate,
+      priority: newPriority,
+      costCenter: newCostCenter,
+      justification: newJustification,
+      estimatedAmount: totalAmt,
+      requestedItems: newItems,
+      status: isDraft ? "Draft" : "Pending Approval",
+      attachments: formAttachments.map(attachmentToApiPayload),
+    };
 
-    if (editPR) {
-      // Edit mode update
-      setPrList((prev) =>
-        prev.map((p) => {
-          if (p.id === editPR.id) {
-            return {
-              ...p,
-              department: newDept,
-              requestedBy: newRequester,
-              requiredDate: newReqDate,
-              priority: newPriority,
-              costCenter: newCostCenter,
-              justification: newJustification,
-              estimatedAmount: totalAmt,
-              requestedItems: newItems,
-              status: isDraft ? "Draft" : "Pending Approval",
-            };
-          }
-          return p;
-        })
-      );
-      setEditPR(null);
-      setToast({ message: `Updated requisition ${editPR.prNumber}`, variant: "success" });
-    } else {
-      // Create mode
-      const nextNum = `PR-2026-00${prList.length + 1}`;
-      const created: PurchaseRequisition = {
-        id: `pr-${Date.now()}`,
-        prNumber: nextNum,
-        department: newDept,
-        requestedBy: newRequester,
-        requestDate: "Today",
-        requiredDate: newReqDate,
-        priority: newPriority,
-        costCenter: newCostCenter,
-        estimatedAmount: totalAmt,
-        currentApprover: "Purchase Manager",
-        status: isDraft ? "Draft" : "Pending Approval",
-        justification: newJustification,
-        requestedItems: newItems,
-        approvalTimeline: [
-          { stage: "Created", approverName: newRequester, status: "Completed", timestamp: "Today" },
-          { stage: "Department Head", approverName: "Rajesh Verma", status: "Completed", timestamp: "Today" },
-          { stage: "Purchase Manager", approverName: "Sunil Mehta", status: isDraft ? "Pending" : "Current" },
-          { stage: "Finance Manager", approverName: "Anil Kapoor", status: "Pending" },
-          { stage: "General Manager", approverName: "Vikramaditya Roy", status: "Pending" },
-        ],
-        attachments: formAttachments.map((f) => ({
-          id: f.id,
-          fileName: f.fileName,
-          fileSize: f.fileSize,
-          fileType: f.fileType === "PDF" ? "pdf" : f.fileType === "Excel" ? "xlsx" : "doc",
-        })),
-        comments: [
-          {
-            id: "com-gen-1",
-            authorRole: "Department Head",
-            authorName: "Rajesh Verma",
-            commentText: "Approved.",
-            timestamp: "Today",
-          },
-          {
-            id: "com-gen-2",
-            authorRole: "Purchase Manager",
-            authorName: "Sunil Mehta",
-            commentText: "Waiting for budget validation.",
-            timestamp: "Today",
-          },
-        ],
-      };
+    setSaving(true);
+    try {
+      if (editPR) {
+        await psRequisitionService.update(editPR.id, payload);
+        setEditPR(null);
+        setToast({ message: `Updated requisition ${editPR.prNumber}`, variant: "success" });
+      } else {
+        await psRequisitionService.create({
+          ...payload,
+          requestDate: "Today",
+          currentApprover: "Purchase Manager",
+        });
+        setCreateModalOpen(false);
+        setToast({
+          message: isDraft ? "Requisition saved as Draft." : "Requisition submitted for approval.",
+          variant: "success",
+        });
+      }
+      await reload();
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Save failed", variant: "info" });
+    } finally {
+      setSaving(false);
+    }
+  };
 
-      setPrList([created, ...prList]);
-      setCreateModalOpen(false);
-      setToast({
-        message: isDraft
-          ? `Requisition ${nextNum} saved as Draft.`
-          : `Requisition ${nextNum} submitted for approval.`,
-        variant: "success",
-      });
+  const handleApprovePR = async () => {
+    if (!selectedPR) return;
+    try {
+      await psRequisitionService.update(selectedPR.id, { status: "Approved" });
+      await reload();
+      setSelectedPR((prev) => (prev ? { ...prev, status: "Approved" } : null));
+      setToast({ message: `${selectedPR.prNumber} approved.`, variant: "success" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Approve failed", variant: "info" });
+    }
+  };
+
+  const handleRejectPR = async () => {
+    if (!selectedPR) return;
+    try {
+      await psRequisitionService.update(selectedPR.id, { status: "Rejected" });
+      await reload();
+      setSelectedPR((prev) => (prev ? { ...prev, status: "Rejected" } : null));
+      setToast({ message: `${selectedPR.prNumber} rejected.`, variant: "info" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Reject failed", variant: "info" });
     }
   };
 
@@ -653,7 +611,7 @@ export default function PurchaseRequisitionsPage() {
         ref={fileInputRef}
         onChange={handleNativeFileSelect}
         className="hidden"
-        accept=".pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg"
+        accept=".pdf,.xlsx,.xls,.csv,.docx,.doc,.png,.jpg,.jpeg,.gif,.webp"
       />
 
       {/* Toast Notification */}
@@ -799,7 +757,7 @@ export default function PurchaseRequisitionsPage() {
         </Button>
         <Button
           type="button"
-          onClick={() => setCreateModalOpen(true)}
+          onClick={openCreateRequisition}
           className="flex-1 h-11 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
         >
           <Plus className="h-4 w-4" /> + Create
@@ -975,6 +933,16 @@ export default function PurchaseRequisitionsPage() {
           onClose={() => setSelectedPR(null)}
           title={`Purchase Requisition: ${selectedPR.prNumber}`}
           width="xl"
+          footer={
+            <DocumentApprovalFooter
+              showApprovalActions={selectedPR.status === "Pending Approval"}
+              onApprove={handleApprovePR}
+              onReject={handleRejectPR}
+              onClose={() => setSelectedPR(null)}
+              approveLabel="Approve Requisition"
+              rejectLabel="Reject"
+            />
+          }
         >
           <div className="space-y-6 select-none pb-6">
             {/* Header Badge */}
@@ -1136,15 +1104,25 @@ export default function PurchaseRequisitionsPage() {
                 Attachments
               </h4>
               <div className="grid grid-cols-2 gap-2">
-                {selectedPR.attachments.map((att) => (
+                {selectedPR.attachments.map((att) => {
+                  const attRecord = attachmentFromApi(att, selectedPR.requestedBy, selectedPR.requestDate);
+                  return (
                   <div key={att.id} className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 flex items-center gap-2">
                     <Paperclip className="h-4 w-4 text-slate-500 shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-extrabold text-slate-800 truncate">{att.fileName}</p>
                       <p className="text-[10px] text-slate-400 font-medium">{att.fileSize}</p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => handlePreviewAttachment(attRecord)}
+                      className="text-[10px] font-bold text-emerald-700 hover:underline shrink-0"
+                    >
+                      Preview
+                    </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -1166,13 +1144,6 @@ export default function PurchaseRequisitionsPage() {
               </div>
             </div>
 
-            <Button
-              type="button"
-              onClick={() => setSelectedPR(null)}
-              className="w-full h-9 text-xs font-bold !bg-slate-900 hover:!bg-slate-800 text-white rounded-xl shadow-xs cursor-pointer"
-            >
-              Close Requisition Details
-            </Button>
           </div>
         </Drawer>
       )}
@@ -1502,9 +1473,10 @@ export default function PurchaseRequisitionsPage() {
               <Button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="h-7 px-2.5 text-[10px] font-bold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer flex items-center gap-1 shadow-xs"
+                disabled={uploadingAttachments}
+                className="h-7 px-2.5 text-[10px] font-bold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer flex items-center gap-1 shadow-xs disabled:opacity-60"
               >
-                <Plus className="h-3 w-3" /> Add Attachment
+                <Plus className="h-3 w-3" /> {uploadingAttachments ? "Uploading…" : "Add Attachment"}
               </Button>
             </div>
 
@@ -1530,7 +1502,7 @@ export default function PurchaseRequisitionsPage() {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
-                        onClick={() => setToast({ message: `Previewing ${att.fileName}`, variant: "info" })}
+                        onClick={() => handlePreviewAttachment(att)}
                         className="px-2 py-0.5 text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
                       >
                         Preview
@@ -1668,6 +1640,11 @@ export default function PurchaseRequisitionsPage() {
           </div>
         </div>
       </Modal>
+
+      <PurchaseAttachmentPreviewModal
+        attachment={previewAttachment}
+        onClose={() => setPreviewAttachment(null)}
+      />
     </div>
   );
 }

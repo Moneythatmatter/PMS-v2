@@ -1,10 +1,11 @@
 "use client";
 
 import { SelectInput } from "@/components/frontoffice/ui";
-import type { FbOutlet } from "@/services/food-beverages";
+
+type OutletOption = { id: string; name: string };
 
 interface FbOutletSelectProps {
-  outlets: FbOutlet[];
+  outlets: OutletOption[];
   value: string;
   onChange: (id: string) => void;
   className?: string;

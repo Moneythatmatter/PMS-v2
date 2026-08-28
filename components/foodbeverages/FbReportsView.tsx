@@ -376,7 +376,7 @@ export function FbReportsView({
   path: string;
 }) {
   const type = reportTypeFromPath(path);
-  const { outlets } = useFbOutlets(["restaurant", "cafe", "bar", "banquet"]);
+  const { outlets } = useFbOutlets(["restaurant", "cafe", "bar"]);
   const [range, setRange] = useState<RangeId>("7d");
   const initialDates = rangeToDates("7d");
   const [fromDate, setFromDate] = useState(initialDates.from);

@@ -30,11 +30,9 @@ import {
   PurchaseAttachmentList,
   AttachmentItem,
 } from "@/components/purchase-stores/ui/PurchaseAttachmentList";
-import {
-  INITIAL_CONTRACT_RECORDS,
-  ContractRecord,
-  ContractItem,
-} from "@/app/data/contractsData";
+import type { ContractRecord, ContractItem } from "@/app/data/contractsData";
+import { usePsList } from "@/hooks/usePsResource";
+import { psContractService } from "@/services/purchase-stores/index";
 
 export default function AnnualRateContractsPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -42,8 +40,7 @@ export default function AnnualRateContractsPage() {
     setIsMounted(true);
   }, []);
 
-  // Main Contract Dataset
-  const [contractList, setContractList] = useState<ContractRecord[]>(INITIAL_CONTRACT_RECORDS);
+  const { data: contractList, loading, reload } = usePsList(() => psContractService.list(), []);
 
   // Search & Filter State
   const [search, setSearch] = useState("");
@@ -155,12 +152,11 @@ export default function AnnualRateContractsPage() {
     });
   }, [contractList, search, typeFilter, statusFilter]);
 
+  const [saving, setSaving] = useState(false);
+
   // Save Contract Handler
-  const handleSaveContract = (isPublish: boolean) => {
-    const nextNum = `ARC-2026-00${contractList.length + 1}`;
-    const newRecord: ContractRecord = {
-      id: editContract ? editContract.id : `arc-${Date.now()}`,
-      contractNumber: editContract ? editContract.contractNumber : nextNum,
+  const handleSaveContract = async (isPublish: boolean) => {
+    const newRecord: Partial<ContractRecord> = {
       contractType: formContractType,
       vendorName: formVendorName,
       startDate: formStartDate,
@@ -188,17 +184,25 @@ export default function AnnualRateContractsPage() {
       ],
     };
 
-    if (editContract) {
-      setContractList((prev) => prev.map((c) => (c.id === editContract.id ? newRecord : c)));
-      setEditContract(null);
-      setToast({ message: "Annual Rate Contract Updated Successfully", variant: "success" });
-    } else {
-      setContractList([newRecord, ...contractList]);
-      setCreateDrawerOpen(false);
-      setToast({
-        message: isPublish ? "Contract Published & Activated" : "Contract Saved as Draft",
-        variant: "success",
-      });
+    setSaving(true);
+    try {
+      if (editContract) {
+        await psContractService.update(editContract.id, newRecord);
+        setEditContract(null);
+        setToast({ message: "Annual Rate Contract Updated Successfully", variant: "success" });
+      } else {
+        await psContractService.create(newRecord);
+        setCreateDrawerOpen(false);
+        setToast({
+          message: isPublish ? "Contract Published & Activated" : "Contract Saved as Draft",
+          variant: "success",
+        });
+      }
+      await reload();
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Save failed", variant: "info" });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -405,6 +409,11 @@ export default function AnnualRateContractsPage() {
 
       {/* CORE SHARED MODULE DATA TABLE */}
       <div className="space-y-3">
+        {loading ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+            Loading contracts…
+          </div>
+        ) : (
         <ModuleDataTable
           columns={columns}
           rows={filteredContracts}
@@ -428,6 +437,7 @@ export default function AnnualRateContractsPage() {
           </div>
         )}
         />
+        )}
       </div>
 
       {/* CREATE / EDIT CONTRACT DRAWER */}
@@ -462,10 +472,11 @@ export default function AnnualRateContractsPage() {
             </Button>
             <Button
               type="button"
+              disabled={saving}
               onClick={() => handleSaveContract(true)}
               className="h-9 px-5 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer"
             >
-              Publish Contract
+              {saving ? "Saving…" : "Publish Contract"}
             </Button>
           </div>
         }

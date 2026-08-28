@@ -5,13 +5,16 @@ import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { ProductForm } from "./ProductForm";
 import { validateProductForm, type ProductValidationError } from "./productValidation";
-import type { ProductItem } from "@/app/data/productMasterData";
+import type { ProductItem, MasterCategory, MasterUnit, MasterSupplier } from "@/app/data/productMasterData";
 
 interface ProductDrawerProps {
   open: boolean;
   onClose: () => void;
   onSave: (product: ProductItem) => void;
   initialProduct?: ProductItem | null;
+  categoryOptions: MasterCategory[];
+  unitOptions: MasterUnit[];
+  supplierOptions: MasterSupplier[];
 }
 
 const defaultProductState: Partial<ProductItem> = {
@@ -40,6 +43,9 @@ export function ProductDrawer({
   onClose,
   onSave,
   initialProduct,
+  categoryOptions,
+  unitOptions,
+  supplierOptions,
 }: ProductDrawerProps) {
   const [formData, setFormData] = useState<Partial<ProductItem>>(defaultProductState);
   const [errors, setErrors] = useState<ProductValidationError>({});
@@ -147,6 +153,9 @@ export function ProductDrawer({
           setFormData={setFormData}
           errors={errors}
           onAutoGenerateCode={handleAutoGenerateCode}
+          categoryOptions={categoryOptions}
+          unitOptions={unitOptions}
+          supplierOptions={supplierOptions}
         />
       </form>
     </Drawer>

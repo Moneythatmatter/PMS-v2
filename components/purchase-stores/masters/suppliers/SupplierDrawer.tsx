@@ -61,7 +61,7 @@ export function SupplierDrawer({ open, onClose, onSave, initialSupplier }: Suppl
     const newErrors: { supplierName?: string; contactPerson?: string; phone?: string; email?: string } = {};
 
     if (!formData.supplierName || !formData.supplierName.trim()) {
-      newErrors.supplierName = "Supplier Name is required.";
+      newErrors.supplierName = "Vendor Name is required.";
     }
     if (!formData.contactPerson || !formData.contactPerson.trim()) {
       newErrors.contactPerson = "Contact Person is required.";
@@ -105,7 +105,7 @@ export function SupplierDrawer({ open, onClose, onSave, initialSupplier }: Suppl
     <Drawer
       open={open}
       onClose={onClose}
-      title={isEditing ? `Edit Supplier: ${initialSupplier?.supplierCode}` : "Add New Vendor / Supplier"}
+      title={isEditing ? `Edit Vendor: ${initialSupplier?.supplierCode}` : "Add Vendor"}
       description="Register vendor contact profiles, GSTIN details, and credit payment terms."
       width="2xl"
       className="max-w-full sm:max-w-[700px]"
@@ -120,7 +120,7 @@ export function SupplierDrawer({ open, onClose, onSave, initialSupplier }: Suppl
             onClick={handleSubmit}
             className="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold px-5"
           >
-            {isEditing ? "Save Changes" : "Save Supplier"}
+            {isEditing ? "Save Changes" : "Save Vendor"}
           </Button>
         </div>
       }
@@ -128,7 +128,7 @@ export function SupplierDrawer({ open, onClose, onSave, initialSupplier }: Suppl
       <form onSubmit={handleSubmit} className="space-y-6 pb-4">
         {/* SECTION 1: Basic Vendor Info */}
         <FormSection title="Section 1: Vendor Profile & Contact" columns={2}>
-          <FormField label="Supplier / Company Name" required className="sm:col-span-2">
+          <FormField label="Vendor / Company Name" required className="sm:col-span-2">
             <TextInput
               value={formData.supplierName ?? ""}
               onChange={(e) => setFormData((p) => ({ ...p, supplierName: e.target.value }))}
@@ -138,7 +138,7 @@ export function SupplierDrawer({ open, onClose, onSave, initialSupplier }: Suppl
             {errors.supplierName && <p className="mt-1 text-[11px] font-medium text-red-500">{errors.supplierName}</p>}
           </FormField>
 
-          <FormField label="Supplier Code">
+          <FormField label="Vendor Code">
             <div className="flex gap-2">
               <TextInput
                 value={formData.supplierCode ?? ""}

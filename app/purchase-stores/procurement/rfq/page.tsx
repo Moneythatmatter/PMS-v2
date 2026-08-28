@@ -50,15 +50,39 @@ import {
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import type { ModuleSelectionAction } from "@/components/pms/ModuleSelectionBar";
-import {
-  INITIAL_RFQ_RECORDS,
-  MASTER_VENDOR_OPTIONS,
+import type {
   RFQRecord,
   RFQVendorItem,
   RFQRequestedItem,
   RFQAttachment,
-  VendorQuotationComparison,
 } from "@/app/data/rfqData";
+import {
+  normalizeRfqRecord,
+  normalizeRfqRequestedItem,
+  normalizeRfqVendor,
+} from "@/app/data/rfqData";
+import type { PurchaseRequisition } from "@/app/data/purchaseRequisitionsData";
+import { usePsList } from "@/hooks/usePsResource";
+import { psRfqService, psRequisitionService, psSupplierService, psPurchaseOrderService, psProductService } from "@/services/purchase-stores/index";
+import {
+  normalizePrRequestedItem,
+  poLinesFromRfq,
+  rfqItemFromPrItem,
+} from "@/app/data/procurementMaterial";
+
+function prItemsToRfqItems(
+  items: PurchaseRequisition["requestedItems"],
+  products: Parameters<typeof normalizePrRequestedItem>[2] = [],
+): RFQRequestedItem[] {
+  return items.map((item, index) =>
+    rfqItemFromPrItem(normalizePrRequestedItem(item as Parameters<typeof normalizePrRequestedItem>[0], index, products)),
+  );
+}
+
+function prOptionLabel(pr: PurchaseRequisition): string {
+  const categoryHint = pr.requestedItems[0]?.category ?? "General";
+  return `${pr.prNumber} (${pr.department} • ${categoryHint})`;
+}
 
 export default function RequestForQuotationsPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -69,15 +93,27 @@ export default function RequestForQuotationsPage() {
   // Native File Input Reference for Attachments
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Loading Simulation State
-  const [isLoading, setIsLoading] = useState(true);
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
+  const { data: rfqListRaw, loading: isLoading, reload } = usePsList(() => psRfqService.list(), []);
+  const rfqList = useMemo(() => rfqListRaw.map(normalizeRfqRecord), [rfqListRaw]);
+  const { data: requisitions, loading: loadingPRs } = usePsList(() => psRequisitionService.list(), []);
+  const { data: products } = usePsList(() => psProductService.list(), []);
+  const { data: suppliers } = usePsList(() => psSupplierService.list(), []);
 
-  // Main RFQ Dataset State (Strictly 3 Initial Records)
-  const [rfqList, setRfqList] = useState<RFQRecord[]>(INITIAL_RFQ_RECORDS);
+  const eligiblePRs = useMemo(
+    () => requisitions.filter((pr) => pr.status === "Approved" || pr.status === "Pending Approval"),
+    [requisitions],
+  );
+  const vendorOptions = useMemo(
+    () =>
+      suppliers.map((s) => ({
+        id: s.id,
+        name: s.supplierName,
+        email: s.email,
+        phone: s.phone,
+      })),
+    [suppliers],
+  );
+  const [saving, setSaving] = useState(false);
 
   // Search & Filter State
   const [search, setSearch] = useState("");
@@ -107,26 +143,24 @@ export default function RequestForQuotationsPage() {
   const [viewPODrawerRFQ, setViewPODrawerRFQ] = useState<RFQRecord | null>(null);
 
   // Vendor Selection Modal Temporary Selection State
-  const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>(["v1", "v2", "v3"]);
+  const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
 
   // Form State for Create/Edit RFQ
-  const [formPR, setFormPR] = useState("PR-2026-001");
+  const [formPR, setFormPR] = useState("");
   const [formBuyer, setFormBuyer] = useState("Purchase Executive");
-  const [formRFQDate, setFormRFQDate] = useState("2026-07-18");
-  const [formClosingDate, setFormClosingDate] = useState("2026-07-25");
-  const [formPriority, setFormPriority] = useState<RFQRecord["priority"]>("High");
-  const [formRemarks, setFormRemarks] = useState("Samples required prior to dispatch.");
+  const [formRFQDate, setFormRFQDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formClosingDate, setFormClosingDate] = useState("");
+  const [formPriority, setFormPriority] = useState<RFQRecord["priority"]>("Medium");
+  const [formRemarks, setFormRemarks] = useState("");
 
   // Form Vendors & Requested Items State
-  const [formVendors, setFormVendors] = useState<RFQVendorItem[]>([
-    { id: "v1", vendorName: "ABC Linen Pvt Ltd", email: "sales@abclinen.com", phone: "+91 98765 43210", invitationSentOn: "18 Jul 2026", status: "Pending" },
-    { id: "v2", vendorName: "XYZ Textiles", email: "info@xyztextiles.in", phone: "+91 98123 45678", invitationSentOn: "18 Jul 2026", status: "Pending" },
-  ]);
+  const [formVendors, setFormVendors] = useState<RFQVendorItem[]>([]);
+  const [formRequestedItems, setFormRequestedItems] = useState<RFQRequestedItem[]>([]);
 
-  const [formRequestedItems, setFormRequestedItems] = useState<RFQRequestedItem[]>([
-    { id: "i1", item: "Bedsheet (King Size 300TC)", category: "Linen", quantity: 200, unit: "Pieces", estimatedRate: 340 },
-    { id: "i2", item: "Pillow Cover (Satin Finish)", category: "Linen", quantity: 150, unit: "Pieces", estimatedRate: 90 },
-  ]);
+  const selectedPR = useMemo(
+    () => requisitions.find((pr) => pr.prNumber === formPR),
+    [requisitions, formPR],
+  );
 
   // Form Commercial Terms State
   const [formDeliveryLoc, setFormDeliveryLoc] = useState("Central Stores Warehouse");
@@ -137,15 +171,24 @@ export default function RequestForQuotationsPage() {
   const [formTax, setFormTax] = useState("18% GST extra as applicable");
 
   // Form Attachments State
-  const [formAttachments, setFormAttachments] = useState<RFQAttachment[]>([
-    { id: "a1", fileName: "Linen_Specification.pdf", fileSize: "245 KB", fileType: "pdf" },
-    { id: "a2", fileName: "RFQ_Terms.pdf", fileSize: "120 KB", fileType: "pdf" },
-  ]);
+  const [formAttachments, setFormAttachments] = useState<RFQAttachment[]>([]);
 
   // Vendor Selection Reason State
   const [vendorSelectReason, setVendorSelectReason] = useState(
     "Lowest evaluated cost with acceptable delivery lead time and 12M warranty."
   );
+  const [pickedVendorName, setPickedVendorName] = useState("");
+
+  // Record vendor quotation modal
+  const [recordQuoteRFQ, setRecordQuoteRFQ] = useState<RFQRecord | null>(null);
+  const [recordQuoteVendor, setRecordQuoteVendor] = useState<RFQVendorItem | null>(null);
+  const [quoteUnitPrice, setQuoteUnitPrice] = useState("");
+  const [quoteDeliveryDays, setQuoteDeliveryDays] = useState("7");
+  const [quotePaymentTerms, setQuotePaymentTerms] = useState("");
+  const [quoteWarranty, setQuoteWarranty] = useState("12 Months");
+  const [quoteRating, setQuoteRating] = useState("4");
+  const [quoteTotalAmount, setQuoteTotalAmount] = useState("");
+  const [savingQuote, setSavingQuote] = useState(false);
 
   // Toast Notification State
   const [toast, setToast] = useState<{ message: string; variant: "success" | "info" } | null>(null);
@@ -156,25 +199,41 @@ export default function RequestForQuotationsPage() {
     }
   }, [toast]);
 
-  // Sync Form State when PR Selection changes in Drawer
-  const handlePRSelectionChange = (prNum: string) => {
+  // Keep detail drawer in sync after API reload
+  useEffect(() => {
+    if (!selectedRFQ) return;
+    const updated = rfqList.find((r) => r.id === selectedRFQ.id);
+    if (updated) setSelectedRFQ(updated);
+  }, [rfqList, selectedRFQ?.id]);
+
+  // Sync form when PR selection changes
+  const handlePRSelectionChange = (prNum: string, prOverride?: PurchaseRequisition) => {
     setFormPR(prNum);
-    if (prNum === "PR-2026-001") {
-      setFormRequestedItems([
-        { id: "i1", item: "Bedsheet (King Size 300TC)", category: "Linen", quantity: 200, unit: "Pieces", estimatedRate: 340 },
-        { id: "i2", item: "Pillow Cover (Satin Finish)", category: "Linen", quantity: 150, unit: "Pieces", estimatedRate: 90 },
-      ]);
-    } else if (prNum === "PR-2026-002") {
-      setFormRequestedItems([
-        { id: "i3", item: "Commercial Air Filters (HEPA)", category: "HVAC", quantity: 20, unit: "Units", estimatedRate: 1500 },
-        { id: "i4", item: "Refrigerant Gas R410A", category: "Chemicals", quantity: 3, unit: "Canisters", estimatedRate: 4000 },
-      ]);
-    } else {
-      setFormRequestedItems([
-        { id: "i5", item: "Fresh Black Truffle Oil (500ml)", category: "Gourmet", quantity: 2, unit: "Bottles", estimatedRate: 3100 },
-        { id: "i6", item: "Saffron Threads (50g)", category: "Spices", quantity: 1, unit: "Pack", estimatedRate: 2500 },
-      ]);
+    const pr = prOverride ?? requisitions.find((p) => p.prNumber === prNum);
+    if (pr) {
+      setFormRequestedItems(prItemsToRfqItems(pr.requestedItems, products));
+      setFormPriority(pr.priority);
+    } else if (!prNum) {
+      setFormRequestedItems([]);
     }
+  };
+
+  const openCreateDrawer = () => {
+    setEditRFQ(null);
+    setFormVendors([]);
+    setFormAttachments([]);
+    setFormRemarks("");
+    setFormBuyer("Purchase Executive");
+    setFormRFQDate(new Date().toISOString().slice(0, 10));
+    const first = eligiblePRs[0];
+    if (first) {
+      handlePRSelectionChange(first.prNumber, first);
+    } else {
+      setFormPR("");
+      setFormRequestedItems([]);
+      setFormPriority("Medium");
+    }
+    setCreateDrawerOpen(true);
   };
 
   // Sync Form State when Edit RFQ opens
@@ -227,7 +286,7 @@ export default function RequestForQuotationsPage() {
     return rfqList.filter((rfq) => {
       const matchSearch =
         rfq.rfqNumber.toLowerCase().includes(search.toLowerCase()) ||
-        rfq.linkedPR.toLowerCase().includes(search.toLowerCase()) ||
+        (rfq.linkedPR ?? "").toLowerCase().includes(search.toLowerCase()) ||
         rfq.department.toLowerCase().includes(search.toLowerCase()) ||
         rfq.buyer.toLowerCase().includes(search.toLowerCase()) ||
         (rfq.selectedVendor && rfq.selectedVendor.toLowerCase().includes(search.toLowerCase())) ||
@@ -301,72 +360,230 @@ export default function RequestForQuotationsPage() {
   };
 
   // Vendor Confirmation Handler
-  const handleConfirmVendorSelection = () => {
+  const handleConfirmVendorSelection = async () => {
     if (!selectVendorModalRFQ) return;
-
-    setRfqList((prev) =>
-      prev.map((r) => {
-        if (r.id === selectVendorModalRFQ.id) {
-          return {
-            ...r,
-            status: "Vendor Selected",
-            selectedVendor: "ABC Linen Pvt Ltd",
-          };
-        }
-        return r;
-      })
-    );
-
-    setToast({
-      message: "Vendor Selected Successfully",
-      variant: "success",
-    });
-    setSelectVendorModalRFQ(null);
+    const vendorName =
+      pickedVendorName ||
+      selectVendorModalRFQ.comparisonData.find((c) => c.isRecommended)?.vendorName ||
+      selectVendorModalRFQ.comparisonData[0]?.vendorName;
+    if (!vendorName) {
+      setToast({ message: "Select a vendor from the comparison table first.", variant: "info" });
+      return;
+    }
+    try {
+      await psRfqService.update(selectVendorModalRFQ.id, {
+        status: "Vendor Selected",
+        selectedVendor: vendorName,
+        activityTimeline: [
+          ...selectVendorModalRFQ.activityTimeline,
+          {
+            stage: "Vendor Selected",
+            timestamp: new Date().toISOString().slice(0, 10),
+            note: vendorSelectReason || `Selected ${vendorName}`,
+            author: selectVendorModalRFQ.buyer,
+          },
+        ],
+      });
+      await reload();
+      setToast({ message: `${vendorName} selected successfully`, variant: "success" });
+      setSelectVendorModalRFQ(null);
+      setPickedVendorName("");
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Selection failed", variant: "info" });
+    }
   };
 
-  // EXECUTE SIMULATED CREATE PURCHASE ORDER WORKFLOW (1 SEC LOADING STATE)
-  const handleExecuteCreatePO = () => {
+  const openRecordQuoteModal = (rfq: RFQRecord, vendor: RFQVendorItem) => {
+    setRecordQuoteRFQ(rfq);
+    setRecordQuoteVendor(vendor);
+    setQuoteUnitPrice("");
+    setQuoteDeliveryDays("7");
+    setQuotePaymentTerms(rfq.commercialTerms.paymentTerms || "Net 30");
+    setQuoteWarranty("12 Months");
+    setQuoteRating("4");
+    setQuoteTotalAmount("");
+  };
+
+  const quoteTotalQty = useMemo(() => {
+    if (!recordQuoteRFQ) return 0;
+    return recordQuoteRFQ.requestedItems.reduce((sum, item) => sum + item.quantity, 0);
+  }, [recordQuoteRFQ]);
+
+  useEffect(() => {
+    const rate = Number(quoteUnitPrice);
+    if (!rate || !quoteTotalQty) return;
+    setQuoteTotalAmount(String(Math.round(rate * quoteTotalQty)));
+  }, [quoteUnitPrice, quoteTotalQty]);
+
+  const handleSaveVendorQuotation = async () => {
+    if (!recordQuoteRFQ || !recordQuoteVendor) return;
+    const unitPrice = Number(quoteUnitPrice);
+    const totalAmount = Number(quoteTotalAmount);
+    if (!unitPrice || !totalAmount) {
+      setToast({ message: "Enter quoted rate and total amount.", variant: "info" });
+      return;
+    }
+
+    const newBid = {
+      vendorName: recordQuoteVendor.vendorName,
+      unitPrice,
+      deliveryDays: Number(quoteDeliveryDays) || 7,
+      paymentTerms: quotePaymentTerms,
+      warranty: quoteWarranty,
+      rating: `${quoteRating} ★`,
+      totalAmount,
+      isRecommended: false,
+    };
+
+    const comparisonData = [
+      ...(recordQuoteRFQ.comparisonData ?? []).filter((b) => b.vendorName !== recordQuoteVendor.vendorName),
+      newBid,
+    ];
+    const lowestTotal = Math.min(...comparisonData.map((b) => b.totalAmount));
+    comparisonData.forEach((b) => {
+      b.isRecommended = b.totalAmount === lowestTotal;
+    });
+
+    const invitedVendors = recordQuoteRFQ.invitedVendors.map((v) =>
+      v.vendorName === recordQuoteVendor.vendorName ? { ...v, status: "Responded" as const } : v,
+    );
+
+    setSavingQuote(true);
+    try {
+      await psRfqService.update(recordQuoteRFQ.id, {
+        invitedVendors,
+        comparisonData,
+        status: recordQuoteRFQ.status === "Sent" ? "Pending Response" : recordQuoteRFQ.status,
+        activityTimeline: [
+          ...recordQuoteRFQ.activityTimeline,
+          {
+            stage: "Quotation Received",
+            timestamp: new Date().toISOString().slice(0, 10),
+            note: `${recordQuoteVendor.vendorName} submitted quotation (₹${totalAmount.toLocaleString("en-IN")})`,
+            author: recordQuoteVendor.vendorName,
+          },
+        ],
+      });
+      await reload();
+      setRecordQuoteRFQ(null);
+      setRecordQuoteVendor(null);
+      setToast({ message: `Quotation recorded for ${recordQuoteVendor.vendorName}`, variant: "success" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Failed to save quotation", variant: "info" });
+    } finally {
+      setSavingQuote(false);
+    }
+  };
+
+  const openCompareForRfq = (rfq: RFQRecord) => {
+    const recommended = rfq.comparisonData.find((c) => c.isRecommended);
+    setPickedVendorName(recommended?.vendorName ?? rfq.comparisonData[0]?.vendorName ?? "");
+    setCompareModalRFQ(rfq);
+  };
+
+  const handleExecuteCreatePO = async () => {
     if (!convertPOModalRFQ) return;
+    const rfq = convertPOModalRFQ;
+    const vendorName =
+      rfq.selectedVendor ||
+      pickedVendorName ||
+      rfq.comparisonData.find((c) => c.isRecommended)?.vendorName ||
+      rfq.comparisonData[0]?.vendorName;
+    if (!vendorName) {
+      setToast({ message: "Select a vendor before converting to PO.", variant: "info" });
+      return;
+    }
+
+    const bid = rfq.comparisonData.find((c) => c.vendorName === vendorName);
+    const unitRateOverride = bid?.unitPrice;
+    const items = poLinesFromRfq(rfq.requestedItems, products, unitRateOverride);
+    const missingMaterial = items.filter((line) => !line.materialId);
+    if (missingMaterial.length > 0) {
+      setToast({
+        message: `${missingMaterial.length} RFQ line(s) could not be matched to Product Master. Fix materials before converting.`,
+        variant: "info",
+      });
+      return;
+    }
+    const subTotal = items.reduce((sum, line) => sum + line.totalAmount, 0);
+    const taxAmount = Math.round(subTotal * 0.18);
+    const ct = rfq.commercialTerms;
 
     setIsConvertingPO(true);
+    try {
+      const created = await psPurchaseOrderService.create({
+        orderDate: new Date().toISOString().slice(0, 10),
+        linkedPR: rfq.linkedPR?.trim() || undefined,
+        linkedRFQ: rfq.rfqNumber,
+        department: rfq.department,
+        buyerName: rfq.buyer,
+        vendorName,
+        contactPerson: vendorName,
+        gstin: "—",
+        vendorAddress: ct.deliveryAddress || "—",
+        vendorPhone: "—",
+        shipToWarehouse: ct.deliveryLocation || "Central Stores",
+        dockGate: "Receiving Dock",
+        expectedDeliveryDate: rfq.closingDate || new Date().toISOString().slice(0, 10),
+        freightTerms: "FOB Destination",
+        paymentTerms: ct.paymentTerms || "Net 30 Days post GRN",
+        paymentDueDays: 30,
+        discountPercent: 0,
+        currency: ct.currency || "INR",
+        taxTerms: ct.tax || "18% GST",
+        subTotal,
+        taxAmount,
+        totalAmount: subTotal + taxAmount,
+        status: "Pending Approval",
+        items,
+        attachments: [],
+        approvalHistory: [
+          {
+            level: "Level 1",
+            approver: rfq.buyer,
+            action: "Submitted",
+            timestamp: new Date().toISOString().slice(0, 10),
+            comments: `Auto-generated from ${rfq.rfqNumber}`,
+          },
+        ],
+        activityTimeline: [
+          {
+            stage: "PO Created from RFQ",
+            timestamp: new Date().toISOString().slice(0, 10),
+            note: rfq.linkedPR?.trim()
+              ? `Converted from ${rfq.rfqNumber} · linked PR ${rfq.linkedPR}`
+              : `Converted from ${rfq.rfqNumber} · direct procurement (no PR)`,
+            author: rfq.buyer,
+          },
+        ],
+      });
 
-    setTimeout(() => {
-      const generatedPO = `PO-2026-015`;
-
-      setRfqList((prev) =>
-        prev.map((r) => {
-          if (r.id === convertPOModalRFQ.id) {
-            const updatedTimeline = r.activityTimeline.map((item) =>
-              item.stage === "Converted to Purchase Order"
-                ? { ...item, timestamp: "Today", note: `Converted to ${generatedPO}`, author: "Purchase Manager" }
-                : item
-            );
-            return {
-              ...r,
-              status: "Converted to PO",
-              poNumber: generatedPO,
-              activityTimeline: updatedTimeline,
-            };
-          }
-          return r;
-        })
-      );
-
-      setIsConvertingPO(false);
+      await psRfqService.update(rfq.id, {
+        status: "Converted to PO",
+        poNumber: created.poNumber,
+        selectedVendor: vendorName,
+      });
+      await reload();
       setConvertPOModalRFQ(null);
       setToast({
-        message: `✅ Purchase Order ${generatedPO} created successfully.`,
+        message: `Purchase Order ${created.poNumber} created${rfq.linkedPR?.trim() ? ` (PR ${rfq.linkedPR})` : ""}`,
         variant: "success",
       });
-    }, 1000);
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "PO conversion failed", variant: "info" });
+    } finally {
+      setIsConvertingPO(false);
+    }
   };
 
-  // Direct Send RFQ from Draft Row
-  const handleSendRFQDirect = (rfq: RFQRecord) => {
-    setRfqList((prev) =>
-      prev.map((r) => (r.id === rfq.id ? { ...r, status: "Sent" } : r))
-    );
-    setToast({ message: "RFQ Sent Successfully", variant: "success" });
+  const handleSendRFQDirect = async (rfq: RFQRecord) => {
+    try {
+      await psRfqService.update(rfq.id, { status: "Sent" });
+      await reload();
+      setToast({ message: "RFQ Sent Successfully", variant: "success" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Send failed", variant: "info" });
+    }
   };
 
   // Send Reminder Handler
@@ -375,11 +592,14 @@ export default function RequestForQuotationsPage() {
   };
 
   // Cancel RFQ Handler
-  const handleCancelRFQ = (rfq: RFQRecord) => {
-    setRfqList((prev) =>
-      prev.map((r) => (r.id === rfq.id ? { ...r, status: "Cancelled" } : r))
-    );
-    setToast({ message: `RFQ ${rfq.rfqNumber} has been cancelled.`, variant: "info" });
+  const handleCancelRFQ = async (rfq: RFQRecord) => {
+    try {
+      await psRfqService.update(rfq.id, { status: "Cancelled" });
+      await reload();
+      setToast({ message: `RFQ ${rfq.rfqNumber} has been cancelled.`, variant: "info" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Cancel failed", variant: "info" });
+    }
   };
 
   // Native File Picker Select Handler
@@ -406,7 +626,7 @@ export default function RequestForQuotationsPage() {
 
   // Confirm Vendors Selection from Vendor Modal
   const handleConfirmVendorModal = () => {
-    const selected = MASTER_VENDOR_OPTIONS.filter((v) => selectedVendorIds.includes(v.id)).map(
+    const selected = vendorOptions.filter((v) => selectedVendorIds.includes(v.id)).map(
       (v) => ({
         id: v.id,
         vendorName: v.name,
@@ -422,20 +642,21 @@ export default function RequestForQuotationsPage() {
   };
 
   // Save RFQ Form Handler
-  const handleSaveRFQ = (isSend: boolean) => {
-    const nextNum = `RFQ-2026-00${rfqList.length + 1}`;
-    const newRecord: RFQRecord = {
-      id: `rfq-${Date.now()}`,
-      rfqNumber: editRFQ ? editRFQ.rfqNumber : nextNum,
-      linkedPR: formPR,
-      department: formPR === "PR-2026-001" ? "Housekeeping" : formPR === "PR-2026-002" ? "Engineering" : "Kitchen",
+  const handleSaveRFQ = async (isSend: boolean) => {
+    if (isSend && formVendors.length === 0) {
+      setToast({ message: "Add at least one vendor before sending.", variant: "info" });
+      return;
+    }
+    const newRecord: Partial<RFQRecord> = {
+      linkedPR: formPR || undefined,
+      department: selectedPR?.department ?? "General",
       buyer: formBuyer,
-      invitedVendors: formVendors,
+      invitedVendors: formVendors.map((v, i) => normalizeRfqVendor(v, i)),
       closingDate: formClosingDate,
       rfqDate: formRFQDate,
       priority: formPriority,
       status: isSend ? "Sent" : "Draft",
-      requestedItems: formRequestedItems,
+      requestedItems: formRequestedItems.map((item, i) => normalizeRfqRequestedItem(item, i)),
       commercialTerms: {
         deliveryLocation: formDeliveryLoc,
         deliveryAddress: formDeliveryAddr,
@@ -446,58 +667,37 @@ export default function RequestForQuotationsPage() {
         remarks: formRemarks,
       },
       attachments: formAttachments,
-      comparisonData: [
-        {
-          vendorName: "ABC Linen Pvt Ltd",
-          unitPrice: 340,
-          deliveryDays: 5,
-          paymentTerms: "30 Days",
-          warranty: "12 Months",
-          rating: "★★★★☆",
-          totalAmount: 68000,
-          isRecommended: true,
-        },
-        {
-          vendorName: "XYZ Textiles",
-          unitPrice: 355,
-          deliveryDays: 3,
-          paymentTerms: "15 Days",
-          warranty: "12 Months",
-          rating: "★★★★★",
-          totalAmount: 71000,
-          isRecommended: false,
-        },
-        {
-          vendorName: "Premium Hospitality Supplies",
-          unitPrice: 330,
-          deliveryDays: 8,
-          paymentTerms: "45 Days",
-          warranty: "6 Months",
-          rating: "★★★☆☆",
-          totalAmount: 66000,
-          isRecommended: false,
-        },
-      ],
+      comparisonData: editRFQ?.comparisonData ?? [],
       activityTimeline: [
-        { stage: "RFQ Created", timestamp: "18 Jul 2026", note: `RFQ created by ${formBuyer}`, author: "Amit Sharma" },
-        ...(isSend ? [{ stage: "Vendors Invited", timestamp: "18 Jul 2026", note: `Sent RFQ to ${formVendors.length} invited vendors`, author: "System" }] : []),
-        { stage: "Waiting for Vendor Responses", timestamp: isSend ? "In Progress" : "Pending", note: "Awaiting submissions", author: "Vendor Portal" },
-        { stage: "Vendor Selected", timestamp: "Pending", note: "Awaiting evaluation", author: "Purchase Manager" },
-        { stage: "Converted to Purchase Order", timestamp: "Pending", note: "Awaiting PO generation", author: "Finance Head" },
+        ...(editRFQ?.activityTimeline ?? []),
+        {
+          stage: isSend ? "Sent" : "Draft",
+          timestamp: new Date().toISOString().slice(0, 10),
+          note: isSend ? "RFQ sent to invited vendors" : "RFQ saved as draft",
+          author: formBuyer,
+        },
       ],
     };
 
-    if (editRFQ) {
-      setRfqList((prev) => prev.map((r) => (r.id === editRFQ.id ? newRecord : r)));
-      setEditRFQ(null);
-      setToast({ message: "RFQ Saved Successfully", variant: "success" });
-    } else {
-      setRfqList([newRecord, ...rfqList]);
-      setCreateDrawerOpen(false);
-      setToast({
-        message: isSend ? "RFQ Sent Successfully" : "RFQ Saved Successfully",
-        variant: "success",
-      });
+    setSaving(true);
+    try {
+      if (editRFQ) {
+        await psRfqService.update(editRFQ.id, newRecord);
+        setEditRFQ(null);
+        setToast({ message: "RFQ Saved Successfully", variant: "success" });
+      } else {
+        await psRfqService.create(newRecord);
+        setCreateDrawerOpen(false);
+        setToast({
+          message: isSend ? "RFQ Sent Successfully" : "RFQ Saved Successfully",
+          variant: "success",
+        });
+      }
+      await reload();
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Save failed", variant: "info" });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -523,7 +723,7 @@ export default function RequestForQuotationsPage() {
           {
             label: "Compare Quotations",
             icon: <FileSpreadsheet className="h-3.5 w-3.5" />,
-            onClick: () => setCompareModalRFQ(rfq),
+            onClick: () => openCompareForRfq(rfq),
           },
           { label: "Edit", icon: <Edit className="h-3.5 w-3.5" />, onClick: () => setEditRFQ(rfq) },
         ];
@@ -533,7 +733,7 @@ export default function RequestForQuotationsPage() {
           {
             label: "Compare Quotations",
             icon: <FileSpreadsheet className="h-3.5 w-3.5" />,
-            onClick: () => setCompareModalRFQ(rfq),
+            onClick: () => openCompareForRfq(rfq),
           },
           {
             label: "Send Reminder",
@@ -626,7 +826,7 @@ export default function RequestForQuotationsPage() {
             </Button>
 
             <Button
-              onClick={() => setCreateDrawerOpen(true)}
+              onClick={openCreateDrawer}
               className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white flex items-center justify-center gap-1.5 rounded-xl h-8 px-3.5 text-xs font-bold shrink-0 shadow-xs cursor-pointer focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
             >
               <Plus className="h-3.5 w-3.5" /> Create RFQ
@@ -700,7 +900,7 @@ export default function RequestForQuotationsPage() {
         </Button>
         <Button
           type="button"
-          onClick={() => setCreateDrawerOpen(true)}
+          onClick={openCreateDrawer}
           className="flex-1 h-11 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
         >
           <Plus className="h-4 w-4" /> + Create
@@ -847,7 +1047,7 @@ export default function RequestForQuotationsPage() {
                       />
                     </td>
                     <td className="px-3.5 py-3 font-mono font-bold text-slate-900">{rfq.rfqNumber}</td>
-                    <td className="px-3.5 py-3 font-mono text-emerald-700 font-bold">{rfq.linkedPR}</td>
+                    <td className="px-3.5 py-3 font-mono text-emerald-700 font-bold">{rfq.linkedPR?.trim() || "—"}</td>
                     <td className="px-3.5 py-3 font-extrabold text-slate-800">{rfq.department}</td>
                     <td className="px-3.5 py-3 text-slate-700 font-medium">{rfq.buyer}</td>
                     <td className="px-3.5 py-3 text-slate-600 font-bold">
@@ -946,7 +1146,7 @@ export default function RequestForQuotationsPage() {
                 {renderStatusBadge(selectedRFQ.status)}
               </div>
               <h3 className="text-base font-extrabold text-slate-900">{selectedRFQ.department} Department RFQ</h3>
-              <p className="text-xs text-slate-500 font-medium">Linked PR: {selectedRFQ.linkedPR} · Buyer: {selectedRFQ.buyer}</p>
+              <p className="text-xs text-slate-500 font-medium">Linked PR: {selectedRFQ.linkedPR?.trim() || "Direct Procurement"} · Buyer: {selectedRFQ.buyer}</p>
             </div>
 
             {/* SECTION 1: BASIC INFORMATION */}
@@ -958,7 +1158,7 @@ export default function RequestForQuotationsPage() {
                 <div className="grid grid-cols-2 gap-3 border-b border-slate-100 pb-2">
                   <div>
                     <span className="text-[10px] text-slate-400 font-bold uppercase">Linked PR</span>
-                    <p className="font-mono font-bold text-slate-900">{selectedRFQ.linkedPR}</p>
+                    <p className="font-mono font-bold text-slate-900">{selectedRFQ.linkedPR?.trim() || "Direct Procurement"}</p>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 font-bold uppercase">Buyer</span>
@@ -993,7 +1193,7 @@ export default function RequestForQuotationsPage() {
             {/* SECTION 2: REQUESTED ITEMS (WITH ESTIMATED RATE COLUMN) */}
             <div className="space-y-2">
               <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
-                Requested Items (Auto-populated from {selectedRFQ.linkedPR})
+                Requested Items{selectedRFQ.linkedPR?.trim() ? ` (from ${selectedRFQ.linkedPR})` : ""}
               </h4>
               <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
                 <table className="w-full text-left text-xs border-collapse">
@@ -1007,8 +1207,8 @@ export default function RequestForQuotationsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
-                    {selectedRFQ.requestedItems.map((item) => (
-                      <tr key={item.id}>
+                    {selectedRFQ.requestedItems.map((item, idx) => (
+                      <tr key={item.id || `item-${idx}`}>
                         <td className="px-3 py-2 font-bold text-slate-900">{item.item}</td>
                         <td className="px-3 py-2 text-slate-600">{item.category}</td>
                         <td className="px-3 py-2 font-extrabold text-slate-900">{item.quantity}</td>
@@ -1038,11 +1238,14 @@ export default function RequestForQuotationsPage() {
                         <th className="px-3 py-2">Phone</th>
                         <th className="px-3 py-2">Invitation Sent On</th>
                         <th className="px-3 py-2 text-right">Status</th>
+                        {(selectedRFQ.status === "Sent" || selectedRFQ.status === "Pending Response") && (
+                          <th className="px-3 py-2 text-right">Action</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
-                      {selectedRFQ.invitedVendors.map((v) => (
-                        <tr key={v.id}>
+                      {selectedRFQ.invitedVendors.map((v, idx) => (
+                        <tr key={v.id || `vendor-${idx}`}>
                           <td className="px-3 py-2 font-bold text-slate-900">{v.vendorName}</td>
                           <td className="px-3 py-2 text-slate-500">{v.email}</td>
                           <td className="px-3 py-2 text-slate-500">{v.phone}</td>
@@ -1055,6 +1258,29 @@ export default function RequestForQuotationsPage() {
                               {v.status}
                             </span>
                           </td>
+                          {(selectedRFQ.status === "Sent" || selectedRFQ.status === "Pending Response") && (
+                            <td className="px-3 py-2 text-right">
+                              {v.status !== "Responded" ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => openRecordQuoteModal(selectedRFQ, v)}
+                                  className="h-7 px-2.5 text-[10px] font-bold rounded-lg cursor-pointer"
+                                >
+                                  Record Quote
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => openRecordQuoteModal(selectedRFQ, v)}
+                                  className="h-7 px-2.5 text-[10px] font-bold rounded-lg cursor-pointer"
+                                >
+                                  Edit Quote
+                                </Button>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -1162,13 +1388,42 @@ export default function RequestForQuotationsPage() {
               </div>
             </div>
 
-            <Button
-              type="button"
-              onClick={() => setSelectedRFQ(null)}
-              className="w-full h-9 text-xs font-bold !bg-slate-900 hover:!bg-slate-800 text-white rounded-xl shadow-xs cursor-pointer"
-            >
-              Close RFQ Details
-            </Button>
+            <div className="flex flex-col gap-2 pt-2">
+              {(selectedRFQ.status === "Sent" || selectedRFQ.status === "Pending Response") &&
+                (selectedRFQ.comparisonData?.length ?? 0) > 0 && (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => openCompareForRfq(selectedRFQ)}
+                      className="flex-1 h-9 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl shadow-xs cursor-pointer inline-flex items-center justify-center gap-1.5"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5" /> Compare & Select Vendor
+                    </Button>
+                  </div>
+                )}
+              {(selectedRFQ.status === "Sent" || selectedRFQ.status === "Pending Response") &&
+                (selectedRFQ.comparisonData?.length ?? 0) === 0 && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 font-medium">
+                    Record vendor quotations using <strong>Record Quote</strong> above, then compare and select the winning vendor.
+                  </p>
+                )}
+              {selectedRFQ.status === "Vendor Selected" && (
+                <Button
+                  type="button"
+                  onClick={() => setConvertPOModalRFQ(selectedRFQ)}
+                  className="w-full h-9 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl shadow-xs cursor-pointer inline-flex items-center justify-center gap-1.5"
+                >
+                  <ShoppingCart className="h-3.5 w-3.5" /> Convert to Purchase Order
+                </Button>
+              )}
+              <Button
+                type="button"
+                onClick={() => setSelectedRFQ(null)}
+                className="w-full h-9 text-xs font-bold !bg-slate-900 hover:!bg-slate-800 text-white rounded-xl shadow-xs cursor-pointer"
+              >
+                Close RFQ Details
+              </Button>
+            </div>
           </div>
         </Drawer>
       )}
@@ -1255,15 +1510,20 @@ export default function RequestForQuotationsPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-              <FormField label="Linked Purchase Requisition" required>
+              <FormField label="Linked Purchase Requisition (Optional)">
                 <SelectInput
                   value={formPR}
                   onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handlePRSelectionChange(e.target.value)}
                   className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
+                  disabled={loadingPRs}
                 >
-                  <option value="PR-2026-001">PR-2026-001 (Housekeeping • Linen)</option>
-                  <option value="PR-2026-002">PR-2026-002 (Engineering • HVAC)</option>
-                  <option value="PR-2026-003">PR-2026-003 (Kitchen • Gourmet)</option>
+                  <option value="">No linked PR — Direct Procurement</option>
+                  {loadingPRs && <option value="" disabled>Loading requisitions…</option>}
+                  {eligiblePRs.map((pr) => (
+                    <option key={pr.id} value={pr.prNumber}>
+                      {prOptionLabel(pr)}
+                    </option>
+                  ))}
                 </SelectInput>
               </FormField>
 
@@ -1644,7 +1904,7 @@ export default function RequestForQuotationsPage() {
         }
       >
         <div className="space-y-3 py-1 text-xs">
-          {MASTER_VENDOR_OPTIONS.map((v) => {
+          {vendorOptions.map((v) => {
             const isChecked = selectedVendorIds.includes(v.id);
 
             return (
@@ -1679,13 +1939,118 @@ export default function RequestForQuotationsPage() {
         </div>
       </Modal>
 
+      {/* RECORD VENDOR QUOTATION MODAL */}
+      {recordQuoteRFQ && recordQuoteVendor && (
+        <Modal
+          open={!!recordQuoteRFQ && !!recordQuoteVendor}
+          onClose={() => {
+            if (!savingQuote) {
+              setRecordQuoteRFQ(null);
+              setRecordQuoteVendor(null);
+            }
+          }}
+          title={`Record Quotation — ${recordQuoteVendor.vendorName}`}
+          description={`Enter commercial bid details for ${recordQuoteRFQ.rfqNumber}`}
+          size="md"
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={savingQuote}
+                onClick={() => {
+                  setRecordQuoteRFQ(null);
+                  setRecordQuoteVendor(null);
+                }}
+                className="h-9 px-4 text-xs font-bold !bg-slate-100 text-slate-700 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={savingQuote}
+                onClick={handleSaveVendorQuotation}
+                className="h-9 px-4 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl cursor-pointer inline-flex items-center gap-1.5"
+              >
+                {savingQuote ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Save Quotation
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-4 select-none py-1">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+              <p className="font-bold text-slate-800">{recordQuoteVendor.vendorName}</p>
+              <p className="text-slate-500">{recordQuoteVendor.email} · {recordQuoteVendor.phone}</p>
+              <p className="text-[10px] text-slate-400 mt-1">Total quantity on RFQ: {quoteTotalQty} units</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Quoted Rate (₹/unit)" required>
+                <TextInput
+                  type="number"
+                  min="0"
+                  value={quoteUnitPrice}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuoteUnitPrice(e.target.value)}
+                  className="h-9 text-xs"
+                  placeholder="e.g. 340"
+                />
+              </FormField>
+              <FormField label="Total Amount (₹)" required>
+                <TextInput
+                  type="number"
+                  min="0"
+                  value={quoteTotalAmount}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuoteTotalAmount(e.target.value)}
+                  className="h-9 text-xs"
+                  placeholder="Auto-calculated"
+                />
+              </FormField>
+              <FormField label="Delivery (days)" required>
+                <TextInput
+                  type="number"
+                  min="1"
+                  value={quoteDeliveryDays}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuoteDeliveryDays(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+              <FormField label="Vendor Rating (1–5)">
+                <TextInput
+                  type="number"
+                  min="1"
+                  max="5"
+                  step="0.5"
+                  value={quoteRating}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuoteRating(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+              <FormField label="Payment Terms">
+                <TextInput
+                  value={quotePaymentTerms}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuotePaymentTerms(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+              <FormField label="Warranty">
+                <TextInput
+                  value={quoteWarranty}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuoteWarranty(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* COMPARE QUOTATIONS MODAL */}
       {compareModalRFQ && (
         <Modal
           open={!!compareModalRFQ}
           onClose={() => setCompareModalRFQ(null)}
           title={`Quotation Comparison Matrix: ${compareModalRFQ.rfqNumber}`}
-          description={`Comparing 3 vendor commercial bids for ${compareModalRFQ.department} Department requisition.`}
+          description={`Comparing vendor bids for ${compareModalRFQ.department} Department requisition.`}
           size="lg"
           footer={
             <div className="flex items-center justify-end gap-2">
@@ -1699,19 +2064,20 @@ export default function RequestForQuotationsPage() {
               </Button>
               <Button
                 type="button"
+                disabled={(compareModalRFQ.comparisonData?.length ?? 0) === 0 || !pickedVendorName}
                 onClick={() => {
                   setSelectVendorModalRFQ(compareModalRFQ);
                   setCompareModalRFQ(null);
                 }}
-                className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl cursor-pointer"
+                className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl cursor-pointer disabled:opacity-50"
               >
-                Select Recommended Vendor
+                Select Vendor
               </Button>
             </div>
           }
         >
           <div className="space-y-4 select-none py-1">
-            {compareModalRFQ.comparisonData.length > 0 ? (
+            {(compareModalRFQ.comparisonData?.length ?? 0) > 0 ? (
               <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
@@ -1727,12 +2093,17 @@ export default function RequestForQuotationsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
-                    {compareModalRFQ.comparisonData.map((bid) => (
+                    {(compareModalRFQ.comparisonData ?? []).map((bid) => (
                       <tr
                         key={bid.vendorName}
+                        onClick={() => setPickedVendorName(bid.vendorName)}
                         className={cn(
-                          "transition-colors",
-                          bid.isRecommended ? "bg-emerald-50/80 border-l-4 border-l-emerald-600" : "hover:bg-slate-50/50"
+                          "transition-colors cursor-pointer",
+                          pickedVendorName === bid.vendorName
+                            ? "bg-emerald-50/80 border-l-4 border-l-emerald-600"
+                            : bid.isRecommended
+                              ? "bg-emerald-50/40 hover:bg-slate-50/50"
+                              : "hover:bg-slate-50/50",
                         )}
                       >
                         <td className="px-3.5 py-3 font-extrabold text-slate-900">{bid.vendorName}</td>
@@ -1759,8 +2130,11 @@ export default function RequestForQuotationsPage() {
                 </table>
               </div>
             ) : (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-xs text-slate-400 font-medium">
-                No quotations received yet.
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center space-y-2">
+                <p className="text-xs text-slate-500 font-medium">No quotations recorded yet.</p>
+                <p className="text-[11px] text-slate-400">
+                  Open the RFQ detail drawer and use <strong>Record Quote</strong> on each vendor row.
+                </p>
               </div>
             )}
           </div>
@@ -1796,17 +2170,30 @@ export default function RequestForQuotationsPage() {
           }
         >
           <div className="space-y-4 select-none py-2 text-xs">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] text-emerald-700 font-bold uppercase">Selected Vendor</span>
-                <span className="text-amber-500 font-bold">★★★★☆</span>
-              </div>
-              <p className="text-base font-extrabold text-slate-900">ABC Linen Pvt Ltd</p>
-              <div className="flex justify-between text-xs font-bold text-slate-700 pt-1 border-t border-emerald-100">
-                <span>Quoted Amount:</span>
-                <span className="text-emerald-800 font-extrabold">₹68,000</span>
-              </div>
-            </div>
+            {(() => {
+              const bid =
+                selectVendorModalRFQ.comparisonData.find((c) => c.vendorName === pickedVendorName) ??
+                selectVendorModalRFQ.comparisonData.find((c) => c.isRecommended) ??
+                selectVendorModalRFQ.comparisonData[0];
+              if (!bid) return null;
+              return (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-emerald-700 font-bold uppercase">Selected Vendor</span>
+                    <span className="text-amber-500 font-bold">{bid.rating}</span>
+                  </div>
+                  <p className="text-base font-extrabold text-slate-900">{bid.vendorName}</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-700 pt-1 border-t border-emerald-100">
+                    <span>Delivery: {bid.deliveryDays} days</span>
+                    <span>Rate: ₹{bid.unitPrice.toLocaleString("en-IN")}/unit</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-bold text-slate-700 pt-1 border-t border-emerald-100">
+                    <span>Quoted Amount:</span>
+                    <span className="text-emerald-800 font-extrabold">₹{bid.totalAmount.toLocaleString("en-IN")}</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             <FormField label="Reason for Selection" required>
               <TextAreaInput
@@ -1875,9 +2262,18 @@ export default function RequestForQuotationsPage() {
 
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Linked PR</span>
+                  <p className="font-mono font-bold text-slate-800">
+                    {convertPOModalRFQ.linkedPR?.trim() ? convertPOModalRFQ.linkedPR : "Direct Procurement"}
+                  </p>
+                </div>
+                <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase">Number of Items</span>
                   <p className="font-bold text-slate-800">{convertPOModalRFQ.requestedItems.length} Items</p>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200">
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase">Estimated Order Total</span>
                   <p className="font-extrabold text-emerald-800 text-sm">
@@ -1963,8 +2359,8 @@ export default function RequestForQuotationsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
-                    {viewPODrawerRFQ.requestedItems.map((item) => (
-                      <tr key={item.id}>
+                    {viewPODrawerRFQ.requestedItems.map((item, idx) => (
+                      <tr key={item.id || `po-item-${idx}`}>
                         <td className="px-3 py-2.5 font-bold text-slate-900">{item.item}</td>
                         <td className="px-3 py-2.5 text-slate-600">{item.category}</td>
                         <td className="px-3 py-2.5 font-extrabold text-slate-900">{item.quantity}</td>

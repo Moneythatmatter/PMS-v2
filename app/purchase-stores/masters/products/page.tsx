@@ -19,7 +19,6 @@ import {
   AlertBanner,
 } from "@/components/frontoffice/ui";
 import {
-  INITIAL_PRODUCTS_DATA,
   type ProductItem,
 } from "@/app/data/productMasterData";
 import { ProductFilters } from "@/components/purchase-stores/products/ProductFilters";
@@ -27,9 +26,56 @@ import { ProductTable } from "@/components/purchase-stores/products/ProductTable
 import { ProductDrawer } from "@/components/purchase-stores/products/ProductDrawer";
 import { ProductDetailsDrawer } from "@/components/purchase-stores/products/ProductDetailsDrawer";
 import { ProductImportModal } from "@/components/purchase-stores/products/ProductImportModal";
+import { usePsList } from "@/hooks/usePsResource";
+import {
+  psProductService,
+  psCategoryService,
+  psUnitService,
+  psSupplierService,
+} from "@/services/purchase-stores/index";
 
 export default function ProductMasterPage() {
-  const [products, setProducts] = useState<ProductItem[]>(INITIAL_PRODUCTS_DATA);
+  const { data: products, loading: productsLoading, reload: reloadProducts } = usePsList(() => psProductService.list());
+  const { data: categories, loading: categoriesLoading } = usePsList(() => psCategoryService.list());
+  const { data: units, loading: unitsLoading } = usePsList(() => psUnitService.list());
+  const { data: suppliers, loading: suppliersLoading } = usePsList(() => psSupplierService.list());
+
+  const loading = productsLoading || categoriesLoading || unitsLoading || suppliersLoading;
+
+  const categoryOptions = useMemo(
+    () =>
+      categories.map((c) => ({
+        id: c.id,
+        code: c.categoryCode,
+        name: c.categoryName,
+        description: c.description ?? "",
+      })),
+    [categories],
+  );
+
+  const unitOptions = useMemo(
+    () =>
+      units.map((u) => ({
+        id: u.id,
+        code: u.unitCode,
+        name: u.unitName,
+        symbol: u.symbol,
+      })),
+    [units],
+  );
+
+  const supplierOptions = useMemo(
+    () =>
+      suppliers.map((s) => ({
+        id: s.id,
+        code: s.supplierCode,
+        name: s.supplierName,
+        contactPerson: s.contactPerson,
+        phone: s.phone,
+        email: s.email,
+      })),
+    [suppliers],
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedSupplier, setSelectedSupplier] = useState("all");
@@ -115,25 +161,32 @@ export default function ProductMasterPage() {
   };
 
   // Save Product Handler (Create / Update)
-  const handleSaveProduct = (product: ProductItem) => {
-    if (editingProduct) {
-      setProducts((prev) =>
-        prev.map((p) => (p.id === product.id ? product : p))
-      );
-      showToast(`Product "${product.productName}" updated successfully.`);
-    } else {
-      setProducts((prev) => [product, ...prev]);
-      showToast(`Product "${product.productName}" created successfully.`);
+  const handleSaveProduct = async (product: ProductItem) => {
+    try {
+      if (editingProduct) {
+        await psProductService.update(product.id, product);
+        showToast(`Product "${product.productName}" updated successfully.`);
+      } else {
+        await psProductService.create(product);
+        showToast(`Product "${product.productName}" created successfully.`);
+      }
+      reloadProducts();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to save product.", "error");
     }
   };
 
-  // Delete Product Handler
-  const ConfirmDeleteProduct = () => {
+  const ConfirmDeleteProduct = async () => {
     if (!deletingProduct) return;
     const prodName = deletingProduct.productName;
-    setProducts((prev) => prev.filter((p) => p.id !== deletingProduct.id));
-    setDeletingProduct(null);
-    showToast(`Product "${prodName}" deleted from master registry.`, "error");
+    try {
+      await psProductService.remove(deletingProduct.id);
+      setDeletingProduct(null);
+      showToast(`Product "${prodName}" deleted from master registry.`, "error");
+      reloadProducts();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to delete product.", "error");
+    }
   };
 
   // CSV Export Handler
@@ -191,6 +244,14 @@ export default function ProductMasterPage() {
     showToast(`Exported ${filteredProducts.length} product records to CSV.`, "info");
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">
+        Loading...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen space-y-6 bg-slate-50/50 p-4 sm:p-6 md:p-8">
       {/* Toast Banner */}
@@ -235,8 +296,7 @@ export default function ProductMasterPage() {
               onClick={handleOpenAddDrawer}
               className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold shadow-xs"
             >
-              <Plus className="h-4 w-4" />
-              + Add Product
+              <Plus className="h-4 w-4" /> Add Product
             </Button>
           </div>
         }
@@ -285,6 +345,8 @@ export default function ProductMasterPage() {
         selectedStatus={selectedStatus}
         onStatusChange={setSelectedStatus}
         onResetFilters={handleResetFilters}
+        categoryOptions={categoryOptions}
+        supplierOptions={supplierOptions}
       />
 
       {/* DATA TABLE */}
@@ -302,6 +364,9 @@ export default function ProductMasterPage() {
         onClose={() => setIsDrawerOpen(false)}
         onSave={handleSaveProduct}
         initialProduct={editingProduct}
+        categoryOptions={categoryOptions}
+        unitOptions={unitOptions}
+        supplierOptions={supplierOptions}
       />
 
       {/* VIEW PRODUCT DETAILS DRAWER */}

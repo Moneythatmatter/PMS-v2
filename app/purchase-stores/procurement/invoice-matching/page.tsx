@@ -25,10 +25,9 @@ import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import { ModuleColumn } from "@/components/pms/module-types";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 import { PurchaseFormCard } from "@/components/purchase-stores/ui/PurchaseFormCard";
-import {
-  INITIAL_INVOICE_RECORDS,
-  InvoiceRecord,
-} from "@/app/data/invoiceVerificationData";
+import type { InvoiceRecord } from "@/app/data/invoiceVerificationData";
+import { usePsList } from "@/hooks/usePsResource";
+import { psInvoiceService } from "@/services/purchase-stores/index";
 
 export default function InvoiceVerificationPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -36,8 +35,7 @@ export default function InvoiceVerificationPage() {
     setIsMounted(true);
   }, []);
 
-  // Main Invoice Dataset
-  const [invoiceList, setInvoiceList] = useState<InvoiceRecord[]>(INITIAL_INVOICE_RECORDS);
+  const { data: invoiceList, loading, reload } = usePsList(() => psInvoiceService.list(), []);
 
   // Search & Filter State
   const [search, setSearch] = useState("");
@@ -114,38 +112,34 @@ export default function InvoiceVerificationPage() {
   }, [invoiceList, search, resultFilter, statusFilter]);
 
   // Verification Action Handlers
-  const handleApproveInvoice = (invoice: InvoiceRecord) => {
-    setInvoiceList((prev) =>
-      prev.map((i) =>
-        i.id === invoice.id
-          ? {
-              ...i,
-              status: "Approved for Payment",
-              verificationResult: "Approved",
-              comments: auditorComments,
-            }
-          : i
-      )
-    );
-    setActiveInvoice(null);
-    setToast({ message: `Invoice ${invoice.invoiceNumber} approved for payment disbursement.`, variant: "success" });
+  const handleApproveInvoice = async (invoice: InvoiceRecord) => {
+    try {
+      await psInvoiceService.update(invoice.id, {
+        status: "Approved for Payment",
+        verificationResult: "Approved",
+        comments: auditorComments,
+      });
+      await reload();
+      setActiveInvoice(null);
+      setToast({ message: `Invoice ${invoice.invoiceNumber} approved for payment disbursement.`, variant: "success" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Approve failed", variant: "warning" });
+    }
   };
 
-  const handleRejectInvoice = (invoice: InvoiceRecord) => {
-    setInvoiceList((prev) =>
-      prev.map((i) =>
-        i.id === invoice.id
-          ? {
-              ...i,
-              status: "Rejected",
-              verificationResult: "Rejected",
-              comments: auditorComments,
-            }
-          : i
-      )
-    );
-    setActiveInvoice(null);
-    setToast({ message: `Invoice ${invoice.invoiceNumber} rejected due to price/qty mismatch.`, variant: "warning" });
+  const handleRejectInvoice = async (invoice: InvoiceRecord) => {
+    try {
+      await psInvoiceService.update(invoice.id, {
+        status: "Rejected",
+        verificationResult: "Rejected",
+        comments: auditorComments,
+      });
+      await reload();
+      setActiveInvoice(null);
+      setToast({ message: `Invoice ${invoice.invoiceNumber} rejected due to price/qty mismatch.`, variant: "warning" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Reject failed", variant: "warning" });
+    }
   };
 
   // Result Badge Renderer
@@ -333,6 +327,11 @@ export default function InvoiceVerificationPage() {
 
       {/* CORE SHARED MODULE DATA TABLE */}
       <div className="space-y-3">
+        {loading ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+            Loading invoices…
+          </div>
+        ) : (
         <ModuleDataTable
           columns={columns}
           rows={filteredInvoices}
@@ -356,6 +355,7 @@ export default function InvoiceVerificationPage() {
           </div>
         )}
         />
+        )}
       </div>
 
       {/* VERIFY INVOICE LARGE RIGHT DRAWER */}

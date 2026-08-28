@@ -1,16 +1,7 @@
 "use client";
 
-import {
-  InventoryWorkspaceStub,
-  inventoryStubIcons,
-} from "@/components/purchase-stores/InventoryWorkspaceStub";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return (
-    <InventoryWorkspaceStub
-      title="Scrap & Write-Offs"
-      description="Record damaged, expired, or written-off stock."
-      icon={inventoryStubIcons.scrap}
-    />
-  );
+export default function ScrapRedirectPage() {
+  redirect("/purchase-stores/inventory/adjustments");
 }

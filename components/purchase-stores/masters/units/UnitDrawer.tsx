@@ -4,8 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { FormField, TextInput, TextAreaInput, FormSection } from "@/components/frontoffice/ui";
-import { Sparkles } from "lucide-react";
-import type { UnitItem, MasterStatus } from "@/app/data/purchaseStoresMastersData";
+import type { UnitItem } from "@/app/data/purchaseStoresMastersData";
 
 interface UnitDrawerProps {
   open: boolean;
@@ -18,14 +17,13 @@ const defaultUnitState: Partial<UnitItem> = {
   unitCode: "",
   unitName: "",
   symbol: "",
-  allowDecimals: false,
   description: "",
   status: "Active",
 };
 
 export function UnitDrawer({ open, onClose, onSave, initialUnit }: UnitDrawerProps) {
   const [formData, setFormData] = useState<Partial<UnitItem>>(defaultUnitState);
-  const [errors, setErrors] = useState<{ unitName?: string; symbol?: string }>({});
+  const [errors, setErrors] = useState<{ unitName?: string; unitCode?: string; symbol?: string }>({});
 
   const isEditing = Boolean(initialUnit);
 
@@ -34,28 +32,21 @@ export function UnitDrawer({ open, onClose, onSave, initialUnit }: UnitDrawerPro
       if (initialUnit) {
         setFormData(initialUnit);
       } else {
-        const rand = Math.floor(100 + Math.random() * 900);
-        setFormData({
-          ...defaultUnitState,
-          unitCode: `UNT-NEW-${rand}`,
-        });
+        setFormData({ ...defaultUnitState });
       }
       setErrors({});
     }
   }, [open, initialUnit]);
 
-  const handleAutoGenerateCode = () => {
-    const prefix = formData.unitName ? formData.unitName.slice(0, 3).toUpperCase() : "UNT";
-    const rand = Math.floor(100 + Math.random() * 900);
-    setFormData((prev) => ({ ...prev, unitCode: `UNT-${prefix}-${rand}` }));
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: { unitName?: string; symbol?: string } = {};
+    const newErrors: { unitName?: string; unitCode?: string; symbol?: string } = {};
 
-    if (!formData.unitName || !formData.unitName.trim()) {
+    if (!formData.unitName?.trim()) {
       newErrors.unitName = "Unit Name is required.";
+    }
+    if (!formData.unitCode?.trim()) {
+      newErrors.unitCode = "Unit Code is required.";
     }
     if (!formData.symbol || !formData.symbol.trim()) {
       newErrors.symbol = "Symbol / Abbreviation is required.";
@@ -70,10 +61,9 @@ export function UnitDrawer({ open, onClose, onSave, initialUnit }: UnitDrawerPro
 
     const finalUnit: UnitItem = {
       id: initialUnit?.id ?? `u-${Date.now()}`,
-      unitCode: formData.unitCode || `UNT-${Date.now().toString().slice(-4)}`,
+      unitCode: formData.unitCode!.trim().toUpperCase(),
       unitName: formData.unitName?.trim() || "",
       symbol: formData.symbol?.trim() || "",
-      allowDecimals: Boolean(formData.allowDecimals),
       description: formData.description?.trim() || undefined,
       status: formData.status || "Active",
       createdDate: initialUnit?.createdDate ?? todayStr,
@@ -119,23 +109,14 @@ export function UnitDrawer({ open, onClose, onSave, initialUnit }: UnitDrawerPro
             {errors.unitName && <p className="mt-1 text-[11px] font-medium text-red-500">{errors.unitName}</p>}
           </FormField>
 
-          <FormField label="Unit Code">
-            <div className="flex gap-2">
-              <TextInput
-                value={formData.unitCode ?? ""}
-                onChange={(e) => setFormData((p) => ({ ...p, unitCode: e.target.value }))}
-                placeholder="e.g. UNT-PCS"
-                className="flex-1 font-mono uppercase"
-              />
-              <button
-                type="button"
-                onClick={handleAutoGenerateCode}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
-                Auto
-              </button>
-            </div>
+          <FormField label="Unit Code" required>
+            <TextInput
+              value={formData.unitCode ?? ""}
+              onChange={(e) => setFormData((p) => ({ ...p, unitCode: e.target.value.toUpperCase() }))}
+              placeholder="e.g. UNT-PCS"
+              className={`font-mono uppercase ${errors.unitCode ? "border-red-400 focus:border-red-500" : ""}`}
+            />
+            {errors.unitCode && <p className="mt-1 text-[11px] font-medium text-red-500">{errors.unitCode}</p>}
           </FormField>
 
           <FormField label="Symbol / Abbreviation" required>
@@ -146,20 +127,6 @@ export function UnitDrawer({ open, onClose, onSave, initialUnit }: UnitDrawerPro
               className={errors.symbol ? "border-red-400 focus:border-red-500 font-bold" : "font-bold"}
             />
             {errors.symbol && <p className="mt-1 text-[11px] font-medium text-red-500">{errors.symbol}</p>}
-          </FormField>
-
-          <FormField label="Decimal Precision Control" className="sm:col-span-2">
-            <label className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/70 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={Boolean(formData.allowDecimals)}
-                onChange={(e) => setFormData((p) => ({ ...p, allowDecimals: e.target.checked }))}
-                className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
-              />
-              <span className="text-xs font-medium text-slate-800">
-                Allow Fractional Quantities (e.g., 1.5 Kg, 2.75 Ltr)
-              </span>
-            </label>
           </FormField>
 
           <FormField label="Description" className="sm:col-span-2">

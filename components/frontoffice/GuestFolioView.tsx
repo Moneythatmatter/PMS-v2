@@ -291,15 +291,15 @@ export function GuestFolioView() {
       </div>
 
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
-        <FOSearchToolbar
-          search={search}
-          onSearchChange={setSearch}
+              <FOSearchToolbar
+                search={search}
+                onSearchChange={setSearch}
           searchPlaceholder="Search folio, guest, room, booking…"
-          filterPills={{
+                filterPills={{
             active: statusFilter,
             onChange: setStatusFilter,
-            options: [
-              { id: "all", label: "All" },
+                  options: [
+                    { id: "all", label: "All" },
               { id: "open", label: "Open" },
               { id: "closed", label: "Closed" },
             ],
@@ -383,11 +383,11 @@ export function GuestFolioView() {
                     ].map((h) => (
                       <th key={h} className="px-4 py-3 text-left first:pl-4">
                         {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
                   {filteredFolios.map((folio) => {
                     const isActive = selected?.id === folio.id && folioDrawerOpen;
                     return (
@@ -438,15 +438,15 @@ export function GuestFolioView() {
                           )}
                         >
                           {formatINR(folio.balanceAmount)}
-                        </td>
+                          </td>
                       </tr>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState
               title="No folios found"
               description="Run transactions.sql in Supabase to create folios for existing bookings."
             />
@@ -473,7 +473,7 @@ export function GuestFolioView() {
               <Button size="sm" variant="outline">
                 <FileText className="mr-1.5 h-3.5 w-3.5" />
                 Print Folio
-              </Button>
+            </Button>
               <Button
                 size="sm"
                 className="bg-emerald-700 hover:bg-emerald-800"
@@ -481,8 +481,8 @@ export function GuestFolioView() {
                 onClick={() => setPaymentDrawerOpen(true)}
               >
                 Collect Payment
-              </Button>
-            </>
+            </Button>
+          </>
           ) : undefined
         }
       >
@@ -513,7 +513,7 @@ export function GuestFolioView() {
               <p className="mt-2 text-xs text-slate-500">
                 {paymentCount} payment{paymentCount !== 1 ? "s" : ""} recorded
               </p>
-            </div>
+          </div>
 
             <div>
               <h3 className="mb-3 text-sm font-semibold text-slate-900">Transactions</h3>
@@ -559,7 +559,7 @@ export function GuestFolioView() {
                 />
               )}
             </div>
-          </div>
+        </div>
         )}
       </Drawer>
 
@@ -580,9 +580,9 @@ export function GuestFolioView() {
         {selectedTxn && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                <ArrowDownLeft className="h-5 w-5" />
-              </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                  <ArrowDownLeft className="h-5 w-5" />
+                </div>
               <div>
                 <p className="font-semibold text-slate-900">{formatINR(selectedTxn.amount)}</p>
                 <p className="text-xs text-slate-500">{selectedTxn.transactionType}</p>
