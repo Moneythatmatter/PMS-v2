@@ -38,7 +38,14 @@ export type LiveTable = {
   durationMin: number;
   checkAmount: number;
   status: string;
+  displayState?: "BLANK" | "RUNNING" | "RUNNING_KOT" | "PRINTED" | "PAID";
+  openOrderId?: string | null;
+  openSessionId?: string | null;
+  openBillId?: string | null;
+  housekeeping?: string;
 };
+
+export type PosEntryMode = "new" | "manage" | "settle";
 
 export type FbOrder = {
   id: string;
@@ -47,6 +54,10 @@ export type FbOrder = {
   type: string;
   ref: string;
   guest: string;
+  guestId?: string | null;
+  guestNo?: string | null;
+  reservationId?: string | null;
+  pax?: number | null;
   lines: { name: string; qty: number; note?: string }[];
   amount: number;
   status: string;
@@ -116,6 +127,130 @@ export const liveTableService = {
     api.post<LiveTable>(fbPath(`/live-tables/${id}/clean`), {}),
 };
 
+export const floorPlanService = {
+  list: (outletId?: string) =>
+    api.get<LiveTable[]>(
+      fbPath(
+        `/floor-plan${outletId ? `?outletId=${encodeURIComponent(outletId)}` : ""}`,
+      ),
+    ),
+  get: (tableId: string) => api.get<LiveTable>(fbPath(`/floor-plan/${tableId}`)),
+  getOpenOrder: (tableId: string) =>
+    api.get<{
+      session: Record<string, unknown> | null;
+      order: FbOrder | null;
+      items?: unknown[];
+      kots?: unknown[];
+      bills?: unknown[];
+    } | null>(fbPath(`/pos/tables/${tableId}/open-order`)),
+};
+
+export type PosKotLine = {
+  menuItemId?: string;
+  name: string;
+  qty: number;
+  unitPrice: number;
+  note?: string;
+};
+
+export const posService = {
+  sendKot: (body: {
+    outletId: string;
+    type: string;
+    ref?: string;
+    liveTableId?: string;
+    orderId?: string;
+    guest?: string;
+    guestId?: string;
+    guestNo?: string;
+    reservationId?: string;
+    pax?: number;
+    server?: string;
+    lines: PosKotLine[];
+    print?: boolean;
+  }) =>
+    api.post<{
+      order: FbOrder;
+      kot: Record<string, unknown>;
+      amount: number;
+    }>(fbPath("/pos/kot"), body),
+  printBillForOrder: (orderId: string) =>
+    api.post<Record<string, unknown>>(fbPath(`/pos/orders/${orderId}/print-bill`), {}),
+  payBill: (billId: string, body?: { amount?: number; paymentMode?: string; fullPay?: boolean }) =>
+    api.post<{ bill: Record<string, unknown>; order: FbOrder | null }>(
+      fbPath(`/pos/bills/${billId}/pay`),
+      body ?? { fullPay: true },
+    ),
+  getOrderDetails: (orderId: string) =>
+    api.get<{
+      order: FbOrder;
+      items: unknown[];
+      kots: unknown[];
+      bills: unknown[];
+    }>(fbPath(`/pos/orders/${orderId}/details`)),
+  listBills: (outletId?: string) =>
+    api.get<FbPosBill[]>(
+      fbPath(
+        `/pos/bills${outletId ? `?outletId=${encodeURIComponent(outletId)}` : ""}`,
+      ),
+    ),
+  listKots: (outletId?: string) =>
+    api.get<FbPosKot[]>(
+      fbPath(
+        `/pos/kots${outletId ? `?outletId=${encodeURIComponent(outletId)}` : ""}`,
+      ),
+    ),
+  acceptKot: (kotId: string, body?: { prepMinutes?: number }) =>
+    api.post<FbPosKot>(fbPath(`/pos/kots/${kotId}/accept`), body ?? {}),
+  rejectKot: (kotId: string, body: { reason: string }) =>
+    api.post<FbPosKot>(fbPath(`/pos/kots/${kotId}/reject`), body),
+  cancelKotItem: (kotItemId: string, body?: { reason?: string }) =>
+    api.post<FbPosKot>(fbPath(`/pos/kot-items/${kotItemId}/cancel`), body ?? {}),
+  advanceKot: (kotId: string) =>
+    api.post<FbPosKot>(fbPath(`/pos/kots/${kotId}/advance`), {}),
+};
+
+export type FbPosKot = {
+  id: string;
+  kotNo: string;
+  orderId: string;
+  orderNo: string;
+  orderType: string;
+  ref: string;
+  guest: string;
+  server: string;
+  outletId: string;
+  status: string;
+  kotStatus: string;
+  placedAt: string;
+  createdAt: string | null;
+  printedAt: string | null;
+  prepMinutes: number | null;
+  rejectReason: string | null;
+  lines: { id: string; name: string; qty: number; status: string; note?: string }[];
+  amount: number;
+};
+
+export type FbPosBill = {
+  id: string;
+  billNo: string;
+  orderId: string;
+  orderNo: string;
+  orderType: string;
+  ref: string;
+  guest: string;
+  server: string;
+  outletId: string;
+  total: number;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  status: string;
+  paymentStatus: string;
+  billPrintedAt: string | null;
+  createdAt: string | null;
+};
+
 /** Master table records (floor plan / QR pages). */
 export const tableService = crud<LiveTable & { shape?: string; qr?: string }>("/tables");
 
@@ -179,42 +314,19 @@ export const fbCashierService = {
 export const menuCategoryService = crud("/menu/categories");
 export const menuItemService = crud("/menu/items");
 export const modifierService = crud("/menu/modifiers");
-export const comboService = crud("/menu/combos");
-export const pricingService = crud("/menu/pricing");
-
-export const banquetBookingService = crud("/banquet/bookings");
-export const banquetPackageService = crud("/banquet/packages");
-export const banquetRequirementService = crud("/banquet/requirements");
-export const banquetBillingService = crud("/banquet/billing");
 
 export const ingredientService = crud("/inventory/ingredients");
-export const supplierService = crud("/inventory/suppliers");
-export const purchaseOrderService = crud("/inventory/purchase-orders");
-export const grnService = crud("/inventory/grn");
-export const stockMovementService = crud("/inventory/stock-movements");
+export const fbUnitService = crud("/masters/units");
+export const fbTaxGroupService = crud("/masters/tax-groups");
+export const fbModifierGroupService = crud("/masters/modifier-groups");
+export const fbOutletTypeService = crud("/masters/outlet-types");
 export const wastageService = crud("/inventory/wastage");
-export const stockCountService = crud("/inventory/stock-counts");
 export const stockAdjustmentService = crud("/inventory/adjustments");
 
-export const drinkCategoryService = crud("/bar/drink-categories");
-export const drinkService = crud("/bar/drinks");
-export const cocktailService = crud("/bar/cocktails");
-export const happyHourService = crud("/bar/happy-hour");
-export const barStockService = crud("/bar/stock");
-export const bottleService = crud("/bar/bottles");
-
-export const taxService = crud("/settings/taxes");
-export const discountService = crud("/settings/discounts");
-export const paymentModeService = crud("/settings/payment-modes");
-export const orderTypeService = crud("/settings/order-types");
 export const dayCloseService = crud("/day-close");
 export const fbReservationService = crud("/reservations");
 
 export const recipeService = crud("/menu/recipes");
-export const serviceChargeService = crud("/settings/service-charge");
-export const kitchenPrinterService = crud("/settings/kitchen-printers");
-export const tableTypeService = crud("/settings/table-types");
-export const reasonMasterService = crud("/settings/reason-masters");
 
 export const fbReportService = {
   get: (

@@ -48,10 +48,11 @@ import { ModuleDataTable } from "@/components/pms/ModuleDataTable";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import { ModuleColumn } from "@/components/pms/module-types";
 import {
-  INITIAL_BATCH_RECORDS,
   BatchRecord,
   ExpiryStatus,
 } from "@/app/data/batchData";
+import { usePsList } from "@/hooks/usePsResource";
+import { psBatchService } from "@/services/purchase-stores/index";
 
 export default function BatchFEFOExpiryControlPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -59,8 +60,7 @@ export default function BatchFEFOExpiryControlPage() {
     setIsMounted(true);
   }, []);
 
-  // Main Dataset State
-  const [batchList, setBatchList] = useState<BatchRecord[]>(INITIAL_BATCH_RECORDS);
+  const { data: batchList, loading, reload } = usePsList(() => psBatchService.list());
 
   // Search & Filter State
   const [search, setSearch] = useState("");
@@ -86,6 +86,21 @@ export default function BatchFEFOExpiryControlPage() {
     setSupplierFilter("all");
     setDateFilter("");
   };
+
+  const warehouseOptions = useMemo(
+    () => [...new Set(batchList.map((b) => b.warehouse))].sort(),
+    [batchList],
+  );
+
+  const categoryOptions = useMemo(
+    () => [...new Set(batchList.map((b) => b.category))].sort(),
+    [batchList],
+  );
+
+  const supplierOptions = useMemo(
+    () => [...new Set(batchList.map((b) => b.supplier))].sort(),
+    [batchList],
+  );
 
   // Selected Batch for View Drawer
   const [selectedBatch, setSelectedBatch] = useState<BatchRecord | null>(null);
@@ -277,7 +292,13 @@ export default function BatchFEFOExpiryControlPage() {
     },
   ];
 
-  if (!isMounted) return null;
+  if (!isMounted || loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 pb-12 select-none">
@@ -306,7 +327,7 @@ export default function BatchFEFOExpiryControlPage() {
               type="button"
               size="sm"
               variant="outline"
-              onClick={() => setBatchList([...INITIAL_BATCH_RECORDS])}
+              onClick={() => reload()}
             >
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
               Refresh
@@ -439,9 +460,9 @@ export default function BatchFEFOExpiryControlPage() {
               className="h-9 w-full rounded-xl text-xs"
             >
               <option value="all">All warehouses</option>
-              <option value="Central Cold Storage">Cold Storage</option>
-              <option value="Main Kitchen Store">Kitchen Store</option>
-              <option value="Housekeeping Store">Housekeeping Store</option>
+              {warehouseOptions.map((w) => (
+                <option key={w} value={w}>{w}</option>
+              ))}
             </SelectInput>
           </FormField>
           <FormField label="Category">
@@ -451,9 +472,9 @@ export default function BatchFEFOExpiryControlPage() {
               className="h-9 w-full rounded-xl text-xs"
             >
               <option value="all">All categories</option>
-              <option value="Dairy">Dairy</option>
-              <option value="Produce">Produce</option>
-              <option value="Chemicals">Cleaning Chemicals</option>
+              {categoryOptions.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </SelectInput>
           </FormField>
           <FormField label="Supplier">
@@ -463,9 +484,9 @@ export default function BatchFEFOExpiryControlPage() {
               className="h-9 w-full rounded-xl text-xs"
             >
               <option value="all">All suppliers</option>
-              <option value="Amul Dairy">Amul Dairy</option>
-              <option value="Fresh Farms">Fresh Farms</option>
-              <option value="EcoClean">EcoClean</option>
+              {supplierOptions.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
             </SelectInput>
           </FormField>
           <FormField label="Expiry date">

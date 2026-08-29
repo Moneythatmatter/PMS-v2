@@ -32,11 +32,43 @@ import {
   PurchaseAttachmentList,
   AttachmentItem,
 } from "@/components/purchase-stores/ui/PurchaseAttachmentList";
+import type { PORecord, POLineItem } from "@/app/data/purchaseOrdersData";
+import { PODetailDrawer } from "@/components/purchase-stores/procurement/PODetailDrawer";
+import type { InvoiceRecord } from "@/app/data/invoiceVerificationData";
+import { usePsList } from "@/hooks/usePsResource";
 import {
-  INITIAL_PO_RECORDS,
-  PORecord,
-  POLineItem,
-} from "@/app/data/purchaseOrdersData";
+  psPurchaseOrderService,
+  psInvoiceService,
+  psRequisitionService,
+  psProductService,
+} from "@/services/purchase-stores/index";
+import type { PurchaseRequisition } from "@/app/data/purchaseRequisitionsData";
+import {
+  catalogItemLabel,
+  normalizePoLineItem,
+  poLineFromProduct,
+  poLinesFromPr,
+  poLinesMissingMaterial,
+  productsToCatalog,
+} from "@/app/data/procurementMaterial";
+
+const NO_LINKED_PR = "";
+
+function prOptionLabel(pr: PurchaseRequisition): string {
+  return `${pr.prNumber} — ${pr.department}`;
+}
+
+function openPoCreateDefaults() {
+  return {
+    formDate: new Date().toISOString().slice(0, 10),
+    formLinkedPR: NO_LINKED_PR,
+    formLinkedRFQ: "",
+    formDepartment: "",
+    formBuyerName: "Purchase Executive",
+    formItems: [] as POLineItem[],
+    formAttachments: [] as AttachmentItem[],
+  };
+}
 
 export default function PurchaseOrdersPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -44,8 +76,22 @@ export default function PurchaseOrdersPage() {
     setIsMounted(true);
   }, []);
 
-  // Main PO Dataset
-  const [poList, setPoList] = useState<PORecord[]>(INITIAL_PO_RECORDS);
+  const { data: poListRaw, loading: poLoading, reload: reloadPos } = usePsList(() => psPurchaseOrderService.list(), []);
+  const { data: products, loading: loadingProducts } = usePsList(() => psProductService.list(), []);
+  const productCatalog = useMemo(() => productsToCatalog(products), [products]);
+  const poList = useMemo(
+    () =>
+      poListRaw.map((po) => ({
+        ...po,
+        items: po.items.map((item, i) =>
+          normalizePoLineItem(item as Parameters<typeof normalizePoLineItem>[0], i, products),
+        ),
+      })),
+    [poListRaw, products],
+  );
+  const { data: invoiceList, reload: reloadInvoices } = usePsList(() => psInvoiceService.list(), []);
+  const { data: requisitions, loading: loadingPRs } = usePsList(() => psRequisitionService.list(), []);
+  const [saving, setSaving] = useState(false);
 
   // Search & Filter State
   const [search, setSearch] = useState("");
@@ -69,9 +115,9 @@ export default function PurchaseOrdersPage() {
   }, [toast]);
 
   // Form State for PO Creation / Edit
-  const [formDate, setFormDate] = useState("2026-07-22");
-  const [formLinkedPR, setFormLinkedPR] = useState("PR-2026-001");
-  const [formLinkedRFQ, setFormLinkedRFQ] = useState("RFQ-2026-001");
+  const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formLinkedPR, setFormLinkedPR] = useState(NO_LINKED_PR);
+  const [formLinkedRFQ, setFormLinkedRFQ] = useState("");
   const [formDepartment, setFormDepartment] = useState("Housekeeping");
   const [formBuyerName, setFormBuyerName] = useState("Amit Sharma");
   const [formVendorName, setFormVendorName] = useState("ABC Linen Pvt Ltd");
@@ -90,20 +136,61 @@ export default function PurchaseOrdersPage() {
   const [formTaxTerms, setFormTaxTerms] = useState("18% GST Included");
 
   // Form Items State
-  const [formItems, setFormItems] = useState<POLineItem[]>([
-    { id: "pli-1", itemCode: "HK-LIN-001", itemDescription: "Bedsheet (King Size 300TC)", category: "Linen", quantity: 200, unit: "Pieces", unitRate: 340, taxPercent: 18, totalAmount: 68000 },
-  ]);
+  const [formItems, setFormItems] = useState<POLineItem[]>([]);
 
-  // Form Attachments State
-  const [formAttachments, setFormAttachments] = useState<AttachmentItem[]>([
-    { id: "pa-1", fileName: "ABC_Linen_Quotation.pdf", fileSize: "320 KB", fileType: "pdf" },
-  ]);
+  const [formAttachments, setFormAttachments] = useState<AttachmentItem[]>([]);
+
+  const handleLinkedPRChange = (prNumber: string) => {
+    setFormLinkedPR(prNumber);
+    if (prNumber) {
+      const pr = requisitions.find((p) => p.prNumber === prNumber);
+      if (pr) {
+        setFormDepartment(pr.department);
+        if (products.length > 0) {
+          setFormItems(poLinesFromPr(pr.requestedItems, products));
+        }
+      }
+    }
+  };
+
+  const handlePoLineMaterialChange = (lineId: string, materialId: string) => {
+    const product = products.find((p) => p.id === materialId);
+    if (!product) return;
+    setFormItems((prev) =>
+      prev.map((line) => {
+        if (line.id !== lineId) return line;
+        const updated = poLineFromProduct(product, line.quantity);
+        return { ...updated, id: line.id, quantity: line.quantity, totalAmount: line.quantity * updated.unitRate };
+      }),
+    );
+  };
+
+  const handleAddPoLine = () => {
+    const first = products.find((p) => p.status === "Active");
+    if (!first) {
+      setToast({ message: "No active products in master. Add materials first.", variant: "info" });
+      return;
+    }
+    setFormItems((prev) => [...prev, poLineFromProduct(first)]);
+  };
+
+  const resetCreateForm = () => {
+    const defaults = openPoCreateDefaults();
+    setFormDate(defaults.formDate);
+    setFormLinkedPR(defaults.formLinkedPR);
+    setFormLinkedRFQ(defaults.formLinkedRFQ);
+    setFormDepartment(defaults.formDepartment);
+    setFormBuyerName(defaults.formBuyerName);
+    const first = products.find((p) => p.status === "Active");
+    setFormItems(first ? [poLineFromProduct(first)] : defaults.formItems);
+    setFormAttachments(defaults.formAttachments);
+  };
 
   // Sync Form when Editing PO
   useEffect(() => {
     if (editPO) {
       setFormDate(editPO.orderDate);
-      setFormLinkedPR(editPO.linkedPR);
+      setFormLinkedPR(editPO.linkedPR ?? NO_LINKED_PR);
       setFormLinkedRFQ(editPO.linkedRFQ || "");
       setFormDepartment(editPO.department);
       setFormBuyerName(editPO.buyerName);
@@ -121,10 +208,14 @@ export default function PurchaseOrdersPage() {
       setFormDiscountPercent(editPO.discountPercent);
       setFormCurrency(editPO.currency);
       setFormTaxTerms(editPO.taxTerms);
-      setFormItems(editPO.items);
+      setFormItems(
+        editPO.items.map((item, i) =>
+          normalizePoLineItem(item as Parameters<typeof normalizePoLineItem>[0], i, products),
+        ),
+      );
       setFormAttachments(editPO.attachments);
     }
-  }, [editPO]);
+  }, [editPO, products]);
 
   // Computed Financial Totals
   const subTotal = useMemo(() => formItems.reduce((acc, i) => acc + i.totalAmount, 0), [formItems]);
@@ -177,14 +268,28 @@ export default function PurchaseOrdersPage() {
   }, [poList, search, deptFilter, statusFilter]);
 
   // Save PO Handler
-  const handleSavePO = (isSubmit: boolean) => {
-    const nextNum = `PO-2026-00${poList.length + 1}`;
-    const newRecord: PORecord = {
-      id: editPO ? editPO.id : `po-${Date.now()}`,
-      poNumber: editPO ? editPO.poNumber : nextNum,
+  const handleSavePO = async (isSubmit: boolean) => {
+    const missing = poLinesMissingMaterial(formItems);
+    if (missing.length > 0) {
+      setToast({
+        message: `${missing.length} line(s) missing a valid material from Product Master.`,
+        variant: "info",
+      });
+      return;
+    }
+    if (formItems.length === 0) {
+      setToast({ message: "Add at least one line item from Product Master.", variant: "info" });
+      return;
+    }
+
+    const normalizedItems = formItems.map((item, i) =>
+      normalizePoLineItem(item as Parameters<typeof normalizePoLineItem>[0], i, products),
+    );
+
+    const newRecord: Partial<PORecord> = {
       orderDate: formDate,
-      linkedPR: formLinkedPR,
-      linkedRFQ: formLinkedRFQ,
+      linkedPR: formLinkedPR || undefined,
+      linkedRFQ: formLinkedRFQ || undefined,
       department: formDepartment,
       buyerName: formBuyerName,
       vendorName: formVendorName,
@@ -204,30 +309,88 @@ export default function PurchaseOrdersPage() {
       subTotal: subTotal,
       taxAmount: taxTotal,
       totalAmount: grandTotal,
-      status: isSubmit ? "Approved" : "Draft",
-      items: formItems,
+      status: isSubmit ? "Pending Approval" : "Draft",
+      items: normalizedItems,
       attachments: formAttachments,
       approvalHistory: [
         { level: "Level 1", approver: formBuyerName, action: "Submitted", timestamp: "Today", comments: "PO generated" },
-        ...(isSubmit ? [{ level: "Level 2", approver: "Finance Manager", action: "Approved", timestamp: "Today", comments: "Budget verified" }] : []),
+        ...(isSubmit ? [{ level: "Level 2", approver: "Finance Manager", action: "Pending", timestamp: "Today", comments: "Awaiting approval" }] : []),
       ],
       activityTimeline: [
         { stage: "PO Created", timestamp: "Today", note: `Created by ${formBuyerName}`, author: formBuyerName },
-        ...(isSubmit ? [{ stage: "PO Approved & Issued", timestamp: "Today", note: "Sent to supplier portal", author: "System" }] : []),
+        ...(isSubmit ? [{ stage: "Submitted for Approval", timestamp: "Today", note: "Sent to finance queue", author: "System" }] : []),
       ],
     };
 
-    if (editPO) {
-      setPoList((prev) => prev.map((p) => (p.id === editPO.id ? newRecord : p)));
-      setEditPO(null);
-      setToast({ message: "Purchase Order Updated Successfully", variant: "success" });
-    } else {
-      setPoList([newRecord, ...poList]);
-      setCreateDrawerOpen(false);
-      setToast({
-        message: isSubmit ? "Purchase Order Approved & Issued" : "Purchase Order Saved as Draft",
-        variant: "success",
+    setSaving(true);
+    try {
+      if (editPO) {
+        await psPurchaseOrderService.update(editPO.id, newRecord);
+        setEditPO(null);
+        setToast({ message: "Purchase Order Updated Successfully", variant: "success" });
+      } else {
+        await psPurchaseOrderService.create(newRecord);
+        setCreateDrawerOpen(false);
+        setToast({
+          message: isSubmit ? "Purchase Order submitted for approval" : "Purchase Order Saved as Draft",
+          variant: "success",
+        });
+      }
+      await reloadPos();
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Save failed", variant: "info" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleApprovePO = async () => {
+    if (!selectedPO) return;
+    try {
+      await psPurchaseOrderService.update(selectedPO.id, { status: "Approved" });
+      await reloadPos();
+      setSelectedPO((prev) => (prev ? { ...prev, status: "Approved" } : null));
+      setToast({ message: `${selectedPO.poNumber} approved.`, variant: "success" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Approve failed", variant: "info" });
+    }
+  };
+
+  const handleRejectPO = async () => {
+    if (!selectedPO) return;
+    try {
+      await psPurchaseOrderService.update(selectedPO.id, { status: "Cancelled" });
+      await reloadPos();
+      setSelectedPO((prev) => (prev ? { ...prev, status: "Cancelled" } : null));
+      setToast({ message: `${selectedPO.poNumber} rejected.`, variant: "info" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Reject failed", variant: "info" });
+    }
+  };
+
+  const handleApproveInvoice = async (invoiceId: string) => {
+    try {
+      await psInvoiceService.update(invoiceId, {
+        status: "Approved for Payment",
+        verificationResult: "Matched",
       });
+      await reloadInvoices();
+      setToast({ message: "Invoice approved for payment.", variant: "success" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Approve failed", variant: "info" });
+    }
+  };
+
+  const handleRejectInvoice = async (invoiceId: string) => {
+    try {
+      await psInvoiceService.update(invoiceId, {
+        status: "Rejected",
+        verificationResult: "Rejected",
+      });
+      await reloadInvoices();
+      setToast({ message: "Invoice rejected.", variant: "info" });
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Reject failed", variant: "info" });
     }
   };
 
@@ -324,6 +487,7 @@ export default function PurchaseOrdersPage() {
             type="button"
             onClick={() => {
               setEditPO(null);
+              resetCreateForm();
               setCreateDrawerOpen(true);
             }}
             className="h-9 px-4 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
@@ -451,6 +615,7 @@ export default function PurchaseOrdersPage() {
           type="button"
           onClick={() => {
             setEditPO(null);
+            resetCreateForm();
             setCreateDrawerOpen(true);
           }}
           className="flex-1 h-11 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
@@ -461,6 +626,11 @@ export default function PurchaseOrdersPage() {
 
       {/* CORE SHARED MODULE DATA TABLE */}
       <div className="space-y-3">
+        {poLoading ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+            Loading purchase orders…
+          </div>
+        ) : (
         <ModuleDataTable
           columns={columns}
           rows={filteredPOs}
@@ -484,6 +654,7 @@ export default function PurchaseOrdersPage() {
           </div>
         )}
         />
+        )}
       </div>
 
       {/* CREATE / EDIT PO DRAWER */}
@@ -538,16 +709,28 @@ export default function PurchaseOrdersPage() {
                   className="h-11 md:h-9 text-xs"
                 />
               </FormField>
-              <FormField label="Linked PR" required>
+              <FormField label="Linked PR (Optional)">
                 <SelectInput
                   value={formLinkedPR}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormLinkedPR(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleLinkedPRChange(e.target.value)}
                   className="h-11 md:h-9 text-xs font-medium"
+                  disabled={loadingPRs}
                 >
-                  <option value="PR-2026-001">PR-2026-001 (Housekeeping)</option>
-                  <option value="PR-2026-002">PR-2026-002 (Engineering)</option>
-                  <option value="PR-2026-003">PR-2026-003 (Kitchen)</option>
+                  <option value={NO_LINKED_PR}>No linked PR — Direct Procurement</option>
+                  {requisitions.map((pr) => (
+                    <option key={pr.id} value={pr.prNumber}>
+                      {prOptionLabel(pr)}
+                    </option>
+                  ))}
                 </SelectInput>
+              </FormField>
+              <FormField label="Linked RFQ (Optional)">
+                <TextInput
+                  value={formLinkedRFQ}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormLinkedRFQ(e.target.value)}
+                  placeholder="e.g. RFQ-2026-001 (if converted from RFQ)"
+                  className="h-11 md:h-9 text-xs font-mono"
+                />
               </FormField>
               <FormField label="Department" required>
                 <TextInput
@@ -607,12 +790,8 @@ export default function PurchaseOrdersPage() {
             actionSlot={
               <Button
                 type="button"
-                onClick={() =>
-                  setFormItems([
-                    ...formItems,
-                    { id: `pli-${Date.now()}`, itemCode: "HK-NEW-01", itemDescription: "Additional Item", category: "General", quantity: 10, unit: "Pieces", unitRate: 100, taxPercent: 18, totalAmount: 1000 },
-                  ])
-                }
+                onClick={handleAddPoLine}
+                disabled={loadingProducts || products.length === 0}
                 className="h-8 px-3 text-xs font-bold !bg-emerald-700 text-white rounded-lg cursor-pointer flex items-center gap-1"
               >
                 <Plus className="h-3.5 w-3.5" /> Add Line Item
@@ -621,14 +800,26 @@ export default function PurchaseOrdersPage() {
           >
             <div className="space-y-3">
               {formItems.map((item) => (
-                <div key={item.id} className="p-3 rounded-xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-5 gap-3 items-center text-xs">
+                <div key={item.id} className="p-3 rounded-xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-6 gap-3 items-center text-xs">
                   <div className="sm:col-span-2">
-                    <span className="text-[10px] text-slate-400 block font-medium mb-1">Item Description</span>
-                    <TextInput
-                      value={item.itemDescription}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormItems(formItems.map((i) => (i.id === item.id ? { ...i, itemDescription: e.target.value } : i)))}
+                    <span className="text-[10px] text-slate-400 block font-medium mb-1">Material (Product Master)</span>
+                    <SelectInput
+                      value={item.materialId}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                        handlePoLineMaterialChange(item.id, e.target.value)
+                      }
                       className="h-9 text-xs font-bold"
-                    />
+                    >
+                      <option value="">Select material…</option>
+                      {productCatalog.map((p) => (
+                        <option key={p.materialId} value={p.materialId}>
+                          {catalogItemLabel(p)}
+                        </option>
+                      ))}
+                    </SelectInput>
+                    {item.productCode && (
+                      <span className="text-[10px] text-slate-400 font-mono mt-1 block">{item.productCode}</span>
+                    )}
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 block font-medium mb-1">Qty ({item.unit})</span>
@@ -714,48 +905,16 @@ export default function PurchaseOrdersPage() {
         </form>
       </Drawer>
 
-      {/* VIEW DETAILS DRAWER */}
-      {selectedPO && (
-        <Drawer
-          open={!!selectedPO}
-          onClose={() => setSelectedPO(null)}
-          title={`Purchase Order: ${selectedPO.poNumber}`}
-          width="lg"
-        >
-          <div className="space-y-6 pb-6 select-none">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-sm font-extrabold text-emerald-900">{selectedPO.poNumber}</span>
-                {renderStatusBadge(selectedPO.status)}
-              </div>
-              <h3 className="text-base font-extrabold text-slate-900">{selectedPO.vendorName}</h3>
-              <p className="text-xs text-slate-500">{selectedPO.department} • Buyer: {selectedPO.buyerName}</p>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 text-xs">
-              <h4 className="font-bold text-slate-900 border-b border-slate-100 pb-2">Line Items Breakdown</h4>
-              {selectedPO.items.map((i) => (
-                <div key={i.id} className="flex justify-between items-center text-slate-800">
-                  <span>{i.itemDescription} ({i.quantity} {i.unit})</span>
-                  <span className="font-bold text-emerald-800">₹{i.totalAmount.toLocaleString("en-IN")}</span>
-                </div>
-              ))}
-              <div className="flex justify-between items-center pt-2 border-t border-slate-100 font-extrabold text-sm text-slate-900">
-                <span>Total PO Value</span>
-                <span className="text-emerald-900">₹{selectedPO.totalAmount.toLocaleString("en-IN")}</span>
-              </div>
-            </div>
-
-            <Button
-              type="button"
-              onClick={() => setSelectedPO(null)}
-              className="w-full h-9 text-xs font-bold !bg-slate-900 text-white rounded-xl shadow-xs cursor-pointer"
-            >
-              Close PO View
-            </Button>
-          </div>
-        </Drawer>
-      )}
+      <PODetailDrawer
+        po={selectedPO}
+        invoices={invoiceList.filter((i) => i.poNumber === selectedPO?.poNumber)}
+        onClose={() => setSelectedPO(null)}
+        renderStatusBadge={renderStatusBadge}
+        onApprovePO={handleApprovePO}
+        onRejectPO={handleRejectPO}
+        onApproveInvoice={handleApproveInvoice}
+        onRejectInvoice={handleRejectInvoice}
+      />
     </div>
   );
 }

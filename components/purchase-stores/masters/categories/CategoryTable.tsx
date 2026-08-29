@@ -97,14 +97,10 @@ export function CategoryTable({ categories, onEditCategory, onDeleteCategory, on
                 <span className="font-medium text-slate-800">{cat.department}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Default Tax %</span>
-                <span className="font-bold text-slate-900">{cat.defaultTaxRate}%</span>
-              </div>
-              <div>
                 <span className="text-slate-400 block text-[10px] uppercase font-semibold">Linked Products</span>
                 <span className="font-semibold text-emerald-800">{cat.productCount} items</span>
               </div>
-              <div>
+              <div className="col-span-2">
                 <span className="text-slate-400 block text-[10px] uppercase font-semibold">Created Date</span>
                 <span className="font-medium text-slate-700">{cat.createdDate}</span>
               </div>
@@ -142,7 +138,6 @@ export function CategoryTable({ categories, onEditCategory, onDeleteCategory, on
                   </button>
                 </th>
                 <th className="py-3.5 px-4">Department</th>
-                <th className="py-3.5 px-4 text-center">Default Tax %</th>
                 <th className="py-3.5 px-4 text-center">Linked Products</th>
                 <th className="py-3.5 px-4">Description</th>
                 <th className="py-3.5 px-4 text-center">Status</th>
@@ -156,7 +151,6 @@ export function CategoryTable({ categories, onEditCategory, onDeleteCategory, on
                   <td className="py-3.5 px-4 font-bold text-emerald-800 whitespace-nowrap">{cat.categoryCode}</td>
                   <td className="py-3.5 px-4 font-semibold text-slate-900">{cat.categoryName}</td>
                   <td className="py-3.5 px-4 text-slate-700">{cat.department}</td>
-                  <td className="py-3.5 px-4 text-center font-bold text-slate-900">{cat.defaultTaxRate}%</td>
                   <td className="py-3.5 px-4 text-center whitespace-nowrap">
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200">
                       <Package className="h-3 w-3 text-emerald-600" />

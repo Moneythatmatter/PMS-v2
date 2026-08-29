@@ -1125,7 +1125,6 @@ export function ModuleListPage({
                     { value: "Restaurant", label: "Restaurant" },
                     { value: "Cafe", label: "Cafe" },
                     { value: "Kitchen", label: "Kitchen" },
-                    { value: "Banquet", label: "Banquet" },
                     { value: "Bar", label: "Bar" },
                   ];
                 } else if (col.key === "status") {

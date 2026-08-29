@@ -131,7 +131,7 @@ export default function RoomCleaningOperations() {
         (task.roomNo ?? task.roomId).toLowerCase().includes(q) ||
         formatTaskTypeLabel(task.taskType).toLowerCase().includes(q) ||
         (task.assignedToName ?? task.assignedTo ?? "").toLowerCase().includes(q);
-
+      
       let matchStatus = true;
       if (statusFilter === "open") {
         matchStatus = isActiveTask(task);
@@ -236,7 +236,7 @@ export default function RoomCleaningOperations() {
             <Link href="/housekeeping/operations/rooms">
               <Button variant="outline" className="flex items-center gap-1.5 text-xs">
                 Room Status <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
+            </Button>
             </Link>
             <Button
               onClick={() => openCreateDrawer()}
@@ -416,9 +416,9 @@ export default function RoomCleaningOperations() {
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
-                    <span
-                      className={cn(
-                        "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide",
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide",
                         statusPillClass(tone),
                         inProgress && "animate-pulse",
                       )}

@@ -4,7 +4,7 @@ import React from "react";
 import { Search, RotateCcw, Filter } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SelectInput } from "@/components/frontoffice/ui";
-import { CATEGORY_MASTER_LIST, SUPPLIER_MASTER_LIST } from "@/app/data/productMasterData";
+import type { MasterCategory, MasterSupplier } from "@/app/data/productMasterData";
 
 interface ProductFiltersProps {
   searchQuery: string;
@@ -16,6 +16,8 @@ interface ProductFiltersProps {
   selectedStatus: string;
   onStatusChange: (value: string) => void;
   onResetFilters: () => void;
+  categoryOptions: MasterCategory[];
+  supplierOptions: MasterSupplier[];
 }
 
 export function ProductFilters({
@@ -28,6 +30,8 @@ export function ProductFilters({
   selectedStatus,
   onStatusChange,
   onResetFilters,
+  categoryOptions,
+  supplierOptions,
 }: ProductFiltersProps) {
   const hasActiveFilters =
     Boolean(searchQuery.trim()) ||
@@ -64,7 +68,7 @@ export function ProductFilters({
             className="h-9.5 text-xs sm:text-sm"
           >
             <option value="all">All Categories</option>
-            {CATEGORY_MASTER_LIST.map((cat) => (
+            {categoryOptions.map((cat) => (
               <option key={cat.id} value={cat.name}>
                 {cat.name}
               </option>
@@ -81,7 +85,7 @@ export function ProductFilters({
             className="h-9.5 text-xs sm:text-sm"
           >
             <option value="all">All Suppliers</option>
-            {SUPPLIER_MASTER_LIST.map((sup) => (
+            {supplierOptions.map((sup) => (
               <option key={sup.id} value={sup.name}>
                 {sup.name}
               </option>

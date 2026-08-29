@@ -536,15 +536,12 @@ function SidebarNav({
 export function ModuleSidebar({ title, subtitle = "Module menu", items }: ModuleSidebarProps) {
   const pathname = usePathname();
   const mobileNav = useMobileNav();
-  const [collapsed, setCollapsed] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     Masters: true,
     Reports: false,
     Restaurants: true,
   });
-
-  const isExpanded = !collapsed;
-  const showTooltips = collapsed;
 
   const toggleGroup = (label: string) => {
     setExpandedGroups((prev) => ({ ...prev, [label]: !prev[label] }));
@@ -557,7 +554,7 @@ export function ModuleSidebar({ title, subtitle = "Module menu", items }: Module
     pathname,
     expandedGroups,
     onToggleGroup: (label: string) => {
-      if (mobileNav?.isOpen || isExpanded) toggleGroup(label);
+      if (mobileNav?.isOpen || hovered) toggleGroup(label);
     },
   };
 
@@ -584,21 +581,35 @@ export function ModuleSidebar({ title, subtitle = "Module menu", items }: Module
         </div>
       )}
 
-      {/* Desktop sidebar — collapsed stays icon-only; hover shows side labels */}
+      {/* Desktop — always collapsed; hover expands as overlapping panel */}
       <aside
-        className={cn(
-          "sidebar-scroll relative z-20 hidden h-screen shrink-0 flex-col overflow-x-hidden border-r border-slate-800 bg-black transition-[width] duration-200 ease-in-out lg:flex",
-          collapsed ? "w-16" : "w-72",
-        )}
+        className="relative z-30 hidden h-screen w-16 shrink-0 overflow-visible lg:block"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
       >
-        <SidebarNav
-          {...navProps}
-          isExpanded={isExpanded}
-          showTooltips={showTooltips}
-          showCollapse
-          collapsed={collapsed}
-          onToggleCollapse={() => setCollapsed((prev) => !prev)}
-        />
+        <div className="sidebar-scroll flex h-full flex-col overflow-x-hidden border-r border-slate-800 bg-black">
+          <SidebarNav
+            {...navProps}
+            isExpanded={false}
+            showTooltips
+          />
+        </div>
+
+        <div
+          className={cn(
+            "sidebar-scroll absolute left-0 top-0 z-40 flex h-full w-72 flex-col overflow-x-hidden border-r border-slate-800 bg-black shadow-2xl transition-[opacity,transform] duration-200 ease-out",
+            hovered
+              ? "pointer-events-auto translate-x-0 opacity-100"
+              : "pointer-events-none -translate-x-1 opacity-0",
+          )}
+          aria-hidden={!hovered}
+        >
+          <SidebarNav
+            {...navProps}
+            isExpanded
+            showTooltips={false}
+          />
+        </div>
       </aside>
     </>
   );

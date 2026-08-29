@@ -96,10 +96,6 @@ export function UnitTable({ units, onEditUnit, onDeleteUnit, onResetFilters }: U
                 <span className="text-slate-400 block text-[10px] uppercase font-semibold">Symbol</span>
                 <span className="font-bold text-slate-900">{unit.symbol}</span>
               </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Allow Decimals</span>
-                <span className="font-medium text-slate-800">{unit.allowDecimals ? "Yes (e.g., 1.5)" : "No (Whole integer)"}</span>
-              </div>
               <div className="col-span-2">
                 <span className="text-slate-400 block text-[10px] uppercase font-semibold">Description</span>
                 <span className="font-medium text-slate-700">{unit.description || "—"}</span>
@@ -148,7 +144,6 @@ export function UnitTable({ units, onEditUnit, onDeleteUnit, onResetFilters }: U
                   </button>
                 </th>
                 <th className="py-3.5 px-4">Symbol / Abbreviation</th>
-                <th className="py-3.5 px-4 text-center">Allow Decimals</th>
                 <th className="py-3.5 px-4">Description</th>
                 <th className="py-3.5 px-4 text-center">Status</th>
                 <th className="py-3.5 px-4 text-center">Created</th>
@@ -161,16 +156,6 @@ export function UnitTable({ units, onEditUnit, onDeleteUnit, onResetFilters }: U
                   <td className="py-3.5 px-4 font-bold text-emerald-800 whitespace-nowrap">{unit.unitCode}</td>
                   <td className="py-3.5 px-4 font-semibold text-slate-900">{unit.unitName}</td>
                   <td className="py-3.5 px-4 font-mono font-bold text-slate-800">{unit.symbol}</td>
-                  <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-                        unit.allowDecimals ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-slate-100 text-slate-600 border border-slate-200"
-                      )}
-                    >
-                      {unit.allowDecimals ? "Decimals (e.g., 1.5)" : "Integers Only"}
-                    </span>
-                  </td>
                   <td className="py-3.5 px-4 text-slate-600 max-w-[240px] truncate">{unit.description || "—"}</td>
                   <td className="py-3.5 px-4 text-center whitespace-nowrap">
                     <span

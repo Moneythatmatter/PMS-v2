@@ -7,7 +7,6 @@ export type OutletTypeFilter =
   | "restaurant"
   | "cafe"
   | "kitchen"
-  | "banquet"
   | "bar"
   | "all";
 
@@ -23,10 +22,11 @@ export function useFbOutlets(types: OutletTypeFilter[] = ["all"]) {
         setLoading(true);
         const data = await outletService.list();
         if (cancelled) return;
-        const filtered =
+        const filtered = (
           types.includes("all")
             ? data
-            : data.filter((o) => types.includes(o.type as OutletTypeFilter));
+            : data.filter((o) => types.includes(o.type as OutletTypeFilter))
+        ).filter((o) => String(o.type).toLowerCase() !== "banquet");
         const rank = (t: string) =>
           t === "restaurant" ? 0 : t === "cafe" ? 1 : t === "kitchen" ? 2 : 3;
         filtered.sort(

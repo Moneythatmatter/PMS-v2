@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Edit, Trash2, Users, ArrowUpDown, ChevronLeft, ChevronRight, Eye, Star, Phone, Mail, FileText } from "lucide-react";
+import { Edit, Trash2, Users, ArrowUpDown, ChevronLeft, ChevronRight, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SupplierItem } from "@/app/data/purchaseStoresMastersData";
 
@@ -53,7 +53,7 @@ export function SupplierTable({
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-3">
           <Users className="h-6 w-6" />
         </div>
-        <h3 className="text-base font-semibold text-slate-900">No Suppliers Found</h3>
+        <h3 className="text-base font-semibold text-slate-900">No Vendors Found</h3>
         <p className="mt-1 max-w-sm text-xs text-slate-500">
           No vendors match your search criteria.
         </p>
@@ -75,7 +75,19 @@ export function SupplierTable({
       {/* Mobile View Cards */}
       <div className="grid grid-cols-1 gap-3 md:hidden">
         {paginatedSuppliers.map((sup) => (
-          <div key={sup.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+          <div
+            key={sup.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => onViewSupplier(sup)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onViewSupplier(sup);
+              }
+            }}
+            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs cursor-pointer transition-colors hover:bg-slate-50/80"
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-100">
@@ -117,20 +129,28 @@ export function SupplierTable({
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5">
-              <div className="flex items-center gap-0.5 text-amber-500 text-xs">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className={cn("h-3.5 w-3.5", i < sup.rating ? "fill-amber-400 text-amber-400" : "text-slate-200")} />
-                ))}
-              </div>
+            <div className="mt-3 flex items-center justify-end border-t border-slate-100 pt-2.5">
               <div className="flex items-center gap-1">
-                <button type="button" onClick={() => onViewSupplier(sup)} className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 hover:text-emerald-700" title="View Details">
-                  <Eye className="h-4 w-4" />
-                </button>
-                <button type="button" onClick={() => onEditSupplier(sup)} className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 hover:text-amber-600" title="Edit Supplier">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditSupplier(sup);
+                  }}
+                  className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 hover:text-amber-600"
+                  title="Edit Vendor"
+                >
                   <Edit className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => onDeleteSupplier(sup)} className="rounded-lg p-1.5 text-slate-600 hover:bg-red-50 hover:text-red-600" title="Delete Supplier">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteSupplier(sup);
+                  }}
+                  className="rounded-lg p-1.5 text-slate-600 hover:bg-red-50 hover:text-red-600"
+                  title="Delete Vendor"
+                >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -152,21 +172,24 @@ export function SupplierTable({
                 </th>
                 <th className="py-3.5 px-4">
                   <button type="button" onClick={() => handleSort("supplierName")} className="flex items-center gap-1 hover:text-slate-900">
-                    Supplier Name <ArrowUpDown className="h-3 w-3" />
+                    Vendor Name <ArrowUpDown className="h-3 w-3" />
                   </button>
                 </th>
                 <th className="py-3.5 px-4">Contact Person</th>
                 <th className="py-3.5 px-4">Phone & Email</th>
                 <th className="py-3.5 px-4">GSTIN</th>
                 <th className="py-3.5 px-4">Payment Terms</th>
-                <th className="py-3.5 px-4 text-center">Rating</th>
                 <th className="py-3.5 px-4 text-center">Status</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {paginatedSuppliers.map((sup) => (
-                <tr key={sup.id} className="transition-colors hover:bg-slate-50/80">
+                <tr
+                  key={sup.id}
+                  onClick={() => onViewSupplier(sup)}
+                  className="cursor-pointer transition-colors hover:bg-slate-50/80"
+                >
                   <td className="py-3.5 px-4 font-bold text-emerald-800 whitespace-nowrap">{sup.supplierCode}</td>
                   <td className="py-3.5 px-4">
                     <p className="font-semibold text-slate-900">{sup.supplierName}</p>
@@ -180,13 +203,6 @@ export function SupplierTable({
                   <td className="py-3.5 px-4 font-mono text-slate-800 whitespace-nowrap">{sup.gstin || "—"}</td>
                   <td className="py-3.5 px-4 text-slate-800 font-medium whitespace-nowrap">{sup.paymentTerms}</td>
                   <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                    <div className="flex items-center justify-center gap-0.5 text-amber-500">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} className={cn("h-3.5 w-3.5", i < sup.rating ? "fill-amber-400 text-amber-400" : "text-slate-200")} />
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 text-center whitespace-nowrap">
                     <span
                       className={cn(
                         "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
@@ -198,13 +214,26 @@ export function SupplierTable({
                   </td>
                   <td className="py-3.5 px-4 text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-1">
-                      <button type="button" onClick={() => onViewSupplier(sup)} className="rounded-lg p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700" title="View Supplier Details">
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button type="button" onClick={() => onEditSupplier(sup)} className="rounded-lg p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600" title="Edit Supplier">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditSupplier(sup);
+                        }}
+                        className="rounded-lg p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600"
+                        title="Edit Vendor"
+                      >
                         <Edit className="h-4 w-4" />
                       </button>
-                      <button type="button" onClick={() => onDeleteSupplier(sup)} className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600" title="Delete Supplier">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteSupplier(sup);
+                        }}
+                        className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600"
+                        title="Delete Vendor"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -219,7 +248,7 @@ export function SupplierTable({
       {/* Pagination Footer */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-1 py-2 text-xs text-slate-500">
         <div>
-          Showing <span className="font-semibold text-slate-700">{Math.min((currentPage - 1) * itemsPerPage + 1, suppliers.length)}</span> to <span className="font-semibold text-slate-700">{Math.min(currentPage * itemsPerPage, suppliers.length)}</span> of <span className="font-semibold text-slate-700">{suppliers.length}</span> suppliers
+          Showing <span className="font-semibold text-slate-700">{Math.min((currentPage - 1) * itemsPerPage + 1, suppliers.length)}</span> to <span className="font-semibold text-slate-700">{Math.min(currentPage * itemsPerPage, suppliers.length)}</span> of <span className="font-semibold text-slate-700">{suppliers.length}</span> vendors
         </div>
 
         {totalPages > 1 && (

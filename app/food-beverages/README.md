@@ -2,6 +2,8 @@
 
 Documentation for the Hotel PMS **Food & Beverages** module: pages, data sources, how screens link through shared keys, and operational flows from menu setup to bill settlement.
 
+> **POS v2 (sessions, KOT, bills):** See [POS-V2-README.md](./POS-V2-README.md) for the current order-to-settlement architecture, database tables, API endpoints, and floor plan flow.
+
 ---
 
 ## 1. Module overview
@@ -51,7 +53,7 @@ All F&B entities hang off a small set of IDs / codes. This is how pages are mean
 | Menu **category** name / id | Groups sellable items | Categories → Items (`category` field) |
 | Menu **item** name | Sellable product | Items → Order lines → KDS lines → recipes / pricing |
 | Banquet **booking** / **venue** id | Event scope | Venues → Bookings → Requirements → Billing → Close |
-| Inventory **SKU** / ingredient | Stock identity | Ingredients → PO → GRN → movements → wastage / count |
+| Inventory **SKU** / ingredient | Stock identity | Ingredients → wastage / adjustments |
 | Cashier **shift** id | Shift collections | Cashier → cashier report → day close |
 
 ### Outlet master (scope root)
@@ -196,7 +198,7 @@ Each `FbRow` typically has `id`, optional `status`, optional `outletId`, plus pa
 
 ### F. Inventory & Bar
 
-Inventory: ingredients → suppliers → PO → GRN → stock movement / wastage / count / adjustments.  
+Inventory: ingredients → wastage / adjustments.  
 Bar mirrors menu+orders for drinks (`drink-categories` → `drinks` / `cocktails` → `bar/orders`).
 
 ### G. Reports & Settings

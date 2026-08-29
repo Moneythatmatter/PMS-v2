@@ -4,12 +4,14 @@ import React, { useState, useMemo } from "react";
 import { Layers, CheckCircle2, XCircle, Plus, Download, Search, RotateCcw, Package } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { FOPageHeader, StatMiniCard, ConfirmModal, AlertBanner, SelectInput } from "@/components/frontoffice/ui";
-import { INITIAL_CATEGORIES_DATA, DEPARTMENT_OPTIONS, type CategoryItem } from "@/app/data/purchaseStoresMastersData";
+import { DEPARTMENT_OPTIONS, type CategoryItem } from "@/app/data/purchaseStoresMastersData";
 import { CategoryTable } from "@/components/purchase-stores/masters/categories/CategoryTable";
 import { CategoryDrawer } from "@/components/purchase-stores/masters/categories/CategoryDrawer";
+import { usePsList } from "@/hooks/usePsResource";
+import { psCategoryService } from "@/services/purchase-stores/index";
 
 export default function CategoryMasterPage() {
-  const [categories, setCategories] = useState<CategoryItem[]>(INITIAL_CATEGORIES_DATA);
+  const { data: categories, loading, reload } = usePsList(() => psCategoryService.list());
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
@@ -67,31 +69,48 @@ export default function CategoryMasterPage() {
     setIsDrawerOpen(true);
   };
 
-  const handleSaveCategory = (category: CategoryItem) => {
-    if (editingCategory) {
-      setCategories((prev) => prev.map((c) => (c.id === category.id ? category : c)));
-      showToast(`Category "${category.categoryName}" updated successfully.`);
-    } else {
-      setCategories((prev) => [category, ...prev]);
-      showToast(`Category "${category.categoryName}" created successfully.`);
+  const handleSaveCategory = async (category: CategoryItem) => {
+    try {
+      if (editingCategory) {
+        await psCategoryService.update(category.id, category);
+        showToast(`Category "${category.categoryName}" updated successfully.`);
+      } else {
+        await psCategoryService.create(category);
+        showToast(`Category "${category.categoryName}" created successfully.`);
+      }
+      reload();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to save category.", "error");
     }
   };
 
-  const confirmDeleteCategory = () => {
+  const confirmDeleteCategory = async () => {
     if (!deletingCategory) return;
     const name = deletingCategory.categoryName;
-    setCategories((prev) => prev.filter((c) => c.id !== deletingCategory.id));
-    setDeletingCategory(null);
-    showToast(`Category "${name}" deleted from master registry.`, "error");
+    try {
+      await psCategoryService.remove(deletingCategory.id);
+      setDeletingCategory(null);
+      showToast(`Category "${name}" deleted from master registry.`, "error");
+      reload();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to delete category.", "error");
+    }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">
+        Loading...
+      </div>
+    );
+  }
+
   const handleExportCSV = () => {
-    const headers = ["Category Code", "Category Name", "Department", "Default Tax %", "Product Count", "Description", "Status", "Created Date"];
+    const headers = ["Category Code", "Category Name", "Department", "Product Count", "Description", "Status", "Created Date"];
     const rows = filteredCategories.map((c) => [
       `"${c.categoryCode}"`,
       `"${c.categoryName}"`,
       `"${c.department}"`,
-      c.defaultTaxRate,
       c.productCount,
       `"${c.description || ""}"`,
       `"${c.status}"`,
@@ -119,14 +138,14 @@ export default function CategoryMasterPage() {
       <FOPageHeader
         eyebrow="Purchase & Stores · Master Registry"
         title="Category Master"
-        description="Manage inventory product categories, department mappings, and default GST tax rates."
+        description="Manage inventory product categories and department mappings."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100">
               <Download className="h-4 w-4" /> Export CSV
             </Button>
             <Button type="button" size="sm" onClick={handleOpenAddDrawer} className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold">
-              <Plus className="h-4 w-4" /> + Add Category
+              <Plus className="h-4 w-4" /> Add Category
             </Button>
           </div>
         }

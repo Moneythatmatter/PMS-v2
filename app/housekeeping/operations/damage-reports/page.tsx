@@ -153,7 +153,7 @@ export default function DamageReportsPage() {
     return (
       <div className="space-y-4 select-none">
         <div className="border-b border-slate-100 pb-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Operations</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Operations</span>
           <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">Damage Reports</h1>
         </div>
       </div>
@@ -170,12 +170,12 @@ export default function DamageReportsPage() {
             <p className="text-[10px] text-amber-700 font-semibold mt-0.5">API offline — changes may not persist</p>
           )}
         </div>
-        <Button
-          onClick={() => setCreateDrawerOpen(true)}
+          <Button
+            onClick={() => setCreateDrawerOpen(true)}
           className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white flex items-center gap-1.5 rounded-xl h-8 px-3.5 text-xs font-bold shadow-xs"
-        >
-          <Plus className="h-3.5 w-3.5" /> Register Damage
-        </Button>
+          >
+            <Plus className="h-3.5 w-3.5" /> Register Damage
+          </Button>
       </div>
 
       {toast && (
@@ -196,7 +196,7 @@ export default function DamageReportsPage() {
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Open</p>
             <h3 className="text-lg font-extrabold text-slate-800">{openReports.length}</h3>
           </div>
-          <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
         </div>
         <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-2xs flex items-center justify-between">
           <div>
@@ -225,26 +225,26 @@ export default function DamageReportsPage() {
         </div>
       </div>
 
-      <OperationsToolbar
-        search={search}
-        onSearchChange={setSearch}
+          <OperationsToolbar
+            search={search}
+            onSearchChange={setSearch}
         searchPlaceholder="Search report ID, room, asset, or description…"
-        activeFilterCount={activeFilterCount}
-        onOpenFilters={() => setFilterDrawerOpen(true)}
-      />
+            activeFilterCount={activeFilterCount}
+            onOpenFilters={() => setFilterDrawerOpen(true)}
+          />
 
-      <OperationsFilterDrawer
-        open={filterDrawerOpen}
-        onClose={() => setFilterDrawerOpen(false)}
-        title="Filter Damage Reports"
-        activeFilterCount={activeFilterCount}
-        onReset={() => {
+          <OperationsFilterDrawer
+            open={filterDrawerOpen}
+            onClose={() => setFilterDrawerOpen(false)}
+            title="Filter Damage Reports"
+            activeFilterCount={activeFilterCount}
+            onReset={() => {
           setTypeFilter("All");
-          setSeverityFilter("All");
-          setRespFilter("All");
-          setStatusFilter("All");
-        }}
-      >
+              setSeverityFilter("All");
+              setRespFilter("All");
+              setStatusFilter("All");
+            }}
+          >
         <div className="space-y-4">
           <FormField label="Damage Type">
             <SelectInput value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-9 text-xs rounded-xl">
@@ -252,51 +252,51 @@ export default function DamageReportsPage() {
               {["Electrical", "Plumbing", "AC / HVAC", "Furniture", "Wall", "Linen", "Glass", "Flooring", "Equipment", "Electronics", "Other"].map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
-            </SelectInput>
-          </FormField>
-          <FormField label="Severity">
+                </SelectInput>
+              </FormField>
+              <FormField label="Severity">
             <SelectInput value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} className="h-9 text-xs rounded-xl">
               <option value="All">All</option>
               {["Critical", "Major", "Moderate", "Minor"].map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
-            </SelectInput>
-          </FormField>
-          <FormField label="Responsibility">
+                </SelectInput>
+              </FormField>
+              <FormField label="Responsibility">
             <SelectInput value={respFilter} onChange={(e) => setRespFilter(e.target.value)} className="h-9 text-xs rounded-xl">
               <option value="All">All</option>
               {["Guest", "Hotel", "Natural Wear", "Vendor", "Split Recovery"].map((r) => (
                 <option key={r} value={r}>{r}</option>
               ))}
-            </SelectInput>
-          </FormField>
-          <FormField label="Status">
+                </SelectInput>
+              </FormField>
+              <FormField label="Status">
             <SelectInput value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9 text-xs rounded-xl">
               <option value="All">All</option>
               {["Reported", "Under Review", "Pending Finance", "Pending Engineering", "Insurance Claim", "Repaired", "Recovered", "Closed", "Cancelled"].map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
-            </SelectInput>
-          </FormField>
-        </div>
-      </OperationsFilterDrawer>
+                </SelectInput>
+              </FormField>
+            </div>
+          </OperationsFilterDrawer>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
-        <table className="w-full text-left text-xs border-collapse">
-          <thead>
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-              <th className="px-3 py-2.5">Report ID</th>
+                  <th className="px-3 py-2.5">Report ID</th>
               <th className="px-3 py-2.5">Room</th>
               <th className="px-3 py-2.5">Type</th>
-              <th className="px-3 py-2.5">Severity</th>
-              <th className="px-3 py-2.5">Responsibility</th>
+                  <th className="px-3 py-2.5">Severity</th>
+                  <th className="px-3 py-2.5">Responsibility</th>
               <th className="px-3 py-2.5">Description</th>
-              <th className="px-3 py-2.5 text-right">Est. Cost</th>
-              <th className="px-3 py-2.5 text-center">Status</th>
-              <th className="px-3 py-2.5">Reported By</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                  <th className="px-3 py-2.5 text-right">Est. Cost</th>
+                  <th className="px-3 py-2.5 text-center">Status</th>
+                  <th className="px-3 py-2.5">Reported By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
             {filteredReports.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-3 py-8 text-center text-slate-400 font-medium">
@@ -305,34 +305,34 @@ export default function DamageReportsPage() {
               </tr>
             ) : (
               filteredReports.map((rep) => (
-                <tr
-                  key={rep.id}
-                  onClick={() => setSelectedReport(rep)}
+                  <tr
+                    key={rep.id}
+                    onClick={() => setSelectedReport(rep)}
                   className="hover:bg-slate-50/50 cursor-pointer"
-                >
+                  >
                   <td className="px-3 py-2.5 font-extrabold text-emerald-800">{rep.id}</td>
                   <td className="px-3 py-2.5">{rep.room}</td>
                   <td className="px-3 py-2.5">{rep.damageType}</td>
-                  <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5">
                     <span className={cn("rounded px-1.5 py-0.5 text-[8.5px] border uppercase", severityBadges[rep.severity] ?? severityBadges.Moderate)}>
-                      {rep.severity}
-                    </span>
-                  </td>
+                        {rep.severity}
+                      </span>
+                    </td>
                   <td className="px-3 py-2.5">{rep.responsibility}</td>
                   <td className="px-3 py-2.5 max-w-[200px] truncate">{rep.description}</td>
                   <td className="px-3 py-2.5 text-right">{formatInr(rep.estimatedCost)}</td>
-                  <td className="px-3 py-2.5 text-center">
+                    <td className="px-3 py-2.5 text-center">
                     <span className={cn("rounded-full px-2 py-0.5 text-[8.5px] border font-bold uppercase whitespace-nowrap", statusBadges[rep.status] ?? statusBadges.Reported)}>
-                      {rep.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-slate-600">{rep.reportedBy}</td>
+                        {rep.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-600">{rep.reportedBy}</td>
                 </tr>
               ))
             )}
-          </tbody>
-        </table>
-      </div>
+              </tbody>
+            </table>
+          </div>
 
       <Drawer
         open={!!selectedReport}
@@ -351,13 +351,13 @@ export default function DamageReportsPage() {
               <div><span className="text-slate-400 block text-[9px] uppercase font-bold">Reported</span>{selectedReport.reportedAt}</div>
               <div><span className="text-slate-400 block text-[9px] uppercase font-bold">Est. Cost</span>{formatInr(selectedReport.estimatedCost)}</div>
               <div><span className="text-slate-400 block text-[9px] uppercase font-bold">Actual Cost</span>{selectedReport.actualCost != null ? formatInr(selectedReport.actualCost) : "—"}</div>
-            </div>
-            <div>
+                  </div>
+                  <div>
               <span className="text-slate-400 block text-[9px] uppercase font-bold mb-1">Description</span>
               <p className="text-xs text-slate-800">{selectedReport.description}</p>
-            </div>
+                  </div>
             {selectedReport.notes && (
-              <div>
+                  <div>
                 <span className="text-slate-400 block text-[9px] uppercase font-bold mb-1">Notes</span>
                 <p className="text-xs text-slate-600">{selectedReport.notes}</p>
               </div>
@@ -372,13 +372,13 @@ export default function DamageReportsPage() {
                     className="h-9 text-xs rounded-xl"
                   />
                 </FormField>
-                <Button
+              <Button
                   onClick={handleResolve}
                   className="w-full !bg-emerald-700 hover:!bg-emerald-800 text-white font-bold rounded-xl h-10 text-xs"
-                >
+              >
                   Close Report
-                </Button>
-              </div>
+              </Button>
+            </div>
             )}
           </div>
         )}
@@ -388,23 +388,23 @@ export default function DamageReportsPage() {
         <div className="space-y-4">
           <FormField label="Room" required>
             <TextInput value={room} onChange={(e) => setRoom(e.target.value)} placeholder="e.g. 305" className="h-9 text-xs rounded-xl" />
-          </FormField>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              </FormField>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <FormField label="Damage Type" required>
               <SelectInput value={damageType} onChange={(e) => setDamageType(e.target.value)} className="h-9 text-xs rounded-xl">
                 {["Furniture", "Electronics", "AC / HVAC", "Plumbing", "Electrical", "Linen", "Glass", "Flooring", "Wall", "Equipment", "Other"].map((t) => (
                   <option key={t} value={t}>{t}</option>
                 ))}
-              </SelectInput>
-            </FormField>
-            <FormField label="Severity" required>
+                </SelectInput>
+              </FormField>
+              <FormField label="Severity" required>
               <SelectInput value={severity} onChange={(e) => setSeverity(e.target.value)} className="h-9 text-xs rounded-xl">
                 {["Critical", "Major", "Moderate", "Minor"].map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
-              </SelectInput>
-            </FormField>
-            <FormField label="Responsibility" required>
+                </SelectInput>
+              </FormField>
+              <FormField label="Responsibility" required>
               <SelectInput value={responsibility} onChange={(e) => setResponsibility(e.target.value)} className="h-9 text-xs rounded-xl">
                 {["Guest", "Hotel", "Natural Wear", "Vendor", "Split Recovery"].map((r) => (
                   <option key={r} value={r}>{r}</option>
@@ -415,20 +415,20 @@ export default function DamageReportsPage() {
           <FormField label="Description" required>
             <TextAreaInput value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the damage…" className="text-xs rounded-xl min-h-[80px]" />
           </FormField>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FormField label="Estimated Cost (₹)">
               <TextInput value={estimatedCost} onChange={(e) => setEstimatedCost(e.target.value)} placeholder="e.g. 4500" className="h-9 text-xs rounded-xl" />
-            </FormField>
+                  </FormField>
             <FormField label="Asset ID (optional)">
               <TextInput value={assetId} onChange={(e) => setAssetId(e.target.value)} placeholder="e.g. AST-TV-305" className="h-9 text-xs rounded-xl font-mono" />
-            </FormField>
+                  </FormField>
           </div>
           <FormField label="Guest (optional)">
             <TextInput value={guest} onChange={(e) => setGuest(e.target.value)} placeholder="Guest name if liable" className="h-9 text-xs rounded-xl" />
-          </FormField>
+                  </FormField>
           <FormField label="Notes">
             <TextAreaInput value={notes} onChange={(e) => setNotes(e.target.value)} className="text-xs rounded-xl min-h-[60px]" />
-          </FormField>
+                  </FormField>
           <p className="text-[10px] text-slate-500">Reporting as: {currentUsername}</p>
           <Button onClick={handleCreateSubmit} className="w-full !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white font-bold rounded-xl h-11 text-xs">
             Register Damage Report

@@ -44,11 +44,9 @@ import {
   PurchaseAttachmentList,
   AttachmentItem,
 } from "@/components/purchase-stores/ui/PurchaseAttachmentList";
-import {
-  INITIAL_VENDOR_RETURN_RECORDS,
-  VendorReturnRecord,
-  VRItem,
-} from "@/app/data/vendorReturnsData";
+import type { VendorReturnRecord, VRItem } from "@/app/data/vendorReturnsData";
+import { usePsList } from "@/hooks/usePsResource";
+import { psVendorReturnService } from "@/services/purchase-stores/index";
 
 export default function VendorReturnsPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -57,7 +55,8 @@ export default function VendorReturnsPage() {
   }, []);
 
   // Main Dataset State
-  const [vrList, setVrList] = useState<VendorReturnRecord[]>(INITIAL_VENDOR_RETURN_RECORDS);
+  const { data: vrList, loading, reload } = usePsList(() => psVendorReturnService.list(), []);
+  const [saving, setSaving] = useState(false);
 
   // Search & Filter State
   const [search, setSearch] = useState("");
@@ -208,11 +207,8 @@ export default function VendorReturnsPage() {
   }, [vrList, search, supplierFilter, warehouseFilter, statusFilter, reasonFilter, dateFilter]);
 
   // Handle Save / Submit Vendor Return
-  const handleSaveReturn = (isSubmit: boolean) => {
-    const nextNum = `VR-2026-00${vrList.length + 1}`;
-    const newRecord: VendorReturnRecord = {
-      id: editVR ? editVR.id : `vr-${Date.now()}`,
-      returnNumber: editVR ? editVR.returnNumber : nextNum,
+  const handleSaveReturn = async (isSubmit: boolean) => {
+    const newRecord: Partial<VendorReturnRecord> = {
       returnDate: formReturnDate,
       supplierName: formSupplier,
       grnNumber: formGRNNum,
@@ -234,24 +230,33 @@ export default function VendorReturnsPage() {
       attachments: formAttachments,
     };
 
-    if (editVR) {
-      setVrList((prev) => prev.map((v) => (v.id === editVR.id ? newRecord : v)));
-      setEditVR(null);
-    } else {
-      setVrList([newRecord, ...vrList]);
-      setCreateDrawerOpen(false);
-    }
+    setSaving(true);
+    try {
+      let saved: VendorReturnRecord;
+      if (editVR) {
+        saved = await psVendorReturnService.update(editVR.id, newRecord);
+        setEditVR(null);
+      } else {
+        saved = await psVendorReturnService.create(newRecord);
+        setCreateDrawerOpen(false);
+      }
+      await reload();
 
-    if (isSubmit) {
-      setAutomationLog([
-        "✓ Supplier Notified via Automated Email & Portal (Ref: " + newRecord.returnNumber + ")",
-        "✓ Return Debit Note & Return Gate Pass (RGP) Generated",
-        "✓ Vendor Return Register Updated in " + formWarehouse,
-        "✓ Payment Block Triggered for Invoice Verification until Resolution",
-        "✓ Purchase Department Notified for Replacement / Credit Note",
-        "✓ Accounts Payable Notified for Ledger Adjustment",
-        ...(formReplacementRequired ? ["✓ Replacement Tracking Order Created (Due: " + formExpectedDate + ")"] : []),
-      ]);
+      if (isSubmit) {
+        setAutomationLog([
+          "✓ Supplier Notified via Automated Email & Portal (Ref: " + saved.returnNumber + ")",
+          "✓ Return Debit Note & Return Gate Pass (RGP) Generated",
+          "✓ Vendor Return Register Updated in " + formWarehouse,
+          "✓ Payment Block Triggered for Invoice Verification until Resolution",
+          "✓ Purchase Department Notified for Replacement / Credit Note",
+          "✓ Accounts Payable Notified for Ledger Adjustment",
+          ...(formReplacementRequired ? ["✓ Replacement Tracking Order Created (Due: " + formExpectedDate + ")"] : []),
+        ]);
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to save return");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -633,6 +638,11 @@ export default function VendorReturnsPage() {
 
       {/* CORE MODULE DATA TABLE & EMPTY STATE */}
       <div className="space-y-3">
+        {loading ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+            Loading vendor returns…
+          </div>
+        ) : (
         <ModuleDataTable
           columns={columns}
           rows={filteredVRs}
@@ -662,6 +672,7 @@ export default function VendorReturnsPage() {
           </div>
         )}
         />
+        )}
       </div>
 
       {/* CREATE / EDIT VENDOR RETURN MODAL & DRAWER */}

@@ -40,7 +40,7 @@ export function SupplierDetailsDrawer({ open, onClose, supplier, onEdit }: Suppl
               }}
               className="bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5"
             >
-              <Edit className="h-3.5 w-3.5" /> Edit Supplier
+              <Edit className="h-3.5 w-3.5" /> Edit Vendor
             </Button>
           </div>
         </div>

@@ -1,16 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
-  Award,
-  Bell,
   Boxes,
   CheckCircle2,
   ClipboardCheck,
   FileText,
+  Loader2,
   Package,
   ShoppingCart,
   Users,
@@ -22,12 +20,8 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { ModulePageShell } from "@/components/pms";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/utils";
-import { INITIAL_PURCHASE_REQUISITIONS } from "@/app/data/purchaseRequisitionsData";
-import { INITIAL_PO_RECORDS } from "@/app/data/purchaseOrdersData";
-import { INITIAL_DSP_RECORDS } from "@/app/data/dspData";
-import { INITIAL_INVOICE_RECORDS } from "@/app/data/invoiceVerificationData";
-import { INITIAL_CONTRACT_RECORDS } from "@/app/data/contractsData";
-import { INITIAL_PRODUCTS_DATA, SUPPLIER_MASTER_LIST } from "@/app/data/productMasterData";
+import { usePsItem, usePsList } from "@/hooks/usePsResource";
+import { psDashboardService, psPurchaseOrderService } from "@/services/purchase-stores/index";
 
 const quickLinks = [
   {
@@ -49,34 +43,22 @@ const quickLinks = [
     hint: "Goods receipt",
   },
   {
-    label: "QC Inspection",
-    href: "/purchase-stores/receiving/inspection",
-    icon: CheckCircle2,
-    hint: "Quality checks",
-  },
-  {
-    label: "Stock Ledger",
-    href: "/purchase-stores/inventory/ledger",
+    label: "Stock",
+    href: "/purchase-stores/inventory/stock",
     icon: Boxes,
-    hint: "Balances",
+    hint: "On-hand balances",
   },
   {
     label: "Warehouses",
     href: "/purchase-stores/inventory/warehouses",
     icon: Warehouse,
-    hint: "Bins & stores",
-  },
-  {
-    label: "3-Way Match",
-    href: "/purchase-stores/procurement/invoice-matching",
-    icon: Award,
-    hint: "Invoice verify",
+    hint: "Storage locations",
   },
   {
     label: "Vendors",
-    href: "/purchase-stores/masters/suppliers",
+    href: "/purchase-stores/vendors",
     icon: Users,
-    hint: "Supplier master",
+    hint: "Vendor registry",
   },
 ];
 
@@ -106,69 +88,66 @@ function Pill({ status }: { status: string }) {
 }
 
 export default function PurchaseStoresDashboardPage() {
-  const pendingPrs = useMemo(
-    () => INITIAL_PURCHASE_REQUISITIONS.filter((p) => p.status === "Pending Approval"),
-    [],
-  );
-  const openPos = INITIAL_PO_RECORDS;
-  const pendingInvoices = useMemo(
-    () => INITIAL_INVOICE_RECORDS.filter((i) => i.status === "Pending Verification"),
-    [],
-  );
-  const activeContracts = useMemo(
-    () => INITIAL_CONTRACT_RECORDS.filter((c) => c.status === "Active"),
-    [],
-  );
-  const lowStockItems = useMemo(
-    () =>
-      INITIAL_PRODUCTS_DATA.filter((p) => p.parStock - 20 < p.reorderLevel).slice(0, 5),
-    [],
-  );
-  const recentPrs = INITIAL_PURCHASE_REQUISITIONS.slice(0, 6);
-  const recentPos = openPos.slice(0, 6);
-  const recentDsp = INITIAL_DSP_RECORDS.slice(0, 4);
-  const stockPreview = INITIAL_PRODUCTS_DATA.slice(0, 5);
+  const { data: dashboard, loading: dashboardLoading } = usePsItem(() => psDashboardService.get(), []);
+  const { data: allPos, loading: posLoading } = usePsList(() => psPurchaseOrderService.list(), []);
 
-  const totalStockValue = 485200;
+  const loading = dashboardLoading || posLoading;
+  const counts = dashboard?.counts ?? {};
+
+  const pendingPrs = counts.pendingRequisitions ?? 0;
+  const openPos = counts.purchaseOrders ?? 0;
+  const pendingInvoices = counts.pendingInvoices ?? 0;
+  const activeContracts = counts.activeContracts ?? 0;
+  const productCount = counts.products ?? 0;
+  const supplierCount = counts.suppliers ?? 0;
+  const dspCount = counts.dsp ?? 0;
+  const lowStockCount = counts.lowStockSkus ?? 0;
+
+  const recentPrs = dashboard?.recentRequisitions ?? [];
+  const recentPos = allPos.slice(0, 6);
+  const recentDsp = dashboard?.recentDsp ?? [];
+  const lowStockItems = dashboard?.lowStockItems ?? [];
+  const stockPreview = dashboard?.stockPreview ?? [];
+
   const stockHealthPct = Math.round(
-    ((INITIAL_PRODUCTS_DATA.length - lowStockItems.length) / Math.max(INITIAL_PRODUCTS_DATA.length, 1)) * 100,
+    ((productCount - lowStockCount) / Math.max(productCount, 1)) * 100,
   );
 
   const stockBreakdown = [
-    { label: "Healthy SKUs", count: INITIAL_PRODUCTS_DATA.length - lowStockItems.length, color: "#15803d" },
-    { label: "Low stock", count: lowStockItems.length, color: "#dc2626" },
-    { label: "Open POs", count: openPos.length, color: "#2563eb" },
-    { label: "Pending PRs", count: pendingPrs.length, color: "#d97706" },
+    { label: "Healthy SKUs", count: Math.max(productCount - lowStockCount, 0), color: "#15803d" },
+    { label: "Low stock", count: lowStockCount, color: "#dc2626" },
+    { label: "Open POs", count: openPos, color: "#2563eb" },
+    { label: "Pending PRs", count: pendingPrs, color: "#d97706" },
   ];
 
   const alerts = [
-    pendingPrs.length > 0 && {
+    pendingPrs > 0 && {
       id: "pr",
       tone: "warning" as const,
-      title: `${pendingPrs.length} PR${pendingPrs.length === 1 ? "" : "s"} pending approval`,
-      detail: pendingPrs.map((p) => p.prNumber).join(", "),
+      title: `${pendingPrs} PR${pendingPrs === 1 ? "" : "s"} pending approval`,
+      detail: recentPrs.filter((p) => p.status === "Pending Approval").map((p) => p.prNumber).join(", ") || "Review requisitions",
       href: "/purchase-stores/procurement/requisitions",
     },
-    pendingInvoices.length > 0 && {
+    pendingInvoices > 0 && {
       id: "invoice",
       tone: "danger" as const,
-      title: `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? "" : "s"} need 3-way match`,
-      detail: pendingInvoices.map((i) => i.invoiceNumber).join(", "),
+      title: `${pendingInvoices} invoice${pendingInvoices === 1 ? "" : "s"} pending match on POs`,
+      detail: "Pending 3-way verification",
       href: "/purchase-stores/procurement/invoice-matching",
     },
-    lowStockItems.length > 0 && {
+    lowStockCount > 0 && {
       id: "stock",
       tone: "warning" as const,
-      title: `${lowStockItems.length} item${lowStockItems.length === 1 ? "" : "s"} below reorder`,
-      detail: lowStockItems.map((p) => p.productName).join(", "),
-      href: "/purchase-stores/inventory/ledger",
+      title: `${lowStockCount} item${lowStockCount === 1 ? "" : "s"} below reorder`,
+      detail: lowStockItems.map((p) => p.productName).join(", ") || "Review stock levels",
+      href: "/purchase-stores/inventory/stock",
     },
-    INITIAL_DSP_RECORDS.length > 0 && {
+    dspCount > 0 && {
       id: "dsp",
       tone: "info" as const,
-      title: `${INITIAL_DSP_RECORDS.length} direct store purchase${INITIAL_DSP_RECORDS.length === 1 ? "" : "s"} active`,
-      detail: INITIAL_DSP_RECORDS[0]
-        ? `${INITIAL_DSP_RECORDS[0].dspNumber} · ${INITIAL_DSP_RECORDS[0].department}`
+      title: `${dspCount} direct store purchase${dspCount === 1 ? "" : "s"} active`,
+      detail: recentDsp[0]
+        ? `${recentDsp[0].dspNumber} · ${recentDsp[0].department}`
         : "Spot buys",
       href: "/purchase-stores/procurement/dsp",
     },
@@ -183,33 +162,48 @@ export default function PurchaseStoresDashboardPage() {
   const statCards = [
     {
       label: "Pending PRs",
-      value: pendingPrs.length,
+      value: pendingPrs,
       accent: "#d97706",
       icon: FileText,
       sublabel: "Awaiting approval",
     },
     {
       label: "Open POs",
-      value: openPos.length,
+      value: openPos,
       accent: "#2563eb",
       icon: ShoppingCart,
       sublabel: "Orders in flight",
     },
     {
       label: "3-Way Matches",
-      value: pendingInvoices.length,
+      value: pendingInvoices,
       accent: "#9333ea",
       icon: CheckCircle2,
       sublabel: "Pending verification",
     },
     {
       label: "Low Stock",
-      value: lowStockItems.length,
+      value: lowStockCount,
       accent: "#dc2626",
       icon: AlertTriangle,
       sublabel: "Below reorder",
     },
   ];
+
+  if (loading) {
+    return (
+      <ModulePageShell
+        eyebrow="Purchase & Stores"
+        title="Dashboard"
+        description="Procurement, receiving, stock balances, and invoice matching for today."
+        wrapChildren={false}
+      >
+        <div className="flex min-h-[40vh] items-center justify-center text-slate-400">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </ModulePageShell>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -251,15 +245,6 @@ export default function PurchaseStoresDashboardPage() {
             <CardHeader
               title="Needs attention"
               subtitle={`${alerts.length} item${alerts.length === 1 ? "" : "s"} to review`}
-              action={
-                <Link
-                  href="/purchase-stores/approvals"
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 hover:underline"
-                >
-                  <Bell className="h-3.5 w-3.5 text-amber-600" />
-                  Approval center
-                </Link>
-              }
             />
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {alerts.map((alert) => (
@@ -309,7 +294,7 @@ export default function PurchaseStoresDashboardPage() {
           <Card className="flex h-full min-w-0 flex-col">
             <CardHeader
               title="Purchase requisitions"
-              subtitle={`${pendingPrs.length} pending approval`}
+              subtitle={`${pendingPrs} pending approval`}
               action={
                 <Link href="/purchase-stores/procurement/requisitions">
                   <Button type="button" size="sm" variant="outline">
@@ -333,13 +318,16 @@ export default function PurchaseStoresDashboardPage() {
                   <Pill status={pr.status} />
                 </li>
               ))}
+              {recentPrs.length === 0 && (
+                <li className="py-6 text-center text-sm text-slate-500">No requisitions yet</li>
+              )}
             </ul>
           </Card>
 
           <Card className="flex h-full min-w-0 flex-col">
             <CardHeader
               title="Purchase orders"
-              subtitle={`${openPos.length} open orders`}
+              subtitle={`${openPos} open orders`}
               action={
                 <Link href="/purchase-stores/procurement/orders">
                   <Button type="button" size="sm" variant="outline">
@@ -363,6 +351,9 @@ export default function PurchaseStoresDashboardPage() {
                   <Pill status={po.status} />
                 </li>
               ))}
+              {recentPos.length === 0 && (
+                <li className="py-6 text-center text-sm text-slate-500">No purchase orders yet</li>
+              )}
             </ul>
           </Card>
         </div>
@@ -371,7 +362,7 @@ export default function PurchaseStoresDashboardPage() {
           <Card className="flex h-full min-w-0 flex-col border-amber-200/80 bg-amber-50/40">
             <CardHeader
               title="Direct store purchases"
-              subtitle={`${INITIAL_DSP_RECORDS.length} active DSP`}
+              subtitle={`${dspCount} active DSP`}
               action={
                 <Link
                   href="/purchase-stores/procurement/dsp"
@@ -405,19 +396,22 @@ export default function PurchaseStoresDashboardPage() {
                   </div>
                 </li>
               ))}
+              {recentDsp.length === 0 && (
+                <li className="py-6 text-center text-sm text-slate-500">No direct purchases yet</li>
+              )}
             </ul>
           </Card>
 
           <Card className="flex h-full min-w-0 flex-col">
             <CardHeader
               title="Stock health"
-              subtitle={`₹${totalStockValue.toLocaleString("en-IN")} inventory value`}
+              subtitle="Inventory overview"
               action={
                 <Link
-                  href="/purchase-stores/inventory/ledger"
+                  href="/purchase-stores/inventory/stock"
                   className="text-xs font-medium text-emerald-700 hover:underline"
                 >
-                  Ledger
+                  View stock
                 </Link>
               }
             />
@@ -440,7 +434,7 @@ export default function PurchaseStoresDashboardPage() {
               </div>
               <div className="min-w-0">
                 <p className="text-2xl font-bold tracking-tight text-slate-900">
-                  {INITIAL_PRODUCTS_DATA.length - lowStockItems.length} / {INITIAL_PRODUCTS_DATA.length}
+                  {Math.max(productCount - lowStockCount, 0)} / {productCount}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">SKUs at healthy levels</p>
               </div>
@@ -454,7 +448,7 @@ export default function PurchaseStoresDashboardPage() {
                   </div>
                   <ProgressBar
                     value={row.count}
-                    max={Math.max(INITIAL_PRODUCTS_DATA.length, openPos.length, pendingPrs.length, 1)}
+                    max={Math.max(productCount, openPos, pendingPrs, 1)}
                     color={row.color}
                   />
                 </div>
@@ -465,7 +459,7 @@ export default function PurchaseStoresDashboardPage() {
           <Card className="flex h-full min-w-0 flex-col">
             <CardHeader
               title="Stock & vendors"
-              subtitle={`${activeContracts.length} contracts · ${SUPPLIER_MASTER_LIST.length} suppliers`}
+              subtitle={`${activeContracts} contracts · ${supplierCount} vendors`}
               action={
                 <Link
                   href="/purchase-stores/masters/products"
@@ -477,7 +471,7 @@ export default function PurchaseStoresDashboardPage() {
             />
             <ul className="flex flex-1 flex-col divide-y divide-slate-100">
               {stockPreview.map((prod) => {
-                const low = prod.parStock - 20 < prod.reorderLevel;
+                const low = (prod.parStock ?? 0) - 20 < (prod.reorderLevel ?? 0);
                 return (
                   <li
                     key={prod.id}

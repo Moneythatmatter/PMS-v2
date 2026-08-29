@@ -1,15 +1,17 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Ruler, CheckCircle2, XCircle, Plus, Download, Search, RotateCcw, Hash } from "lucide-react";
+import { Ruler, CheckCircle2, XCircle, Plus, Download, Search, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { FOPageHeader, StatMiniCard, ConfirmModal, AlertBanner, SelectInput } from "@/components/frontoffice/ui";
-import { INITIAL_UNITS_DATA, type UnitItem } from "@/app/data/purchaseStoresMastersData";
+import { type UnitItem } from "@/app/data/purchaseStoresMastersData";
 import { UnitTable } from "@/components/purchase-stores/masters/units/UnitTable";
 import { UnitDrawer } from "@/components/purchase-stores/masters/units/UnitDrawer";
+import { usePsList } from "@/hooks/usePsResource";
+import { psUnitService } from "@/services/purchase-stores/index";
 
 export default function UnitMasterPage() {
-  const [units, setUnits] = useState<UnitItem[]>(INITIAL_UNITS_DATA);
+  const { data: units, loading, reload } = usePsList(() => psUnitService.list());
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
 
@@ -45,8 +47,7 @@ export default function UnitMasterPage() {
     const total = units.length;
     const active = units.filter((u) => u.status === "Active").length;
     const inactive = units.filter((u) => u.status === "Inactive").length;
-    const decimalAllowed = units.filter((u) => u.allowDecimals).length;
-    return { total, active, inactive, decimalAllowed };
+    return { total, active, inactive };
   }, [units]);
 
   const handleResetFilters = () => {
@@ -64,31 +65,48 @@ export default function UnitMasterPage() {
     setIsDrawerOpen(true);
   };
 
-  const handleSaveUnit = (unit: UnitItem) => {
-    if (editingUnit) {
-      setUnits((prev) => prev.map((u) => (u.id === unit.id ? unit : u)));
-      showToast(`Unit "${unit.unitName}" updated successfully.`);
-    } else {
-      setUnits((prev) => [unit, ...prev]);
-      showToast(`Unit "${unit.unitName}" created successfully.`);
+  const handleSaveUnit = async (unit: UnitItem) => {
+    try {
+      if (editingUnit) {
+        await psUnitService.update(unit.id, unit);
+        showToast(`Unit "${unit.unitName}" updated successfully.`);
+      } else {
+        await psUnitService.create(unit);
+        showToast(`Unit "${unit.unitName}" created successfully.`);
+      }
+      reload();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to save unit.", "error");
     }
   };
 
-  const confirmDeleteUnit = () => {
+  const confirmDeleteUnit = async () => {
     if (!deletingUnit) return;
     const name = deletingUnit.unitName;
-    setUnits((prev) => prev.filter((u) => u.id !== deletingUnit.id));
-    setDeletingUnit(null);
-    showToast(`Unit "${name}" deleted from master registry.`, "error");
+    try {
+      await psUnitService.remove(deletingUnit.id);
+      setDeletingUnit(null);
+      showToast(`Unit "${name}" deleted from master registry.`, "error");
+      reload();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to delete unit.", "error");
+    }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">
+        Loading...
+      </div>
+    );
+  }
+
   const handleExportCSV = () => {
-    const headers = ["Unit Code", "Unit Name", "Symbol", "Allow Decimals", "Description", "Status", "Created Date"];
+    const headers = ["Unit Code", "Unit Name", "Symbol", "Description", "Status", "Created Date"];
     const rows = filteredUnits.map((u) => [
       `"${u.unitCode}"`,
       `"${u.unitName}"`,
       `"${u.symbol}"`,
-      u.allowDecimals ? "Yes" : "No",
       `"${u.description || ""}"`,
       `"${u.status}"`,
       `"${u.createdDate}"`,
@@ -121,16 +139,15 @@ export default function UnitMasterPage() {
             <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100">
               <Download className="h-4 w-4" /> Export CSV
             </Button>            <Button type="button" size="sm" onClick={handleOpenAddDrawer} className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold">
-              <Plus className="h-4 w-4" /> + Add Unit
+              <Plus className="h-4 w-4" /> Add Unit
             </Button>
           </div>
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <StatMiniCard label="Total Units" value={stats.total} sublabel="Cataloged UOMs" accent="#0f766e" icon={Ruler} />
         <StatMiniCard label="Active Units" value={stats.active} sublabel="In active use" accent="#16a34a" icon={CheckCircle2} />
-        <StatMiniCard label="Decimal Allowed" value={stats.decimalAllowed} sublabel="Supports fractions" accent="#d97706" icon={Hash} />
         <StatMiniCard label="Inactive Units" value={stats.inactive} sublabel="Disabled UOMs" accent="#64748b" icon={XCircle} />
       </div>
 

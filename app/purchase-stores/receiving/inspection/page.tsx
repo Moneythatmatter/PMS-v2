@@ -52,12 +52,9 @@ import {
   PurchaseAttachmentList,
   AttachmentItem,
 } from "@/components/purchase-stores/ui/PurchaseAttachmentList";
-import {
-  INITIAL_QUALITY_INSPECTION_RECORDS,
-  QualityInspectionRecord,
-  QIItem,
-  QIChecklistItem,
-} from "@/app/data/qualityInspectionData";
+import type { QualityInspectionRecord, QIItem, QIChecklistItem } from "@/app/data/qualityInspectionData";
+import { usePsList } from "@/hooks/usePsResource";
+import { psQualityInspectionService } from "@/services/purchase-stores/index";
 
 // SAMPLE GRN DATABASE FOR AUTO-LOADING INSPECTIONS
 const SAMPLE_GRN_QC_DATABASE: Record<string, {
@@ -162,7 +159,8 @@ export default function QualityInspectionPage() {
   }, []);
 
   // Main Dataset State
-  const [qiList, setQiList] = useState<QualityInspectionRecord[]>(INITIAL_QUALITY_INSPECTION_RECORDS);
+  const { data: qiList, loading, reload } = usePsList(() => psQualityInspectionService.list(), []);
+  const [saving, setSaving] = useState(false);
 
   // Search & Filter State
   const [search, setSearch] = useState("");
@@ -367,7 +365,7 @@ export default function QualityInspectionPage() {
   }, [formItems]);
 
   // Save / Complete Quality Inspection
-  const handleSaveInspection = (isComplete: boolean) => {
+  const handleSaveInspection = async (isComplete: boolean) => {
     if (!activeInspectionRecord) return;
 
     // BUSINESS RULES VALIDATION
@@ -388,49 +386,37 @@ export default function QualityInspectionPage() {
         : "Partial"
       : "Passed";
 
-    const updatedList = qiList.map((q) => {
-      if (q.id === activeInspectionRecord.id) {
-        return {
-          ...q,
-          status: isComplete ? ("Completed" as const) : ("In Progress" as const),
-          result: overallResult,
-          inspectorName: formInspector,
-          generalRemarks: formRemarks,
-          remarks: formRemarks,
-          checklist: [
-            { id: "c1", category: "Packaging & Seal Verification", checkItem: "Packaging Condition", result: checklist.packagingCondition === "Good" ? "Pass" : "Fail" },
-            { id: "c2", category: "Packaging & Seal Verification", checkItem: "Seal Integrity", result: checklist.sealVerification === "Passed" ? "Pass" : "Fail" },
-            { id: "c3", category: "Expiry & Storage", checkItem: "Expiry & FEFO Check", result: checklist.expiryVerification === "Valid" ? "Pass" : "Fail" },
-            { id: "c4", category: "Temperature & Quality", checkItem: "Cold Chain Temperature", result: checklist.temperatureCheck === "Passed" ? "Pass" : "Fail" },
-          ],
-          items: formItems.map((i) => ({
-            id: i.id,
-            productCode: i.productCode,
-            productName: i.productName,
-            receivedQty: i.receivedQty,
-            inspectedQty: i.receivedQty,
-            acceptedQty: i.acceptedQty,
-            rejectedQty: i.rejectedQty,
-            qualityResult: i.qualityResult as any,
-            rejectionReason: i.rejectionReason,
-            remarks: i.remarks,
-          })),
-          history: [
-            ...(q.history || []),
-            {
-              timestamp: "Just Now",
-              user: formInspector,
-              action: `Quality Inspection ${isComplete ? "Completed (" + overallResult + ")" : "Saved In Progress"}`,
-              status: "Success",
-            },
-          ],
-        };
-      }
-      return q;
-    });
+    const updatePayload: Partial<QualityInspectionRecord> = {
+      status: isComplete ? "Completed" : "In Progress",
+      result: overallResult,
+      inspectorName: formInspector,
+      generalRemarks: formRemarks,
+      remarks: formRemarks,
+      checklist: [
+        { id: "c1", category: "Packaging & Seal Verification", checkItem: "Packaging Condition", result: checklist.packagingCondition === "Good" ? "Pass" : "Fail" },
+        { id: "c2", category: "Packaging & Seal Verification", checkItem: "Seal Integrity", result: checklist.sealVerification === "Passed" ? "Pass" : "Fail" },
+        { id: "c3", category: "Expiry & Storage", checkItem: "Expiry & FEFO Check", result: checklist.expiryVerification === "Valid" ? "Pass" : "Fail" },
+        { id: "c4", category: "Temperature & Quality", checkItem: "Cold Chain Temperature", result: checklist.temperatureCheck === "Passed" ? "Pass" : "Fail" },
+      ],
+      items: formItems.map((i) => ({
+        id: i.id,
+        productCode: i.productCode,
+        productName: i.productName,
+        receivedQty: i.receivedQty,
+        inspectedQty: i.receivedQty,
+        acceptedQty: i.acceptedQty,
+        rejectedQty: i.rejectedQty,
+        qualityResult: i.qualityResult as QIItem["qualityResult"],
+        rejectionReason: i.rejectionReason,
+        remarks: i.remarks,
+      })),
+    };
 
-    setQiList(updatedList);
-    setPerformInspectionDrawerOpen(false);
+    setSaving(true);
+    try {
+      await psQualityInspectionService.update(activeInspectionRecord.id, updatePayload);
+      await reload();
+      setPerformInspectionDrawerOpen(false);
 
     // AUTOMATION LOGS FEEDBACK
     if (isComplete) {
@@ -461,6 +447,11 @@ export default function QualityInspectionPage() {
       }
     } else {
       alert("Inspection status saved as 'In Progress'.");
+    }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to save inspection");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -766,6 +757,9 @@ export default function QualityInspectionPage() {
 
       {/* CORE DATA TABLE WITH SORTED QUEUE (Pending First) */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+        {loading ? (
+          <div className="py-8 text-center text-sm text-slate-500">Loading inspections…</div>
+        ) : (
         <ModuleDataTable
           columns={columns}
           rows={filteredQIs}
@@ -781,6 +775,7 @@ export default function QualityInspectionPage() {
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
         />
+        )}
       </div>
 
       {/* PENDING INSPECTION QUEUE SIDE PANEL */}

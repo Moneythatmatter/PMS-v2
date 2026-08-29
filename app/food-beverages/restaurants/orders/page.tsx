@@ -1,5 +1,9 @@
 import { FbOrdersView } from "@/components/foodbeverages/FbOrdersView";
 
 export default function RestaurantOrdersPage() {
-  return <FbOrdersView />;
+  return (
+    <div className="relative min-h-0 flex-1">
+      <FbOrdersView />
+    </div>
+  );
 }

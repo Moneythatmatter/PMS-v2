@@ -8,11 +8,14 @@ export const purchaseStoresNavItems: ModuleNavItem[] = [
     icon: "shopping-bag",
     children: [
       { label: "Requisitions", href: "/purchase-stores/procurement/requisitions", icon: "file-text" },
-      { label: "Direct Purchases", href: "/purchase-stores/procurement/dsp", icon: "zap" },
-      { label: "Quotations", href: "/purchase-stores/procurement/rfq", icon: "file-spreadsheet" },
-      { label: "Rate Contracts", href: "/purchase-stores/procurement/contracts", icon: "award" },
+      { label: "RFQs", href: "/purchase-stores/procurement/rfq", icon: "file-spreadsheet" },
+      { label: "Vendors", href: "/purchase-stores/vendors", icon: "users" },
       { label: "Purchase Orders", href: "/purchase-stores/procurement/orders", icon: "shopping-cart" },
-      { label: "Invoice Matching", href: "/purchase-stores/procurement/invoice-matching", icon: "check-circle" },
+      { label: "Direct Purchases", href: "/purchase-stores/procurement/dsp", icon: "zap" },
+      // V1: hidden — keep route /procurement/contracts
+      // { label: "Rate Contracts", href: "/purchase-stores/procurement/contracts", icon: "award" },
+      // V1: hidden — keep route /procurement/invoice-matching (future work queue)
+      // { label: "Invoice Matching", href: "/purchase-stores/procurement/invoice-matching", icon: "check-circle" },
     ],
   },
   {
@@ -30,25 +33,15 @@ export const purchaseStoresNavItems: ModuleNavItem[] = [
     href: "/purchase-stores/inventory",
     icon: "boxes",
     children: [
-      { label: "Stock Ledger", href: "/purchase-stores/inventory/ledger", icon: "layers" },
-      { label: "Warehouses", href: "/purchase-stores/inventory/warehouses", icon: "building-2" },
-      { label: "Batch & Expiry", href: "/purchase-stores/inventory/batch-fefo", icon: "clock" },
-      { label: "Stock Issues", href: "/purchase-stores/inventory/issues", icon: "arrow-up-right" },
+      { label: "Stock", href: "/purchase-stores/inventory/stock", icon: "layers" },
+      // V1: movement history accessed from Stock detail — keep route /inventory/ledger
+      { label: "Issues", href: "/purchase-stores/inventory/issues", icon: "arrow-up-right" },
       { label: "Transfers", href: "/purchase-stores/inventory/transfers", icon: "arrow-right-left" },
-      { label: "Scrap & Write-Offs", href: "/purchase-stores/inventory/scrap", icon: "trash-2" },
       { label: "Par Stock", href: "/purchase-stores/inventory/par-stock", icon: "sliders" },
-      { label: "Gate Pass", href: "/purchase-stores/inventory/gate-pass", icon: "truck" },
+      { label: "Adjustments", href: "/purchase-stores/inventory/adjustments", icon: "sliders" },
+      { label: "Warehouses", href: "/purchase-stores/inventory/warehouses", icon: "building-2" },
+      // V1: hidden — keep route /inventory/batch-fefo (access from Stock detail when needed)
     ],
-  },
-  {
-    label: "Vendors",
-    href: "/purchase-stores/vendors",
-    icon: "users",
-  },
-  {
-    label: "Approvals",
-    href: "/purchase-stores/approvals",
-    icon: "check-square",
   },
   {
     label: "Masters",
@@ -57,8 +50,7 @@ export const purchaseStoresNavItems: ModuleNavItem[] = [
     children: [
       { label: "Units", href: "/purchase-stores/masters/units", icon: "ruler" },
       { label: "Categories", href: "/purchase-stores/masters/categories", icon: "layers" },
-      { label: "Products", href: "/purchase-stores/masters/products", icon: "package" },
-      { label: "Suppliers", href: "/purchase-stores/masters/suppliers", icon: "users" },
+      { label: "Products / Materials", href: "/purchase-stores/masters/products", icon: "package" },
     ],
   },
   {
@@ -74,11 +66,6 @@ export const purchaseStoresNavItems: ModuleNavItem[] = [
       { label: "Purchase Orders", href: "/purchase-stores/reports/orders", icon: "shopping-cart" },
       { label: "Returns", href: "/purchase-stores/reports/returns", icon: "rotate-ccw" },
     ],
-  },
-  {
-    label: "Audit Logs",
-    href: "/purchase-stores/audit-logs",
-    icon: "history",
   },
   {
     label: "Settings",

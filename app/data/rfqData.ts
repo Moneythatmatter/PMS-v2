@@ -9,6 +9,8 @@ export interface RFQVendorItem {
 
 export interface RFQRequestedItem {
   id: string;
+  materialId?: string;
+  productCode?: string;
   item: string;
   category: string;
   quantity: number;
@@ -37,7 +39,7 @@ export interface VendorQuotationComparison {
 export interface RFQRecord {
   id: string;
   rfqNumber: string;
-  linkedPR: string;
+  linkedPR?: string;
   department: string;
   buyer: string;
   invitedVendors: RFQVendorItem[];
@@ -62,190 +64,68 @@ export interface RFQRecord {
   activityTimeline: { stage: string; timestamp: string; note: string; author?: string }[];
 }
 
-export const MASTER_VENDOR_OPTIONS = [
-  { id: "v1", name: "ABC Linen Pvt Ltd", email: "sales@abclinen.com", phone: "+91 98765 43210" },
-  { id: "v2", name: "XYZ Textiles", email: "info@xyztextiles.in", phone: "+91 98123 45678" },
-  { id: "v3", name: "Premium Hospitality Supplies", email: "orders@premiumhosp.com", phone: "+91 99887 76655" },
-  { id: "v4", name: "Hotel Essentials India", email: "contact@hotelessentials.co.in", phone: "+91 97766 55443" },
-];
+/** Normalize API / legacy JSON shapes into canonical RFQ line items. */
+export function normalizeRfqRequestedItem(
+  raw: Partial<RFQRequestedItem> & Record<string, unknown>,
+  index: number,
+): RFQRequestedItem {
+  return {
+    id: String(raw.id ?? `rfq-item-${index}`),
+    materialId: raw.materialId ? String(raw.materialId) : undefined,
+    productCode: raw.productCode ? String(raw.productCode) : undefined,
+    item: String(raw.item ?? raw.itemName ?? raw.itemDescription ?? ""),
+    category: String(raw.category ?? ""),
+    quantity: Number(raw.quantity ?? raw.requestedQty ?? 0),
+    unit: String(raw.unit ?? raw.uom ?? ""),
+    estimatedRate: Number(raw.estimatedRate ?? raw.estimatedPrice ?? raw.unitRate ?? 0),
+  };
+}
 
-export const INITIAL_RFQ_RECORDS: RFQRecord[] = [
-  {
-    id: "rfq-1",
-    rfqNumber: "RFQ-2026-001",
-    linkedPR: "PR-2026-001",
-    department: "Housekeeping",
-    buyer: "Purchase Executive",
-    rfqDate: "18 Jul 2026",
-    closingDate: "25 Jul 2026",
-    priority: "High",
-    status: "Sent",
-    selectedVendor: undefined,
-    invitedVendors: [
-      { id: "v1", vendorName: "ABC Linen Pvt Ltd", email: "sales@abclinen.com", phone: "+91 98765 43210", invitationSentOn: "18 Jul 2026", status: "Responded" },
-      { id: "v2", vendorName: "XYZ Textiles", email: "info@xyztextiles.in", phone: "+91 98123 45678", invitationSentOn: "18 Jul 2026", status: "Responded" },
-      { id: "v3", vendorName: "Premium Hospitality Supplies", email: "orders@premiumhosp.com", phone: "+91 99887 76655", invitationSentOn: "18 Jul 2026", status: "Responded" },
-    ],
-    requestedItems: [
-      { id: "i1", item: "Bedsheet (King Size 300TC)", category: "Linen", quantity: 200, unit: "Pieces", estimatedRate: 340 },
-      { id: "i2", item: "Pillow Cover (Satin Finish)", category: "Linen", quantity: 150, unit: "Pieces", estimatedRate: 90 },
-    ],
+/** Normalize API / legacy JSON shapes into canonical RFQ vendor rows. */
+export function normalizeRfqVendor(
+  raw: Partial<RFQVendorItem> & Record<string, unknown>,
+  index: number,
+): RFQVendorItem {
+  const status = raw.status;
+  return {
+    id: String(raw.id ?? raw.vendorId ?? `rfq-vendor-${index}`),
+    vendorName: String(raw.vendorName ?? raw.name ?? ""),
+    email: String(raw.email ?? ""),
+    phone: String(raw.phone ?? ""),
+    invitationSentOn: raw.invitationSentOn
+      ? String(raw.invitationSentOn)
+      : raw.invitedOn
+        ? String(raw.invitedOn)
+        : undefined,
+    status:
+      status === "Pending" || status === "Sent" || status === "Responded" ? status : "Pending",
+  };
+}
+
+/** Normalize a full RFQ record from API (handles field aliases and missing ids). */
+export function normalizeRfqRecord(rfq: RFQRecord): RFQRecord {
+  const linked =
+    rfq.linkedPR ??
+    (rfq as RFQRecord & { linkedPr?: string }).linkedPr ??
+    "";
+
+  return {
+    ...rfq,
+    linkedPR: linked || undefined,
+    requestedItems: (rfq.requestedItems ?? []).map(normalizeRfqRequestedItem),
+    invitedVendors: (rfq.invitedVendors ?? []).map(normalizeRfqVendor),
+    attachments: (rfq.attachments ?? []).map((att, i) => ({
+      ...att,
+      id: att.id ?? `rfq-att-${i}`,
+    })),
     commercialTerms: {
-      deliveryLocation: "Central Stores Warehouse",
-      deliveryAddress: "Dock 2, Hotel Grand Plaza, MG Road, New Delhi",
-      paymentTerms: "Net 30 Days post GRN & Invoice 3-way match",
-      currency: "INR (₹)",
-      expectedDelivery: "7 Days from PO issuance",
-      tax: "18% GST extra as applicable",
-      remarks: "Sample approval required prior to dispatch",
+      deliveryLocation: rfq.commercialTerms?.deliveryLocation ?? "",
+      deliveryAddress: rfq.commercialTerms?.deliveryAddress ?? "",
+      paymentTerms: rfq.commercialTerms?.paymentTerms ?? "",
+      currency: rfq.commercialTerms?.currency ?? "INR",
+      expectedDelivery: rfq.commercialTerms?.expectedDelivery ?? "",
+      tax: rfq.commercialTerms?.tax ?? "",
+      remarks: rfq.commercialTerms?.remarks ?? "",
     },
-    attachments: [
-      { id: "a1", fileName: "Linen_Specification.pdf", fileSize: "245 KB", fileType: "pdf" },
-      { id: "a2", fileName: "RFQ_Terms.pdf", fileSize: "120 KB", fileType: "pdf" },
-    ],
-    comparisonData: [
-      {
-        vendorName: "ABC Linen Pvt Ltd",
-        unitPrice: 340,
-        deliveryDays: 5,
-        paymentTerms: "30 Days",
-        warranty: "12 Months",
-        rating: "★★★★☆",
-        totalAmount: 68000,
-        isRecommended: true,
-      },
-      {
-        vendorName: "XYZ Textiles",
-        unitPrice: 355,
-        deliveryDays: 3,
-        paymentTerms: "15 Days",
-        warranty: "12 Months",
-        rating: "★★★★★",
-        totalAmount: 71000,
-        isRecommended: false,
-      },
-      {
-        vendorName: "Premium Hospitality Supplies",
-        unitPrice: 330,
-        deliveryDays: 8,
-        paymentTerms: "45 Days",
-        warranty: "6 Months",
-        rating: "★★★☆☆",
-        totalAmount: 66000,
-        isRecommended: false,
-      },
-    ],
-    activityTimeline: [
-      { stage: "RFQ Created", timestamp: "18 Jul 2026", note: "RFQ generated by Purchase Executive", author: "Amit Sharma" },
-      { stage: "Vendors Invited", timestamp: "18 Jul 2026", note: "Invited 3 suppliers via email notification", author: "System" },
-      { stage: "Waiting for Vendor Responses", timestamp: "19 Jul 2026", note: "Quotations submitted by 3 vendors", author: "Vendor Portal" },
-      { stage: "Vendor Selected", timestamp: "Pending", note: "Evaluation in progress", author: "Purchase Manager" },
-      { stage: "Converted to Purchase Order", timestamp: "Pending", note: "Awaiting final approval", author: "Finance Head" },
-    ],
-  },
-  {
-    id: "rfq-2",
-    rfqNumber: "RFQ-2026-002",
-    linkedPR: "PR-2026-002",
-    department: "Engineering",
-    buyer: "Purchase Manager",
-    rfqDate: "19 Jul 2026",
-    closingDate: "28 Jul 2026",
-    priority: "Medium",
-    status: "Vendor Selected",
-    selectedVendor: "ABC Linen Pvt Ltd",
-    invitedVendors: [
-      { id: "v1", vendorName: "ABC Linen Pvt Ltd", email: "sales@abclinen.com", phone: "+91 98765 43210", invitationSentOn: "19 Jul 2026", status: "Responded" },
-      { id: "v4", vendorName: "Hotel Essentials India", email: "contact@hotelessentials.co.in", phone: "+91 97766 55443", invitationSentOn: "19 Jul 2026", status: "Responded" },
-    ],
-    requestedItems: [
-      { id: "i3", item: "Commercial Air Filters (HEPA)", category: "HVAC", quantity: 20, unit: "Units", estimatedRate: 1500 },
-      { id: "i4", item: "Refrigerant Gas R410A", category: "Chemicals", quantity: 3, unit: "Canisters", estimatedRate: 4000 },
-    ],
-    commercialTerms: {
-      deliveryLocation: "Engineering Maintenance Bay",
-      deliveryAddress: "Basement B2, Hotel Grand Plaza",
-      paymentTerms: "Net 30 Days",
-      currency: "INR (₹)",
-      expectedDelivery: "5 Days from PO issuance",
-      tax: "18% GST included",
-      remarks: "OEM warranty certificates mandatory",
-    },
-    attachments: [
-      { id: "a3", fileName: "HVAC_Tech_Spec.pdf", fileSize: "1.8 MB", fileType: "pdf" },
-      { id: "a4", fileName: "Vendor_Quote_Draft.xlsx", fileSize: "450 KB", fileType: "xlsx" },
-    ],
-    comparisonData: [
-      {
-        vendorName: "ABC Linen Pvt Ltd",
-        unitPrice: 1500,
-        deliveryDays: 5,
-        paymentTerms: "30 Days",
-        warranty: "24 Months",
-        rating: "★★★★★",
-        totalAmount: 42000,
-        isRecommended: true,
-      },
-      {
-        vendorName: "Hotel Essentials India",
-        unitPrice: 1600,
-        deliveryDays: 7,
-        paymentTerms: "15 Days",
-        warranty: "12 Months",
-        rating: "★★★☆☆",
-        totalAmount: 44000,
-        isRecommended: false,
-      },
-    ],
-    activityTimeline: [
-      { stage: "RFQ Created", timestamp: "19 Jul 2026", note: "RFQ generated from PR-2026-002", author: "Rahul Singh" },
-      { stage: "Vendors Invited", timestamp: "19 Jul 2026", note: "Invited 2 engineering suppliers", author: "System" },
-      { stage: "Waiting for Vendor Responses", timestamp: "20 Jul 2026", note: "Bids received from 2 vendors", author: "Vendor Portal" },
-      { stage: "Vendor Selected", timestamp: "20 Jul 2026", note: "ABC Linen Pvt Ltd selected as winning bidder", author: "Purchase Manager" },
-      { stage: "Converted to Purchase Order", timestamp: "Pending", note: "Ready for PO generation", author: "Finance Head" },
-    ],
-  },
-  {
-    id: "rfq-3",
-    rfqNumber: "RFQ-2026-003",
-    linkedPR: "PR-2026-003",
-    department: "Kitchen",
-    buyer: "Purchase Executive",
-    rfqDate: "20 Jul 2026",
-    closingDate: "22 Jul 2026",
-    priority: "Emergency",
-    status: "Draft",
-    selectedVendor: undefined,
-    invitedVendors: [
-      { id: "v1", vendorName: "ABC Linen Pvt Ltd", email: "sales@abclinen.com", phone: "+91 98765 43210", invitationSentOn: "20 Jul 2026", status: "Pending" },
-      { id: "v2", vendorName: "XYZ Textiles", email: "info@xyztextiles.in", phone: "+91 98123 45678", invitationSentOn: "20 Jul 2026", status: "Pending" },
-      { id: "v3", vendorName: "Premium Hospitality Supplies", email: "orders@premiumhosp.com", phone: "+91 99887 76655", invitationSentOn: "20 Jul 2026", status: "Pending" },
-      { id: "v4", vendorName: "Hotel Essentials India", email: "contact@hotelessentials.co.in", phone: "+91 97766 55443", invitationSentOn: "20 Jul 2026", status: "Pending" },
-    ],
-    requestedItems: [
-      { id: "i5", item: "Fresh Black Truffle Oil (500ml)", category: "Gourmet", quantity: 2, unit: "Bottles", estimatedRate: 3100 },
-      { id: "i6", item: "Saffron Threads (50g)", category: "Spices", quantity: 1, unit: "Pack", estimatedRate: 2500 },
-    ],
-    commercialTerms: {
-      deliveryLocation: "Main Kitchen Receiving Counter",
-      deliveryAddress: "Ground Floor, Kitchen Dock, Hotel Grand Plaza",
-      paymentTerms: "Immediate Spot Payment / COD",
-      currency: "INR (₹)",
-      expectedDelivery: "Same Day Spot Delivery (by 5 PM)",
-      tax: "5% GST included",
-      remarks: "Urgent diplomatic banquet requirement",
-    },
-    attachments: [
-      { id: "a5", fileName: "Banquet_Urgent_Memo.pdf", fileSize: "310 KB", fileType: "pdf" },
-      { id: "a6", fileName: "Gourmet_Spec.pdf", fileSize: "190 KB", fileType: "pdf" },
-    ],
-    comparisonData: [],
-    activityTimeline: [
-      { stage: "RFQ Created", timestamp: "20 Jul 2026", note: "Draft RFQ created by Chef Arjun", author: "Chef Arjun" },
-      { stage: "Vendors Invited", timestamp: "Pending", note: "Awaiting dispatch", author: "System" },
-      { stage: "Waiting for Vendor Responses", timestamp: "Pending", note: "Not started", author: "Vendor Portal" },
-      { stage: "Vendor Selected", timestamp: "Pending", note: "Not started", author: "Purchase Manager" },
-      { stage: "Converted to Purchase Order", timestamp: "Pending", note: "Not started", author: "Finance Head" },
-    ],
-  },
-];
+  };
+}

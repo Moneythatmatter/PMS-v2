@@ -14,7 +14,7 @@ export default function FoodBeveragesLayout({
       moduleSidebar={
         <ModuleSidebar
           title="Food & Beverages"
-          subtitle="Restaurants, banquets & kitchen"
+          subtitle="Restaurants, cafes & kitchen"
           items={foodBeveragesNavItems}
         />
       }

@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { FormField, TextInput, SelectInput, TextAreaInput, FormSection } from "@/components/frontoffice/ui";
-import { Sparkles } from "lucide-react";
 import { DEPARTMENT_OPTIONS, type CategoryItem } from "@/app/data/purchaseStoresMastersData";
 
 interface CategoryDrawerProps {
@@ -18,7 +17,6 @@ const defaultCategoryState: Partial<CategoryItem> = {
   categoryCode: "",
   categoryName: "",
   department: "Housekeeping",
-  defaultTaxRate: 18,
   description: "",
   productCount: 0,
   status: "Active",
@@ -26,7 +24,7 @@ const defaultCategoryState: Partial<CategoryItem> = {
 
 export function CategoryDrawer({ open, onClose, onSave, initialCategory }: CategoryDrawerProps) {
   const [formData, setFormData] = useState<Partial<CategoryItem>>(defaultCategoryState);
-  const [errors, setErrors] = useState<{ categoryName?: string; defaultTaxRate?: string }>({});
+  const [errors, setErrors] = useState<{ categoryName?: string; categoryCode?: string }>({});
 
   const isEditing = Boolean(initialCategory);
 
@@ -35,33 +33,22 @@ export function CategoryDrawer({ open, onClose, onSave, initialCategory }: Categ
       if (initialCategory) {
         setFormData(initialCategory);
       } else {
-        const rand = Math.floor(100 + Math.random() * 900);
-        setFormData({
-          ...defaultCategoryState,
-          categoryCode: `CAT-NEW-${rand}`,
-        });
+        setFormData({ ...defaultCategoryState });
       }
       setErrors({});
     }
   }, [open, initialCategory]);
 
-  const handleAutoGenerateCode = () => {
-    const prefix = formData.categoryName ? formData.categoryName.slice(0, 3).toUpperCase() : "CAT";
-    const rand = Math.floor(100 + Math.random() * 900);
-    setFormData((prev) => ({ ...prev, categoryCode: `CAT-${prefix}-${rand}` }));
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: { categoryName?: string; defaultTaxRate?: string } = {};
+    const newErrors: { categoryName?: string; categoryCode?: string } = {};
 
-    if (!formData.categoryName || !formData.categoryName.trim()) {
+    if (!formData.categoryName?.trim()) {
       newErrors.categoryName = "Category Name is required.";
     }
 
-    const tax = Number(formData.defaultTaxRate);
-    if (formData.defaultTaxRate === undefined || Number.isNaN(tax) || tax < 0 || tax > 100) {
-      newErrors.defaultTaxRate = "Default Tax Rate % must be between 0 and 100.";
+    if (!formData.categoryCode?.trim()) {
+      newErrors.categoryCode = "Category Code is required.";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -73,10 +60,9 @@ export function CategoryDrawer({ open, onClose, onSave, initialCategory }: Categ
 
     const finalCategory: CategoryItem = {
       id: initialCategory?.id ?? `cat-${Date.now()}`,
-      categoryCode: formData.categoryCode || `CAT-${Date.now().toString().slice(-4)}`,
-      categoryName: formData.categoryName?.trim() || "",
+      categoryCode: formData.categoryCode!.trim().toUpperCase(),
+      categoryName: formData.categoryName!.trim(),
       department: formData.department || "Housekeeping",
-      defaultTaxRate: Number(formData.defaultTaxRate ?? 18),
       description: formData.description?.trim() || undefined,
       productCount: initialCategory?.productCount ?? 0,
       status: formData.status || "Active",
@@ -92,7 +78,7 @@ export function CategoryDrawer({ open, onClose, onSave, initialCategory }: Categ
       open={open}
       onClose={onClose}
       title={isEditing ? `Edit Category: ${initialCategory?.categoryCode}` : "Add Product Category"}
-      description="Define inventory categories and default GST tax rates for hotel procurement."
+      description="Define inventory categories and map them to hotel departments."
       width="xl"
       className="max-w-full sm:max-w-[650px]"
       footer={
@@ -123,23 +109,14 @@ export function CategoryDrawer({ open, onClose, onSave, initialCategory }: Categ
             {errors.categoryName && <p className="mt-1 text-[11px] font-medium text-red-500">{errors.categoryName}</p>}
           </FormField>
 
-          <FormField label="Category Code">
-            <div className="flex gap-2">
-              <TextInput
-                value={formData.categoryCode ?? ""}
-                onChange={(e) => setFormData((p) => ({ ...p, categoryCode: e.target.value }))}
-                placeholder="e.g. CAT-LIN"
-                className="flex-1 font-mono uppercase"
-              />
-              <button
-                type="button"
-                onClick={handleAutoGenerateCode}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
-                Auto
-              </button>
-            </div>
+          <FormField label="Category Code" required>
+            <TextInput
+              value={formData.categoryCode ?? ""}
+              onChange={(e) => setFormData((p) => ({ ...p, categoryCode: e.target.value.toUpperCase() }))}
+              placeholder="e.g. CAT-LIN"
+              className={`font-mono uppercase ${errors.categoryCode ? "border-red-400 focus:border-red-500" : ""}`}
+            />
+            {errors.categoryCode && <p className="mt-1 text-[11px] font-medium text-red-500">{errors.categoryCode}</p>}
           </FormField>
 
           <FormField label="Department Mapping" required>
@@ -153,20 +130,6 @@ export function CategoryDrawer({ open, onClose, onSave, initialCategory }: Categ
                 </option>
               ))}
             </SelectInput>
-          </FormField>
-
-          <FormField label="Default Tax Rate (%)" required>
-            <TextInput
-              type="number"
-              min="0"
-              max="100"
-              step="0.1"
-              value={formData.defaultTaxRate ?? 18}
-              onChange={(e) => setFormData((p) => ({ ...p, defaultTaxRate: Number(e.target.value) }))}
-              placeholder="e.g. 18"
-              className={errors.defaultTaxRate ? "border-red-400 focus:border-red-500" : ""}
-            />
-            {errors.defaultTaxRate && <p className="mt-1 text-[11px] font-medium text-red-500">{errors.defaultTaxRate}</p>}
           </FormField>
 
           <FormField label="Description" className="sm:col-span-2">

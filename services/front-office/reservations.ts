@@ -3,6 +3,9 @@ import type { ReservationBooking, ReservationSummaryStat } from "@/app/data/type
 
 export type InHouseGuestDto = {
   id: string;
+  guestId?: string;
+  bookingNo?: string;
+  guestNo?: string;
   guestName: string;
   room: string;
   roomType: string;

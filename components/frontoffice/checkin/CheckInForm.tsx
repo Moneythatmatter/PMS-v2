@@ -679,16 +679,16 @@ export function CheckInForm() {
               <div className="flex flex-col gap-2">
                 <input
                   type="text"
-                  value={bookingId}
-                  onChange={(e) => setBookingId(e.target.value)}
+                      value={bookingId}
+                      onChange={(e) => setBookingId(e.target.value)}
                   onKeyDown={(e) =>
                     e.key === "Enter" && handleLookupBooking()
                   }
                   placeholder="e.g. BK-0 or James Wilson"
                   className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                />
-                <Button
-                  onClick={() => handleLookupBooking()}
+                    />
+                  <Button
+                    onClick={() => handleLookupBooking()}
                   className="h-11 gap-2 bg-emerald-700 hover:bg-emerald-800"
                 >
                   Lookup Guest
@@ -761,9 +761,9 @@ export function CheckInForm() {
                         ? `Room ${arr.roomNo}`
                         : arr.roomType || "Room TBA";
                     return (
-                      <button
-                        key={arr.id}
-                        type="button"
+                        <button
+                          key={arr.id}
+                          type="button"
                         onClick={() => void loadArrival(arr)}
                         className={cn(
                           "w-full rounded-xl border p-3.5 text-left transition-all",
@@ -805,8 +805,8 @@ export function CheckInForm() {
                                 ? ` · ${formatINR(arr.totalAmount)}`
                                 : ""}
                             </p>
-                          </div>
-                        </div>
+                    </div>
+                  </div>
                       </button>
                     );
                   })
@@ -951,7 +951,7 @@ export function CheckInForm() {
                     onDepositChange={setDeposit}
                     totalAmount={booking.totalAmount ?? 4500}
                   />
-                </SectionCard>
+            </SectionCard>
 
                 <div className="flex justify-end border-t border-slate-200 pt-4">
                   <Button
@@ -973,37 +973,37 @@ export function CheckInForm() {
             description="Log instant walk-in guest information."
           >
             <FormField label="First Name" required error={errors.firstName}>
-              <TextInput
-                className={inputClass}
-                placeholder="e.g. Rajesh"
-                value={walkIn.firstName}
+                <TextInput
+                  className={inputClass}
+                  placeholder="e.g. Rajesh"
+                  value={walkIn.firstName}
                 onChange={(e) => {
                   setWalkIn((p) => ({ ...p, firstName: e.target.value }));
                   if (errors.firstName) {
                     setErrors((p) => ({ ...p, firstName: "" }));
                   }
                 }}
-              />
-            </FormField>
+                />
+              </FormField>
             <FormField label="Last Name" required error={errors.lastName}>
-              <TextInput
-                className={inputClass}
-                placeholder="e.g. Kumar"
-                value={walkIn.lastName}
+                <TextInput
+                  className={inputClass}
+                  placeholder="e.g. Kumar"
+                  value={walkIn.lastName}
                 onChange={(e) => {
                   setWalkIn((p) => ({ ...p, lastName: e.target.value }));
                   if (errors.lastName) {
                     setErrors((p) => ({ ...p, lastName: "" }));
                   }
                 }}
-              />
-            </FormField>
+                />
+              </FormField>
             <FormField label="Mobile Phone" required error={errors.mobile}>
-              <TextInput
-                className={inputClass}
+                <TextInput
+                  className={inputClass}
                 placeholder="10-digit mobile number"
                 maxLength={10}
-                value={walkIn.mobile}
+                  value={walkIn.mobile}
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, "").slice(0, 10);
                   setWalkIn((p) => ({ ...p, mobile: val }));
@@ -1011,19 +1011,19 @@ export function CheckInForm() {
                     setErrors((p) => ({ ...p, mobile: "" }));
                   }
                 }}
-              />
-            </FormField>
-            <FormField label="Email Address">
-              <TextInput
-                type="email"
-                className={inputClass}
-                placeholder="guest@example.com"
-                value={walkIn.email}
+                />
+              </FormField>
+              <FormField label="Email Address">
+                <TextInput
+                  type="email"
+                  className={inputClass}
+                  placeholder="guest@example.com"
+                  value={walkIn.email}
                 onChange={(e) =>
                   setWalkIn((p) => ({ ...p, email: e.target.value }))
                 }
-              />
-            </FormField>
+                />
+              </FormField>
             <FormField label="Booking Type" required error={errors.bookingType}>
               <SearchSelect
                 options={[...bookingTypeOptions]}
@@ -1051,11 +1051,11 @@ export function CheckInForm() {
                   }))
                 }
               />
-            </FormField>
-            {walkIn.bookingType === "Company" && (
+              </FormField>
+              {walkIn.bookingType === "Company" && (
               <FormField label="Company Name" error={errors.companyName}>
-                <CompanySearchSelect
-                  value={walkIn.companyName}
+                  <CompanySearchSelect
+                    value={walkIn.companyName}
                   selectedCompanyId={walkIn.companyId || null}
                   onChange={(val) =>
                     setWalkIn((p) => ({
@@ -1083,10 +1083,10 @@ export function CheckInForm() {
                   }
                   placeholder="Search company name or code…"
                   inputClassName={inputClass}
-                />
-              </FormField>
-            )}
-          </SectionCard>
+                  />
+                </FormField>
+              )}
+            </SectionCard>
 
           <SectionCard
             icon={UserCheck}

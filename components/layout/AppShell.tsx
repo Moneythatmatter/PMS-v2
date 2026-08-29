@@ -28,9 +28,11 @@ export function AppShell({ children, navItems, user, moduleSidebar, subNav }: Ap
               {subNav}
             </div>
           )}
-          <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6">
-            {children}
-          </main>
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            <main className="absolute inset-0 flex flex-col overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6">
+              {children}
+            </main>
+          </div>
         </div>
       </div>
     </MobileNavProvider>

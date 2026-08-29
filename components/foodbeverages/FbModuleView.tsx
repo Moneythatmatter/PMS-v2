@@ -6,44 +6,23 @@ import type { FbPageDefinition } from "@/app/data/foodbeverages/modules";
 import type { ModuleCrudHandlers, ModuleListDefinition, ModuleRow } from "@/components/pms";
 import { ModuleListPage } from "@/components/pms";
 import {
-  banquetBillingService,
-  banquetBookingService,
-  banquetPackageService,
-  banquetRequirementService,
-  barStockService,
-  bottleService,
-  cocktailService,
-  comboService,
   dayCloseService,
-  discountService,
-  drinkCategoryService,
-  drinkService,
   fbCashierService,
   fbOrderService,
   fbReportService,
   fbReservationService,
-  grnService,
-  happyHourService,
+  fbModifierGroupService,
+  fbOutletTypeService,
+  fbTaxGroupService,
+  fbUnitService,
   ingredientService,
-  kitchenPrinterService,
   menuCategoryService,
   menuItemService,
   modifierService,
-  orderTypeService,
   outletService,
-  paymentModeService,
-  pricingService,
-  purchaseOrderService,
-  reasonMasterService,
   recipeService,
-  serviceChargeService,
   stockAdjustmentService,
-  stockCountService,
-  stockMovementService,
-  supplierService,
   tableService,
-  tableTypeService,
-  taxService,
   wastageService,
   type FbOutlet,
 } from "@/services/food-beverages";
@@ -65,6 +44,25 @@ type ReportSummary = {
   rowCount?: number;
   growth?: string;
 };
+
+type ItemLookupOption = { id: string; name: string };
+
+type ItemLookups = {
+  categories: ItemLookupOption[];
+  taxGroups: ItemLookupOption[];
+};
+
+const ITEM_FK_COLUMNS: Record<string, keyof ItemLookups> = {
+  categoryId: "categories",
+  taxGroupId: "taxGroups",
+};
+
+function mapLookupRows(rows: Record<string, unknown>[]): ItemLookupOption[] {
+  return rows.map((row) => ({
+    id: String(row.id ?? ""),
+    name: String(row.name ?? row.code ?? row.id ?? "—"),
+  }));
+}
 
 function reportTypeFromPath(path: string) {
   const m = path.match(/\/food-beverages\/reports\/([^/]+)/);
@@ -187,28 +185,7 @@ const PATH_SERVICE: Record<string, CrudLike> = {
   "/food-beverages/restaurants/outlets": outletService as CrudLike,
   "/food-beverages/restaurants/tables": tableService as CrudLike,
   "/food-beverages/restaurants/reservations": fbReservationService as CrudLike,
-  "/food-beverages/restaurants/orders": {
-    list: async () =>
-      (await fbOrderService.list()) as unknown as Record<string, unknown>[],
-    create: async (body) =>
-      (await fbOrderService.create({
-        ...body,
-        lines: Array.isArray(body.lines) ? body.lines : [],
-      } as never)) as unknown as Record<string, unknown>,
-    update: async (id, body) =>
-      (await fbOrderService.update(id, body as never)) as unknown as Record<
-        string,
-        unknown
-      >,
-    remove: (id) => fbOrderService.remove(id),
-  },
   "/food-beverages/restaurants/day-close": dayCloseService as CrudLike,
-  "/food-beverages/banquet/venues": outletService as CrudLike,
-  "/food-beverages/banquet/bookings": banquetBookingService as CrudLike,
-  "/food-beverages/banquet/menu-packages": banquetPackageService as CrudLike,
-  "/food-beverages/banquet/requirements": banquetRequirementService as CrudLike,
-  "/food-beverages/banquet/billing": banquetBillingService as CrudLike,
-  "/food-beverages/banquet/close-event": banquetBillingService as CrudLike,
   "/food-beverages/restaurants/cashier": {
     list: async () =>
       (await fbCashierService.list()) as unknown as Record<string, unknown>[],
@@ -225,21 +202,6 @@ const PATH_SERVICE: Record<string, CrudLike> = {
     remove: async () => {
       /* shifts are closed, not deleted */
     },
-  },
-  "/food-beverages/bar/orders": {
-    list: async () =>
-      (await fbOrderService.list()) as unknown as Record<string, unknown>[],
-    create: async (body) =>
-      (await fbOrderService.create({
-        ...body,
-        lines: Array.isArray(body.lines) ? body.lines : [],
-      } as never)) as unknown as Record<string, unknown>,
-    update: async (id, body) =>
-      (await fbOrderService.update(id, body as never)) as unknown as Record<
-        string,
-        unknown
-      >,
-    remove: (id) => fbOrderService.remove(id),
   },
   "/food-beverages/kitchen/orders": {
     list: async () => {
@@ -276,35 +238,17 @@ const PATH_SERVICE: Record<string, CrudLike> = {
       >,
     remove: (id) => fbOrderService.remove(id),
   },
+  "/food-beverages/masters/units": fbUnitService as CrudLike,
+  "/food-beverages/masters/tax-groups": fbTaxGroupService as CrudLike,
+  "/food-beverages/masters/modifier-groups": fbModifierGroupService as CrudLike,
+  "/food-beverages/masters/outlet-types": fbOutletTypeService as CrudLike,
   "/food-beverages/menu/categories": menuCategoryService as CrudLike,
   "/food-beverages/menu/items": menuItemService as CrudLike,
   "/food-beverages/menu/modifiers": modifierService as CrudLike,
-  "/food-beverages/menu/combos": comboService as CrudLike,
-  "/food-beverages/menu/pricing": pricingService as CrudLike,
   "/food-beverages/menu/recipes": recipeService as CrudLike,
   "/food-beverages/inventory/ingredients": ingredientService as CrudLike,
-  "/food-beverages/inventory/suppliers": supplierService as CrudLike,
-  "/food-beverages/inventory/purchase-orders": purchaseOrderService as CrudLike,
-  "/food-beverages/inventory/grn": grnService as CrudLike,
-  "/food-beverages/inventory/stock-movement": stockMovementService as CrudLike,
   "/food-beverages/inventory/wastage": wastageService as CrudLike,
-  "/food-beverages/inventory/stock-count": stockCountService as CrudLike,
   "/food-beverages/inventory/adjustments": stockAdjustmentService as CrudLike,
-  "/food-beverages/bar/drink-categories": drinkCategoryService as CrudLike,
-  "/food-beverages/bar/drinks": drinkService as CrudLike,
-  "/food-beverages/bar/cocktails": cocktailService as CrudLike,
-  "/food-beverages/bar/happy-hour": happyHourService as CrudLike,
-  "/food-beverages/bar/stock": barStockService as CrudLike,
-  "/food-beverages/bar/bottle-tracking": bottleService as CrudLike,
-  "/food-beverages/settings/taxes": taxService as CrudLike,
-  "/food-beverages/settings/discounts": discountService as CrudLike,
-  "/food-beverages/settings/payment-modes": paymentModeService as CrudLike,
-  "/food-beverages/settings/order-types": orderTypeService as CrudLike,
-  "/food-beverages/settings/service-charge": serviceChargeService as CrudLike,
-  "/food-beverages/settings/kitchen-printers": kitchenPrinterService as CrudLike,
-  "/food-beverages/settings/modifiers": modifierService as CrudLike,
-  "/food-beverages/settings/table-types": tableTypeService as CrudLike,
-  "/food-beverages/settings/reason-masters": reasonMasterService as CrudLike,
   "/food-beverages/reports/daily-sales": readOnlyReport("daily-sales"),
   "/food-beverages/reports/item-sales": readOnlyReport("item-sales"),
   "/food-beverages/reports/category-sales": readOnlyReport("category-sales"),
@@ -320,11 +264,9 @@ const PATH_SERVICE: Record<string, CrudLike> = {
 
 function scopeTypes(
   scope: FbPageDefinition["outletScope"],
-): ("restaurant" | "cafe" | "kitchen" | "banquet" | "bar" | "all")[] {
+): ("restaurant" | "cafe" | "kitchen" | "all")[] {
   if (scope === "restaurant") return ["restaurant", "cafe"];
   if (scope === "kitchen") return ["kitchen"];
-  if (scope === "banquet") return ["banquet"];
-  if (scope === "bar") return ["bar"];
   return ["all"];
 }
 
@@ -360,71 +302,9 @@ function normalizeRow(path: string, row: Record<string, unknown>): ModuleRow {
   if (path.includes("/outlets") && base.type) {
     base.type = titleCaseType(base.type);
   }
-  if (path.includes("/banquet/venues") && base.type) {
-    base.type = titleCaseType(base.type);
-  }
-
-  // Banquet venues: provide capacity, area, and todayEvent defaults if missing
-  if (
-    path.includes("/banquet/venues") ||
-    (path.includes("/outlets") && String(base.type).toLowerCase() === "banquet")
-  ) {
-    if (
-      base.capacity === undefined ||
-      base.capacity === null ||
-      base.capacity === "" ||
-      base.capacity === 0
-    ) {
-      const n = String(base.name ?? "").toLowerCase();
-      base.capacity = n.includes("conference") || n.includes("hall")
-        ? 80
-        : n.includes("lawn") || n.includes("garden")
-          ? 250
-          : n.includes("pool")
-            ? 100
-            : n.includes("rooftop")
-              ? 150
-              : 100;
-    } else if (typeof base.capacity === "string") {
-      const parsed = Number.parseInt(base.capacity, 10);
-      if (Number.isFinite(parsed)) base.capacity = parsed;
-    }
-
-    if (!base.area) {
-      const n = String(base.name ?? "").toLowerCase();
-      base.area =
-        n.includes("garden") ||
-        n.includes("lawn") ||
-        n.includes("outdoor") ||
-        n.includes("pool") ||
-        n.includes("rooftop")
-          ? "Outdoor"
-          : "Indoor";
-    }
-  }
-
-  // Bar drink categories: normalize items count and fallback bar outletId
-  if (path.includes("/bar/drink-categories")) {
-    const rawItems = base.items ?? row.items ?? row.itemCount;
-    base.items = typeof rawItems === "number" ? rawItems : Number(rawItems ?? 0);
-    if (!base.outletId) {
-      base.outletId = (row.outletId as string) || "O-80858";
-    }
-  }
-
-  // Close Event reuses banquet billing; align status labels for the UI
-  if (path.includes("/banquet/close-event")) {
-    if (String(base.status).toLowerCase() === "settled") {
-      base.status = "Closed";
-    }
-    if (!base.venue && base.event) {
-      // keep list usable when venue column is absent in billing rows
-      base.venue = String(base.venue ?? "—");
-    }
-  }
 
   // Outlets: keep operational status separate from booking availability
-  if (path.includes("/outlets") || path.includes("/banquet/venues")) {
+  if (path.includes("/outlets")) {
     const bookingValues = new Set(["available", "occupied", "booked", "reserved"]);
     const statusVal = String(base.status ?? "").trim();
     if (bookingValues.has(statusVal.toLowerCase()) && !base.bookingStatus) {
@@ -464,28 +344,12 @@ function toApiPayload(path: string, row: ModuleRow): Record<string, unknown> {
     }
   }
 
-  if (path.includes("/banquet/bookings")) {
-    const venue = payload.outletId ?? payload.venueId;
-    if (venue !== undefined) {
-      payload.venueId = venue;
-      payload.outletId = venue;
-    }
-  }
-
-  if (path.includes("/banquet/venues")) {
-    payload.type = "banquet";
-  } else if (path.includes("/outlets") && payload.type) {
+  if (path.includes("/outlets") && payload.type) {
     payload.type = String(payload.type).toLowerCase();
   }
   if (path.includes("/outlets")) {
     delete payload.sales;
     delete payload.covers;
-  }
-  if (path.includes("/banquet/close-event")) {
-    if (String(payload.status).toLowerCase() === "closed") {
-      // Persist as Closed; billing also accepts Settled historically
-      payload.status = "Closed";
-    }
   }
   return payload;
 }
@@ -499,6 +363,7 @@ function toModuleDefinition(
   crud?: ModuleCrudHandlers,
   tableInventory?: ModuleRow[],
   tableCrud?: ModuleCrudHandlers,
+  itemLookups?: ItemLookups,
 ): ModuleListDefinition {
   const types = scopeTypes(definition.outletScope);
   const scoped = (() => {
@@ -551,6 +416,24 @@ function toModuleDefinition(
     eyebrow: scoped.length ? undefined : "Food & Beverages",
     stats: calculatedStats,
     columns: definition.columns.map((col) => {
+      const fkLookupKey = ITEM_FK_COLUMNS[col.key];
+      if (fkLookupKey && itemLookups) {
+        const options = itemLookups[fkLookupKey].map((o) => ({
+          value: o.id,
+          label: o.name,
+        }));
+        return {
+          ...col,
+          inputType: "select" as const,
+          options,
+          render: (row: ModuleRow) => {
+            const val = row[col.key];
+            if (val === undefined || val === null || val === "") return "—";
+            const match = itemLookups[fkLookupKey].find((o) => o.id === String(val));
+            return match?.name ?? String(val);
+          },
+        };
+      }
       if (col.key !== "outletId" && col.key !== "venueId") return col;
       return {
         ...col,
@@ -572,11 +455,9 @@ function toModuleDefinition(
     statusStyle: definition.statusStyle,
     outlets: scoped.length ? scoped : undefined,
     outletLabel:
-      definition.outletScope === "banquet"
-        ? "Venue"
-        : definition.outletScope === "kitchen"
-          ? "Kitchen"
-          : "Outlet",
+      definition.outletScope === "kitchen"
+        ? "Kitchen"
+        : "Outlet",
     crud,
     tableInventory,
     tableCrud,
@@ -598,6 +479,7 @@ export function FbModuleView({
 
   const [rows, setRows] = useState<ModuleRow[]>([]);
   const [tableInventory, setTableInventory] = useState<ModuleRow[]>([]);
+  const [itemLookups, setItemLookups] = useState<ItemLookups | null>(null);
   const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -638,97 +520,32 @@ export function FbModuleView({
           const data = await service.list();
           if (!cancelled) {
             let mapped = data.map((row) => normalizeRow(path, row));
-            if (path.includes("/banquet/venues")) {
-              mapped = mapped.filter(
-                (r) => String(r.type).toLowerCase() === "banquet",
-              );
+            if (path.includes("/menu/items")) {
               try {
-                const rawBookings = await banquetBookingService.list();
-                const bookings = (rawBookings ?? []) as Record<string, unknown>[];
-                const todayStr = new Date().toISOString().slice(0, 10);
-                mapped = mapped.map((venue) => {
-                  const matchingBooking = bookings.find((b) => {
-                    const venueIdMatch =
-                      String(b.outletId ?? b.venueId ?? "") === String(venue.id);
-                    const dateVal = String(b.date ?? "").slice(0, 10);
-                    return venueIdMatch && (dateVal === todayStr || b.status === "In Progress" || b.status === "Confirmed");
-                  });
-
-                  const isBooked = Boolean(matchingBooking);
-
-                  return {
-                    ...venue,
-                    bookingStatus: isBooked ? "Booked" : (venue.bookingStatus ?? "Available"),
-                  };
-                });
-              } catch {
-                /* fallback to normalized venue */
-              }
-            }
-            if (path.includes("/bar/drink-categories")) {
-              try {
-                const rawDrinks = await drinkService.list();
-                const drinks = (rawDrinks ?? []) as Record<string, unknown>[];
-                mapped = mapped.map((cat) => {
-                  const catName = String(cat.name ?? "").toLowerCase();
-                  const catCode = String(cat.code ?? "").toLowerCase();
-                  const linkedDrinks = drinks.filter((d) => {
-                    const dCat = String(d.category ?? "").toLowerCase();
-                    return dCat === catName || dCat === catCode || String(d.categoryId) === String(cat.id);
-                  });
-                  const drinkCount = linkedDrinks.length;
-                  const sampleDrink = linkedDrinks[0];
-                  return {
-                    ...cat,
-                    items: Number(cat.items ?? cat.itemCount ?? drinkCount ?? 0),
-                    outletId: String(cat.outletId ?? sampleDrink?.outletId ?? "O-80858"),
-                  };
-                });
-              } catch {
-                /* fallback to normalized drink category */
-              }
-            }
-            if (path.includes("/bar/drinks")) {
-              try {
-                const rawCategories = await drinkCategoryService.list();
-                const categories = (rawCategories ?? []) as Record<string, unknown>[];
-                const catNames = categories
-                  .map((c) => String(c.name ?? "").trim())
-                  .filter(Boolean);
-                const uniqueCats = Array.from(new Set(catNames));
-                if (uniqueCats.length > 0) {
-                  const existingFilters = definition.filterOptions ?? [];
-                  const existingFilterIds = new Set(
-                    existingFilters.map((f) => f.id.toLowerCase()),
-                  );
-                  const newCategoryFilters = uniqueCats
-                    .filter((c) => !existingFilterIds.has(c.toLowerCase()))
-                    .map((c) => ({ id: c, label: c }));
-                  if (newCategoryFilters.length > 0) {
-                    definition.filterOptions = [
-                      ...existingFilters,
-                      ...newCategoryFilters,
-                    ];
-                  }
-                }
-
-                const catCol = definition.columns.find((c) => c.key === "category");
-                if (catCol && Array.isArray(catCol.options)) {
-                  const existingValues = new Set(
-                    catCol.options.map((o) =>
-                      typeof o === "string" ? o.toLowerCase() : o.value.toLowerCase(),
+                const [categories, taxGroups] = await Promise.all([
+                  menuCategoryService.list(),
+                  fbTaxGroupService.list(),
+                ]);
+                if (!cancelled) {
+                  setItemLookups({
+                    categories: mapLookupRows(
+                      (categories ?? []) as Record<string, unknown>[],
                     ),
-                  );
-                  const newColOpts = uniqueCats
-                    .filter((c) => !existingValues.has(c.toLowerCase()))
-                    .map((c) => ({ value: c, label: c }));
-                  if (newColOpts.length > 0) {
-                    catCol.options = [...(catCol.options as { value: string; label: string }[]), ...newColOpts];
-                  }
+                    taxGroups: mapLookupRows(
+                      (taxGroups ?? []) as Record<string, unknown>[],
+                    ),
+                  });
                 }
               } catch {
-                /* fallback */
+                if (!cancelled) {
+                  setItemLookups({
+                    categories: [],
+                    taxGroups: [],
+                  });
+                }
               }
+            } else if (!cancelled) {
+              setItemLookups(null);
             }
             setRows(mapped);
             setReportSummary(null);
@@ -847,6 +664,7 @@ export function FbModuleView({
         crud,
         needsTableOps && !path.includes("/tables") ? tableInventory : undefined,
         needsTableOps && !path.includes("/tables") ? tableCrud : undefined,
+        itemLookups ?? undefined,
       )}
     />
   );

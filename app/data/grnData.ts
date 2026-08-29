@@ -1,3 +1,38 @@
+/** One received stock lot — batch/expiry belong here, not on material master. */
+export interface GRNBatchAllocation {
+  id: string;
+  batchNumber: string;
+  expiryDate: string;
+  mfgDate?: string;
+  receivedQty: number;
+  acceptedQty: number;
+  rejectedQty: number;
+  storageWarehouse: string;
+  storageLocation?: string;
+  qcStatus: "Pending" | "Passed" | "Failed";
+}
+
+/** GRN line — one PO material; may split across multiple batch allocations. */
+export interface GRNLineItem {
+  id: string;
+  /** ps_products.id — inherited from PO line */
+  materialId: string;
+  productCode: string;
+  productName: string;
+  category: string;
+  unit: string;
+  orderedQty: number;
+  receivedQty: number;
+  acceptedQty: number;
+  rejectedQty: number;
+  unitRate: number;
+  receivedValue: number;
+  qcStatus: "Pending" | "Passed" | "Failed" | "Partial";
+  batchAllocations: GRNBatchAllocation[];
+  remarks?: string;
+}
+
+/** @deprecated Use GRNLineItem — kept for legacy rows */
 export interface GRNItem {
   id: string;
   productCode: string;
@@ -33,6 +68,9 @@ export interface GRNRecord {
   id: string;
   grnNumber: string;
   receiptDate: string;
+  deliveryTime?: string;
+  receivingDock?: string;
+  deliveryPerson?: string;
   poNumber: string;
   supplierName: string;
   warehouse: string;
@@ -40,149 +78,73 @@ export interface GRNRecord {
   receivedBy: string;
   inspectionStatus: "Passed" | "Pending" | "Rejected" | "Under QC" | "Partially Accepted";
   status: "Received" | "Completed" | "Return" | "Pending" | "Approved";
-  invoiceNumber: string;
   vehicleNumber: string;
   deliveryChallan: string;
   totalAmount: number;
   remarks?: string;
-  items: GRNItem[];
+  items: GRNLineItem[];
   inspectionDetails: QualityInspectionDetails;
   attachments: GRNAttachment[];
   logs?: Array<{ timestamp: string; user: string; action: string; status: string }>;
 }
 
-export const INITIAL_GRN_RECORDS: GRNRecord[] = [
-  {
-    id: "grn-1",
-    grnNumber: "GRN-2026-001",
-    receiptDate: "15-Jul-2026",
-    poNumber: "PO-2026-041",
-    supplierName: "Amul Dairy",
-    warehouse: "Central Cold Storage",
-    itemCount: 12,
-    totalAmount: 34650,
-    receivedBy: "Suresh Chander",
-    inspectionStatus: "Passed",
-    status: "Approved",
-    invoiceNumber: "INV-AMUL-998",
-    vehicleNumber: "MH-04-AB-1234",
-    deliveryChallan: "CHAL-8841",
-    remarks: "Inspected and accepted at cold dock",
-    items: [
-      {
-        id: "item-1",
-        productCode: "FNB-DRY-01",
-        productName: "Full Cream Fresh Milk 1L",
-        category: "Dairy",
-        orderedQty: 500,
-        receivedQty: 500,
-        acceptedQty: 500,
-        rejectedQty: 0,
-        unit: "Litres",
-        batchNumber: "B-AML-8821",
-        mfgDate: "2026-07-20",
-        expiryDate: "2026-07-28",
-        storageBin: "BIN-CHILL-D1-01",
-        remarks: "Temperature checked: +3°C",
-      },
-    ],
-    inspectionDetails: {
-      status: "Passed",
-      inspector: "Quality Auditor Anand",
-      inspectionDate: "15-Jul-2026",
-      comments: "All 500 litres in sound condition with intact seal.",
-    },
-    attachments: [
-      { id: "att-1", fileName: "Vendor_Invoice_AMUL_998.pdf", fileSize: "1.4 MB", fileType: "pdf" },
-      { id: "att-2", fileName: "Delivery_Challan_CHAL_8841.pdf", fileSize: "850 KB", fileType: "pdf" },
-    ],
-  },
-  {
-    id: "grn-2",
-    grnNumber: "GRN-2026-002",
-    receiptDate: "18-Jul-2026",
-    poNumber: "PO-2026-042",
-    supplierName: "Fresh Farms",
-    warehouse: "Main Kitchen Store",
-    itemCount: 8,
-    totalAmount: 18400,
-    receivedBy: "Chef Marco",
-    inspectionStatus: "Pending",
-    status: "Pending",
-    invoiceNumber: "INV-FF-401",
-    vehicleNumber: "DL-01-XY-9081",
-    deliveryChallan: "CHAL-9902",
-    remarks: "Produce receiving at kitchen bay",
-    items: [
-      {
-        id: "item-2",
-        productCode: "FNB-VEG-09",
-        productName: "Exotic Baby Spinach (500g)",
-        category: "Produce",
-        orderedQty: 70,
-        receivedQty: 70,
-        acceptedQty: 70,
-        rejectedQty: 0,
-        unit: "Packs",
-        batchNumber: "B-FF-1120",
-        mfgDate: "2026-07-22",
-        expiryDate: "2026-07-26",
-        storageBin: "BIN-VEG-02",
-        remarks: "Fresh green leaves",
-      },
-    ],
-    inspectionDetails: {
-      status: "Pending",
-      inspector: "Unassigned",
-      inspectionDate: "18-Jul-2026",
-      comments: "Awaiting final freshness score.",
-    },
-    attachments: [
-      { id: "att-3", fileName: "Fresh_Farms_Challan.pdf", fileSize: "920 KB", fileType: "pdf" },
-    ],
-  },
-  {
-    id: "grn-3",
-    grnNumber: "GRN-2026-003",
-    receiptDate: "20-Jul-2026",
-    poNumber: "PO-2026-043",
-    supplierName: "EcoClean",
-    warehouse: "Housekeeping Store",
-    itemCount: 15,
-    totalAmount: 24500,
-    receivedBy: "Priya Das",
-    inspectionStatus: "Rejected",
-    status: "Return",
-    invoiceNumber: "INV-ECO-881",
-    vehicleNumber: "KA-03-MC-4410",
-    deliveryChallan: "CHAL-4412",
-    remarks: "2 canisters leaking - rejected at dock",
-    items: [
-      {
-        id: "item-3",
-        productCode: "HK-CHM-05",
-        productName: "Taski R2 All Surface Cleaner 5L",
-        category: "Cleaning Chemicals",
-        orderedQty: 15,
-        receivedQty: 15,
-        acceptedQty: 13,
-        rejectedQty: 2,
-        unit: "Canisters",
-        batchNumber: "B-ECO-7741",
-        mfgDate: "2026-06-01",
-        expiryDate: "2028-06-01",
-        storageBin: "BIN-CHEM-01",
-        remarks: "2 damaged canisters returned to driver",
-      },
-    ],
-    inspectionDetails: {
-      status: "Rejected",
-      inspector: "Priya Das",
-      inspectionDate: "20-Jul-2026",
-      comments: "Packaging leak detected on 2 units.",
-    },
-    attachments: [
-      { id: "att-4", fileName: "EcoClean_Damage_Report.pdf", fileSize: "1.1 MB", fileType: "pdf" },
-    ],
-  },
-];
+function legacyItemToLine(raw: GRNItem & Record<string, unknown>, index: number): GRNLineItem {
+  const unitRate = Number(raw.unitRate ?? raw.rate ?? 0);
+  const accepted = Number(raw.acceptedQty ?? raw.receivedQty ?? 0);
+  return {
+    id: String(raw.id ?? `line-${index}`),
+    materialId: String(raw.materialId ?? ""),
+    productCode: String(raw.productCode ?? ""),
+    productName: String(raw.productName ?? raw.itemName ?? ""),
+    category: String(raw.category ?? ""),
+    unit: String(raw.unit ?? raw.uom ?? "Pieces"),
+    orderedQty: Number(raw.orderedQty ?? 0),
+    receivedQty: Number(raw.receivedQty ?? 0),
+    acceptedQty: accepted,
+    rejectedQty: Number(raw.rejectedQty ?? 0),
+    unitRate,
+    receivedValue: Number(raw.receivedValue ?? accepted * unitRate),
+    qcStatus: (raw.qcStatus as GRNLineItem["qcStatus"]) ?? "Pending",
+    batchAllocations: Array.isArray(raw.batchAllocations)
+      ? (raw.batchAllocations as GRNBatchAllocation[])
+      : [
+          {
+            id: `batch-${index}-0`,
+            batchNumber: String(raw.batchNumber ?? `B-${index}`),
+            expiryDate: String(raw.expiryDate ?? ""),
+            mfgDate: raw.mfgDate ? String(raw.mfgDate) : undefined,
+            receivedQty: Number(raw.receivedQty ?? 0),
+            acceptedQty: accepted,
+            rejectedQty: Number(raw.rejectedQty ?? 0),
+            storageWarehouse: String(raw.storageWarehouse ?? raw.storageBin ?? ""),
+            storageLocation: raw.storageBin ? String(raw.storageBin) : undefined,
+            qcStatus: "Pending",
+          },
+        ],
+    remarks: raw.remarks ? String(raw.remarks) : undefined,
+  };
+}
+
+/** Normalize API / legacy GRN JSON into canonical line + batch shape. */
+export function normalizeGrnRecord(grn: GRNRecord): GRNRecord {
+  const rawItems = (grn.items ?? []) as Array<GRNLineItem & GRNItem & Record<string, unknown>>;
+  const items = rawItems.map((item, i) =>
+    Array.isArray(item.batchAllocations) && item.batchAllocations.length > 0
+      ? {
+          ...item,
+          unitRate: Number(item.unitRate ?? 0),
+          receivedValue: Number(item.receivedValue ?? item.acceptedQty * Number(item.unitRate ?? 0)),
+        }
+      : legacyItemToLine(item, i),
+  );
+
+  return {
+    ...grn,
+    deliveryTime: grn.deliveryTime ?? (grn as GRNRecord & { delivery_time?: string }).delivery_time,
+    receivingDock: grn.receivingDock ?? (grn as GRNRecord & { receiving_dock?: string }).receiving_dock,
+    deliveryPerson: grn.deliveryPerson ?? (grn as GRNRecord & { delivery_person?: string }).delivery_person,
+    items,
+    itemCount: items.length,
+    totalAmount: items.reduce((s, l) => s + l.receivedValue, 0),
+  };
+}
