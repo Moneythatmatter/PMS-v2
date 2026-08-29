@@ -61,6 +61,8 @@ export type FbOrder = {
   lines: { name: string; qty: number; note?: string }[];
   amount: number;
   status: string;
+  /** OPEN | CLOSED | CANCELLED — POS lifecycle separate from kitchen status */
+  lifecycleStatus?: string;
   placedAt: string;
   server: string;
   /** Chef ETA in minutes after accept */
