@@ -16,7 +16,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { RoomAvailabilityRow, RoomDayStatus } from "@/app/data/frontoffice/modules";
-import { roomService } from "@/services/front-office";
+import { roomService, type RoomAvailabilityBlock } from "@/services/front-office/rooms";
 import { Button } from "@/components/ui/Button";
 import {
   EmptyState,
@@ -85,6 +85,34 @@ function formatDayLabel(iso: string): string {
 
 function nextDayIso(iso: string): string {
   return toIsoDate(addDays(parseIsoDate(iso), 1));
+}
+
+function formatBlockRange(start: string, end: string): string {
+  if (start === end) return formatDayLabel(start);
+  return `${formatDayLabel(start)} – ${formatDayLabel(end)}`;
+}
+
+function buildBlockHintMap(
+  blocks: RoomAvailabilityBlock[],
+  gridDays: string[],
+): Map<string, string> {
+  const hints = new Map<string, string>();
+  for (const block of blocks) {
+    const roomNo = String(block.roomNo ?? "").trim();
+    if (!roomNo) continue;
+    const label =
+      block.kind === "maintenance" ? "Maintenance" : "Blocked";
+    const reason = block.reason?.trim();
+    const range = formatBlockRange(block.startDate, block.endDate);
+    const text = reason ? `${label}: ${reason} (${range})` : `${label} (${range})`;
+
+    for (const day of gridDays) {
+      if (day >= block.startDate && day <= block.endDate) {
+        hints.set(`${roomNo}-${day}`, text);
+      }
+    }
+  }
+  return hints;
 }
 
 function isBookableStatus(status: DayStatus, day: string, today: string): boolean {
@@ -224,6 +252,7 @@ export function RoomAvailabilityView() {
   const [monthStart, setMonthStart] = useState(currentMonthStart);
   const [visibleDays, setVisibleDays] = useState<string[]>([]);
   const [rows, setRows] = useState<RoomAvailabilityRow[]>([]);
+  const [availabilityBlocks, setAvailabilityBlocks] = useState<RoomAvailabilityBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [roomType, setRoomType] = useState("all");
@@ -250,6 +279,11 @@ export function RoomAvailabilityView() {
     return visibleDays.filter((d) => d >= todayIso);
   }, [visibleDays, isCurrentMonth, todayIso]);
 
+  const blockHints = useMemo(
+    () => buildBlockHintMap(availabilityBlocks, gridDays),
+    [availabilityBlocks, gridDays],
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -259,6 +293,7 @@ export function RoomAvailabilityView() {
         if (!cancelled) {
           setRows(data.rows);
           setVisibleDays(data.days?.length ? data.days : []);
+          setAvailabilityBlocks(data.blocks ?? []);
           setError(null);
         }
       } catch (e) {
@@ -517,7 +552,7 @@ export function RoomAvailabilityView() {
       <FOPageHeader
         eyebrow="Front Office"
         title="Room Availability"
-        description="Monthly tape chart — scan inventory by floor, spot gaps, and plan allocations."
+        description="Monthly tape chart — reservations and dated maintenance blocks affect availability; dirty rooms show today only and remain sellable."
         badge={
           <div className="flex items-center gap-3 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-green-50 px-4 py-2.5">
             <div className="relative flex h-10 w-10 items-center justify-center">
@@ -817,6 +852,12 @@ export function RoomAvailabilityView() {
                           const cellKey = `${row.room}-${d}`;
                           const isToday = d === todayIso;
                           const isHovered = hoveredCell === cellKey;
+                          const blockHint = blockHints.get(cellKey);
+                          const dirtyHint =
+                            status === "dirty" && isToday
+                              ? "Dirty today — still available to book"
+                              : undefined;
+                          const cellTitle = blockHint ?? dirtyHint ?? cfg.description;
                           const inDragPreview =
                             dragState?.room === row.room &&
                             isDayInRange(d, dragState.startDay, dragState.endDay);
@@ -839,6 +880,7 @@ export function RoomAvailabilityView() {
                                   handleCellMouseDown(row, d, status);
                                 }}
                                 onMouseEnter={() => handleCellMouseEnter(row, d)}
+                                title={cellTitle}
                                 aria-label={`Room ${row.room}, ${formatDayLabel(d)}: ${cfg.label}`}
                                 className={cn(
                                   "relative mx-auto flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border transition-all duration-150",
@@ -882,7 +924,7 @@ export function RoomAvailabilityView() {
 
         {filtered.length > 0 && (
           <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-2.5 text-center text-[11px] text-slate-400 sm:px-5">
-            Click or drag across vacant dates to create a booking · click occupied cells for details
+            Click or drag across vacant or dirty (today) dates to create a booking · maintenance/blocked cells show dated holds
           </div>
         )}
       </div>
@@ -1019,7 +1061,8 @@ export function RoomAvailabilityView() {
               </div>
             </div>
             <p className="text-sm text-slate-600">
-              {statusConfig[detailCell.status].description}
+              {blockHints.get(`${detailCell.room}-${detailCell.day}`) ??
+                statusConfig[detailCell.status].description}
             </p>
             {(detailCell.status === "reserved" ||
               detailCell.status === "occupied") && (

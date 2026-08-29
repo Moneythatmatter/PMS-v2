@@ -41,6 +41,12 @@ const BUSINESS_DATE = "23 Jun 2026";
 
 const quickLinks = [
   {
+    label: "Room Availability",
+    href: "/frontoffice/room-availability",
+    icon: DoorOpen,
+    hint: "Tape chart",
+  },
+  {
     label: "Check-In",
     href: "/frontoffice/reservation/check-in",
     icon: LogIn,
@@ -63,12 +69,6 @@ const quickLinks = [
     href: "/frontoffice/in-house-guests",
     icon: Users,
     hint: "Current guests",
-  },
-  {
-    label: "Room Status",
-    href: "/frontoffice/room-status",
-    icon: DoorOpen,
-    hint: "House status",
   },
   {
     label: "Payments",
