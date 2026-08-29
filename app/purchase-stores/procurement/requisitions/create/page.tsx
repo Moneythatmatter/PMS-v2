@@ -33,7 +33,7 @@ import {
   FormField,
   TextAreaInput,
 } from "@/components/frontoffice/ui";
-import { PRRequestedItem } from "@/app/data/purchaseRequisitionsData";
+import { PRRequestedItem, DEPARTMENT_STAFF_DATA } from "@/app/data/purchaseRequisitionsData";
 import {
   MOCK_INVENTORY_CATALOG,
   InventoryCatalogItem,
@@ -68,6 +68,31 @@ export default function CreatePurchaseRequisitionPage() {
   const [newJustification, setNewJustification] = useState(
     "Current linen inventory has fallen below the minimum stock level before the upcoming holiday season. Additional stock is required to maintain operational readiness."
   );
+
+  // Current selected department staff and cost centers data
+  const currentDeptStaff = useMemo(() => {
+    return (
+      DEPARTMENT_STAFF_DATA.find(
+        (d) => d.department.toLowerCase() === newDept.toLowerCase()
+      ) || DEPARTMENT_STAFF_DATA[0]
+    );
+  }, [newDept]);
+
+  // Handle department change with auto-selection of requester and cost center
+  const handleDepartmentChange = (deptName: string) => {
+    setNewDept(deptName);
+    const deptData = DEPARTMENT_STAFF_DATA.find(
+      (d) => d.department.toLowerCase() === deptName.toLowerCase()
+    );
+    if (deptData) {
+      if (deptData.employees.length > 0) {
+        setNewRequester(deptData.employees[0].name);
+      }
+      if (deptData.costCenters.length > 0) {
+        setNewCostCenter(deptData.costCenters[0].code);
+      }
+    }
+  };
 
   // Dynamic Requested Items State
   const [newItems, setNewItems] = useState<PRRequestedItem[]>([
@@ -375,22 +400,29 @@ export default function CreatePurchaseRequisitionPage() {
             <FormField label="Department" required>
               <SelectInput
                 value={newDept}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewDept(e.target.value)}
-                className="h-10 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleDepartmentChange(e.target.value)}
+                className="h-10 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg bg-white"
               >
-                <option value="Housekeeping">Housekeeping</option>
-                <option value="Engineering">Engineering</option>
-                <option value="Kitchen">Kitchen (Food & Beverage)</option>
+                {DEPARTMENT_STAFF_DATA.map((dept) => (
+                  <option key={dept.department} value={dept.department}>
+                    {dept.department}
+                  </option>
+                ))}
               </SelectInput>
             </FormField>
 
             <FormField label="Requester Name" required>
-              <TextInput
+              <SelectInput
                 value={newRequester}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewRequester(e.target.value)}
-                placeholder="Enter requester full name"
-                className="h-10 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-              />
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewRequester(e.target.value)}
+                className="h-10 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg bg-white"
+              >
+                {currentDeptStaff?.employees.map((emp) => (
+                  <option key={emp.name} value={emp.name}>
+                    {emp.name} ({emp.designation})
+                  </option>
+                ))}
+              </SelectInput>
             </FormField>
 
             <FormField label="Required Date" required>
@@ -398,7 +430,7 @@ export default function CreatePurchaseRequisitionPage() {
                 type="date"
                 value={newReqDate}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewReqDate(e.target.value)}
-                className="h-10 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
+                className="h-10 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg bg-white"
               />
             </FormField>
 
@@ -408,7 +440,7 @@ export default function CreatePurchaseRequisitionPage() {
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                   setNewPriority(e.target.value as any)
                 }
-                className="h-10 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
+                className="h-10 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg bg-white"
               >
                 <option value="Low">Low Priority</option>
                 <option value="Medium">Medium Priority</option>
@@ -422,11 +454,13 @@ export default function CreatePurchaseRequisitionPage() {
                 <SelectInput
                   value={newCostCenter}
                   onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewCostCenter(e.target.value)}
-                  className="h-10 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
+                  className="h-10 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg bg-white"
                 >
-                  <option value="CC-HK-LINEN">CC-HK-LINEN (Housekeeping Linen Dept)</option>
-                  <option value="CC-ENG-HVAC">CC-ENG-HVAC (Engineering HVAC Maintenance)</option>
-                  <option value="CC-FB-[#001]">CC-FB-[#001] (F&B Main Kitchen Operating)</option>
+                  {currentDeptStaff?.costCenters.map((cc) => (
+                    <option key={cc.code} value={cc.code}>
+                      {cc.name}
+                    </option>
+                  ))}
                 </SelectInput>
               </FormField>
             </div>
