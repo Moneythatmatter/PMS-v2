@@ -56,6 +56,7 @@ import {
   filterRoomsForStay,
   isRoomSellableStatus,
 } from "@/lib/room-availability";
+import type { RoomAvailabilityBlock } from "@/services/front-office/rooms";
 
 function nightsBetween(checkIn: string, checkOut: string) {
   if (!checkIn || !checkOut) return 0;
@@ -155,6 +156,7 @@ export function NewReservationForm() {
   const [savedBookingNo, setSavedBookingNo] = useState<string | null>(null);
   const [allRoomNos, setAllRoomNos] = useState<string[]>([]);
   const [reservations, setReservations] = useState<ReservationBooking[]>([]);
+  const [availabilityBlocks, setAvailabilityBlocks] = useState<RoomAvailabilityBlock[]>([]);
   const [tariffByPlanMap, setTariffByPlanMap] = useState<Record<string, number>>({});
   const [baseRateByRoomMap, setBaseRateByRoomMap] = useState<Record<string, number>>({});
   const [allRoomsByType, setAllRoomsByType] = useState<Record<string, string[]>>({});
@@ -361,6 +363,31 @@ export function NewReservationForm() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const checkIn = normalizeToIso(form.checkIn);
+    const checkOut = normalizeToIso(form.checkOut);
+    if (!checkIn || !checkOut || checkOut <= checkIn) {
+      setAvailabilityBlocks([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void roomService
+      .blocks(checkIn, checkOut)
+      .then((blocks) => {
+        if (!cancelled) setAvailabilityBlocks(blocks);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailabilityBlocks([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.checkIn, form.checkOut]);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
@@ -388,8 +415,8 @@ export function NewReservationForm() {
     const checkOut = normalizeToIso(form.checkOut);
     if (!checkIn || !checkOut || checkOut <= checkIn) return [];
 
-    return filterRoomsForStay(pool, reservations, checkIn, checkOut);
-  }, [form.roomType, form.checkIn, form.checkOut, allRoomsByType, allRoomNos, reservations]);
+    return filterRoomsForStay(pool, reservations, checkIn, checkOut, availabilityBlocks);
+  }, [form.roomType, form.checkIn, form.checkOut, allRoomsByType, allRoomNos, reservations, availabilityBlocks]);
 
   const roomSelectOptions = useMemo(() => {
     const rooms = [...filteredRooms];

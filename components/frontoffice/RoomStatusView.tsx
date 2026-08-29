@@ -5,18 +5,10 @@ import { BedDouble, Building2, Sparkles, Wrench } from "lucide-react";
 import type { RoomStatusCard } from "@/app/data/frontoffice/modules";
 import { floors, roomStatuses } from "@/app/data/frontoffice/constants";
 import { roomService } from "@/services/front-office";
-import { hkRoomService } from "@/services/housekeeping";
 import {
-  foStatusToHkEnum,
-  hkHousekeepingToHkEnum,
-} from "@/components/housekeeping/roomUtils";
-import { Button } from "@/components/ui/Button";
-import {
-  AlertBanner,
   FormField,
   FOPageHeader,
   FOSearchToolbar,
-  Modal,
   SelectInput,
   StatMiniCard,
 } from "@/components/frontoffice/ui";
@@ -35,18 +27,11 @@ const statusConfig: Record<
   Blocked: { card: "border-slate-300 bg-slate-100", dot: "bg-slate-400" },
 };
 
-const hkStatuses = ["Clean", "Dirty", "Inspected", "In Progress"] as const;
-
 export function RoomStatusView() {
   const [rooms, setRooms] = useState<RoomStatusCard[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [floorFilter, setFloorFilter] = useState("all");
-  const [selectedRoom, setSelectedRoom] = useState<RoomStatusCard | null>(null);
-  const [actionType, setActionType] = useState<"assign" | "hk" | "status" | null>(null);
-  const [newStatus, setNewStatus] = useState("");
-  const [newHk, setNewHk] = useState("");
-  const [toast, setToast] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,55 +83,15 @@ export function RoomStatusView() {
     [rooms],
   );
 
-  const openAction = (room: RoomStatusCard, type: "assign" | "hk" | "status") => {
-    setSelectedRoom(room);
-    setActionType(type);
-    setNewStatus(room.status);
-    setNewHk(room.housekeeping);
-  };
-
-  const handleSave = async () => {
-    if (!selectedRoom) return;
-    try {
-      const roomKey = selectedRoom.id ?? selectedRoom.roomNo;
-      if (actionType === "status" && newStatus) {
-        await hkRoomService.update(roomKey, {
-          status: foStatusToHkEnum(newStatus),
-        });
-      } else if (actionType === "hk" && newHk) {
-        await hkRoomService.update(roomKey, {
-          status: hkHousekeepingToHkEnum(newHk),
-        });
-      }
-      const data = await roomService.status();
-      setRooms(data);
-      setToast(
-        actionType === "hk"
-          ? `Housekeeping updated for Room ${selectedRoom.roomNo}.`
-          : actionType === "status"
-            ? `Room ${selectedRoom.roomNo} status changed to ${newStatus}.`
-            : `Room ${selectedRoom.roomNo} assigned successfully.`,
-      );
-    } catch (e) {
-      setToast(e instanceof Error ? e.message : "Failed to update room");
-    }
-    setSelectedRoom(null);
-    setActionType(null);
-  };
-
   if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   return (
     <div className="space-y-5">
-      {toast && (
-        <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />
-      )}
-
       <FOPageHeader
         eyebrow="Front Office"
         title="Room Status"
-        description="Real-time room inventory, housekeeping, and maintenance status board."
+        description="Real-time room inventory and maintenance status board."
         badge={
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
             <BedDouble className="h-4 w-4 text-emerald-600" />
@@ -160,7 +105,7 @@ export function RoomStatusView() {
         <StatMiniCard label="Occupied" value={stats.occupied} accent="#7c3aed" icon={BedDouble} />
         <StatMiniCard label="Reserved" value={stats.reserved} accent="#0284c7" icon={BedDouble} />
         <StatMiniCard label="Vacant" value={stats.vacant} accent="#22c55e" icon={BedDouble} />
-        <StatMiniCard label="Dirty / HK" value={stats.dirty} accent="#f59e0b" icon={Sparkles} />
+        <StatMiniCard label="Dirty" value={stats.dirty} accent="#f59e0b" icon={Sparkles} />
         <StatMiniCard label="Maintenance" value={stats.maintenance} accent="#f97316" icon={Wrench} />
       </div>
 
@@ -228,35 +173,14 @@ export function RoomStatusView() {
                 <p className="text-[11px] text-slate-500">Out: {room.checkoutDate}</p>
               )}
 
-              <div className="mt-3 space-y-1 border-t border-black/5 pt-3">
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                  <Sparkles className="h-3 w-3" />
-                  HK: {room.housekeeping}
+              {room.maintenance !== "OK" && (
+                <div className="mt-3 border-t border-black/5 pt-3">
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                    {StatusIcon ? <StatusIcon className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
+                    Maint: {room.maintenance}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                  {StatusIcon ? <StatusIcon className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
-                  Maint: {room.maintenance}
-                </div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 flex-1 px-2 text-[10px] bg-white/80"
-                  onClick={() => openAction(room, "status")}
-                >
-                  Status
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 flex-1 px-2 text-[10px] bg-white/80"
-                  onClick={() => openAction(room, "hk")}
-                >
-                  HK
-                </Button>
-              </div>
+              )}
             </div>
           );
         })}
@@ -267,43 +191,6 @@ export function RoomStatusView() {
           No rooms match the selected filters.
         </p>
       )}
-
-      <Modal
-        open={!!selectedRoom && !!actionType}
-        onClose={() => { setSelectedRoom(null); setActionType(null); }}
-        title={
-          actionType === "hk"
-            ? `Housekeeping — Room ${selectedRoom?.roomNo}`
-            : actionType === "status"
-              ? `Update Status — Room ${selectedRoom?.roomNo}`
-              : `Assign Room ${selectedRoom?.roomNo}`
-        }
-        footer={
-          <>
-            <Button variant="outline" onClick={() => { setSelectedRoom(null); setActionType(null); }}>
-              Cancel
-            </Button>
-            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave}>
-              Save Changes
-            </Button>
-          </>
-        }
-      >
-        {actionType === "status" && (
-          <SelectInput value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
-            {roomStatuses.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </SelectInput>
-        )}
-        {actionType === "hk" && (
-          <SelectInput value={newHk} onChange={(e) => setNewHk(e.target.value)}>
-            {hkStatuses.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </SelectInput>
-        )}
-      </Modal>
     </div>
   );
 }
