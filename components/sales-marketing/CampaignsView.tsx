@@ -39,6 +39,7 @@ import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { cn } from "@/lib/utils";
+import { CsvLeadImportModal } from "./shared/CsvLeadImportModal";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES & SCHEMAS FOR HOTEL PMS CAMPAIGN V1 ARCHITECTURE
@@ -221,11 +222,57 @@ export const INITIAL_CAMPAIGNS: HotelCampaign[] = [
   },
 ];
 
+/** Dynamic Client-Side CSV Parser */
+function parseCsvContent(text: string) {
+  const lines = text
+    .split(/\r\n|\n|\r/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return { headers: [], rows: [] };
+  }
+
+  const parseRow = (rowStr: string) => {
+    const result: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < rowStr.length; i++) {
+      const char = rowStr[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === "," && !inQuotes) {
+        result.push(current.trim().replace(/^"|"$/g, ""));
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim().replace(/^"|"$/g, ""));
+    return result;
+  };
+
+  const headers = parseRow(lines[0]);
+  const rows: Record<string, string>[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseRow(lines[i]);
+    if (values.length === 0) continue;
+    const rowObj: Record<string, string> = {};
+    headers.forEach((header, index) => {
+      rowObj[header] = values[index] || "";
+    });
+    rows.push(rowObj);
+  }
+
+  return { headers, rows };
+}
+
 // Sample CSV Raw Rows for Import Simulation
-const SAMPLE_CSV_ROWS = [
-  { "Full Name": "Amit Kumar", "Phone Number": "+91 98112 33445", "Email": "amit.k@gmail.com", "Company Name": "Kumar Tech Ltd", "Event Date": "2026-11-20", "Guest Count": "300", "Expected Budget": "1200000", "Notes": "Need wedding lawn and 40 rooms" },
-  { "Full Name": "Suresh Raina", "Phone Number": "+91 97700 88990", "Email": "suresh.r@sports.in", "Company Name": "SR Sports Academy", "Event Date": "2026-10-15", "Guest Count": "150", "Expected Budget": "650000", "Notes": "Corporate annual awards ceremony" },
-  { "Full Name": "Neha Gupta", "Phone Number": "+91 99554 11223", "Email": "neha.gupta@fashion.com", "Company Name": "Gupta Designs", "Event Date": "2026-12-05", "Guest Count": "200", "Expected Budget": "800000", "Notes": "Fashion show and banquet dinner" },
+const SAMPLE_CSV_ROWS: Record<string, string>[] = [
+  { "Ad Lead ID": "GLD-77102", "Full Name": "Amit Kumar", "Phone Number": "+91 98112 33445", "Email": "amit.k@gmail.com", "Company Name": "Kumar Tech Ltd", "Event Date": "2026-11-20", "Guest Count": "300", "Expected Budget": "1200000", "Notes": "Need wedding lawn and 40 rooms" },
+  { "Ad Lead ID": "GLD-77103", "Full Name": "Suresh Raina", "Phone Number": "+91 97700 88990", "Email": "suresh.r@sports.in", "Company Name": "SR Sports Academy", "Event Date": "2026-10-15", "Guest Count": "150", "Expected Budget": "650000", "Notes": "Corporate annual awards ceremony" },
+  { "Ad Lead ID": "MLD-88204", "Full Name": "Neha Gupta", "Phone Number": "+91 99554 11223", "Email": "neha.gupta@fashion.com", "Company Name": "Gupta Designs", "Event Date": "2026-12-05", "Guest Count": "200", "Expected Budget": "800000", "Notes": "Fashion show and banquet dinner" },
 ];
 
 export function CampaignsView() {
@@ -285,19 +332,7 @@ export function CampaignsView() {
     });
   };
 
-  // CSV Import Workflow State (Upload -> Preview -> Map -> Validate -> Summary -> Confirm)
-  const [importStep, setImportStep] = useState<"UPLOAD" | "PREVIEW_MAP" | "SUMMARY">("UPLOAD");
-  const [importedFileName, setImportedFileName] = useState("");
-  const [csvSourcePlatform, setCsvSourcePlatform] = useState<"Google Ads" | "Meta Ads" | "Other">("Google Ads");
-  const [csvFieldMapping, setCsvFieldMapping] = useState({
-    fullName: "Full Name",
-    phone: "Phone Number",
-    email: "Email",
-    company: "Company Name",
-    eventDate: "Event Date",
-    notes: "Notes",
-  });
-  const [templateSaved, setTemplateSaved] = useState(false);
+
 
   // New Campaign Form State (Matching exact V1 specification)
   const [newForm, setNewForm] = useState({
@@ -482,56 +517,7 @@ export function CampaignsView() {
     resetLeadForm();
   };
 
-  // Handle CSV Upload Simulation
-  const handleSimulateCsvUpload = () => {
-    setImportedFileName("google_wedding_leads.csv");
-    setImportStep("PREVIEW_MAP");
-  };
 
-  // Handle Final CSV Import Confirmation
-  const handleConfirmCsvImport = () => {
-    if (!selectedCampaignDetail) return;
-
-    const source: LeadSource = csvSourcePlatform === "Google Ads" ? "Marketing Campaign" : "Website";
-
-    const newImportedLeads: CentralLeadItem[] = SAMPLE_CSV_ROWS.map((row, idx) => {
-      const numRevenue = Number(row["Expected Budget"]) || 500000;
-      return {
-        id: `LD-CSV-${Math.floor(600 + Math.random() * 300)}-${idx}`,
-        leadName: row["Full Name"],
-        companyName: row["Company Name"] || undefined,
-        mobile: row["Phone Number"],
-        email: row["Email"],
-        preferredContactMethod: "Phone",
-        leadType: selectedCampaignDetail.campaignType === "Banquet Promotion" ? "Wedding" : "Room Booking",
-        leadSource: source,
-        inquiryDate: "2026-08-26",
-        expectedEventDate: row["Event Date"],
-        guestCount: Number(row["Guest Count"]) || 100,
-        expectedRevenue: `₹${numRevenue.toLocaleString("en-IN")}`,
-        rawRevenue: numRevenue,
-        assignedExecutive: "Jay Kumar",
-        priority: "High",
-        status: "New",
-        pipelineStage: "Qualification",
-        customerRequirement: row["Notes"] || "Imported from CSV campaign lead generation.",
-        createdDate: "26 Aug 2026",
-        campaignId: selectedCampaignDetail.campaignCode,
-        campaignName: selectedCampaignDetail.campaignName,
-        externalPlatform: csvSourcePlatform,
-        externalCampaignId: selectedCampaignDetail.externalCampaignId,
-        activityTimeline: [
-          { action: `Lead Created (CSV Import - ${csvSourcePlatform})`, user: "System", date: "26 Aug 2026, Just now" },
-        ],
-      };
-    });
-
-    setCentralLeads((prev) => [...newImportedLeads, ...prev]);
-    setToastMessage(`🚀 Successfully imported ${newImportedLeads.length} leads from ${importedFileName}! Auto-associated with ${selectedCampaignDetail.campaignCode}.`);
-    setIsImportCsvModalOpen(false);
-    setImportStep("UPLOAD");
-    setImportedFileName("");
-  };
 
   return (
     <ModulePageShell
@@ -1101,7 +1087,6 @@ export function CampaignsView() {
                           onClick={() => {
                             setIsLeadActionMenuOpen(false);
                             setIsImportCsvModalOpen(true);
-                            setImportStep("UPLOAD");
                           }}
                           className="w-full text-left px-3 py-2 hover:bg-slate-50 font-bold text-slate-800 flex items-center gap-2 border-t border-slate-100"
                         >
@@ -1406,237 +1391,60 @@ export function CampaignsView() {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 7: IMPORT LEADS CSV MODAL (FULL WORKFLOW)
+          SECTION 7: REUSABLE IMPORT LEADS CSV MODAL
       ───────────────────────────────────────────────────────────── */}
-      {isImportCsvModalOpen && selectedCampaignDetail && (
-        <Modal
+      {selectedCampaignDetail && (
+        <CsvLeadImportModal
           isOpen={isImportCsvModalOpen}
-          onClose={() => {
+          onClose={() => setIsImportCsvModalOpen(false)}
+          campaignTitle={selectedCampaignDetail.campaignCode}
+          defaultCampaignName={selectedCampaignDetail.campaignName}
+          defaultLeadSource={selectedCampaignDetail.externalPlatform === "Meta Ads" ? "Meta Ads" : "Google Ads"}
+          existingLeadCount={centralLeads.length}
+          onImportLeads={(importedLeads) => {
+            const convertedToCentral: CentralLeadItem[] = importedLeads.map((lead, idx) => {
+              const rawRevenue = lead.estimatedRevenue || Number((lead.budgetRange || "500000").replace(/[^0-9]/g, "")) || 500000;
+              return {
+                id: `LD-CSV-${Math.floor(600 + Math.random() * 300)}-${idx + 1}`,
+                leadName: lead.leadName,
+                contactPerson: lead.contactPerson || lead.leadName,
+                companyName: lead.companyName,
+                mobileNumber: lead.mobileNumber,
+                mobile: lead.mobileNumber,
+                email: lead.email,
+                preferredContactMethod: "Phone",
+                bookingType: (selectedCampaignDetail.campaignType === "Banquet Promotion" ? "Banquet Event" : "Room Booking") as any,
+                leadType: selectedCampaignDetail.campaignType === "Banquet Promotion" ? "Wedding" : "Room Booking",
+                leadSource: lead.leadSource,
+                inquiryDate: "2026-08-28",
+                eventDate: lead.eventDate,
+                expectedEventDate: lead.eventDate,
+                guestCount: lead.guestCount,
+                expectedRevenue: lead.budgetRange || `₹${rawRevenue.toLocaleString("en-IN")}`,
+                rawRevenue: rawRevenue,
+                estimatedRevenue: rawRevenue,
+                assignedExecutive: lead.assignedExecutive || "Jay Kumar",
+                priority: "High",
+                status: "New",
+                customerRequirements: lead.customerRequirements || lead.specialRequirements || "Imported from CSV campaign lead generation.",
+                specialRequirements: lead.customerRequirements || lead.specialRequirements || "Imported from CSV campaign lead generation.",
+                customerRequirement: lead.customerRequirements || lead.specialRequirements || "Imported from CSV campaign lead generation.",
+                timeline: [],
+                createdDate: "28 Aug 2026",
+                campaignId: selectedCampaignDetail.campaignCode,
+                campaignName: selectedCampaignDetail.campaignName,
+                externalPlatform: lead.leadSource === "Google Ads" ? "Google Ads" : lead.leadSource === "Meta Ads" ? "Meta Ads" : "Other",
+                activityTimeline: [
+                  { action: `Lead Created (CSV Import - ${lead.leadSource})`, user: "System", date: "28 Aug 2026, Just now" },
+                ],
+              };
+            });
+
+            setCentralLeads((prev) => [...convertedToCentral, ...prev]);
+            setToastMessage(`🚀 Successfully imported ${convertedToCentral.length} leads! Auto-associated with ${selectedCampaignDetail.campaignCode}.`);
             setIsImportCsvModalOpen(false);
-            setImportStep("UPLOAD");
-            setImportedFileName("");
           }}
-          title={`Import Leads CSV → ${selectedCampaignDetail.campaignCode}`}
-        >
-          <div className="space-y-4 text-xs p-1">
-            {/* Workflow Progress Steps */}
-            <div className="flex items-center justify-between bg-slate-100 p-2 rounded-xl text-[10px] font-bold text-slate-600">
-              <span className={cn("px-2 py-1 rounded-lg", importStep === "UPLOAD" ? "bg-emerald-700 text-white" : "")}>
-                1. Upload CSV
-              </span>
-              <span>→</span>
-              <span className={cn("px-2 py-1 rounded-lg", importStep === "PREVIEW_MAP" ? "bg-emerald-700 text-white" : "")}>
-                2. Map CSV Fields
-              </span>
-              <span>→</span>
-              <span className={cn("px-2 py-1 rounded-lg", importStep === "SUMMARY" ? "bg-emerald-700 text-white" : "")}>
-                3. Summary &amp; Confirm
-              </span>
-            </div>
-
-            {/* STEP 1: UPLOAD */}
-            {importStep === "UPLOAD" && (
-              <div className="space-y-4 text-center py-4">
-                <div className="border-2 border-dashed border-slate-300 rounded-2xl p-8 bg-slate-50 flex flex-col items-center justify-center space-y-2">
-                  <FileSpreadsheet className="h-10 w-10 text-emerald-700" />
-                  <h4 className="font-bold text-slate-800 text-xs">Upload Lead Export File (.csv)</h4>
-                  <p className="text-[11px] text-slate-500 max-w-xs">
-                    Exported lead lists from Google Ads Lead Forms or Meta Lead Center.
-                  </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={handleSimulateCsvUpload}
-                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs mt-2 px-4 cursor-pointer"
-                  >
-                    <Upload className="h-3.5 w-3.5 mr-1" /> Select CSV File
-                  </Button>
-                </div>
-
-                <div className="text-left p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                  <span className="font-bold text-slate-700 block text-[11px]">Select Source Advertising Platform:</span>
-                  <div className="flex items-center gap-4">
-                    {(["Google Ads", "Meta Ads", "Other"] as const).map((plat) => (
-                      <label key={plat} className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 text-xs">
-                        <input
-                          type="radio"
-                          name="sourcePlatform"
-                          checked={csvSourcePlatform === plat}
-                          onChange={() => setCsvSourcePlatform(plat)}
-                          className="accent-emerald-700"
-                        />
-                        {plat}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 2: PREVIEW & FIELD MAPPING */}
-            {importStep === "PREVIEW_MAP" && (
-              <div className="space-y-4">
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
-                  <span className="font-bold text-emerald-950">File: {importedFileName}</span>
-                  <span className="text-[11px] text-emerald-800 font-bold">Source: {csvSourcePlatform}</span>
-                </div>
-
-                <div className="space-y-2">
-                  <span className="font-extrabold text-slate-800 block text-xs">Map CSV Column Fields → PMS Central Lead Fields</span>
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <label className="block text-slate-600 font-bold mb-1">Full Name Column</label>
-                      <select
-                        value={csvFieldMapping.fullName}
-                        onChange={(e) => setCsvFieldMapping({ ...csvFieldMapping, fullName: e.target.value })}
-                        className="w-full p-2 rounded-xl border border-slate-200 font-bold text-slate-900 bg-white"
-                      >
-                        <option value="Full Name">Full Name</option>
-                        <option value="Name">Name</option>
-                        <option value="Contact Name">Contact Name</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-600 font-bold mb-1">Phone Number Column</label>
-                      <select
-                        value={csvFieldMapping.phone}
-                        onChange={(e) => setCsvFieldMapping({ ...csvFieldMapping, phone: e.target.value })}
-                        className="w-full p-2 rounded-xl border border-slate-200 p-2 font-bold text-slate-900 bg-white"
-                      >
-                        <option value="Phone Number">Phone Number</option>
-                        <option value="Mobile">Mobile</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-600 font-bold mb-1">Email Column</label>
-                      <select
-                        value={csvFieldMapping.email}
-                        onChange={(e) => setCsvFieldMapping({ ...csvFieldMapping, email: e.target.value })}
-                        className="w-full p-2 rounded-xl border border-slate-200 font-bold text-slate-900 bg-white"
-                      >
-                        <option value="Email">Email</option>
-                        <option value="Email Address">Email Address</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-600 font-bold mb-1">Company Name Column</label>
-                      <select
-                        value={csvFieldMapping.company}
-                        onChange={(e) => setCsvFieldMapping({ ...csvFieldMapping, company: e.target.value })}
-                        className="w-full p-2 rounded-xl border border-slate-200 font-bold text-slate-900 bg-white"
-                      >
-                        <option value="Company Name">Company Name</option>
-                        <option value="Company">Company</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex justify-between items-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTemplateSaved(true);
-                        setToastMessage("✓ Mapping template saved for future CSV files!");
-                      }}
-                      className="text-emerald-700 hover:text-emerald-800 font-bold text-xs flex items-center gap-1 cursor-pointer"
-                    >
-                      <Save className="h-3.5 w-3.5" /> Save Mapping Template
-                    </button>
-                    {templateSaved && <span className="text-[10px] text-emerald-800 font-bold">Template Saved</span>}
-                  </div>
-                </div>
-
-                {/* CSV Rows Preview Table */}
-                <div className="space-y-1">
-                  <span className="font-bold text-slate-700 block text-[11px]">CSV Rows Preview (3 Sample Records)</span>
-                  <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden text-[10px]">
-                    <table className="w-full text-left">
-                      <thead className="bg-slate-100 font-bold text-slate-600">
-                        <tr>
-                          <th className="p-2">Name</th>
-                          <th className="p-2">Phone</th>
-                          <th className="p-2">Company</th>
-                          <th className="p-2">Event Date</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 font-medium">
-                        {SAMPLE_CSV_ROWS.map((r, i) => (
-                          <tr key={i}>
-                            <td className="p-2 font-bold text-slate-900">{r["Full Name"]}</td>
-                            <td className="p-2 font-mono">{r["Phone Number"]}</td>
-                            <td className="p-2">{r["Company Name"]}</td>
-                            <td className="p-2 font-mono">{r["Event Date"]}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setImportStep("UPLOAD")}
-                    className="rounded-xl text-xs"
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setImportStep("SUMMARY")}
-                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs px-4"
-                  >
-                    Validate &amp; Preview Summary →
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 3: SUMMARY & CONFIRM */}
-            {importStep === "SUMMARY" && (
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200 space-y-2 text-xs">
-                  <span className="font-extrabold text-purple-950 block text-xs">Import Validation Summary</span>
-                  <div className="bg-white p-3 rounded-xl border border-purple-200 space-y-1 font-semibold text-slate-800">
-                    <div>• Total Records Parsed: <strong>{SAMPLE_CSV_ROWS.length} Leads</strong></div>
-                    <div>• Validation Errors: <strong className="text-emerald-700">0 Errors (100% Valid)</strong></div>
-                    <div>• Auto-Assigned Campaign ID: <strong className="text-purple-900 font-mono">{selectedCampaignDetail.campaignCode}</strong></div>
-                    <div>• Auto-Assigned Lead Source: <strong className="text-blue-900">{csvSourcePlatform}</strong></div>
-                  </div>
-                  <p className="text-[11px] text-purple-900">
-                    These lead records will be inserted directly into the <strong>Central Lead Database</strong> and will automatically appear under both <strong>Sales &amp; CRM → Leads &amp; Inquiries</strong> and this campaign's <strong>Tracked Leads</strong> tab.
-                  </p>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setImportStep("PREVIEW_MAP")}
-                    className="rounded-xl text-xs"
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={handleConfirmCsvImport}
-                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs px-5 shadow-xs cursor-pointer"
-                  >
-                    Confirm Import ({SAMPLE_CSV_ROWS.length} Leads)
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </Modal>
+        />
       )}
     </ModulePageShell>
   );

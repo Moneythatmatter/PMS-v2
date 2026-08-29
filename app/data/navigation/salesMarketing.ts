@@ -2,8 +2,6 @@ import type { ModuleNavItem } from "../types";
 
 export const salesMarketingNavItems: ModuleNavItem[] = [
   { label: "Dashboard", href: "/sales-marketing/dashboard", icon: "layout-grid" },
-  { label: "My Tasks & Queue", href: "/sales-marketing/workqueue", icon: "check-square" },
-  { label: "Reports & Insights", href: "/sales-marketing/reports-analytics", icon: "bar-chart-3" },
   {
     label: "Marketing",
     href: "/sales-marketing/marketing",
@@ -11,7 +9,6 @@ export const salesMarketingNavItems: ModuleNavItem[] = [
     children: [
       { label: "Campaigns", href: "/sales-marketing/marketing/campaigns", icon: "target" },
       { label: "Promos & Discounts", href: "/sales-marketing/marketing/promo-codes", icon: "ticket" },
-      { label: "Ads Management", href: "/sales-marketing/marketing/ads", icon: "bar-chart-2" },
       { label: "OTA & Channel Performance", href: "/sales-marketing/marketing/ota-performance", icon: "globe" },
       { label: "Guest Retention & Loyalty", href: "/sales-marketing/marketing/loyalty", icon: "crown" },
     ],
@@ -22,9 +19,9 @@ export const salesMarketingNavItems: ModuleNavItem[] = [
     icon: "users",
     children: [
       { label: "Leads & Inquiries", href: "/sales-marketing/crm/leads", icon: "user-plus" },
-      { label: "Corporate & Clients", href: "/sales-marketing/crm/accounts-contacts", icon: "building-2" },
       { label: "Deals & Pipeline", href: "/sales-marketing/crm/pipeline", icon: "git-commit" },
-      { label: "Calls & Site Visits", href: "/sales-marketing/crm/activities-calls", icon: "phone-call" },
+      { label: "Activities", href: "/sales-marketing/crm/activities-calls", icon: "calendar-check" },
+      { label: "Contacts", href: "/sales-marketing/crm/accounts-contacts", icon: "building-2" },
     ],
   },
   {
@@ -42,17 +39,24 @@ export const salesMarketingNavItems: ModuleNavItem[] = [
     href: "/sales-marketing/masters",
     icon: "database",
     children: [
-      { label: "Venues & Halls", href: "/sales-marketing/masters/venue-hall-master", icon: "landmark" },
-      { label: "Rates & Commissions", href: "/sales-marketing/masters/tariff-commission-rules", icon: "receipt" },
-      { label: "Targets & Incentives", href: "/sales-marketing/masters/sales-targets-incentives", icon: "award" },
+      { label: "Venues & Spaces", href: "/sales-marketing/masters/venues-spaces", icon: "landmark" },
+      { label: "Rates & Commissions", href: "/sales-marketing/masters/rates-commissions", icon: "receipt" },
+      { label: "Targets & Incentives", href: "/sales-marketing/masters/targets-incentives", icon: "award" },
+      { label: "Lead Sources", href: "/sales-marketing/masters/lead-sources", icon: "share-2" },
+      { label: "Activity Types", href: "/sales-marketing/masters/activity-types", icon: "check-square" },
+      { label: "Deal Stages", href: "/sales-marketing/masters/deal-stages", icon: "git-commit" },
+      { label: "Booking Categories", href: "/sales-marketing/masters/booking-categories", icon: "tag" },
+      { label: "Contact Types", href: "/sales-marketing/masters/contact-types", icon: "users" },
     ],
   },
+  { label: "Reports & Insights", href: "/sales-marketing/reports-analytics", icon: "bar-chart-3" },
   {
     label: "Settings",
     href: "/sales-marketing/settings",
     icon: "settings",
     children: [
       { label: "Sales Settings", href: "/sales-marketing/masters/crm-masters", icon: "sliders" },
+      { label: "Loyalty Points Settings & Earning Rules", href: "/sales-marketing/settings/loyalty-rules", icon: "crown" },
     ],
   },
 ];

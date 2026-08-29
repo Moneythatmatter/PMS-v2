@@ -43,6 +43,7 @@ export type PromoStatus = "Active" | "Inactive";
 
 export interface HotelPromotion {
   id: string;
+  uniquePromoId: string; // Unique Promo / Discount Scheme ID for Front Office / PMS schema integration (e.g. PRM-101)
   name: string;
   promoCode: string;
   description: string;
@@ -72,6 +73,7 @@ export interface PromoValidationResult {
 export const INITIAL_PROMOTIONS: HotelPromotion[] = [
   {
     id: "PROMO-001",
+    uniquePromoId: "PRM-101",
     name: "Monsoon Room Retreat",
     promoCode: "MONSOON20",
     description: "20% discount on room bookings during monsoon season.",
@@ -88,6 +90,7 @@ export const INITIAL_PROMOTIONS: HotelPromotion[] = [
   },
   {
     id: "PROMO-002",
+    uniquePromoId: "PRM-102",
     name: "Grand Wedding Hall Special",
     promoCode: "WEDDING2026",
     description: "Flat ₹50,000 discount on banquet hall bookings for weddings.",
@@ -103,6 +106,7 @@ export const INITIAL_PROMOTIONS: HotelPromotion[] = [
   },
   {
     id: "PROMO-003",
+    uniquePromoId: "PRM-103",
     name: "Birthday Dining Treat",
     promoCode: "BIRTHDAY10",
     description: "10% off restaurant dining bills.",
@@ -118,6 +122,7 @@ export const INITIAL_PROMOTIONS: HotelPromotion[] = [
   },
   {
     id: "PROMO-004",
+    uniquePromoId: "PRM-104",
     name: "Summer Staycation Saver",
     promoCode: "SUMMER15",
     description: "15% off room staycation packages.",
@@ -134,6 +139,7 @@ export const INITIAL_PROMOTIONS: HotelPromotion[] = [
   },
   {
     id: "PROMO-005",
+    uniquePromoId: "PRM-105",
     name: "Corporate Executive Saver",
     promoCode: "CORP1500",
     description: "Flat ₹1,500 discount for corporate room bookings.",
@@ -164,6 +170,7 @@ export function PromosDiscountsView() {
 
   // Form State (Create / Edit Promotion)
   const [promoForm, setPromoForm] = useState({
+    uniquePromoId: `PRM-${Math.floor(100 + Math.random() * 900)}`,
     name: "",
     promoCode: "",
     description: "",
@@ -210,12 +217,20 @@ export function PromosDiscountsView() {
     return promotionsList.filter((p) => {
       const matchSearch =
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.promoCode.toLowerCase().includes(searchTerm.toLowerCase());
+        p.promoCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.uniquePromoId && p.uniquePromoId.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        p.id.toLowerCase().includes(searchTerm.toLowerCase());
       const matchService = selectedServiceFilter === "ALL" || p.applicableTo === selectedServiceFilter;
       const matchStatus = selectedStatusFilter === "ALL" || p.status === selectedStatusFilter;
       return matchSearch && matchService && matchStatus;
     });
   }, [promotionsList, searchTerm, selectedServiceFilter, selectedStatusFilter]);
+
+  // Auto-Generate Unique Promo ID
+  const handleAutoGenerateId = () => {
+    const generatedId = `PRM-${Math.floor(100 + Math.random() * 900)}`;
+    setPromoForm((prev) => ({ ...prev, uniquePromoId: generatedId }));
+  };
 
   // Handle Save / Edit Promotion
   const handleSavePromotion = (e: React.FormEvent) => {
@@ -227,6 +242,8 @@ export function PromosDiscountsView() {
         ? `${promoForm.rawDiscountNumber}%`
         : `₹${promoForm.rawDiscountNumber.toLocaleString()}`;
 
+    const finalUniqueId = promoForm.uniquePromoId.trim().toUpperCase() || `PRM-${Math.floor(100 + Math.random() * 900)}`;
+
     if (editingPromotion) {
       // Edit existing promotion
       setPromotionsList((prev) =>
@@ -234,6 +251,7 @@ export function PromosDiscountsView() {
           p.id === editingPromotion.id
             ? {
                 ...p,
+                uniquePromoId: finalUniqueId,
                 name: promoForm.name,
                 promoCode: promoForm.promoCode.toUpperCase(),
                 description: promoForm.description,
@@ -250,11 +268,12 @@ export function PromosDiscountsView() {
             : p
         )
       );
-      setToastMessage(`Promotion "${promoForm.name}" updated successfully!`);
+      setToastMessage(`Promotion "${promoForm.name}" [ID: ${finalUniqueId}] updated successfully!`);
     } else {
       // Create new promotion
       const newPromo: HotelPromotion = {
         id: `PROMO-${Math.floor(100 + Math.random() * 900)}`,
+        uniquePromoId: finalUniqueId,
         name: promoForm.name,
         promoCode: promoForm.promoCode.toUpperCase(),
         description: promoForm.description,
@@ -271,7 +290,7 @@ export function PromosDiscountsView() {
       };
 
       setPromotionsList([newPromo, ...promotionsList]);
-      setToastMessage(`Promotion "${newPromo.name}" (${newPromo.promoCode}) created successfully!`);
+      setToastMessage(`Promotion "${newPromo.name}" [ID: ${finalUniqueId}] created successfully!`);
     }
 
     setIsCreateModalOpen(false);
@@ -291,6 +310,7 @@ export function PromosDiscountsView() {
   // Reset Form
   const resetForm = () => {
     setPromoForm({
+      uniquePromoId: `PRM-${Math.floor(100 + Math.random() * 900)}`,
       name: "",
       promoCode: "",
       description: "",
@@ -309,6 +329,7 @@ export function PromosDiscountsView() {
   const handleOpenEdit = (promo: HotelPromotion) => {
     setEditingPromotion(promo);
     setPromoForm({
+      uniquePromoId: promo.uniquePromoId || promo.id,
       name: promo.name,
       promoCode: promo.promoCode,
       description: promo.description,
@@ -324,16 +345,21 @@ export function PromosDiscountsView() {
     setIsCreateModalOpen(true);
   };
 
-  // Staff Manual Promo Code Validation Engine (V1 System Rules)
+  // Staff Manual Promo Code / Scheme ID Validation Engine (V1 System Rules)
   const handleValidateAndApplyCode = (e: React.FormEvent) => {
     e.preventDefault();
-    const enteredCode = applyForm.promoCode.trim().toUpperCase();
-    const matchedPromo = promotionsList.find((p) => p.promoCode === enteredCode);
+    const enteredInput = applyForm.promoCode.trim().toUpperCase();
+    const matchedPromo = promotionsList.find(
+      (p) =>
+        p.promoCode === enteredInput ||
+        (p.uniquePromoId && p.uniquePromoId.toUpperCase() === enteredInput) ||
+        p.id.toUpperCase() === enteredInput
+    );
 
     if (!matchedPromo) {
       setApplyValidationResult({
         isValid: false,
-        message: `Invalid Promo Code! "${enteredCode}" does not exist in the PMS.`,
+        message: `Invalid Code/ID! "${enteredInput}" does not exist in PMS Promotions.`,
       });
       return;
     }
@@ -341,7 +367,7 @@ export function PromosDiscountsView() {
     if (matchedPromo.status !== "Active") {
       setApplyValidationResult({
         isValid: false,
-        message: `Promo Code "${enteredCode}" is currently Inactive!`,
+        message: `Promotion "${matchedPromo.name}" [${matchedPromo.uniquePromoId}] is currently Inactive!`,
       });
       return;
     }
@@ -351,7 +377,7 @@ export function PromosDiscountsView() {
     if (todayStr < matchedPromo.startDate || todayStr > matchedPromo.endDate) {
       setApplyValidationResult({
         isValid: false,
-        message: `Promo Code "${enteredCode}" is expired or not valid on today's date (${todayStr}). Valid dates: ${matchedPromo.startDate} to ${matchedPromo.endDate}.`,
+        message: `Promo Scheme "${enteredInput}" is expired or not valid on today's date (${todayStr}). Valid dates: ${matchedPromo.startDate} to ${matchedPromo.endDate}.`,
       });
       return;
     }
@@ -360,7 +386,7 @@ export function PromosDiscountsView() {
     if (matchedPromo.applicableTo !== applyForm.serviceType) {
       setApplyValidationResult({
         isValid: false,
-        message: `Invalid Service! "${enteredCode}" is applicable only to "${matchedPromo.applicableTo}", but you selected "${applyForm.serviceType}".`,
+        message: `Invalid Service! "${enteredInput}" is applicable only to "${matchedPromo.applicableTo}", but you selected "${applyForm.serviceType}".`,
       });
       return;
     }
@@ -369,7 +395,7 @@ export function PromosDiscountsView() {
     if (matchedPromo.minSpend && applyForm.billAmount < matchedPromo.minSpend) {
       setApplyValidationResult({
         isValid: false,
-        message: `Ineligible! "${enteredCode}" requires a minimum spend of ₹${matchedPromo.minSpend.toLocaleString()}, but current bill is ₹${applyForm.billAmount.toLocaleString()}.`,
+        message: `Ineligible! "${enteredInput}" requires a minimum spend of ₹${matchedPromo.minSpend.toLocaleString()}, but current bill is ₹${applyForm.billAmount.toLocaleString()}.`,
       });
       return;
     }
@@ -451,43 +477,44 @@ export function PromosDiscountsView() {
         <HRKPICard
           label="Restaurant Offers"
           value={`${metrics.restaurantOffers}`}
-          subtitle="F&B Discounts"
+          subtitle="Dining Offers"
           tone="amber"
           icon={<Utensils className="h-4 w-4" />}
         />
         <HRKPICard
-          label="Total Code Usage"
-          value={`${metrics.totalUsage}`}
-          subtitle="Applied Times"
+          label="Banquet Offers"
+          value={`${metrics.banquetOffers}`}
+          subtitle="Event Discounts"
           tone="emerald"
-          icon={<TrendingUp className="h-4 w-4" />}
+          icon={<Building2 className="h-4 w-4" />}
         />
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 2: PROMOTION LIST & FILTERS
+          SECTION 2: PROMOTIONS LIST WITH SEARCH & FILTERS
          ───────────────────────────────────────────────────────────── */}
-      <div className="space-y-4">
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-1 min-w-[280px]">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex flex-wrap items-center gap-2 flex-1">
+            {/* Search Bar */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search promo name or promo code..."
+                placeholder="Search by promo ID, name, code..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-7 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800"
+                className="w-full text-xs rounded-xl border border-slate-200 pl-9 pr-3 py-1.5 bg-slate-50 font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
             </div>
 
-            {/* Applicable Service Filter */}
+            {/* Service Filter */}
             <select
               value={selectedServiceFilter}
               onChange={(e) => setSelectedServiceFilter(e.target.value)}
               className="text-xs rounded-lg border border-slate-200 py-1.5 px-3 bg-white font-bold text-slate-800 focus:ring-2 focus:ring-emerald-600"
             >
-              <option value="ALL">All Applicable Services</option>
+              <option value="ALL">All Services</option>
               <option value="Rooms">Rooms</option>
               <option value="Restaurant">Restaurant</option>
               <option value="Banquet">Banquet</option>
@@ -516,10 +543,12 @@ export function PromosDiscountsView() {
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50/80 text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
                 <tr>
-                  <th className="py-3.5 px-4">Promotion Name</th>
+                  <th className="py-3.5 px-4 text-left">Unique Promo ID</th>
+                  <th className="py-3.5 px-4 text-left">Promotion Name</th>
                   <th className="py-3.5 px-4 text-center">Promo Code</th>
                   <th className="py-3.5 px-4 text-center">Applicable To</th>
                   <th className="py-3.5 px-4 text-center">Discount</th>
+                  <th className="py-3.5 px-4 text-left">Eligibility Criteria</th>
                   <th className="py-3.5 px-4 text-center">Validity Period</th>
                   <th className="py-3.5 px-4 text-center">Status</th>
                   <th className="py-3.5 px-4 text-center">Usage Count</th>
@@ -530,21 +559,16 @@ export function PromosDiscountsView() {
                 {filteredPromotions.length > 0 ? (
                   filteredPromotions.map((promo) => (
                     <tr key={promo.id} className="hover:bg-slate-50/70 transition">
+                      <td className="py-3.5 px-4 font-mono">
+                        <span className="bg-slate-100 text-slate-900 font-extrabold text-[11px] px-2.5 py-1 rounded-md border border-slate-200 inline-flex items-center gap-1 shadow-xs">
+                          <Tag className="h-3 w-3 text-emerald-700" />
+                          {promo.uniquePromoId || promo.id}
+                        </span>
+                      </td>
+
                       <td className="py-3.5 px-4">
                         <strong className="text-xs font-bold text-slate-900 block">{promo.name}</strong>
                         <span className="text-[10px] text-slate-400 line-clamp-1 block mb-1">{promo.description}</span>
-                        <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-bold">
-                          {promo.minSpend && promo.minSpend > 0 && (
-                            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
-                              Min Spend: ₹{promo.minSpend.toLocaleString()}
-                            </span>
-                          )}
-                          {promo.applicableTo === "Rooms" && promo.minNights && promo.minNights > 0 && (
-                            <span className="bg-purple-50 text-purple-800 px-2 py-0.5 rounded-md border border-purple-200">
-                              Min Stay: {promo.minNights} {promo.minNights === 1 ? "Night" : "Nights"}
-                            </span>
-                          )}
-                        </div>
                       </td>
 
                       <td className="py-3.5 px-4 text-center">
@@ -575,6 +599,24 @@ export function PromosDiscountsView() {
                       <td className="py-3.5 px-4 text-center font-extrabold font-mono text-emerald-800">
                         {promo.discountValue}
                         <span className="text-[9px] font-normal text-slate-400 block">({promo.discountType})</span>
+                      </td>
+
+                      {/* ELIGIBILITY CRITERIA COLUMN */}
+                      <td className="py-3.5 px-4 text-left">
+                        <div className="flex flex-col gap-1 text-[10px]">
+                          {promo.minSpend && promo.minSpend > 0 ? (
+                            <span className="font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md w-fit">
+                              Min Spend: ₹{promo.minSpend.toLocaleString("en-IN")}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-medium">No Min Spend</span>
+                          )}
+                          {promo.applicableTo === "Rooms" && promo.minNights && promo.minNights > 0 && (
+                            <span className="font-bold text-purple-800 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md w-fit">
+                              Min Stay: {promo.minNights} {promo.minNights === 1 ? "Night" : "Nights"}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="py-3.5 px-4 text-center">
@@ -635,7 +677,7 @@ export function PromosDiscountsView() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-500 text-xs">
+                    <td colSpan={10} className="py-8 text-center text-slate-500 text-xs">
                       No hotel promotions found matching your search filters.
                     </td>
                   </tr>
@@ -660,6 +702,33 @@ export function PromosDiscountsView() {
         >
           <form onSubmit={handleSavePromotion} className="space-y-4 text-xs p-1">
             <div className="space-y-3">
+              {/* Unique Promo Scheme ID (For Front Office / PMS Integration) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] font-bold uppercase text-slate-600 block">
+                    Unique Promo Scheme ID (Front Office Integration ID) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAutoGenerateId}
+                    className="text-[10px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="h-3 w-3" /> Auto-Generate ID
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. PRM-101, SCHEME-ROOM-01"
+                  value={promoForm.uniquePromoId}
+                  onChange={(e) => setPromoForm({ ...promoForm, uniquePromoId: e.target.value.toUpperCase() })}
+                  className="w-full text-xs font-mono font-extrabold rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 uppercase focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Front Office Note: Rates &amp; schemes in Front Office / Reservations reference this Unique Promo ID.
+                </span>
+              </div>
+
               <div>
                 <label className="text-[10px] font-bold uppercase text-slate-600 block mb-1">
                   Promotion Name *
@@ -892,12 +961,12 @@ export function PromosDiscountsView() {
             <div className="space-y-3">
               <div>
                 <label className="text-[10px] font-bold uppercase text-slate-600 block mb-1">
-                  Enter Guest Promo Code *
+                  Enter Guest Promo Code or Unique Scheme ID *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. BIRTHDAY10, MONSOON20"
+                  placeholder="e.g. MONSOON20 or PRM-101"
                   value={applyForm.promoCode}
                   onChange={(e) => setApplyForm({ ...applyForm, promoCode: e.target.value.toUpperCase() })}
                   className="w-full text-xs font-bold font-mono rounded-xl border border-slate-200 p-2.5 bg-white text-emerald-800 uppercase focus:ring-2 focus:ring-emerald-600 focus:outline-none"
@@ -956,7 +1025,7 @@ export function PromosDiscountsView() {
             {applyValidationResult && (
               <div
                 className={cn(
-                  "p-3.5 rounded-xl border text-xs font-medium space-y-1",
+                  "p-3.5 rounded-xl border text-xs font-medium space-y-1.5",
                   applyValidationResult.isValid
                     ? "bg-emerald-50 border-emerald-200 text-emerald-900"
                     : "bg-red-50 border-red-200 text-red-900"
@@ -972,11 +1041,19 @@ export function PromosDiscountsView() {
                 </div>
 
                 {applyValidationResult.isValid && applyValidationResult.calculatedDiscountAmount !== undefined && (
-                  <div className="pt-2 border-t border-emerald-200/60 flex justify-between items-center text-xs font-bold">
-                    <span>Discount Calculated:</span>
-                    <span className="font-mono text-emerald-800 text-sm font-extrabold">
-                      - ₹{applyValidationResult.calculatedDiscountAmount.toLocaleString()}
-                    </span>
+                  <div className="pt-2 border-t border-emerald-200/60 space-y-1">
+                    <div className="flex justify-between items-center text-[11px] font-semibold text-emerald-950">
+                      <span>Front Office Linked Scheme ID:</span>
+                      <span className="font-mono text-emerald-900 font-extrabold bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                        {promotionsList.find((p) => p.promoCode === applyForm.promoCode.trim().toUpperCase() || p.uniquePromoId.toUpperCase() === applyForm.promoCode.trim().toUpperCase())?.uniquePromoId || "PRM-101"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs font-bold pt-1">
+                      <span>Discount Calculated:</span>
+                      <span className="font-mono text-emerald-800 text-sm font-extrabold">
+                        - ₹{applyValidationResult.calculatedDiscountAmount.toLocaleString()}
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>

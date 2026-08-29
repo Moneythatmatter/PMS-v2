@@ -5,6 +5,7 @@ export interface CentralLeadItem extends HotelLeadItem {
   campaignName?: string | null;
   externalPlatform?: "Google Ads" | "Meta Ads" | "Other" | null;
   externalCampaignId?: string | null;
+  externalAdLeadId?: string | null;
 }
 
 export const INITIAL_CENTRAL_LEADS: CentralLeadItem[] = [

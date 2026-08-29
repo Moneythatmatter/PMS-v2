@@ -305,7 +305,6 @@ export function OtaChannelPerformanceView() {
       description="Real-time 2-way Channel Manager ARI sync, channel profitability analytics, lead time trends, and room mapping control."
       breadcrumbs={[
         { label: "Sales & Marketing", href: "/sales-marketing/dashboard" },
-        { label: "Marketing" },
         { label: "OTA Performance" },
       ]}
       actionButtons={
@@ -472,7 +471,6 @@ export function OtaChannelPerformanceView() {
             <thead className="bg-slate-50/80 text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
               <tr>
                 <th className="py-3.5 px-4">OTA Partner</th>
-                <th className="py-3.5 px-4 text-center">Sync Health</th>
                 <th className="py-3.5 px-4 text-center">Bookings / Nights</th>
                 <th className="py-3.5 px-4 text-right">Gross Revenue</th>
                 <th className="py-3.5 px-4 text-center">Comm. %</th>
@@ -498,20 +496,6 @@ export function OtaChannelPerformanceView() {
                           <span className="text-[10px] text-slate-400">Sync: {ota.lastSyncTime}</span>
                         </div>
                       </div>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-center">
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
-                          ota.status === "Active Sync"
-                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                            : "bg-amber-50 text-amber-800 border-amber-200"
-                        )}
-                      >
-                        <span className={cn("h-1.5 w-1.5 rounded-full", ota.status === "Active Sync" ? "bg-emerald-500" : "bg-amber-500")} />
-                        {ota.status}
-                      </span>
                     </td>
 
                     <td className="py-3.5 px-4 text-center">
@@ -580,26 +564,13 @@ export function OtaChannelPerformanceView() {
                         >
                           <BarChart3 className="h-3 w-3 mr-1" /> Analytics
                         </Button>
-
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setMappingChannel(ota);
-                            setIsMappingModalOpen(true);
-                          }}
-                          className="rounded-lg text-xs font-bold px-2.5 h-7 border-slate-200 cursor-pointer"
-                        >
-                          <Sliders className="h-3 w-3 mr-1" /> Mapping
-                        </Button>
                       </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-slate-500 text-xs">
+                  <td colSpan={10} className="py-8 text-center text-slate-500 text-xs">
                     No OTA channels found matching your search.
                   </td>
                 </tr>

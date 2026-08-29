@@ -11,6 +11,10 @@ import { GuestRetentionLoyaltyView } from "@/components/sales-marketing/GuestRet
 import { PromosDiscountsView } from "@/components/sales-marketing/PromosDiscountsView";
 import { CampaignsView } from "@/components/sales-marketing/CampaignsView";
 import { DealsPipelineView } from "@/components/sales-marketing/DealsPipelineView";
+import { LoyaltyPointsSettingsView } from "@/components/sales-marketing/LoyaltyPointsSettingsView";
+import { ActivitiesView } from "@/components/sales-marketing/ActivitiesView";
+import { ReportsAnalyticsView } from "@/components/sales-marketing/ReportsAnalyticsView";
+import { SalesMarketingMastersView, MasterTabKey } from "@/components/sales-marketing/masters/SalesMarketingMastersView";
 
 export default async function SalesMarketingPage({
   params,
@@ -41,11 +45,15 @@ export default async function SalesMarketingPage({
     return <DealsPipelineView />;
   }
 
-  if (slugPath === "crm/accounts-contacts" || slugPath === "accounts-contacts") {
+  if (slugPath === "crm/activities-calls" || slugPath === "activities-calls" || slugPath === "crm/activities" || slugPath === "activities") {
+    return <ActivitiesView />;
+  }
+
+  if (slugPath === "crm/accounts-contacts" || slugPath === "accounts-contacts" || slugPath === "crm/contacts" || slugPath === "contacts") {
     return <CorporateClientsView />;
   }
 
-  if (slugPath === "banquets/bookings-enquiries" || slugPath === "bookings-enquiries") {
+  if (slugPath === "banquets/bookings-enquiries" || slugPath === "bookings-enquiries" || slugPath === "banquets/bookings" || slugPath === "bookings") {
     return <EventBookingsView />;
   }
 
@@ -67,6 +75,58 @@ export default async function SalesMarketingPage({
 
   if (slugPath === "marketing/promo-codes" || slugPath === "promos-discounts") {
     return <PromosDiscountsView />;
+  }
+
+  if (slugPath === "settings/loyalty-rules" || slugPath === "loyalty-rules") {
+    return <LoyaltyPointsSettingsView />;
+  }
+
+  if (
+    slugPath === "reports-analytics" ||
+    slugPath === "reports" ||
+    slugPath === "analytics" ||
+    slugPath === "reports-insights"
+  ) {
+    return <ReportsAnalyticsView />;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 8 MASTERS ROUTES
+  // ─────────────────────────────────────────────────────────────
+  if (slugPath === "masters" || slugPath === "masters/crm-masters") {
+    return <SalesMarketingMastersView initialTab="venues-halls" />;
+  }
+
+  if (slugPath === "masters/venues-spaces" || slugPath === "masters/venues-halls" || slugPath === "masters/venue-hall-master") {
+    return <SalesMarketingMastersView initialTab="venues-halls" />;
+  }
+
+  if (slugPath === "masters/rates-commissions" || slugPath === "masters/tariff-commission-rules") {
+    return <SalesMarketingMastersView initialTab="rates-commissions" />;
+  }
+
+  if (slugPath === "masters/targets-incentives" || slugPath === "masters/sales-targets-incentives") {
+    return <SalesMarketingMastersView initialTab="targets-incentives" />;
+  }
+
+  if (slugPath === "masters/lead-sources") {
+    return <SalesMarketingMastersView initialTab="lead-sources" />;
+  }
+
+  if (slugPath === "masters/activity-types") {
+    return <SalesMarketingMastersView initialTab="activity-types" />;
+  }
+
+  if (slugPath === "masters/deal-stages") {
+    return <SalesMarketingMastersView initialTab="deal-stages" />;
+  }
+
+  if (slugPath === "masters/booking-categories") {
+    return <SalesMarketingMastersView initialTab="booking-categories" />;
+  }
+
+  if (slugPath === "masters/contact-types") {
+    return <SalesMarketingMastersView initialTab="contact-types" />;
   }
 
   return <SalesMarketingBlankView slugPath={slugPath} />;
