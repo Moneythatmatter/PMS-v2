@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BedDouble,
   Sparkles,
   Layers,
   UserCheck,
@@ -13,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const housekeepingSubNavItems = [
+  { label: "Room Status", href: "/housekeeping/operations/rooms", icon: BedDouble },
   { label: "Room Cleaning", href: "/housekeeping/operations/room-cleaning", icon: Sparkles },
   { label: "Public Area", href: "/housekeeping/operations/public-cleaning", icon: Layers },
   { label: "Cleaning Inspection", href: "/housekeeping/operations/inspection", icon: UserCheck },

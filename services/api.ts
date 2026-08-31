@@ -36,12 +36,23 @@ export async function apiRequest<T>(
 
   const token =
     typeof window !== "undefined" ? localStorage.getItem("pms_token") : null;
+  const propertyId =
+    typeof window !== "undefined" ? localStorage.getItem("pms_active_property") : null;
+  let parsedPropertyId: string | undefined;
+  if (propertyId) {
+    try {
+      parsedPropertyId = (JSON.parse(propertyId) as { id?: string }).id;
+    } catch {
+      parsedPropertyId = undefined;
+    }
+  }
 
   const res = await fetch(url, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(parsedPropertyId ? { "X-Property-Id": parsedPropertyId } : {}),
       ...(options.headers || {}),
     },
     cache: "no-store",

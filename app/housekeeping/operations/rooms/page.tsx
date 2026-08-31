@@ -5,41 +5,122 @@ import Link from "next/link";
 import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
 import { hkRoomService, hkTaskService } from "@/services/housekeeping";
 import { roomService, type RoomDto } from "@/services/front-office/rooms";
-import type { HKTask } from "@/components/housekeeping/HousekeepingTypes";
+import type { HKRoom, HKTask } from "@/components/housekeeping/HousekeepingTypes";
 import { findRoomByKey, roomApiId, roomKey } from "@/components/housekeeping/roomUtils";
 import { isActiveTask } from "@/components/housekeeping/taskUtils";
 import { CreateCleaningTaskForm } from "@/components/housekeeping/CreateCleaningTaskForm";
 import { CleaningTaskDetailPanel } from "@/components/housekeeping/CleaningTaskDetailPanel";
+import { floors } from "@/app/data/frontoffice/constants";
+import {
+  countHkStatusFilter,
+  getHkLegendConfig,
+  getHkRoomStatusConfig,
+  getHkRoomStatusShortLabel,
+  HK_ROOM_STATUS_LEGEND_ORDER,
+  matchesHkStatusFilter,
+} from "@/lib/housekeeping/room-status-colors";
 import {
   Clock,
   Play,
   Pause,
-  CheckCircle2,
   User,
-  Sparkles,
   ClipboardList,
-  AlertTriangle,
-  Eye,
   Building2,
-  BedDouble,
   Camera,
   Layers,
-  ArrowRight,
+  DoorOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import {
   SelectInput,
-  FormField,
   FOPageHeader,
-  StatMiniCard,
+  FOSearchToolbar,
 } from "@/components/frontoffice/ui";
-import {
-  OperationsToolbar,
-  OperationsFilterDrawer,
-} from "@/components/housekeeping/OperationsToolbar";
-import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
+
+function compareFloorLabel(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+function compareRoomNo(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+function roomTypeLabel(room: HKRoom): string {
+  return (room.type ?? room.category).trim();
+}
+
+function formatTime(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
+function HKRoomStatusCardTile({
+  room,
+  task,
+  onClick,
+}: {
+  room: HKRoom;
+  task: HKTask | null;
+  onClick: () => void;
+}) {
+  const config = getHkRoomStatusConfig(room.status);
+  const shortStatus = getHkRoomStatusShortLabel(room.status);
+  const showTimer = room.status === "Cleaning" && room.cleaningTimer;
+  const showStaff = !!room.assignedStaff;
+  const footerText = showTimer
+    ? formatTime(room.cleaningTimer!.elapsedSeconds)
+    : showStaff
+      ? room.assignedStaff
+      : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Room ${room.roomNo} — ${room.status}${room.assignedStaff ? ` · ${room.assignedStaff}` : ""}`}
+      className={cn(
+        "group flex h-[76px] w-full flex-col rounded-xl border p-3 text-left transition-all",
+        "hover:-translate-y-0.5 hover:shadow-lg",
+        config.card,
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className={cn("text-base font-bold leading-none tracking-tight", config.roomNoText)}>
+          {room.roomNo}
+        </p>
+        <span className={cn("mt-0.5 h-2 w-2 shrink-0 rounded-full", config.dot)} />
+      </div>
+
+      <p className={cn("mt-2 truncate text-[11px] font-medium leading-tight", config.metaText)}>
+        {room.category}
+        <span className="opacity-60"> · </span>
+        <span className="font-semibold">{shortStatus}</span>
+      </p>
+
+      <div className={cn("mt-auto flex min-h-[14px] items-center gap-1 truncate text-[10px]", config.metaText)}>
+        {footerText ? (
+          <>
+            {showTimer ? (
+              <Clock className="h-2.5 w-2.5 shrink-0 opacity-70" />
+            ) : (
+              <User className="h-2.5 w-2.5 shrink-0 opacity-70" />
+            )}
+            <span className="truncate opacity-80">{footerText}</span>
+          </>
+        ) : task?.taskNumber ? (
+          <span className="truncate opacity-70">{task.taskNumber}</span>
+        ) : (
+          <span className="invisible select-none" aria-hidden>
+            —
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
 
 export default function RoomStatusOperations() {
   const {
@@ -57,14 +138,12 @@ export default function RoomStatusOperations() {
   const [foRooms, setFoRooms] = useState<RoomDto[]>([]);
   const [search, setSearch] = useState("");
   const [floorFilter, setFloorFilter] = useState("all");
+  const [roomTypeFilter, setRoomTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [checklistId, setChecklistId] = useState("");
   const [checkedItems, setCheckedItems] = useState<string[]>([]);
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     void hkTaskService
@@ -154,44 +233,86 @@ export default function RoomStatusOperations() {
       selectedRoom.status.includes("Occupied"));
 
   const filteredRooms = useMemo(() => {
+    const q = search.toLowerCase();
     return rooms.filter((r) => {
       const matchSearch =
-        r.roomNo.includes(search) ||
-        r.category.toLowerCase().includes(search.toLowerCase()) ||
-        (r.assignedStaff && r.assignedStaff.toLowerCase().includes(search.toLowerCase()));
+        !q ||
+        r.roomNo.includes(q) ||
+        r.category.toLowerCase().includes(q) ||
+        (r.assignedStaff && r.assignedStaff.toLowerCase().includes(q));
 
       const matchFloor = floorFilter === "all" || r.floor === floorFilter;
+      const matchRoomType =
+        roomTypeFilter === "all" || roomTypeLabel(r) === roomTypeFilter;
+      const matchStatus = matchesHkStatusFilter(r.status, statusFilter);
 
-      let matchStatus = true;
-      if (statusFilter === "dirty") matchStatus = r.status.includes("Dirty");
-      else if (statusFilter === "cleaning") matchStatus = r.status === "Cleaning";
-      else if (statusFilter === "inspection") matchStatus = r.status === "Inspection Pending";
-      else if (statusFilter === "ready") matchStatus = r.status === "Vacant Ready";
-      else if (statusFilter === "blocked") {
-        matchStatus =
-          r.status === "Blocked" ||
-          r.status === "Out of Order" ||
-          r.status === "Out of Service";
-      }
-
-      return matchSearch && matchFloor && matchStatus;
+      return matchSearch && matchFloor && matchRoomType && matchStatus;
     });
-  }, [rooms, search, floorFilter, statusFilter]);
+  }, [rooms, search, floorFilter, roomTypeFilter, statusFilter]);
 
-  const uniqueFloors = useMemo(
-    () => Array.from(new Set(rooms.map((r) => r.floor).filter(Boolean))).sort(),
+  const pillScopeRooms = useMemo(() => {
+    const q = search.toLowerCase();
+    return rooms.filter((r) => {
+      const matchSearch =
+        !q ||
+        r.roomNo.includes(q) ||
+        r.category.toLowerCase().includes(q) ||
+        (r.assignedStaff && r.assignedStaff.toLowerCase().includes(q));
+      const matchFloor = floorFilter === "all" || r.floor === floorFilter;
+      const matchRoomType =
+        roomTypeFilter === "all" || roomTypeLabel(r) === roomTypeFilter;
+      return matchSearch && matchFloor && matchRoomType;
+    });
+  }, [rooms, search, floorFilter, roomTypeFilter]);
+
+  const statusCounts = useMemo(
+    () => ({
+      all: pillScopeRooms.length,
+      dirty: countHkStatusFilter(pillScopeRooms, "dirty"),
+      cleaning: countHkStatusFilter(pillScopeRooms, "cleaning"),
+      inspection: countHkStatusFilter(pillScopeRooms, "inspection"),
+      ready: countHkStatusFilter(pillScopeRooms, "ready"),
+      blocked: countHkStatusFilter(pillScopeRooms, "blocked"),
+    }),
+    [pillScopeRooms],
+  );
+
+  const floorOptions = useMemo(() => {
+    const known = floors.filter((f) => rooms.some((r) => r.floor === f));
+    const other = [...new Set(rooms.map((r) => r.floor).filter(Boolean))]
+      .filter((f) => !floors.includes(f as (typeof floors)[number]))
+      .sort(compareFloorLabel);
+    return [...known, ...other];
+  }, [rooms]);
+
+  const roomTypeOptions = useMemo(
+    () =>
+      [...new Set(rooms.map(roomTypeLabel).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" }),
+      ),
     [rooms],
   );
 
-  const stats = useMemo(() => {
-    return {
-      total: rooms.length,
-      dirty: rooms.filter((r) => r.status.includes("Dirty")).length,
-      cleaning: rooms.filter((r) => r.status === "Cleaning").length,
-      inspection: rooms.filter((r) => r.status === "Inspection Pending").length,
-      ready: rooms.filter((r) => r.status === "Vacant Ready").length,
-    };
-  }, [rooms]);
+  const roomsByFloor = useMemo(() => {
+    const groups = new Map<string, HKRoom[]>();
+
+    for (const room of filteredRooms) {
+      const floor = room.floor?.trim() || "Unassigned";
+      const list = groups.get(floor) ?? [];
+      list.push(room);
+      groups.set(floor, list);
+    }
+
+    const knownFloors = floors.filter((floor) => groups.has(floor));
+    const otherFloors = [...groups.keys()]
+      .filter((floor) => !floors.includes(floor as (typeof floors)[number]))
+      .sort(compareFloorLabel);
+
+    return [...knownFloors, ...otherFloors].map((floor) => ({
+      floor,
+      rooms: (groups.get(floor) ?? []).sort((a, b) => compareRoomNo(a.roomNo, b.roomNo)),
+    }));
+  }, [filteredRooms]);
 
   const activeChecklist = useMemo(
     () => checklists.find((c) => c.id === checklistId) ?? null,
@@ -215,12 +336,6 @@ export default function RoomStatusOperations() {
     setUploadedPhotos(rm.photos || []);
   };
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  };
-
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedRoom) return;
@@ -238,111 +353,79 @@ export default function RoomStatusOperations() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <FOPageHeader
         eyebrow="Operations"
         title="Room Status"
-        description="Live HK room states — dirty, cleaning, inspection, and ready to sell."
-        badge={
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-650">
-            <BedDouble className="h-4 w-4 text-emerald-600" />
-            {stats.cleaning} cleaning
-          </div>
-        }
         action={
-          <div className="flex items-center gap-2">
-            <Link href="/housekeeping/operations/room-cleaning">
-              <Button variant="outline" className="flex items-center gap-1.5 text-xs">
-                Cleaning Tasks <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </Link>
-            <Button
-              variant={viewMode === "grid" ? "primary" : "outline"}
-              onClick={() => setViewMode("grid")}
-              className="px-3"
-            >
-              Grid
-            </Button>
-            <Button
-              variant={viewMode === "list" ? "primary" : "outline"}
-              onClick={() => setViewMode("list")}
-              className="px-3"
-            >
-              List
-            </Button>
+          <div className="flex max-w-xl flex-wrap items-center justify-end gap-x-3 gap-y-1.5">
+            {HK_ROOM_STATUS_LEGEND_ORDER.map(({ key, label }) => {
+              const cfg = getHkLegendConfig(key);
+              return (
+                <div
+                  key={key}
+                  className="flex items-center gap-1.5 text-[11px] text-slate-600"
+                  title={cfg.description}
+                >
+                  <span className={cn("h-3 w-4 shrink-0 rounded border", cfg.legend)} />
+                  <span className="font-medium text-slate-700">{label}</span>
+                </div>
+              );
+            })}
           </div>
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <StatMiniCard label="Total Rooms" value={stats.total} icon={Building2} accent="#64748b" />
-        <StatMiniCard label="Dirty" value={stats.dirty} accent="#ef4444" icon={AlertTriangle} />
-        <StatMiniCard label="Cleaning" value={stats.cleaning} accent="#f59e0b" icon={Sparkles} />
-        <StatMiniCard label="Awaiting Inspection" value={stats.inspection} accent="#3b82f6" icon={ClipboardList} />
-        <StatMiniCard label="Vacant Ready" value={stats.ready} accent="#10b981" icon={CheckCircle2} />
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <FOSearchToolbar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search room, category, staff…"
+          showFiltersButton={false}
+          beforeFilters={
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <div className="relative">
+                <DoorOpen className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <SelectInput
+                  value={roomTypeFilter}
+                  onChange={(e) => setRoomTypeFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border-slate-200 pl-9 sm:w-44"
+                >
+                  <option value="all">All Room Types</option>
+                  {roomTypeOptions.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </SelectInput>
+              </div>
+              <div className="relative">
+                <Layers className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <SelectInput
+                  value={floorFilter}
+                  onChange={(e) => setFloorFilter(e.target.value)}
+                  className="h-10 w-full rounded-xl border-slate-200 pl-9 sm:w-40"
+                >
+                  <option value="all">All Floors</option>
+                  {floorOptions.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </SelectInput>
+              </div>
+            </div>
+          }
+          filterPills={{
+            active: statusFilter,
+            onChange: setStatusFilter,
+            options: [
+              { id: "all", label: `All (${statusCounts.all})` },
+              { id: "dirty", label: `Dirty (${statusCounts.dirty})` },
+              { id: "cleaning", label: `Cleaning (${statusCounts.cleaning})` },
+              { id: "inspection", label: `Inspection (${statusCounts.inspection})` },
+              { id: "ready", label: `Ready (${statusCounts.ready})` },
+              { id: "blocked", label: `Blocked (${statusCounts.blocked})` },
+            ],
+          }}
+        />
       </div>
-
-      <OperationsToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search room, category, staff…"
-        activeFilterCount={floorFilter !== "all" ? 1 : 0}
-        onOpenFilters={() => setFilterDrawerOpen(true)}
-        statusTabs={[
-          { id: "all", label: "All" },
-          { id: "dirty", label: "Dirty" },
-          { id: "cleaning", label: "Cleaning" },
-          { id: "inspection", label: "Inspection Pending" },
-          { id: "ready", label: "Vacant Ready" },
-          { id: "blocked", label: "Blocked / OOS" },
-        ]}
-        activeStatusTab={statusFilter}
-        onStatusTabChange={setStatusFilter}
-        selectionBar={
-          viewMode === "list" ? (
-            <ModuleSelectionBar
-              count={selectedIds.size}
-              noun="room"
-              onClear={() => setSelectedIds(new Set())}
-              actions={[
-                {
-                  label: "Open Controls",
-                  icon: <Eye className="h-3.5 w-3.5" />,
-                  onClick: () => {
-                    const firstId = Array.from(selectedIds)[0];
-                    if (firstId) handleRoomClick(firstId);
-                  },
-                },
-              ]}
-            />
-          ) : null
-        }
-      />
-
-      <OperationsFilterDrawer
-        open={filterDrawerOpen}
-        onClose={() => setFilterDrawerOpen(false)}
-        title="Filter Rooms"
-        activeFilterCount={floorFilter !== "all" ? 1 : 0}
-        onReset={() => setFloorFilter("all")}
-      >
-        <FormField label="Filter by Floor">
-          <SelectInput
-            value={floorFilter}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-              setFloorFilter(e.target.value)
-            }
-            className="w-full text-xs rounded-xl h-9 bg-white"
-          >
-            <option value="all">All Floors</option>
-            {uniqueFloors.map((fl) => (
-              <option key={fl} value={fl}>
-                {fl}
-              </option>
-            ))}
-          </SelectInput>
-        </FormField>
-      </OperationsFilterDrawer>
 
       {filteredRooms.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-10 text-center">
@@ -352,106 +435,32 @@ export default function RoomStatusOperations() {
             Link rooms in Room Master or adjust your filters.
           </p>
         </div>
-      ) : viewMode === "grid" ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filteredRooms.map((room) => {
-            const isCleaning = room.status === "Cleaning";
-            const isPendingInspect = room.status === "Inspection Pending";
-            const isDirty = room.status.includes("Dirty");
-            const isReady = room.status === "Vacant Ready";
-            const task = getRoomTask(room);
-
-            return (
-              <div
-                key={roomKey(room)}
-                onClick={() => handleRoomClick(roomKey(room))}
-                className={cn(
-                  "cursor-pointer rounded-md border bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-md",
-                  isCleaning
-                    ? "border-amber-200 ring-2 ring-amber-100/50"
-                    : isPendingInspect
-                      ? "border-blue-200"
-                      : isDirty
-                        ? "border-red-200"
-                        : isReady
-                          ? "border-emerald-200"
-                          : "border-slate-200",
-                )}
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-800">Room {room.roomNo}</h3>
-                    <p className="text-xs text-slate-500 font-medium">
-                      {task?.taskNumber ? `${task.taskNumber} · active task` : room.category}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide",
-                      isReady
-                        ? "bg-emerald-50 text-emerald-700"
-                        : isDirty
-                          ? "bg-red-50 text-red-700"
-                          : isCleaning
-                            ? "bg-amber-50 text-amber-700 animate-pulse"
-                            : isPendingInspect
-                              ? "bg-blue-50 text-blue-700"
-                              : "bg-slate-100 text-slate-700",
-                    )}
-                  >
-                    {room.status}
-                  </span>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                  <div className="flex items-center gap-1">
-                    <User className="h-3 w-3" />
-                    <span>{room.assignedStaff || "Unassigned"}</span>
-                  </div>
-                  {isCleaning && room.cleaningTimer && (
-                    <div className="flex items-center gap-1 font-semibold text-amber-700">
-                      <Clock className="h-3 w-3" />
-                      <span>{formatTime(room.cleaningTimer.elapsedSeconds)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
-              <tr>
-                <th className="px-5 py-3">Room</th>
-                <th className="px-5 py-3">Category</th>
-                <th className="px-5 py-3">Floor</th>
-                <th className="px-5 py-3">Housekeeper</th>
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3">Active Task</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredRooms.map((room) => {
-                const task = getRoomTask(room);
-                return (
-                  <tr
+        <div className="space-y-5">
+          {roomsByFloor.map(({ floor, rooms: floorRooms }) => (
+            <section
+              key={floor}
+              className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+            >
+              <div className="flex items-center gap-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-5 py-3.5">
+                <div className="h-7 w-1 rounded-full bg-emerald-500" />
+                <h2 className="text-sm font-semibold text-slate-800">{floor}</h2>
+                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                  {floorRooms.length} {floorRooms.length === 1 ? "room" : "rooms"}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                {floorRooms.map((room) => (
+                  <HKRoomStatusCardTile
                     key={roomKey(room)}
+                    room={room}
+                    task={getRoomTask(room)}
                     onClick={() => handleRoomClick(roomKey(room))}
-                    className="hover:bg-slate-50/50 cursor-pointer"
-                  >
-                    <td className="px-5 py-3.5 font-bold text-slate-800">Room {room.roomNo}</td>
-                    <td className="px-5 py-3.5 text-slate-500">{room.category}</td>
-                    <td className="px-5 py-3.5 text-slate-500">{room.floor}</td>
-                    <td className="px-5 py-3.5">{room.assignedStaff || "—"}</td>
-                    <td className="px-5 py-3.5">{room.status}</td>
-                    <td className="px-5 py-3.5 text-slate-500">{task?.taskNumber ?? "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
       )}
 

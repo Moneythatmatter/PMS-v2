@@ -33,6 +33,7 @@ export interface RoomAvailabilityRow {
   type: string;
   floor: string;
   bedType?: string;
+  maxOccupancy?: number;
   days: Record<string, RoomDayStatus>;
 }
 

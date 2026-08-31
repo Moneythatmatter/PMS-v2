@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AuthProvider } from "./AuthProvider";
 import { AuthGuard } from "./AuthGuard";
+import { PropertyProvider } from "@/components/platform/PropertyProvider";
 import { clearNonAuthStorage } from "@/lib/clear-non-auth-storage";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
@@ -12,7 +13,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthProvider>
-      <AuthGuard>{children}</AuthGuard>
+      <PropertyProvider>
+        <AuthGuard>{children}</AuthGuard>
+      </PropertyProvider>
     </AuthProvider>
   );
 }
