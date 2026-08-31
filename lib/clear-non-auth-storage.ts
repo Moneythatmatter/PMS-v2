@@ -1,4 +1,9 @@
-const AUTH_LOCAL_KEYS = new Set(["pms_session", "pms_token"]);
+const AUTH_LOCAL_KEYS = new Set([
+  "pms_session",
+  "pms_token",
+  "pms_active_property",
+  "pms_property_permissions",
+]);
 
 const LEGACY_LOCAL_KEYS = [
   "hk_rooms",

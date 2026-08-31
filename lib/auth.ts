@@ -7,6 +7,7 @@ export type AuthUser = {
   email: string;
   role: string;
   initials: string;
+  isSuperAdmin?: boolean;
 };
 
 export type LoginResult = {
@@ -67,4 +68,12 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
 
 export function logoutSession() {
   setSession(null);
+}
+
+/** Super admin flag or legacy Admin role — can manage users & properties. */
+export function isPlatformAdmin(user?: AuthUser | null): boolean {
+  if (!user) return false;
+  if (user.isSuperAdmin) return true;
+  const role = String(user.role ?? "").trim().toLowerCase();
+  return role === "admin" || role === "administrator";
 }
