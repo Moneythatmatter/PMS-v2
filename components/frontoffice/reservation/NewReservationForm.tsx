@@ -214,7 +214,6 @@ export function NewReservationForm() {
     preferences: [] as string[],
     notes: "",
     loyaltyPoints: 0,
-    totalStays: 0,
   });
 
   // Prefill from Room Availability (or deep links) when query params change
@@ -542,7 +541,6 @@ export function NewReservationForm() {
       pincode: "",
       preferences: [],
       loyaltyPoints: 0,
-      totalStays: 0,
     }));
     setErrors((prev) => {
       const next = { ...prev };
@@ -682,7 +680,6 @@ export function NewReservationForm() {
           state: form.state || "",
           country: form.country || "",
           pincode: form.pincode || "",
-          totalStays: 1,
           loyaltyPoints: 100,
           idType: form.idProofType || "Aadhaar",
           idNumber: form.idNumber || "",

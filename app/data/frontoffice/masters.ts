@@ -4,10 +4,6 @@ export interface RoomTypeMaster {
   name: string;
   description: string;
   baseRate: number;
-  maxOccupancy: number;
-  maxAdults: number;
-  maxChildren: number;
-  totalRooms: number;
   sizeSqFt: number;
   amenities: string[];
   status: "Active" | "Inactive";
@@ -42,18 +38,6 @@ export interface TariffPlanMaster {
 
 /** @deprecated Use TariffPlanMaster */
 export type RatePlanMaster = TariffPlanMaster;
-
-export interface MarketSegmentMaster {
-  id: string;
-  code: string;
-  name: string;
-  category: "Corporate" | "Leisure" | "OTA" | "Government" | "Group";
-  discountPercent: number;
-  description: string;
-  contactPerson?: string;
-  commissionPercent?: number;
-  status: "Active" | "Inactive";
-}
 
 export interface CompanyMaster {
   id: string;

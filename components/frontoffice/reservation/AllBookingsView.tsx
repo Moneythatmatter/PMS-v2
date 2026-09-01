@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   BedDouble,
   Calendar,
@@ -116,7 +117,23 @@ function matchesFilter(booking: ReservationBooking, filter: ReservationFilter) {
   }
 }
 
+function findBookingByKey(bookings: ReservationBooking[], key: string) {
+  const trimmed = key.trim();
+  if (!trimmed) return null;
+  return (
+    bookings.find((b) => b.id === trimmed) ??
+    bookings.find((b) => displayBookingNo(b) === trimmed) ??
+    bookings.find((b) => b.bookingNo === trimmed) ??
+    null
+  );
+}
+
 export function AllBookingsView() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const bookingQuery =
+    searchParams.get("bookingId") ?? searchParams.get("booking") ?? "";
+  const guestIdQuery = searchParams.get("guestId") ?? "";
   const [bookings, setBookings] = useState<ReservationBooking[]>([]);
   const [summaryStats, setSummaryStats] = useState<ReservationSummaryStat[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,9 +175,45 @@ export function AllBookingsView() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!bookingQuery || bookings.length === 0) return;
+    const match = findBookingByKey(bookings, bookingQuery);
+    if (match) setViewBooking(match);
+  }, [bookingQuery, bookings]);
+
+  const closeBookingDetail = () => {
+    setViewBooking(null);
+    if (bookingQuery) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("bookingId");
+      params.delete("booking");
+      const qs = params.toString();
+      router.replace(
+        qs
+          ? `/frontoffice/reservation/all-bookings?${qs}`
+          : "/frontoffice/reservation/all-bookings",
+        { scroll: false },
+      );
+    }
+  };
+
+  const clearGuestFilter = () => {
+    router.replace("/frontoffice/reservation/all-bookings", { scroll: false });
+  };
+
+  const scopedBookings = useMemo(() => {
+    if (!guestIdQuery) return bookings;
+    return bookings.filter((b) => b.guestId === guestIdQuery);
+  }, [bookings, guestIdQuery]);
+
+  const guestFilterName = useMemo(() => {
+    if (!guestIdQuery) return null;
+    return scopedBookings[0]?.guestName ?? null;
+  }, [guestIdQuery, scopedBookings]);
+
   const sourceOptions = useMemo(
-    () => [...new Set(bookings.map((b) => b.source))].sort(),
-    [bookings],
+    () => [...new Set(scopedBookings.map((b) => b.source))].sort(),
+    [scopedBookings],
   );
 
   const filterCounts = useMemo(
@@ -168,10 +221,10 @@ export function AllBookingsView() {
       Object.fromEntries(
         statusFilters.map((f) => [
           f.id,
-          bookings.filter((b) => matchesFilter(b, f.id)).length,
+          scopedBookings.filter((b) => matchesFilter(b, f.id)).length,
         ]),
       ) as Record<ReservationFilter, number>,
-    [bookings],
+    [scopedBookings],
   );
 
   const displayStats = useMemo(
@@ -186,7 +239,7 @@ export function AllBookingsView() {
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return bookings.filter((booking) => {
+    return scopedBookings.filter((booking) => {
       const matchesSearch =
         !query ||
         booking.guestName?.toLowerCase().includes(query) ||
@@ -206,7 +259,7 @@ export function AllBookingsView() {
         matchesFilter(booking, activeFilter)
       );
     });
-  }, [bookings, search, activeFilter, sourceFilter, roomTypeFilter]);
+  }, [scopedBookings, search, activeFilter, sourceFilter, roomTypeFilter]);
 
   const hasActiveAdvancedFilters = sourceFilter !== "all" || roomTypeFilter !== "all";
 
@@ -281,13 +334,31 @@ export function AllBookingsView() {
         <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />
       )}
 
+      {guestIdQuery && (
+        <AlertBanner
+          variant="info"
+          message={
+            guestFilterName
+              ? `Showing bookings for ${guestFilterName}`
+              : "Showing bookings for selected guest"
+          }
+          onDismiss={clearGuestFilter}
+          autoDismissMs={0}
+        />
+      )}
+
       <FOPageHeader
         eyebrow="Reservations"
         title="All Bookings"
-        description="Search, filter, and manage all reservations from a single view."
+        description={
+          guestIdQuery
+            ? "Bookings filtered to the selected guest profile."
+            : "Search, filter, and manage all reservations from a single view."
+        }
         badge={
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-            {filtered.length} of {bookings.length} shown
+            {filtered.length} of {scopedBookings.length} shown
+            {guestIdQuery ? ` · guest filter on` : ""}
           </span>
         }
         action={
@@ -678,9 +749,9 @@ export function AllBookingsView() {
 
       <BookingDetailDrawer
         booking={viewBooking}
-        onClose={() => setViewBooking(null)}
+        onClose={closeBookingDetail}
         onCancel={(b) => {
-          setViewBooking(null);
+          closeBookingDetail();
           setCancelBooking(b);
         }}
       />

@@ -8,7 +8,6 @@ export {
   roomTypeService,
   ratePlanService,
   tariffPlanService,
-  marketSegmentService,
   companyService,
   bookingSourceService,
 } from "./masters";

@@ -2,7 +2,6 @@ import { api, foPath } from "../api";
 import type {
   BookingSourceMaster,
   CompanyMaster,
-  MarketSegmentMaster,
   TariffPlanMaster,
   RoomTypeMaster,
 } from "@/app/data/frontoffice/masters";
@@ -22,8 +21,6 @@ export const roomTypeService = crud<RoomTypeMaster>("/masters/room-types");
 export const tariffPlanService = crud<TariffPlanMaster>("/masters/tariff-plans");
 /** @deprecated Use tariffPlanService */
 export const ratePlanService = tariffPlanService;
-export const marketSegmentService =
-  crud<MarketSegmentMaster>("/masters/market-segments");
 export const companyService = crud<CompanyMaster>("/masters/companies");
 export const bookingSourceService =
   crud<BookingSourceMaster>("/masters/booking-sources");
@@ -32,7 +29,6 @@ export const mastersService = {
   roomTypes: roomTypeService,
   tariffPlans: tariffPlanService,
   ratePlans: tariffPlanService,
-  marketSegments: marketSegmentService,
   companies: companyService,
   bookingSources: bookingSourceService,
 };

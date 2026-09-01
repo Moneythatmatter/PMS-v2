@@ -35,6 +35,11 @@ import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
 import { isDepartingOnDate, isDepartingToday, todayIso } from "@/lib/reservation-dates";
 import { CheckoutInvoiceDrawer } from "@/components/frontoffice/CheckoutInvoice";
+import { BookingLookupSearch } from "@/components/frontoffice/BookingLookupSearch";
+import {
+  findBookingByQuery,
+  folioToLookupRecord,
+} from "@/lib/booking-lookup";
 
 type Step = "find" | "review" | "pay" | "done";
 
@@ -69,6 +74,7 @@ function mapInHouseToFolio(g: {
   id: string;
   bookingNo?: string;
   guestName: string;
+  phone?: string;
   email?: string;
   room: string;
   roomType: string;
@@ -88,7 +94,7 @@ function mapInHouseToFolio(g: {
     id: g.id,
     bookingId: displayBookingNo(g),
     guestName: g.guestName,
-    phone: "",
+    phone: g.phone ?? "",
     email: g.email,
     room: formatRoomLabel(g.room),
     roomType: g.roomType,
@@ -177,6 +183,11 @@ export function CheckOutView() {
     });
   }, [folios]);
 
+  const lookupPool = useMemo(
+    () => folios.map(folioToLookupRecord),
+    [folios],
+  );
+
   const filteredCheckedInGuests = useMemo(() => {
     if (departureFilter === "today") {
       return checkedInGuests.filter((f) => isDepartingToday(f));
@@ -234,13 +245,11 @@ export function CheckOutView() {
     if (!prefillBookingKey || folios.length === 0) return;
     if (prefillAttempted.current === prefillBookingKey) return;
 
-    const query = prefillBookingKey.trim().toLowerCase();
-    const found = folios.find(
-      (f) =>
-        f.id === prefillBookingKey ||
-        f.bookingId.toLowerCase() === query ||
-        f.id.toLowerCase() === query,
-    );
+    const query = prefillBookingKey.trim();
+    const foundRecord = findBookingByQuery(lookupPool, query);
+    const found = foundRecord
+      ? folios.find((f) => f.id === foundRecord.id)
+      : undefined;
 
     prefillAttempted.current = prefillBookingKey;
 
@@ -253,20 +262,18 @@ export function CheckOutView() {
     setLookupError(
       `In-house booking "${prefillBookingKey}" was not found. The guest may not be checked in yet.`,
     );
-  }, [prefillBookingKey, folios, loadGuest]);
+  }, [prefillBookingKey, folios, loadGuest, lookupPool]);
 
   const handleLookup = () => {
     setLookupError("");
-    const query = search.trim().toLowerCase();
-    const found = folios.find(
-      (f) =>
-        f.id.toLowerCase() === query ||
-        f.bookingId.toLowerCase() === query ||
-        f.guestName.toLowerCase().includes(query) ||
-        formatRoomLabel(f.room).toLowerCase() === query,
-    );
+    const foundRecord = findBookingByQuery(lookupPool, search);
+    const found = foundRecord
+      ? folios.find((f) => f.id === foundRecord.id)
+      : undefined;
     if (!found) {
-      setLookupError("No in-house guest found. Try BK-0, James Wilson, or room 112.");
+      setLookupError(
+        "No in-house guest found. Try booking ID, name, phone, email, or room number.",
+      );
       setSelected(null);
       return;
     }
@@ -524,17 +531,31 @@ export function CheckOutView() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Find Guest</p>
-                  <p className="text-xs text-slate-500">Booking ID, name, or room number</p>
+                  <p className="text-xs text-slate-500">
+                    Booking ID, name, phone, email, or room
+                  </p>
                 </div>
               </div>
               <div className="flex flex-col gap-2">
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleLookup()}
-                  placeholder="e.g. BK-0 or James Wilson"
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                <BookingLookupSearch
+                  items={lookupPool}
+                  query={search}
+                  onQueryChange={(value) => {
+                    setSearch(value);
+                    setLookupError("");
+                  }}
+                  selectedId={selected?.id}
+                  onSelectItem={(item) => {
+                    const folio = folios.find((f) => f.id === item.id);
+                    if (folio) loadGuest(folio);
+                  }}
+                  onClear={() => {
+                    setSearch("");
+                    setSelected(null);
+                    setLookupError("");
+                  }}
+                  onEnter={handleLookup}
+                  placeholder="e.g. BK-38, Atul, or 98765…"
                 />
                 <Button onClick={handleLookup} className="h-11 gap-2 bg-emerald-700 hover:bg-emerald-800">
                   Lookup Guest

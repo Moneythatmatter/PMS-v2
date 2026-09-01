@@ -33,18 +33,15 @@ type PropertyContextValue = {
 const PropertyContext = createContext<PropertyContextValue | null>(null);
 
 export function PropertyProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  const [property, setPropertyState] = useState<PropertySession | null>(null);
-  const [permissions, setPermissions] = useState<Record<string, PermissionLevel>>(
-    {},
+  const { user, loading: authLoading } = useAuth();
+  const [property, setPropertyState] = useState<PropertySession | null>(() =>
+    typeof window !== "undefined" ? getActiveProperty() : null,
   );
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setPropertyState(getActiveProperty());
-    setPermissions(getCachedPermissions() ?? {});
-    setLoading(false);
-  }, []);
+  const [permissions, setPermissions] = useState<Record<string, PermissionLevel>>(
+    () =>
+      typeof window !== "undefined" ? getCachedPermissions() ?? {} : {},
+  );
+  const [loading, setLoading] = useState(false);
 
   const refreshPermissions = useCallback(async () => {
     if (!property?.id) {
@@ -92,12 +89,13 @@ export function PropertyProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!user) {
       clearActiveProperty();
       setPropertyState(null);
       setPermissions({});
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   const canRead = useCallback(
     (moduleKey: string) => {

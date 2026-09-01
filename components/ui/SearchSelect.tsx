@@ -28,6 +28,10 @@ export interface SearchSelectProps {
   allowCustom?: boolean;
   /** When a selection exists, lock the input (clear via X only). */
   lockInputWhenSelected?: boolean;
+  /** Hide suggestions until the user has typed at least one character. */
+  requireQuery?: boolean;
+  /** Disable editing and hide the dropdown. */
+  disabled?: boolean;
 }
 
 export function SearchSelect({
@@ -44,6 +48,8 @@ export function SearchSelect({
   renderOption,
   allowCustom = false,
   lockInputWhenSelected = false,
+  requireQuery = false,
+  disabled = false,
 }: SearchSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [internalQuery, setInternalQuery] = useState("");
@@ -67,11 +73,15 @@ export function SearchSelect({
       ? { id: selectedId, label: selectedId, data: { id: selectedId, label: selectedId } }
       : null);
 
-  const displayValue = isOpen ? query : (selected?.label ?? "");
+  const displayValue = disabled
+    ? (selected?.label || query)
+    : isOpen
+      ? query
+      : (selected?.label ?? "");
 
   const matches = uniqueOptions.filter((opt) => {
     const q = query.toLowerCase().trim();
-    if (!q) return true;
+    if (!q) return !requireQuery;
     return (
       opt.label.toLowerCase().includes(q) ||
       opt.id.toLowerCase().includes(q) ||
@@ -120,8 +130,12 @@ export function SearchSelect({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- commit uses latest query via refs would be overkill; query captured on each open cycle
   }, [allowCustom, isControlledQuery, internalQuery]);
 
-  const showDropdown = isOpen && !(lockInputWhenSelected && selectedId);
-  const inputLocked = lockInputWhenSelected && Boolean(selectedId);
+  const showDropdown =
+    !disabled &&
+    isOpen &&
+    !(lockInputWhenSelected && selectedId) &&
+    (!requireQuery || trimmedQuery.length > 0);
+  const inputLocked = disabled || (lockInputWhenSelected && Boolean(selectedId));
 
   const handleInputChange = (val: string) => {
     if (inputLocked) return;
@@ -133,7 +147,7 @@ export function SearchSelect({
     setIsOpen(true);
   };
 
-  const showClear = Boolean(selectedId || displayValue.trim());
+  const showClear = !disabled && Boolean(selectedId || displayValue.trim());
 
   const handleClear = () => {
     if (isControlledQuery) {
@@ -160,7 +174,9 @@ export function SearchSelect({
             if (!isControlledQuery && selected) {
               setInternalQuery(selected.label);
             }
-            setIsOpen(true);
+            if (!requireQuery || query.trim().length > 0) {
+              setIsOpen(true);
+            }
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && canCommitCustom) {

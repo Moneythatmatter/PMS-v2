@@ -3,6 +3,7 @@ const AUTH_LOCAL_KEYS = new Set([
   "pms_token",
   "pms_active_property",
   "pms_property_permissions",
+  "pms-side-drawer-width",
 ]);
 
 const LEGACY_LOCAL_KEYS = [

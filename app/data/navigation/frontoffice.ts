@@ -28,7 +28,6 @@ export const frontOfficeNavItems: ModuleNavItem[] = [
       { label: "Rooms", href: "/frontoffice/masters/rooms", icon: "door-open" },
       { label: "Room Types", href: "/frontoffice/masters/room-types", icon: "bed" },
       { label: "Tariff Plans", href: "/frontoffice/masters/tariff-plans", icon: "tag" },
-      { label: "Market Segments", href: "/frontoffice/masters/market-segments", icon: "pie-chart" },
       { label: "Companies", href: "/frontoffice/masters/companies", icon: "building-2" },
       { label: "Booking Sources", href: "/frontoffice/masters/booking-sources", icon: "globe" },
     ],

@@ -1,7 +1,8 @@
 "use client";
 
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { GripVertical, Maximize2, Minimize2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useResizablePanelWidth } from "@/lib/use-resizable-panel-width";
 
 interface DrawerProps {
   open: boolean;
@@ -15,6 +16,8 @@ interface DrawerProps {
   fullScreen?: boolean;
   onToggleFullScreen?: () => void;
   className?: string;
+  /** Allow drag-resize from the left edge. Default true. */
+  resizable?: boolean;
 }
 
 export function Drawer({
@@ -29,10 +32,14 @@ export function Drawer({
   fullScreen = false,
   onToggleFullScreen,
   className,
+  resizable = true,
 }: DrawerProps) {
+  const widthKey = fullScreen ? undefined : width;
+  const { panelWidth, onResizeStart, isResizing, resizable: canResize } =
+    useResizablePanelWidth(open, widthKey, { enabled: resizable && !fullScreen });
+
   return (
     <>
-      {/* Overlay */}
       <div
         className={cn(
           "fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-300",
@@ -42,31 +49,59 @@ export function Drawer({
         aria-hidden={!open}
       />
 
-      {/* Panel */}
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="drawer-title"
+        style={fullScreen || !canResize ? undefined : { width: panelWidth, maxWidth: "60vw" }}
         className={cn(
-          "fixed z-50 flex flex-col bg-white shadow-2xl transition-all duration-300 ease-out",
+          "fixed z-50 flex flex-col bg-white shadow-2xl",
+          !isResizing && "transition-all duration-300 ease-out",
           fullScreen
             ? "inset-0 border-0"
             : cn(
                 "inset-y-0 right-0 border-l border-slate-200",
-                width === "sm" && "w-full max-w-sm",
-                width === "md" && "w-full max-w-md",
-                width === "lg" && "w-full max-w-lg",
-                width === "xl" && "w-full max-w-2xl",
-                width === "2xl" && "w-full max-w-4xl",
-                width === "3xl" && "w-full max-w-6xl",
-                width === "responsive" && "w-full md:w-[85vw] lg:w-[70vw] xl:w-[65vw]",
-                typeof width === "string" && !["sm","md","lg","xl","2xl","3xl","responsive"].includes(width) && width
+                !canResize && width === "sm" && "w-full max-w-sm",
+                !canResize && width === "md" && "w-full max-w-md",
+                !canResize && width === "lg" && "w-full max-w-lg",
+                !canResize && width === "xl" && "w-full max-w-2xl",
+                !canResize && width === "2xl" && "w-full max-w-4xl",
+                !canResize && width === "3xl" && "w-full max-w-6xl",
+                !canResize &&
+                  width === "responsive" &&
+                  "w-full md:w-[85vw] lg:w-[70vw] xl:w-[65vw]",
+                !canResize &&
+                  typeof width === "string" &&
+                  !["sm", "md", "lg", "xl", "2xl", "3xl", "responsive"].includes(width) &&
+                  width,
               ),
           open ? "translate-x-0" : "translate-x-full",
-          className
+          className,
         )}
       >
-        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 px-6 py-4 bg-white sticky top-0 z-20">
+        {canResize && !fullScreen && (
+          <button
+            type="button"
+            aria-label="Resize drawer"
+            onMouseDown={onResizeStart}
+            className={cn(
+              "group absolute -left-2 top-0 z-30 flex h-full w-4 cursor-col-resize items-center justify-center border-0 bg-transparent p-0",
+              isResizing && "bg-emerald-500/10",
+            )}
+          >
+            <span
+              className={cn(
+                "flex h-14 w-1.5 items-center justify-center rounded-full bg-slate-200 transition-colors",
+                "group-hover:bg-emerald-400 group-active:bg-emerald-500",
+                isResizing && "bg-emerald-500",
+              )}
+            >
+              <GripVertical className="h-3 w-3 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100" />
+            </span>
+          </button>
+        )}
+
+        <div className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-white px-6 py-4">
           <div className="min-w-0 flex-1">
             {customHeader ? (
               customHeader
@@ -90,13 +125,17 @@ export function Drawer({
                 aria-label={fullScreen ? "Exit full screen" : "Full screen"}
                 title={fullScreen ? "Exit full screen" : "Full screen"}
               >
-                {fullScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                {fullScreen ? (
+                  <Minimize2 className="h-4 w-4" />
+                ) : (
+                  <Maximize2 className="h-4 w-4" />
+                )}
               </button>
             )}
             <button
               type="button"
               onClick={onClose}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 text-xs font-bold transition-colors cursor-pointer"
+              className="flex cursor-pointer items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -110,7 +149,7 @@ export function Drawer({
         </div>
 
         {footer && (
-          <div className="shrink-0 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-white px-5 py-4">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-white px-5 py-4">
             {footer}
           </div>
         )}
