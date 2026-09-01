@@ -105,7 +105,6 @@ async function saveWalkInGuestProfile(
       email,
       dob,
       nationality: "Indian",
-      totalStays: 0,
       loyaltyPoints: 0,
     });
     return { id: created.id, guestNo: created.guestNo };

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 interface ModulePageShellProps {
   toast?: string | null;
+  toastVariant?: "success" | "error";
   onDismissToast?: () => void;
   eyebrow?: string;
   title: string;
@@ -60,6 +61,7 @@ interface ModulePageShellProps {
 
 export function ModulePageShell({
   toast,
+  toastVariant = "success",
   onDismissToast,
   eyebrow = "Front Office",
   title,
@@ -119,7 +121,7 @@ export function ModulePageShell({
   return (
     <div className="space-y-5">
       {toast && onDismissToast && (
-        <AlertBanner variant="success" message={toast} onDismiss={onDismissToast} />
+        <AlertBanner variant={toastVariant} message={toast} onDismiss={onDismissToast} />
       )}
 
       <FOPageHeader

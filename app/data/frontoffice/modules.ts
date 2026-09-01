@@ -15,6 +15,7 @@ export interface InHouseGuest {
   laundry: number;
   status: ReservationStatus;
   isVip?: boolean;
+  phone?: string;
   email?: string;
   adults: number;
   children: number;
@@ -56,7 +57,7 @@ export interface GuestProfile {
   mobile: string;
   email: string;
   nationality: string;
-  totalStays: number;
+  totalStays?: number;
   loyaltyPoints: number;
   idType?: string;
   idNumber?: string;

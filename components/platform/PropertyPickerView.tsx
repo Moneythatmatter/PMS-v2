@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Pencil, Plus, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, Building2, MapPin, Pencil, Plus, RefreshCw } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isPlatformAdmin } from "@/lib/auth";
 import { useProperty } from "@/components/platform/PropertyProvider";
@@ -18,6 +18,94 @@ function initials(name: string) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+function PropertyCardSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+      <div className="h-1 animate-pulse bg-slate-200" />
+      <div className="p-5">
+        <div className="flex items-center gap-3">
+          <div className="h-11 w-11 animate-pulse rounded-xl bg-slate-200" />
+          <div className="flex-1 space-y-2">
+            <div className="h-5 w-3/4 animate-pulse rounded bg-slate-200" />
+            <div className="h-4 w-16 animate-pulse rounded bg-slate-100" />
+          </div>
+        </div>
+        <div className="mt-4 h-4 w-24 animate-pulse rounded bg-slate-100" />
+        <div className="mt-5 h-10 animate-pulse rounded-xl bg-slate-100" />
+      </div>
+    </div>
+  );
+}
+
+function PropertyCard({
+  property,
+  canEdit,
+  onOpen,
+}: {
+  property: PropertyDto;
+  canEdit: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <article
+      className={cn(
+        "group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-all duration-200",
+        "hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-100/40",
+      )}
+    >
+      <div className="h-1 bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200 group-hover:from-emerald-400 group-hover:via-emerald-500 group-hover:to-teal-400" />
+
+      <div className="flex flex-1 flex-col p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-sm font-bold text-white shadow-md shadow-slate-300/50 group-hover:from-emerald-600 group-hover:to-emerald-800 group-hover:shadow-emerald-200/60">
+              {initials(property.name)}
+            </div>
+            <div className="min-w-0">
+              <h3 className="truncate text-lg font-bold leading-tight text-slate-900">
+                {property.name}
+              </h3>
+              <span className="mt-1 inline-flex rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                {property.code}
+              </span>
+            </div>
+          </div>
+
+          {canEdit && (
+            <button
+              type="button"
+              className="rounded-lg p-1.5 text-slate-300 opacity-0 transition-all hover:bg-slate-100 hover:text-slate-600 group-hover:opacity-100"
+              aria-label={`Edit ${property.name}`}
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="mt-4 flex items-center gap-1.5 text-sm text-slate-500">
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+          <span className="truncate">{property.city?.trim() || "Location not set"}</span>
+        </div>
+
+        {property.timezone && (
+          <p className="mt-1 pl-5 text-xs text-slate-400">{property.timezone}</p>
+        )}
+
+        <div className="mt-auto pt-5">
+          <Button
+            className="h-10 w-full gap-2 border-slate-200 bg-white font-semibold text-slate-800 shadow-sm transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-900"
+            variant="outline"
+            onClick={onOpen}
+          >
+            Open workspace
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </Button>
+        </div>
+      </div>
+    </article>
+  );
 }
 
 export function PropertyPickerView() {
@@ -47,11 +135,6 @@ export function PropertyPickerView() {
   useEffect(() => {
     void load();
   }, []);
-
-  const defaultProperty = useMemo(
-    () => properties.find((p) => p.isDefault) ?? properties[0],
-    [properties],
-  );
 
   const openWorkspace = (property: PropertyDto) => {
     setProperty({
@@ -161,53 +244,32 @@ export function PropertyPickerView() {
         </div>
       )}
 
-      <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {properties.map((property) => (
-          <div
-            key={property.id}
-            className="group relative rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm transition hover:border-emerald-200 hover:shadow-md"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-700 text-sm font-bold text-white shadow-sm shadow-emerald-200/50">
-                {initials(property.name)}
-              </div>
-              {isPlatformAdmin(user) && (
-                <button
-                  type="button"
-                  className="text-slate-300 transition-colors hover:text-slate-500"
-                  aria-label="Edit property"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-            <h3 className="mt-4 text-xl font-bold text-slate-900">{property.name}</h3>
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-              {property.code}
-            </p>
-            <p className="mt-1 text-sm text-slate-500">{property.city || "—"}</p>
-            {defaultProperty?.id === property.id && (
-              <p className="mt-3 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
-                Default workspace
-              </p>
-            )}
-            <Button
-              variant="outline"
-              className="mt-5 w-full border-emerald-200 text-emerald-800 hover:border-emerald-300 hover:bg-emerald-50"
-              onClick={() => openWorkspace(property)}
-            >
-              Open workspace
-              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </Button>
-          </div>
-        ))}
-      </div>
+      <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {loading &&
+          Array.from({ length: 3 }).map((_, i) => <PropertyCardSkeleton key={i} />)}
 
-      {!loading && properties.length === 0 && !error && (
-        <p className="mt-10 text-center text-sm text-slate-500">
-          No properties assigned to your account. Contact an administrator.
-        </p>
-      )}
+        {!loading &&
+          properties.map((property) => (
+            <PropertyCard
+              key={property.id}
+              property={property}
+              canEdit={isPlatformAdmin(user)}
+              onOpen={() => openWorkspace(property)}
+            />
+          ))}
+
+        {!loading && properties.length === 0 && !error && (
+          <div className="col-span-full flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-white/60 px-6 py-16 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+              <Building2 className="h-7 w-7" />
+            </div>
+            <p className="mt-4 text-base font-semibold text-slate-700">No properties yet</p>
+            <p className="mt-1 max-w-sm text-sm text-slate-500">
+              No properties are assigned to your account. Contact an administrator to get access.
+            </p>
+          </div>
+        )}
+      </div>
     </WorkspaceShell>
   );
 }
