@@ -18,17 +18,26 @@ import {
   useModulePage,
 } from "./common";
 
+function getTodayString() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function WakeUpCallsView() {
   const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered } =
     useModulePage(() => wakeUpCallService.list(), (r, q) =>
       r.guest.toLowerCase().includes(q) || r.room.includes(q) || r.date.toLowerCase().includes(q));
   const guests = useInHouseGuests();
 
+  const todayStr = getTodayString();
   const [guestName, setGuestName] = useState("");
   useEffect(() => {
     if (!guestName && guests[0]) setGuestName(guests[0].guestName);
   }, [guests, guestName]);
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(() => getTodayString());
   const [time, setTime] = useState("06:00");
   const [notes, setNotes] = useState("");
   const [filter, setFilter] = useState("all");
@@ -48,10 +57,25 @@ export function WakeUpCallsView() {
 
   const handleSave = async () => {
     try {
+      if (!guestName) {
+        setToast("Please select a guest.");
+        return;
+      }
+      const today = getTodayString();
+      if (!date || date < today) {
+        setToast("Date cannot be in the past. Please select today or a future date.");
+        return;
+      }
+      const now = new Date();
+      const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      if (date === today && time <= currentHHMM) {
+        setToast("For today's date, please select a time in the future.");
+        return;
+      }
       const record = await wakeUpCallService.create({
         guest: guestName,
         room: guest?.room ?? "—",
-        date: new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+        date: new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
         time: new Date(`2000-01-01T${time}`).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
         notes: notes || undefined,
         completed: false,
@@ -78,7 +102,18 @@ export function WakeUpCallsView() {
 
   return (
     <ModuleShell toast={toast} setToast={setToast}
-      header={{ title: "Wake-up Calls", desc: "Schedule and track guest wake-up calls.", btn: "Schedule Call", onBtn: () => setFormOpen(true) }}
+      header={{
+        title: "Wake-up Calls",
+        desc: "Schedule and track guest wake-up calls.",
+        btn: "Schedule Call",
+        onBtn: () => {
+          const today = getTodayString();
+          if (!date || date < today) {
+            setDate(today);
+          }
+          setFormOpen(true);
+        },
+      }}
       stats={[
         { label: "Scheduled Today", value: list.filter((r) => !r.completed).length, accent: "#f59e0b", icon: Bell, sublabel: "Awaiting call" },
         { label: "Completed", value: items.filter((r) => r.completed).length, accent: "#10b981", icon: CheckCircle2, sublabel: "Done today" },
@@ -104,11 +139,11 @@ export function WakeUpCallsView() {
             },
             ...(firstSelected && !firstSelected.completed
               ? [
-                  {
-                    label: "Mark Done",
-                    onClick: () => markDone(firstSelected.id),
-                  },
-                ]
+                {
+                  label: "Mark Done",
+                  onClick: () => markDone(firstSelected.id),
+                },
+              ]
               : []),
           ]}
         />
@@ -129,7 +164,7 @@ export function WakeUpCallsView() {
       <FormDrawer open={formOpen} onClose={() => setFormOpen(false)} title="Schedule Wake-up Call" onSave={handleSave}>
         <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{guests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName} — Room {g.room}</option>)}</SelectInput></FormField>
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Date"><TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} /></FormField>
+          <FormField label="Date"><TextInput type="date" min={todayStr} value={date} onChange={(e) => setDate(e.target.value)} /></FormField>
           <FormField label="Time"><TextInput type="time" value={time} onChange={(e) => setTime(e.target.value)} /></FormField>
         </div>
         <FormField label="Notes"><TextAreaInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Special instructions…" /></FormField>
