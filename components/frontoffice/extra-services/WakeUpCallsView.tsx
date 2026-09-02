@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, CheckCircle2, Clock } from "lucide-react";
 import { wakeUpCallService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
@@ -43,6 +43,8 @@ export function WakeUpCallsView() {
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const isSavingRef = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const list = useMemo(() => {
     let rows = filtered.filter((r) =>
@@ -56,36 +58,73 @@ export function WakeUpCallsView() {
   const firstSelected = list.find((r) => selectedIds.has(r.id));
 
   const handleSave = async () => {
+    if (isSavingRef.current) return;
+
+    if (!guestName) {
+      setToast("Please select a guest.");
+      return;
+    }
+    const today = getTodayString();
+    if (!date || date < today) {
+      setToast("Date cannot be in the past. Please select today or a future date.");
+      return;
+    }
+    const now = new Date();
+    const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    if (date === today && time <= currentHHMM) {
+      setToast("For today's date, please select a time in the future.");
+      return;
+    }
+
+    const formattedDate = new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+    const formattedTime = new Date(`2000-01-01T${time}`).toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+    const roomNo = guest?.room ?? "—";
+
+    // Duplicate prevention
+    const isDuplicate = items.some((item) => {
+      const sameDate = item.date.trim().toLowerCase() === formattedDate.trim().toLowerCase();
+      const sameTime = item.time.trim().toLowerCase() === formattedTime.trim().toLowerCase();
+      const sameRoom = roomNo !== "—" && item.room.trim().toLowerCase() === roomNo.trim().toLowerCase();
+      const sameGuest = item.guest.trim().toLowerCase() === guestName.trim().toLowerCase();
+      return sameDate && sameTime && (sameRoom || sameGuest);
+    });
+
+    if (isDuplicate) {
+      setToast(`A wake-up call is already scheduled for ${guestName} (Room ${roomNo}) on ${formattedDate} at ${formattedTime}.`);
+      return;
+    }
+
     try {
-      if (!guestName) {
-        setToast("Please select a guest.");
-        return;
-      }
-      const today = getTodayString();
-      if (!date || date < today) {
-        setToast("Date cannot be in the past. Please select today or a future date.");
-        return;
-      }
-      const now = new Date();
-      const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-      if (date === today && time <= currentHHMM) {
-        setToast("For today's date, please select a time in the future.");
-        return;
-      }
+      isSavingRef.current = true;
+      setIsSaving(true);
       const record = await wakeUpCallService.create({
         guest: guestName,
-        room: guest?.room ?? "—",
-        date: new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
-        time: new Date(`2000-01-01T${time}`).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
+        room: roomNo,
+        date: formattedDate,
+        time: formattedTime,
         notes: notes || undefined,
         completed: false,
       });
-      setItems((prev) => [record, ...prev]);
+      setItems((prev) => {
+        if (prev.some((r) => r.id === record.id)) return prev;
+        return [record, ...prev];
+      });
       setFormOpen(false);
       setToast(`Wake-up call scheduled for ${guestName} at ${record.time}.`);
       setNotes("");
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
     }
   };
 
@@ -97,6 +136,24 @@ export function WakeUpCallsView() {
       setToast("Wake-up call marked as completed.");
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Failed to update");
+    }
+  };
+
+  const handleDelete = async (idsToDelete: string[]) => {
+    try {
+      await Promise.all(idsToDelete.map((id) => wakeUpCallService.remove(id)));
+      setItems((prev) => prev.filter((r) => !idsToDelete.includes(r.id)));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        idsToDelete.forEach((id) => next.delete(id));
+        return next;
+      });
+      if (preview && idsToDelete.includes(preview.id)) {
+        setPreview(null);
+      }
+      setToast(`Deleted ${idsToDelete.length} wake-up call(s).`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to delete");
     }
   };
 
@@ -145,6 +202,10 @@ export function WakeUpCallsView() {
                 },
               ]
               : []),
+            {
+              label: "Delete",
+              onClick: () => handleDelete(Array.from(selectedIds)),
+            },
           ]}
         />
       }
@@ -161,7 +222,7 @@ export function WakeUpCallsView() {
           { key: "status", header: "Status", render: (r) => <Pill className={r.completed ? statusColors.Completed : statusColors.Pending}>{r.completed ? "Done" : "Pending"}</Pill> },
         ]}
       />
-      <FormDrawer open={formOpen} onClose={() => setFormOpen(false)} title="Schedule Wake-up Call" onSave={handleSave}>
+      <FormDrawer open={formOpen} onClose={() => setFormOpen(false)} title="Schedule Wake-up Call" onSave={handleSave} isSaving={isSaving}>
         <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{guests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName} — Room {g.room}</option>)}</SelectInput></FormField>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Date"><TextInput type="date" min={todayStr} value={date} onChange={(e) => setDate(e.target.value)} /></FormField>
@@ -170,7 +231,24 @@ export function WakeUpCallsView() {
         <FormField label="Notes"><TextAreaInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Special instructions…" /></FormField>
       </FormDrawer>
       <PreviewDrawer open={!!preview} onClose={() => setPreview(null)} title={preview?.guest ?? ""} desc={`Room ${preview?.room} · ${preview?.time}`}
-        footer={preview && !preview.completed && <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={() => markDone(preview.id)}>Mark Done</Button>}>
+        footer={
+          preview && (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"
+                onClick={() => handleDelete([preview.id])}
+              >
+                Delete
+              </Button>
+              {!preview.completed && (
+                <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={() => markDone(preview.id)}>
+                  Mark Done
+                </Button>
+              )}
+            </div>
+          )
+        }>
         {preview && <PreviewGrid icon={Bell} rows={[["Date", preview.date], ["Time", preview.time], ["Notes", preview.notes ?? "—"], ["Status", preview.completed ? "Completed" : "Pending"]]} />}
       </PreviewDrawer>
     </ModuleShell>

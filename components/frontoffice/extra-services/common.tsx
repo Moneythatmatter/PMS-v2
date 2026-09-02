@@ -298,12 +298,19 @@ export function ModuleShell({
   );
 }
 
-export function FormDrawer({ open, onClose, title, onSave, children }: {
-  open: boolean; onClose: () => void; title: string; onSave: () => void; children: React.ReactNode;
+export function FormDrawer({ open, onClose, title, onSave, isSaving = false, children }: {
+  open: boolean; onClose: () => void; title: string; onSave: () => void; isSaving?: boolean; children: React.ReactNode;
 }) {
   return (
     <Drawer open={open} onClose={onClose} title={title} width="md"
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button className="bg-emerald-700 hover:bg-emerald-800" onClick={onSave}>Save</Button></>}>
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} disabled={isSaving}>Cancel</Button>
+          <Button className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50" onClick={onSave} disabled={isSaving}>
+            {isSaving ? "Saving…" : "Save"}
+          </Button>
+        </>
+      }>
       <div className="space-y-4">{children}</div>
     </Drawer>
   );
