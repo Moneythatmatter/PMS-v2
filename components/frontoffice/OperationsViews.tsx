@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRightLeft,
   BedDouble,
@@ -100,6 +100,8 @@ export function RoomTransferView() {
   const [transfers, setTransfers] = useState<RoomTransferRecord[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [previewTransfer, setPreviewTransfer] = useState<RoomTransferRecord | null>(null);
 
   useEffect(() => {
@@ -182,20 +184,31 @@ export function RoomTransferView() {
   };
 
   const handleTransfer = async () => {
+    if (isSubmittingRef.current) return;
+
     if (!guest) return;
-    if (!newRoom) {
+    const targetRoomNo = newRoom.split(" ")[0]?.trim();
+    if (!targetRoomNo) {
       setToast("Please select a new room.");
+      return;
+    }
+    if (targetRoomNo === guest.room) {
+      setToast("Please select a different room from the guest's current room.");
       return;
     }
     if (!transferDate || transferDate < todayIso()) {
       setToast("Transfer date cannot be in the past.");
       return;
     }
+
+    isSubmittingRef.current = true;
+    setSubmitting(true);
+
     try {
       const record = await transferService.create({
         guestName: guest.guestName,
         fromRoom: guest.room,
-        toRoom: newRoom.split(" ")[0],
+        toRoom: targetRoomNo,
         date: new Date(`${transferDate}T00:00:00`).toLocaleDateString("en-IN", {
           day: "numeric",
           month: "short",
@@ -204,21 +217,29 @@ export function RoomTransferView() {
         reason: reason || "Guest request",
         status: "Completed",
       });
+
+      // Update transfer records and close the form immediately
       setTransfers((prev) => [record, ...prev]);
-      const [updatedRooms, updatedInHouse] = await Promise.all([
-        roomService.status().catch(() => null),
-        reservationService.inHouse().catch(() => null),
-      ]);
-      if (updatedRooms) setRoomCards(updatedRooms);
-      if (updatedInHouse) {
-        const mapped = updatedInHouse as InHouseGuest[];
-        setGuests(mapped);
-      }
       setTransferOpen(false);
       resetForm();
       setToast(`${guest.guestName} transferred from Room ${guest.room} to ${record.toRoom}.`);
+
+      // Refresh status in background without blocking form closure
+      Promise.all([
+        roomService.status().catch(() => null),
+        reservationService.inHouse().catch(() => null),
+      ]).then(([updatedRooms, updatedInHouse]) => {
+        if (updatedRooms) setRoomCards(updatedRooms);
+        if (updatedInHouse) {
+          const mapped = updatedInHouse as InHouseGuest[];
+          setGuests(mapped);
+        }
+      });
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Failed to transfer");
+    } finally {
+      isSubmittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -449,18 +470,28 @@ export function RoomTransferView() {
       {/* Transfer form drawer */}
       <Drawer
         open={transferOpen}
-        onClose={() => setTransferOpen(false)}
+        onClose={() => {
+          if (!submitting) setTransferOpen(false);
+        }}
         title="Transfer Room"
         description="Move guest to an available room of the same type."
         width="md"
         footer={
           <>
-            <Button variant="outline" onClick={() => setTransferOpen(false)}>
+            <Button
+              variant="outline"
+              disabled={submitting}
+              onClick={() => setTransferOpen(false)}
+            >
               Cancel
             </Button>
-            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleTransfer}>
-              <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
-              Confirm Transfer
+            <Button
+              className="bg-emerald-700 hover:bg-emerald-800"
+              onClick={handleTransfer}
+              disabled={submitting || !newRoom}
+            >
+              <ArrowRightLeft className={cn("mr-1.5 h-3.5 w-3.5", submitting && "animate-spin")} />
+              {submitting ? "Transferring…" : "Confirm Transfer"}
             </Button>
           </>
         }
