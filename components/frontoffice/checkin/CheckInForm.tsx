@@ -615,6 +615,17 @@ export function CheckInForm() {
     return list;
   }, [availableRooms, walkIn.roomType, booking?.roomType, assignedRoom]);
 
+  const reservedRoomDisplay = useMemo(() => {
+    const roomKey = String(assignedRoom || booking?.roomNo || "").trim();
+    const roomLabel = roomKey || "TBA";
+    const fromPool = availableRooms.find(
+      (r) => r.roomNo === roomKey || r.roomNo.toLowerCase() === roomKey.toLowerCase(),
+    );
+    const typeLabel =
+      String(booking?.roomType || fromPool?.roomType || "").trim() || "—";
+    return `${roomLabel} · ${typeLabel}`;
+  }, [assignedRoom, booking?.roomNo, booking?.roomType, availableRooms]);
+
   return (
     <div className="space-y-6 select-none">
       {toast && (
@@ -967,7 +978,7 @@ export function CheckInForm() {
                       {
                         icon: BedDouble,
                         label: "Room",
-                        value: `${assignedRoom || booking.roomNo || "TBA"} · ${booking.roomType}`,
+                        value: reservedRoomDisplay,
                       },
                       {
                         icon: Calendar,
