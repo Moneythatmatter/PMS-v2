@@ -565,7 +565,7 @@ export function AllBookingsView() {
               ))}
             </div>
 
-            <div className="hidden overflow-x-auto md:block">
+            <div className="hidden min-h-[280px] overflow-x-auto md:block">
               <table className="w-full min-w-[860px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/80">
@@ -596,141 +596,149 @@ export function AllBookingsView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filtered.map((booking) => (
-                    <tr
-                      key={booking.id}
-                      onClick={() => setViewBooking(booking)}
-                      className="group cursor-pointer transition-colors hover:bg-emerald-50/30"
-                    >
-                      <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selected.has(booking.id)}
-                          onChange={() => toggleOne(booking.id)}
-                          className="rounded border-slate-300"
-                          aria-label={`Select ${displayBookingNo(booking)}`}
-                        />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-xs font-bold text-white transition-colors group-hover:from-emerald-600 group-hover:to-emerald-800">
-                            {getInitials(booking.guestName)}
+                  {filtered.map((booking, idx) => {
+                    const openUpwards = idx >= 1 && idx >= filtered.length - 2;
+                    return (
+                      <tr
+                        key={booking.id}
+                        onClick={() => setViewBooking(booking)}
+                        className="group cursor-pointer transition-colors hover:bg-emerald-50/30"
+                      >
+                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selected.has(booking.id)}
+                            onChange={() => toggleOne(booking.id)}
+                            className="rounded border-slate-300"
+                            aria-label={`Select ${displayBookingNo(booking)}`}
+                          />
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-xs font-bold text-white transition-colors group-hover:from-emerald-600 group-hover:to-emerald-800">
+                              {getInitials(booking.guestName)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-slate-900">{booking.guestName}</p>
+                              <p className="text-xs text-slate-500">
+                                {formatBookingGuestLine(booking)}
+                              </p>
+                              <p className="text-[11px] text-slate-400">{booking.source}</p>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-slate-900">{booking.guestName}</p>
-                            <p className="text-xs text-slate-500">
-                              {formatBookingGuestLine(booking)}
-                            </p>
-                            <p className="text-[11px] text-slate-400">{booking.source}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <p className="font-medium text-slate-800">
-                          Room {booking.roomNo} · {booking.roomType}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {booking.checkIn} – {booking.checkOut}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <p
-                          className={cn(
-                            "font-semibold",
-                            booking.balance > 0 ? "text-slate-900" : "text-emerald-700",
-                          )}
-                        >
-                          {formatBalance(booking.balance)}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <ReservationStatusBadge status={booking.status} />
-                      </td>
-                      <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
-                          {(() => {
-                            const action = primaryAction(booking);
-                            if (!action) return null;
-                            const ActionIcon = action.icon;
-                            return (
-                              <Link
-                                href={action.href}
-                                className={cn("rounded-lg p-2", action.className)}
-                                title={action.title}
-                              >
-                                <ActionIcon className="h-4 w-4" />
-                              </Link>
-                            );
-                          })()}
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setOpenMenu(openMenu === booking.id ? null : booking.id)
-                              }
-                              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
-                              aria-label="More actions"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </button>
-                            {openMenu === booking.id && (
-                              <>
-                                <button
-                                  type="button"
-                                  className="fixed inset-0 z-10"
-                                  onClick={() => setOpenMenu(null)}
-                                  aria-label="Close menu"
-                                />
-                                <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
-                                  {[
-                                    {
-                                      icon: Pencil,
-                                      label: "Edit",
-                                      onClick: () => setToast(`Edit ${displayBookingNo(booking)} coming soon.`),
-                                    },
-                                    {
-                                      icon: Printer,
-                                      label: "Print",
-                                      onClick: () => window.print(),
-                                    },
-                                    ...(booking.status === "Cancelled" ||
-                                      booking.status === "Checked Out"
-                                      ? []
-                                      : [
-                                        {
-                                          icon: XCircle,
-                                          label: "Cancel",
-                                          onClick: () => setCancelBooking(booking),
-                                          danger: true,
-                                        },
-                                      ]),
-                                  ].map(({ icon: Icon, label, onClick, danger }) => (
-                                    <button
-                                      key={label}
-                                      type="button"
-                                      onClick={() => {
-                                        onClick();
-                                        setOpenMenu(null);
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50",
-                                        danger
-                                          ? "text-red-600 hover:bg-red-50"
-                                          : "text-slate-700",
-                                      )}
-                                    >
-                                      <Icon className="h-3.5 w-3.5" />
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <p className="font-medium text-slate-800">
+                            Room {booking.roomNo} · {booking.roomType}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {booking.checkIn} – {booking.checkOut}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <p
+                            className={cn(
+                              "font-semibold",
+                              booking.balance > 0 ? "text-slate-900" : "text-emerald-700",
                             )}
+                          >
+                            {formatBalance(booking.balance)}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <ReservationStatusBadge status={booking.status} />
+                        </td>
+                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            {(() => {
+                              const action = primaryAction(booking);
+                              if (!action) return null;
+                              const ActionIcon = action.icon;
+                              return (
+                                <Link
+                                  href={action.href}
+                                  className={cn("rounded-lg p-2", action.className)}
+                                  title={action.title}
+                                >
+                                  <ActionIcon className="h-4 w-4" />
+                                </Link>
+                              );
+                            })()}
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenMenu(openMenu === booking.id ? null : booking.id)
+                                }
+                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+                                aria-label="More actions"
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </button>
+                              {openMenu === booking.id && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="fixed inset-0 z-10"
+                                    onClick={() => setOpenMenu(null)}
+                                    aria-label="Close menu"
+                                  />
+                                  <div
+                                    className={cn(
+                                      "absolute right-0 z-20 w-40 rounded-xl border border-slate-200 bg-white py-1 shadow-lg",
+                                      openUpwards ? "bottom-full mb-1" : "top-full mt-1",
+                                    )}
+                                  >
+                                    {[
+                                      {
+                                        icon: Pencil,
+                                        label: "Edit",
+                                        onClick: () => setToast(`Edit ${displayBookingNo(booking)} coming soon.`),
+                                      },
+                                      {
+                                        icon: Printer,
+                                        label: "Print",
+                                        onClick: () => window.print(),
+                                      },
+                                      ...(booking.status === "Cancelled" ||
+                                        booking.status === "Checked Out"
+                                        ? []
+                                        : [
+                                          {
+                                            icon: XCircle,
+                                            label: "Cancel",
+                                            onClick: () => setCancelBooking(booking),
+                                            danger: true,
+                                          },
+                                        ]),
+                                    ].map(({ icon: Icon, label, onClick, danger }) => (
+                                      <button
+                                        key={label}
+                                        type="button"
+                                        onClick={() => {
+                                          onClick();
+                                          setOpenMenu(null);
+                                        }}
+                                        className={cn(
+                                          "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50",
+                                          danger
+                                            ? "text-red-600 hover:bg-red-50"
+                                            : "text-slate-700",
+                                        )}
+                                      >
+                                        <Icon className="h-3.5 w-3.5" />
+                                        {label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
