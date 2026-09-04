@@ -41,10 +41,10 @@ import {
   ShieldCheck,
   Timer,
   FileCheck,
+  Eye,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Button, Drawer, Modal } from "@/components/ui";
-import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { INITIAL_CENTRAL_LEADS, CentralLeadItem } from "@/app/data/centralLeadData";
 import { LeadType, LeadSource } from "./LeadsInquiriesView";
@@ -1237,51 +1237,94 @@ export function DealsPipelineView() {
       }
     >
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: PIPELINE COMMERCIAL KPI CARDS
+          SECTION 1: PIPELINE COMMERCIAL KPI CARDS (F&B DASHBOARD STYLE)
       ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <HRKPICard
-          label="Total Active Deals"
-          value={`${kpiMetrics.totalCount}`}
-          subtitle={`${kpiMetrics.openCount} In Active Pipeline`}
-          tone="emerald"
-          icon={<Briefcase className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Pipeline Value"
-          value={`₹${(kpiMetrics.totalPipelineValue / 100000).toFixed(1)}L`}
-          subtitle="Weighted Commercial Value"
-          tone="purple"
-          icon={<DollarSign className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Won Bookings Value"
-          value={`₹${(kpiMetrics.wonValue / 100000).toFixed(1)}L`}
-          subtitle={`${kpiMetrics.wonCount} Deals Won This Month`}
-          tone="blue"
-          icon={<Award className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Conversion Velocity"
-          value="68.5%"
-          subtitle="Qualified to Won Rate"
-          tone="amber"
-          icon={<TrendingUp className="h-5 w-5" />}
-        />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6 mb-5">
+        {/* Card 1: Total Active Deals */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Total Active Deals
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <Briefcase className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.totalCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            {kpiMetrics.openCount} in active pipeline
+          </p>
+        </Card>
+
+        {/* Card 2: Pipeline Value */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Pipeline Value
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 sm:h-8 sm:w-8">
+              <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            ₹{(kpiMetrics.totalPipelineValue / 100000).toFixed(1)}L
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Weighted commercial value
+          </p>
+        </Card>
+
+        {/* Card 3: Won Bookings Value */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Won Bookings Value
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <Award className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            ₹{(kpiMetrics.wonValue / 100000).toFixed(1)}L
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            {kpiMetrics.wonCount} {kpiMetrics.wonCount === 1 ? "deal" : "deals"} won this month
+          </p>
+        </Card>
+
+        {/* Card 4: Conversion Velocity */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Conversion Velocity
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 sm:h-8 sm:w-8">
+              <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            68.5%
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Qualified to won rate
+          </p>
+        </Card>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION 2: SEARCH & FILTER TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs mb-4 flex flex-col md:flex-row items-center justify-between gap-3">
+      <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/80 shadow-xs mb-4 flex flex-col md:flex-row items-center justify-between gap-3">
         <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by Deal Name, Opportunity ID (#OPP-301), Client, Company, or Lead ID (#LD-502)..."
+            placeholder="Search by Deal Name, Opportunity ID (#OPP-301), Client, Company..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full text-xs rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50 font-medium text-slate-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-400"
+            className="w-full text-xs sm:text-sm rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50/50 font-normal text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300"
           />
         </div>
 
@@ -1290,7 +1333,7 @@ export function DealsPipelineView() {
           <select
             value={selectedStageFilter}
             onChange={(e) => setSelectedStageFilter(e.target.value)}
-            className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none"
+            className="text-xs rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
           >
             <option value="ALL">All 8 Stages</option>
             {HOTEL_PIPELINE_STAGES.map((st) => (
@@ -1304,7 +1347,7 @@ export function DealsPipelineView() {
           <select
             value={selectedLeadTypeFilter}
             onChange={(e) => setSelectedLeadTypeFilter(e.target.value)}
-            className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none"
+            className="text-xs rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
           >
             <option value="ALL">All Event Types</option>
             <option value="Wedding">Wedding</option>
@@ -1318,7 +1361,7 @@ export function DealsPipelineView() {
           <select
             value={selectedExecutiveFilter}
             onChange={(e) => setSelectedExecutiveFilter(e.target.value)}
-            className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none"
+            className="text-xs rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
           >
             <option value="ALL">All Executives</option>
             <option value="Vikram Malhotra">Vikram Malhotra</option>
@@ -1362,7 +1405,7 @@ export function DealsPipelineView() {
                     </div>
 
                     <div className="text-right shrink-0">
-                      <span className="text-[11px] font-mono font-bold text-emerald-800 block">
+                      <span className="text-[11px] font-mono font-semibold text-slate-600 block">
                         ₹{(stageTotal / 100000).toFixed(1)}L
                       </span>
                     </div>
@@ -1380,11 +1423,11 @@ export function DealsPipelineView() {
                             setSelectedDeal(deal);
                             setDrawerTab("overview");
                           }}
-                          className="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs hover:shadow-xs hover:border-slate-300 transition cursor-grab active:cursor-grabbing space-y-2"
+                          className="bg-white rounded-xl p-3 border border-slate-200/80 shadow-2xs hover:shadow-xs hover:border-slate-300 transition cursor-grab active:cursor-grabbing space-y-2"
                         >
                           {/* Card Top: Booking Type Pill & Deal ID */}
                           <div className="flex items-center justify-between">
-                            <span className="bg-purple-50 text-purple-800 border border-purple-200 px-1.5 py-0.5 rounded text-[10px] font-semibold truncate max-w-[120px]">
+                            <span className="bg-slate-100 text-slate-700 border border-slate-200/80 px-2 py-0.5 rounded text-[10px] font-medium truncate max-w-[120px]">
                               {deal.leadType}
                             </span>
                             <span className="font-mono text-[10px] text-slate-400 font-semibold">
@@ -1394,17 +1437,17 @@ export function DealsPipelineView() {
 
                           {/* Deal Title & Company */}
                           <div>
-                            <h4 className="font-bold text-xs text-slate-900 leading-tight">
+                            <h4 className="font-semibold text-xs text-slate-900 leading-tight">
                               {deal.dealName}
                             </h4>
-                            <span className="text-[10px] text-slate-500 font-medium block truncate">
+                            <span className="text-[10px] text-slate-500 font-normal block truncate">
                               {deal.companyName || deal.customerName} (Lead: #{deal.leadId})
                             </span>
                           </div>
 
                           {/* Commercial Value & Target Date */}
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
-                            <strong className="text-emerald-900 font-mono font-bold text-xs">
+                            <strong className="text-slate-900 font-mono font-semibold text-xs">
                               ₹{deal.dealValue.toLocaleString("en-IN")}
                             </strong>
                             <span className="text-[10px] text-slate-500 font-mono">
@@ -1414,7 +1457,7 @@ export function DealsPipelineView() {
 
                           {/* Tentative Hold Badge if active */}
                           {deal.tentativeHold && (
-                            <div className="bg-amber-50 border border-amber-200 p-1 rounded-md text-[10px] text-amber-900 flex items-center justify-between font-medium">
+                            <div className="bg-amber-50/70 border border-amber-200/80 p-1.5 rounded-md text-[10px] text-amber-800 flex items-center justify-between font-medium">
                               <span className="truncate flex items-center gap-1">
                                 <Timer className="h-3 w-3 text-amber-700 shrink-0" />
                                 Hold until {deal.tentativeHold.holdExpiryDate}
@@ -1424,37 +1467,37 @@ export function DealsPipelineView() {
 
                           {/* Quotation Badge if quotations exist */}
                           {deal.quotations.length > 0 && (
-                            <div className="bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] text-slate-700 flex items-center justify-between">
+                            <div className="bg-slate-50 border border-slate-200/80 px-2 py-1 rounded text-[10px] text-slate-700 flex items-center justify-between">
                               <span className="font-medium">
                                 QTN: #{deal.quotations[0].id} ({deal.quotations.length} Revs)
                               </span>
-                              <span className="font-mono font-bold text-emerald-800 text-[10px]">
+                              <span className="font-mono font-semibold text-slate-900 text-[10px]">
                                 ₹{(deal.quotedValue || deal.dealValue).toLocaleString("en-IN")}
                               </span>
                             </div>
                           )}
 
                           {/* Immediate Next Action Strip (Driven by Activity) */}
-                          <div className="bg-slate-50 rounded-lg p-1.5 border border-slate-100 text-[10px] space-y-0.5">
-                            <span className="text-slate-400 font-bold uppercase text-[9px] block">
+                          <div className="bg-slate-50/80 rounded-lg p-2 border border-slate-100 text-[10px] space-y-0.5">
+                            <span className="text-slate-400 font-semibold uppercase tracking-wider text-[9px] block">
                               Immediate Next Action
                             </span>
-                            <p className="text-slate-700 font-medium leading-tight truncate">
+                            <p className="text-slate-600 font-normal leading-tight truncate">
                               {deal.nextActionSummary || "No upcoming activity scheduled"}
                             </p>
                           </div>
 
                           {/* Executive & Contact Footer */}
-                          <div className="flex items-center justify-between pt-1 text-[10px] text-slate-400">
-                            <span className="truncate max-w-[130px] font-medium text-slate-600">
-                              👤 {deal.assignedExecutive}
+                          <div className="flex items-center justify-between pt-1 text-[10px]">
+                            <span className="truncate max-w-[130px] font-normal text-slate-500 flex items-center gap-1">
+                              <Users className="h-3 w-3 text-slate-400 shrink-0" /> {deal.assignedExecutive}
                             </span>
                             <a
                               href={`tel:${deal.mobile}`}
                               onClick={(e) => e.stopPropagation()}
-                              className="text-emerald-700 hover:text-emerald-800 p-0.5 font-mono font-semibold"
+                              className="text-slate-600 hover:text-slate-900 p-0.5 font-mono font-medium flex items-center gap-1"
                             >
-                              📞 {deal.mobile}
+                              <Phone className="h-3 w-3 text-slate-400 shrink-0" /> {deal.mobile}
                             </a>
                           </div>
                         </div>
@@ -1474,12 +1517,15 @@ export function DealsPipelineView() {
         /* ─────────────────────────────────────────────────────────────
             LIST VIEW TABLE (FOR BULK SEARCH & EXPORT)
         ───────────────────────────────────────────────────────────── */
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div className="px-4 py-3 text-xs text-slate-500 font-medium border-b border-slate-100 flex items-center justify-between">
+            <span>Showing <strong className="text-slate-700 font-semibold">{filteredDeals.length}</strong> of <strong className="text-slate-700 font-semibold">{deals.length}</strong> records &bull; Deals &amp; Pipeline</span>
+          </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 border-b border-slate-200">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50/70 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="py-3 px-4">Opportunity ID</th>
+                  <th className="py-3 px-4">Opportunity #</th>
                   <th className="py-3 px-4">Deal Name</th>
                   <th className="py-3 px-4">Customer / Company</th>
                   <th className="py-3 px-4">Type</th>
@@ -1490,7 +1536,7 @@ export function DealsPipelineView() {
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
+              <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
                 {filteredDeals.map((deal) => (
                   <tr
                     key={deal.id}
@@ -1498,51 +1544,48 @@ export function DealsPipelineView() {
                       setSelectedDeal(deal);
                       setDrawerTab("overview");
                     }}
-                    className="hover:bg-slate-50/80 transition cursor-pointer"
+                    className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                   >
-                    <td className="py-3 px-4 font-mono font-bold text-emerald-800">
+                    <td className="py-3.5 px-4 font-mono text-xs font-semibold text-slate-800">
                       #{deal.id}
                     </td>
-                    <td className="py-3 px-4 font-bold text-slate-900">
+                    <td className="py-3.5 px-4 font-semibold text-slate-900">
                       {deal.dealName}
                     </td>
-                    <td className="py-3 px-4 text-slate-700">
+                    <td className="py-3.5 px-4 text-slate-700">
                       <span className="block font-medium">{deal.companyName || deal.customerName}</span>
                       <span className="text-[10px] text-slate-400 font-mono">{deal.mobile}</span>
                     </td>
-                    <td className="py-3 px-4">
-                      <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded text-[10px] font-semibold">
+                    <td className="py-3.5 px-4">
+                      <span className="bg-slate-100 text-slate-700 border border-slate-200/80 px-2 py-0.5 rounded text-[10px] font-medium">
                         {deal.leadType}
                       </span>
                     </td>
-                    <td className="py-3 px-4 font-mono font-bold text-emerald-900">
+                    <td className="py-3.5 px-4 font-mono font-semibold text-slate-900">
                       ₹{deal.dealValue.toLocaleString("en-IN")}
                     </td>
-                    <td className="py-3 px-4">
-                      <span className="bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-bold">
+                    <td className="py-3.5 px-4">
+                      <span className="bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-semibold">
                         {deal.stage}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-slate-600 text-[11px] truncate max-w-[200px]">
+                    <td className="py-3.5 px-4 text-slate-600 text-[11px] truncate max-w-[200px]">
                       {deal.nextActionSummary || "—"}
                     </td>
-                    <td className="py-3 px-4 text-slate-700 font-medium">
+                    <td className="py-3.5 px-4 text-slate-700 font-medium">
                       {deal.assignedExecutive}
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      <Button
+                    <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <button
                         type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={() => {
                           setSelectedDeal(deal);
                           setDrawerTab("overview");
                         }}
-                        className="text-[11px] font-semibold rounded-lg px-2.5 h-7 cursor-pointer"
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer"
                       >
-                        View
-                      </Button>
+                        <Eye className="h-3 w-3 text-slate-400" /> View
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1649,32 +1692,32 @@ export function DealsPipelineView() {
         >
           <div className="space-y-4 text-xs pb-4">
             {/* Top Deal Hero Card */}
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-3">
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-[10px] font-mono font-bold text-emerald-800 block">
+                  <span className="text-[11px] font-mono text-slate-500 font-medium block">
                     Opportunity #{selectedDeal.id} (Linked Lead: #{selectedDeal.leadId})
                   </span>
-                  <h3 className="text-base font-bold text-slate-900 leading-tight">
+                  <h3 className="text-base font-bold text-slate-900 leading-tight mt-0.5">
                     {selectedDeal.dealName}
                   </h3>
-                  <span className="text-xs text-slate-600 font-medium">
-                    {selectedDeal.companyName || selectedDeal.customerName} • {selectedDeal.contactPerson}
+                  <span className="text-xs text-slate-500 font-normal">
+                    {selectedDeal.companyName || selectedDeal.customerName} &bull; {selectedDeal.contactPerson}
                   </span>
                 </div>
 
                 <div className="text-right space-y-1">
-                  <span className="text-sm font-black font-mono text-emerald-900 block">
+                  <span className="text-base font-bold font-mono text-slate-900 block">
                     ₹{selectedDeal.dealValue.toLocaleString("en-IN")}
                   </span>
                   <span
                     className={cn(
-                      "px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-block",
+                      "px-2.5 py-0.5 rounded-full text-[11px] font-semibold border inline-block",
                       selectedDeal.status === "Won"
-                        ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
                         : selectedDeal.status === "Lost"
-                        ? "bg-rose-100 text-rose-800 border-rose-200"
-                        : "bg-slate-200 text-slate-800 border-slate-300"
+                        ? "bg-rose-50 text-rose-700 border-rose-200/80"
+                        : "bg-slate-100 text-slate-700 border-slate-200/80"
                     )}
                   >
                     Stage: {selectedDeal.stage}
@@ -1682,18 +1725,18 @@ export function DealsPipelineView() {
                 </div>
               </div>
 
-              {/* Immediate Next Action Banner (Driven dynamically by Activity) */}
-              <div className="bg-emerald-50/80 border border-emerald-200 p-2.5 rounded-xl space-y-1">
-                <span className="text-[10px] font-bold text-emerald-900 uppercase tracking-wide flex items-center gap-1">
-                  <Clock className="h-3 w-3 text-emerald-700" /> Immediate Next Action
+              {/* Immediate Next Action Banner */}
+              <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs space-y-1">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-slate-400" /> Immediate Next Action
                 </span>
-                <p className="text-xs text-slate-800 font-medium leading-relaxed">
+                <p className="text-xs text-slate-700 font-medium leading-relaxed">
                   {selectedDeal.nextActionSummary || "No immediate next action configured."}
                 </p>
               </div>
             </div>
 
-            {/* Clean Tabs */}
+            {/* Clean Tabs (No Emojis) */}
             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold overflow-x-auto">
               <button
                 type="button"
@@ -1705,7 +1748,7 @@ export function DealsPipelineView() {
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                📋 Overview &amp; Requirements
+                Overview &amp; Requirements
               </button>
               <button
                 type="button"
@@ -1717,7 +1760,7 @@ export function DealsPipelineView() {
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                💰 Commercials &amp; Terms
+                Commercials &amp; Terms
               </button>
               <button
                 type="button"
@@ -1729,7 +1772,7 @@ export function DealsPipelineView() {
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                📜 Quotations ({selectedDeal.quotations.length})
+                Quotations ({selectedDeal.quotations.length})
               </button>
               <button
                 type="button"
@@ -1741,7 +1784,7 @@ export function DealsPipelineView() {
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                🏛️ Hold Details {selectedDeal.tentativeHold ? "🔒" : ""}
+                Hold Details
               </button>
               <button
                 type="button"
@@ -1753,7 +1796,7 @@ export function DealsPipelineView() {
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                📞 Activities ({selectedDeal.activities.length})
+                Activities ({selectedDeal.activities.length})
               </button>
               <button
                 type="button"
@@ -1765,18 +1808,18 @@ export function DealsPipelineView() {
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                ⏱️ Stage Timeline
+                Stage Timeline
               </button>
             </div>
 
             {/* ── TAB 1: OVERVIEW & EVENT REQUIREMENTS ── */}
             {drawerTab === "overview" && (
               <div className="space-y-3.5">
-                <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-2.5">
-                  <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wide flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
+                <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2.5">
+                  <h4 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2">
                     <UserCheck className="h-3.5 w-3.5 text-emerald-700" /> Client &amp; Contact Information
                   </h4>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs">
                     <div>
                       <span className="text-slate-400 text-[10px] block">Customer / Organization:</span>
                       <strong className="text-slate-900">{selectedDeal.companyName || selectedDeal.customerName}</strong>
@@ -1787,65 +1830,65 @@ export function DealsPipelineView() {
                     </div>
                     <div>
                       <span className="text-slate-400 text-[10px] block">Mobile Number:</span>
-                      <span className="font-mono font-semibold text-emerald-800">{selectedDeal.mobile}</span>
+                      <span className="font-mono text-slate-700">{selectedDeal.mobile}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 text-[10px] block">Email Address:</span>
-                      <span className="font-mono text-slate-800">{selectedDeal.email || "Not Provided"}</span>
+                      <span className="font-mono text-slate-700">{selectedDeal.email || "Not Provided"}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 text-[10px] block">Linked Lead ID:</span>
-                      <span className="font-mono font-bold text-slate-900">#{selectedDeal.leadId}</span>
+                      <span className="font-mono text-slate-700">#{selectedDeal.leadId}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 text-[10px] block">Assigned Executive:</span>
-                      <span className="font-semibold text-slate-800">{selectedDeal.assignedExecutive}</span>
+                      <span className="text-slate-700 font-medium">{selectedDeal.assignedExecutive}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-2.5">
-                  <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wide flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
-                    <Tag className="h-3.5 w-3.5 text-purple-700" /> Event &amp; Booking Specifications
+                <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2.5">
+                  <h4 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                    <Tag className="h-3.5 w-3.5 text-slate-500" /> Event &amp; Booking Specifications
                   </h4>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs">
                     <div>
                       <span className="text-slate-400 text-[10px] block">Event Booking Type:</span>
-                      <strong className="text-purple-900">{selectedDeal.leadType}</strong>
+                      <strong className="text-slate-800">{selectedDeal.leadType}</strong>
                     </div>
                     <div>
                       <span className="text-slate-400 text-[10px] block">Expected Date:</span>
-                      <span className="font-mono font-semibold text-slate-900">
+                      <span className="font-mono text-slate-700">
                         {selectedDeal.expectedEventDate || "Not Provided"}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-400 text-[10px] block">Requested Venue:</span>
-                      <strong className="text-slate-900 font-semibold">{selectedDeal.venueRequired || "Grand Ballroom"}</strong>
+                      <strong className="text-slate-800">{selectedDeal.venueRequired || "Grand Ballroom"}</strong>
                     </div>
                     <div>
                       <span className="text-slate-400 text-[10px] block">Expected Guest Pax:</span>
-                      <strong className="text-slate-900 font-mono">
+                      <strong className="text-slate-800 font-mono">
                         {selectedDeal.guestCount ? `${selectedDeal.guestCount} Guests` : "Not Provided"}
                       </strong>
                     </div>
                     {selectedDeal.expectedRoomNights && (
                       <div>
                         <span className="text-slate-400 text-[10px] block">Room Block Nights:</span>
-                        <strong className="text-slate-900 font-mono">{selectedDeal.expectedRoomNights} Room Nights</strong>
+                        <strong className="text-slate-800 font-mono">{selectedDeal.expectedRoomNights} Room Nights</strong>
                       </div>
                     )}
                     <div>
                       <span className="text-slate-400 text-[10px] block">Target Close Date:</span>
-                      <span className="font-mono text-slate-700">{selectedDeal.expectedCloseDate}</span>
+                      <span className="font-mono text-slate-600">{selectedDeal.expectedCloseDate}</span>
                     </div>
                   </div>
 
                   <div className="pt-2 border-t border-slate-100">
-                    <span className="text-slate-400 text-[10px] font-bold block mb-1">
+                    <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider block mb-1">
                       Customer Requirements &amp; Notes:
                     </span>
-                    <p className="text-slate-700 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 leading-relaxed font-medium">
+                    <p className="text-slate-600 text-xs bg-slate-50/80 p-2.5 rounded-lg border border-slate-200/80 leading-relaxed font-normal">
                       {selectedDeal.customerRequirement}
                     </p>
                   </div>
@@ -1853,41 +1896,50 @@ export function DealsPipelineView() {
               </div>
             )}
 
-            {/* ── TAB 2: COMMERCIALS & TERMS ── */}
+            {/* ── TAB 2: COMMERCIALS & TERMS (CLEAN PMS THEME, NO DARK BOX) ── */}
             {drawerTab === "commercials" && (
               <div className="space-y-3.5">
-                <div className="p-4 rounded-xl bg-slate-900 text-white space-y-3">
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wide font-bold">Deal Commercial Value</span>
-                  <h3 className="text-2xl font-black text-emerald-400 font-mono">
-                    ₹{selectedDeal.dealValue.toLocaleString("en-IN")}
-                  </h3>
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800 text-xs">
+                <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-3">
+                  <div className="flex items-start justify-between">
                     <div>
-                      <span className="text-slate-400 text-[10px] block">Quoted Tariff:</span>
-                      <strong className="text-white font-mono">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+                        Deal Commercial Value
+                      </span>
+                      <h3 className="text-2xl font-bold text-slate-900 font-mono mt-0.5">
+                        ₹{selectedDeal.dealValue.toLocaleString("en-IN")}
+                      </h3>
+                    </div>
+                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                      {selectedDeal.discountOffered || "Standard Tariff"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-xs">
+                    <div>
+                      <span className="text-slate-400 text-[11px] block">Quoted Tariff:</span>
+                      <strong className="text-slate-900 font-mono text-xs">
                         ₹{(selectedDeal.quotedValue || selectedDeal.dealValue).toLocaleString("en-IN")}
                       </strong>
                     </div>
                     <div>
-                      <span className="text-slate-400 text-[10px] block">Discount / Rate Agreement:</span>
-                      <span className="text-amber-300 font-semibold">{selectedDeal.discountOffered || "Standard Tariff"}</span>
+                      <span className="text-slate-400 text-[11px] block">Discount / Rate Agreement:</span>
+                      <span className="text-slate-700 font-medium">{selectedDeal.discountOffered || "Standard Tariff Rate"}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-2">
-                  <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wide border-b border-slate-100 pb-1.5">
-                    Payment &amp; Credit Agreement
+                <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2.5">
+                  <h4 className="font-semibold text-xs text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                    <DollarSign className="h-3.5 w-3.5 text-slate-400" /> Payment &amp; Credit Agreement
                   </h4>
-                  <div className="space-y-1.5 text-xs">
+                  <div className="space-y-2 text-xs pt-0.5">
                     <div>
-                      <span className="text-slate-400 text-[10px] block">Agreed Payment Terms:</span>
-                      <strong className="text-slate-800">{selectedDeal.paymentTerms || "Standard 50% Advance on Booking"}</strong>
+                      <span className="text-slate-400 text-[11px] block">Agreed Payment Terms:</span>
+                      <strong className="text-slate-800 font-medium">{selectedDeal.paymentTerms || "Standard 50% Advance on Booking"}</strong>
                     </div>
                     {selectedDeal.creditTerms && (
                       <div>
-                        <span className="text-slate-400 text-[10px] block">Corporate Credit SLA:</span>
-                        <span className="text-blue-800 font-semibold">{selectedDeal.creditTerms}</span>
+                        <span className="text-slate-400 text-[11px] block">Corporate Credit SLA:</span>
+                        <span className="text-slate-700 font-medium">{selectedDeal.creditTerms}</span>
                       </div>
                     )}
                   </div>

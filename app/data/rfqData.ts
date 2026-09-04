@@ -66,36 +66,38 @@ export interface RFQRecord {
 
 /** Normalize API / legacy JSON shapes into canonical RFQ line items. */
 export function normalizeRfqRequestedItem(
-  raw: Partial<RFQRequestedItem> & Record<string, unknown>,
+  raw: Partial<RFQRequestedItem> & { [key: string]: any },
   index: number,
 ): RFQRequestedItem {
+  const r = raw as Record<string, any>;
   return {
-    id: String(raw.id ?? `rfq-item-${index}`),
-    materialId: raw.materialId ? String(raw.materialId) : undefined,
-    productCode: raw.productCode ? String(raw.productCode) : undefined,
-    item: String(raw.item ?? raw.itemName ?? raw.itemDescription ?? ""),
-    category: String(raw.category ?? ""),
-    quantity: Number(raw.quantity ?? raw.requestedQty ?? 0),
-    unit: String(raw.unit ?? raw.uom ?? ""),
-    estimatedRate: Number(raw.estimatedRate ?? raw.estimatedPrice ?? raw.unitRate ?? 0),
+    id: String(r.id ?? `rfq-item-${index}`),
+    materialId: r.materialId ? String(r.materialId) : undefined,
+    productCode: r.productCode ? String(r.productCode) : undefined,
+    item: String(r.item ?? r.itemName ?? r.itemDescription ?? ""),
+    category: String(r.category ?? ""),
+    quantity: Number(r.quantity ?? r.requestedQty ?? 0),
+    unit: String(r.unit ?? r.uom ?? ""),
+    estimatedRate: Number(r.estimatedRate ?? r.estimatedPrice ?? r.unitRate ?? 0),
   };
 }
 
 /** Normalize API / legacy JSON shapes into canonical RFQ vendor rows. */
 export function normalizeRfqVendor(
-  raw: Partial<RFQVendorItem> & Record<string, unknown>,
+  raw: Partial<RFQVendorItem> & { [key: string]: any },
   index: number,
 ): RFQVendorItem {
-  const status = raw.status;
+  const r = raw as Record<string, any>;
+  const status = r.status;
   return {
-    id: String(raw.id ?? raw.vendorId ?? `rfq-vendor-${index}`),
-    vendorName: String(raw.vendorName ?? raw.name ?? ""),
-    email: String(raw.email ?? ""),
-    phone: String(raw.phone ?? ""),
-    invitationSentOn: raw.invitationSentOn
-      ? String(raw.invitationSentOn)
-      : raw.invitedOn
-        ? String(raw.invitedOn)
+    id: String(r.id ?? r.vendorId ?? `rfq-vendor-${index}`),
+    vendorName: String(r.vendorName ?? r.name ?? ""),
+    email: String(r.email ?? ""),
+    phone: String(r.phone ?? ""),
+    invitationSentOn: r.invitationSentOn
+      ? String(r.invitationSentOn)
+      : r.invitedOn
+        ? String(r.invitedOn)
         : undefined,
     status:
       status === "Pending" || status === "Sent" || status === "Responded" ? status : "Pending",

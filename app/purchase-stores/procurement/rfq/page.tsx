@@ -239,7 +239,7 @@ export default function RequestForQuotationsPage() {
   // Sync Form State when Edit RFQ opens
   useEffect(() => {
     if (editRFQ) {
-      setFormPR(editRFQ.linkedPR);
+      setFormPR(editRFQ.linkedPR ?? "");
       setFormBuyer(editRFQ.buyer);
       setFormRFQDate(editRFQ.rfqDate);
       setFormClosingDate(editRFQ.closingDate);

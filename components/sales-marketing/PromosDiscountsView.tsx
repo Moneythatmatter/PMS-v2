@@ -29,8 +29,7 @@ import {
   Check,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
-import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { Button, Card, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────
@@ -441,7 +440,7 @@ export function PromosDiscountsView() {
             resetForm();
             setIsCreateModalOpen(true);
           }}
-          className="rounded-full text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm flex items-center gap-1.5 px-4 cursor-pointer"
+          className="rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-2xs flex items-center gap-1.5 px-3.5 py-1.5 cursor-pointer"
         >
           <Plus className="h-3.5 w-3.5" /> Create Promotion
         </Button>
@@ -450,73 +449,121 @@ export function PromosDiscountsView() {
       onDismissToast={() => setToastMessage(null)}
     >
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: KPI CARDS
+          SECTION 1: KPI CARDS (FRONT OFFICE / F&B COHESIVE THEME)
          ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 mb-5">
-        <HRKPICard
-          label="Total Promotions"
-          value={`${metrics.totalPromos}`}
-          subtitle={`${metrics.activePromos} Active Offers`}
-          tone="emerald"
-          icon={<Ticket className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Active Offers"
-          value={`${metrics.activePromos}`}
-          subtitle="Currently Usable"
-          tone="blue"
-          icon={<CheckCircle2 className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Room Offers"
-          value={`${metrics.roomOffers}`}
-          subtitle="Stay Discounts"
-          tone="purple"
-          icon={<Bed className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Restaurant Offers"
-          value={`${metrics.restaurantOffers}`}
-          subtitle="Dining Offers"
-          tone="amber"
-          icon={<Utensils className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Banquet Offers"
-          value={`${metrics.banquetOffers}`}
-          subtitle="Event Discounts"
-          tone="emerald"
-          icon={<Building2 className="h-4 w-4" />}
-        />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+        <Card className="p-4 bg-white border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Total Promotions</span>
+            <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+              <Ticket className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+            {metrics.totalPromos}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            All Created Schemes
+          </div>
+        </Card>
+
+        <Card className="p-4 bg-white border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Active Offers</span>
+            <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+            {metrics.activePromos}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            Currently Usable
+          </div>
+        </Card>
+
+        <Card className="p-4 bg-white border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Room Offers</span>
+            <div className="h-8 w-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+              <Bed className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+            {metrics.roomOffers}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            Stay Discounts
+          </div>
+        </Card>
+
+        <Card className="p-4 bg-white border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Restaurant Offers</span>
+            <div className="h-8 w-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+              <Utensils className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+            {metrics.restaurantOffers}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            F&amp;B Dining Deals
+          </div>
+        </Card>
+
+        <Card className="p-4 bg-white border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Banquet Offers</span>
+            <div className="h-8 w-8 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
+              <Building2 className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+            {metrics.banquetOffers}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            Event &amp; Hall Specials
+          </div>
+        </Card>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION 2: PROMOTIONS LIST WITH SEARCH & FILTERS
          ───────────────────────────────────────────────────────────── */}
       <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs">
           <div className="flex flex-wrap items-center gap-2 flex-1">
             {/* Search Bar */}
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search by promo ID, name, code..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full text-xs rounded-xl border border-slate-200 pl-9 pr-3 py-1.5 bg-slate-50 font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                className="w-full text-xs rounded-lg border border-slate-200 pl-9 pr-8 py-1.5 bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 placeholder:text-slate-400"
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </div>
 
             {/* Service Filter */}
             <select
               value={selectedServiceFilter}
               onChange={(e) => setSelectedServiceFilter(e.target.value)}
-              className="text-xs rounded-lg border border-slate-200 py-1.5 px-3 bg-white font-bold text-slate-800 focus:ring-2 focus:ring-emerald-600"
+              className="text-xs rounded-lg border border-slate-200 py-1.5 px-3 bg-white font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer"
             >
               <option value="ALL">All Services</option>
               <option value="Rooms">Rooms</option>
-              <option value="Restaurant">Restaurant</option>
+              <option value="Restaurant">Restaurant (F&amp;B)</option>
               <option value="Banquet">Banquet</option>
             </select>
 
@@ -524,7 +571,7 @@ export function PromosDiscountsView() {
             <select
               value={selectedStatusFilter}
               onChange={(e) => setSelectedStatusFilter(e.target.value)}
-              className="text-xs rounded-lg border border-slate-200 py-1.5 px-3 bg-white font-bold text-slate-800 focus:ring-2 focus:ring-emerald-600"
+              className="text-xs rounded-lg border border-slate-200 py-1.5 px-3 bg-white font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer"
             >
               <option value="ALL">All Statuses</option>
               <option value="Active">Active</option>
@@ -532,105 +579,105 @@ export function PromosDiscountsView() {
             </select>
           </div>
 
-          <div className="text-xs font-bold text-slate-500">
-            Showing <span className="text-slate-900">{filteredPromotions.length}</span> promotions
+          <div className="text-xs text-slate-500 font-medium">
+            Showing <strong>{filteredPromotions.length}</strong> of {promotionsList.length} promotions
           </div>
         </div>
 
-        {/* PROMOTION LIST TABLE */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        {/* PROMOTION LIST TABLE (CLEAN PMS FRONT OFFICE / F&B STYLE) */}
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50/80 text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
+              <thead className="bg-slate-50/80 text-[11px] font-semibold tracking-wider text-slate-500 uppercase border-b border-slate-200">
                 <tr>
-                  <th className="py-3.5 px-4 text-left">Unique Promo ID</th>
-                  <th className="py-3.5 px-4 text-left">Promotion Name</th>
-                  <th className="py-3.5 px-4 text-center">Promo Code</th>
-                  <th className="py-3.5 px-4 text-center">Applicable To</th>
-                  <th className="py-3.5 px-4 text-center">Discount</th>
-                  <th className="py-3.5 px-4 text-left">Eligibility Criteria</th>
-                  <th className="py-3.5 px-4 text-center">Validity Period</th>
-                  <th className="py-3.5 px-4 text-center">Status</th>
-                  <th className="py-3.5 px-4 text-center">Usage Count</th>
-                  <th className="py-3.5 px-4 text-center">Actions</th>
+                  <th className="py-3 px-4 text-left">Promotion Scheme</th>
+                  <th className="py-3 px-4 text-left">Promo Code</th>
+                  <th className="py-3 px-4 text-left">Applicable To</th>
+                  <th className="py-3 px-4 text-left">Discount</th>
+                  <th className="py-3 px-4 text-left">Eligibility &amp; Rules</th>
+                  <th className="py-3 px-4 text-left">Validity</th>
+                  <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 text-center">Usage</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredPromotions.length > 0 ? (
                   filteredPromotions.map((promo) => (
                     <tr key={promo.id} className="hover:bg-slate-50/70 transition">
-                      <td className="py-3.5 px-4 font-mono">
-                        <span className="bg-slate-100 text-slate-900 font-extrabold text-[11px] px-2.5 py-1 rounded-md border border-slate-200 inline-flex items-center gap-1 shadow-xs">
-                          <Tag className="h-3 w-3 text-emerald-700" />
-                          {promo.uniquePromoId || promo.id}
-                        </span>
+                      {/* Promotion Scheme */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-slate-900 text-xs">{promo.name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">#{promo.uniquePromoId || promo.id}</span>
+                            </div>
+                            <span className="text-[11px] text-slate-500 line-clamp-1 block mt-0.5">{promo.description}</span>
+                          </div>
+                        </div>
                       </td>
 
-                      <td className="py-3.5 px-4">
-                        <strong className="text-xs font-bold text-slate-900 block">{promo.name}</strong>
-                        <span className="text-[10px] text-slate-400 line-clamp-1 block mb-1">{promo.description}</span>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 font-extrabold font-mono text-[11px] px-2.5 py-0.5 rounded-full border border-emerald-200">
-                          <Tag className="h-3 w-3" />
+                      {/* Promo Code */}
+                      <td className="py-3 px-4">
+                        <code className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono text-[11px] border border-slate-200 font-bold">
                           {promo.promoCode}
-                        </span>
+                        </code>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center font-bold text-slate-800">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
-                            promo.applicableTo === "Rooms"
-                              ? "bg-purple-50 text-purple-800 border-purple-200"
-                              : promo.applicableTo === "Restaurant"
-                              ? "bg-amber-50 text-amber-800 border-amber-200"
-                              : "bg-blue-50 text-blue-800 border-blue-200"
-                          )}
-                        >
-                          {promo.applicableTo === "Rooms" && <Bed className="h-3 w-3" />}
-                          {promo.applicableTo === "Restaurant" && <Utensils className="h-3 w-3" />}
-                          {promo.applicableTo === "Banquet" && <Building2 className="h-3 w-3" />}
+                      {/* Applicable To */}
+                      <td className="py-3 px-4">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                          {promo.applicableTo === "Rooms" && <Bed className="h-3.5 w-3.5 text-slate-500" />}
+                          {promo.applicableTo === "Restaurant" && <Utensils className="h-3.5 w-3.5 text-slate-500" />}
+                          {promo.applicableTo === "Banquet" && <Building2 className="h-3.5 w-3.5 text-slate-500" />}
                           {promo.applicableTo}
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center font-extrabold font-mono text-emerald-800">
-                        {promo.discountValue}
-                        <span className="text-[9px] font-normal text-slate-400 block">({promo.discountType})</span>
+                      {/* Discount Value */}
+                      <td className="py-3 px-4">
+                        <div>
+                          <span className="font-bold font-mono text-slate-900 text-xs block">
+                            {promo.discountValue}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium block">
+                            {promo.discountType}
+                          </span>
+                        </div>
                       </td>
 
-                      {/* ELIGIBILITY CRITERIA COLUMN */}
-                      <td className="py-3.5 px-4 text-left">
-                        <div className="flex flex-col gap-1 text-[10px]">
+                      {/* Eligibility & Rules */}
+                      <td className="py-3 px-4">
+                        <div className="text-[11px] space-y-0.5 text-slate-600 font-medium">
                           {promo.minSpend && promo.minSpend > 0 ? (
-                            <span className="font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md w-fit">
-                              Min Spend: ₹{promo.minSpend.toLocaleString("en-IN")}
-                            </span>
+                            <div>Min Spend: <strong className="text-slate-800 font-mono">₹{promo.minSpend.toLocaleString("en-IN")}</strong></div>
                           ) : (
-                            <span className="text-slate-400 font-medium">No Min Spend</span>
+                            <span className="text-slate-400 text-[10px]">No Min Spend</span>
                           )}
                           {promo.applicableTo === "Rooms" && promo.minNights && promo.minNights > 0 && (
-                            <span className="font-bold text-purple-800 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md w-fit">
-                              Min Stay: {promo.minNights} {promo.minNights === 1 ? "Night" : "Nights"}
-                            </span>
+                            <div className="text-[10px] text-slate-500">Min Stay: {promo.minNights} {promo.minNights === 1 ? "Night" : "Nights"}</div>
                           )}
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="text-slate-800 font-mono text-[10px] block">
-                          {promo.startDate} to {promo.endDate}
+                      {/* Validity */}
+                      <td className="py-3 px-4">
+                        <span className="text-slate-700 font-mono text-[11px] block">
+                          {promo.startDate}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono block">
+                          to {promo.endDate}
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center">
+                      {/* Status */}
+                      <td className="py-3 px-4 text-center">
                         <button
                           type="button"
                           onClick={() => handleToggleStatus(promo)}
                           className={cn(
-                            "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border cursor-pointer transition hover:opacity-80",
+                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border cursor-pointer transition hover:opacity-80",
                             promo.status === "Active"
                               ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                               : "bg-slate-100 text-slate-600 border-slate-200"
@@ -646,28 +693,32 @@ export function PromosDiscountsView() {
                         </button>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center font-bold font-mono text-slate-800">
-                        {promo.usageCount} times
+                      {/* Usage */}
+                      <td className="py-3 px-4 text-center font-mono font-medium text-slate-700 text-xs">
+                        {promo.usageCount}
                       </td>
 
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
+                      {/* Actions */}
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenEdit(promo)}
-                            className="rounded-lg text-xs font-bold px-2.5 h-7 border-slate-200 cursor-pointer"
+                            className="rounded-lg text-xs font-semibold px-2.5 h-7 border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer"
                           >
-                            <Edit2 className="h-3 w-3 mr-1" /> Edit
+                            <Edit2 className="h-3 w-3 mr-1 text-slate-400" /> Edit
                           </Button>
-
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             onClick={() => handleToggleStatus(promo)}
-                            className="rounded-lg text-[10px] font-bold px-2 h-7 border-slate-200 cursor-pointer"
+                            className={cn(
+                              "rounded-lg text-xs font-semibold px-2.5 h-7 border-slate-200 bg-white cursor-pointer",
+                              promo.status === "Active" ? "text-slate-600 hover:bg-slate-50" : "text-emerald-700 hover:bg-emerald-50"
+                            )}
                           >
                             {promo.status === "Active" ? "Deactivate" : "Activate"}
                           </Button>
@@ -677,7 +728,7 @@ export function PromosDiscountsView() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={10} className="py-8 text-center text-slate-500 text-xs">
+                    <td colSpan={9} className="py-8 text-center text-slate-500 text-xs">
                       No hotel promotions found matching your search filters.
                     </td>
                   </tr>

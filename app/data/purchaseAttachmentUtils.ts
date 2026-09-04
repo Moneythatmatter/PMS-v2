@@ -89,7 +89,9 @@ export function revokeAttachmentUrls(attachments: PurchaseAttachmentRecord[]) {
   }
 }
 
-export function attachmentToApiPayload(att: PurchaseAttachmentRecord) {
+import type { PRAttachment } from "./purchaseRequisitionsData";
+
+export function attachmentToApiPayload(att: PurchaseAttachmentRecord): PRAttachment {
   return {
     id: att.id,
     fileName: att.fileName,

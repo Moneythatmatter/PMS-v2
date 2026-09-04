@@ -2,8 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import {
-  Building2,
-  FolderTree,
+  PieChart,
   Plus,
   Save,
   RotateCcw,
@@ -11,10 +10,8 @@ import {
   X,
   Power,
   Trash2,
-  Layers,
   FileText,
   CheckCircle2,
-  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -25,10 +22,9 @@ import {
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
 import {
-  sampleDivisionsList,
-  DivisionModel,
-  DivisionType,
-} from "@/app/data/accounts/divisionData";
+  sampleRevenueCategoriesList,
+  RevenueCategoryModel,
+} from "@/app/data/accounts/revenueCategoryData";
 import {
   CompanySelector,
   MasterFormSection,
@@ -38,10 +34,10 @@ import {
 } from "@/components/accounts/MasterComponents";
 import { cn } from "@/lib/utils";
 
-export function DivisionMasterView() {
-  // Master Divisions State
-  const [divisions, setDivisions] = useState<DivisionModel[]>(sampleDivisionsList);
-  const [selectedDivisionId, setSelectedDivisionId] = useState<string>("DIV-001");
+export function RevenueCategoryMasterView() {
+  // Master Revenue Categories State (strictly 2 initial seed records)
+  const [categories, setCategories] = useState<RevenueCategoryModel[]>(sampleRevenueCategoriesList);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("RC-001");
 
   // Company Selector State
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("comp-101");
@@ -49,7 +45,6 @@ export function DivisionMasterView() {
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Inactive">("All");
-  const [typeFilter, setTypeFilter] = useState<"All" | DivisionType>("All");
 
   // Toast Notification State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -71,17 +66,14 @@ export function DivisionMasterView() {
   // Active Selected Record
   const activeRecord = useMemo(() => {
     return (
-      divisions.find((d) => d.divisionId === selectedDivisionId) ||
-      divisions[0] || {
-        divisionId: "DIV-001",
-        divisionCode: "ROOMS",
-        divisionName: "Rooms",
-        shortName: "RMS",
-        divisionType: "Revenue Department" as DivisionType,
-        sequence: 1,
+      categories.find((c) => c.revenueCategoryId === selectedCategoryId) ||
+      categories[0] || {
+        revenueCategoryId: "RC-001",
+        revenueCategoryCode: "ROOMS",
+        revenueCategoryName: "Rooms",
         status: "Active" as const,
         description: "",
-        companyId: "CMP-001",
+        companyId: "comp-101",
         createdAt: "01 Apr 2024",
         updatedAt: "01 Apr 2024",
         createdBy: "Finance Admin",
@@ -90,73 +82,55 @@ export function DivisionMasterView() {
         transactionCount: 0,
       }
     );
-  }, [divisions, selectedDivisionId]);
+  }, [categories, selectedCategoryId]);
 
   // Form State
-  const [formData, setFormData] = useState<DivisionModel>(activeRecord);
+  const [formData, setFormData] = useState<RevenueCategoryModel>(activeRecord);
 
   // Sync Form State when selection changes
   useEffect(() => {
     setFormData({ ...activeRecord });
   }, [activeRecord]);
 
-  // Filtered Divisions List
-  const filteredDivisions = useMemo(() => {
-    return divisions
-      .filter((d) => {
-        // Status Filter
-        if (statusFilter !== "All" && d.status !== statusFilter) return false;
-        // Division Type Filter
-        if (typeFilter !== "All" && d.divisionType !== typeFilter) return false;
-        // Search Query
-        if (searchQuery) {
-          const q = searchQuery.toLowerCase();
-          return (
-            d.divisionId.toLowerCase().includes(q) ||
-            d.divisionCode.toLowerCase().includes(q) ||
-            d.divisionName.toLowerCase().includes(q) ||
-            (d.shortName && d.shortName.toLowerCase().includes(q)) ||
-            (d.description && d.description.toLowerCase().includes(q))
-          );
-        }
-        return true;
-      })
-      .sort((a, b) => a.sequence - b.sequence);
-  }, [divisions, searchQuery, statusFilter, typeFilter]);
+  // Filtered Revenue Categories List
+  const filteredCategories = useMemo(() => {
+    return categories.filter((c) => {
+      // Status Filter
+      if (statusFilter !== "All" && c.status !== statusFilter) return false;
+      // Search Query
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return (
+          c.revenueCategoryId.toLowerCase().includes(q) ||
+          c.revenueCategoryCode.toLowerCase().includes(q) ||
+          c.revenueCategoryName.toLowerCase().includes(q) ||
+          (c.description && c.description.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [categories, searchQuery, statusFilter]);
 
-  // Available Parent Divisions (excluding self and any circular descendants)
-  const availableParents = useMemo(() => {
-    return divisions.filter((d) => d.divisionId !== formData.divisionId);
-  }, [divisions, formData.divisionId]);
-
-  // Child divisions count for current record
-  const childDivisions = useMemo(() => {
-    return divisions.filter((d) => d.parentDivisionId === formData.divisionId);
-  }, [divisions, formData.divisionId]);
-
-  // Form Change Handler
-  const handleFormChange = (field: keyof DivisionModel, value: any) => {
+  // Form Field Change Handler
+  const handleFormChange = (field: keyof RevenueCategoryModel, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Create New Division Handler
-  const handleNewDivision = () => {
-    const nextSeq = divisions.length + 1;
+  // Create New Revenue Category Handler
+  const handleNewCategory = () => {
+    const nextSeq = categories.length + 1;
     const nextNum = nextSeq < 10 ? `00${nextSeq}` : nextSeq < 100 ? `0${nextSeq}` : `${nextSeq}`;
-    const newDivisionId = `DIV-${nextNum}`;
+    const newCategoryId = `RC-${nextNum}`;
     const now = new Date().toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
 
-    const newRecord: DivisionModel = {
-      divisionId: newDivisionId,
-      divisionCode: `DEPT${nextSeq}`,
-      divisionName: "New Department",
-      shortName: `D${nextSeq}`,
-      divisionType: "Support Department",
-      sequence: nextSeq,
+    const newRecord: RevenueCategoryModel = {
+      revenueCategoryId: newCategoryId,
+      revenueCategoryCode: `CAT${nextSeq}`,
+      revenueCategoryName: "Banquet",
       status: "Active",
       description: "",
       companyId: selectedCompanyId,
@@ -168,32 +142,48 @@ export function DivisionMasterView() {
       transactionCount: 0,
     };
 
-    setDivisions((prev) => [newRecord, ...prev]);
-    setSelectedDivisionId(newRecord.divisionId);
+    setCategories((prev) => [newRecord, ...prev]);
+    setSelectedCategoryId(newRecord.revenueCategoryId);
     setFormData(newRecord);
-    setToastMessage(`Created new Division '${newRecord.divisionName}' (${newRecord.divisionId}).`);
+    setToastMessage(`Created new Revenue Category '${newRecord.revenueCategoryName}' (${newRecord.revenueCategoryCode}).`);
   };
 
-  // Save Division Changes
-  const handleSaveDivision = () => {
-    if (!formData.divisionCode.trim()) {
-      setToastMessage("Division Code is required.");
+  // Save Revenue Category Changes
+  const handleSaveCategory = () => {
+    if (!formData.revenueCategoryCode.trim()) {
+      setToastMessage("Revenue Category Code is required.");
       return;
     }
-    if (!formData.divisionName.trim()) {
-      setToastMessage("Division Name is required.");
+    if (!formData.revenueCategoryName.trim()) {
+      setToastMessage("Revenue Category Name is required.");
       return;
     }
 
-    // Check code uniqueness among other records
-    const codeExists = divisions.some(
-      (d) =>
-        d.divisionId !== formData.divisionId &&
-        d.divisionCode.trim().toUpperCase() === formData.divisionCode.trim().toUpperCase()
+    const currentCompany = formData.companyId || selectedCompanyId;
+
+    // Check code uniqueness within current company
+    const codeExists = categories.some(
+      (c) =>
+        c.revenueCategoryId !== formData.revenueCategoryId &&
+        (c.companyId || selectedCompanyId) === currentCompany &&
+        c.revenueCategoryCode.trim().toUpperCase() === formData.revenueCategoryCode.trim().toUpperCase()
     );
 
     if (codeExists) {
-      setToastMessage(`Division Code '${formData.divisionCode.toUpperCase()}' is already in use.`);
+      setToastMessage(`Revenue Category Code '${formData.revenueCategoryCode.toUpperCase()}' is already in use for this company.`);
+      return;
+    }
+
+    // Check name uniqueness within current company
+    const nameExists = categories.some(
+      (c) =>
+        c.revenueCategoryId !== formData.revenueCategoryId &&
+        (c.companyId || selectedCompanyId) === currentCompany &&
+        c.revenueCategoryName.trim().toLowerCase() === formData.revenueCategoryName.trim().toLowerCase()
+    );
+
+    if (nameExists) {
+      setToastMessage(`Revenue Category Name '${formData.revenueCategoryName}' is already in use for this company.`);
       return;
     }
 
@@ -203,26 +193,26 @@ export function DivisionMasterView() {
       year: "numeric",
     });
 
-    const updatedRecord: DivisionModel = {
+    const updatedRecord: RevenueCategoryModel = {
       ...formData,
-      divisionCode: formData.divisionCode.trim().toUpperCase(),
-      divisionName: formData.divisionName.trim(),
-      shortName: (formData.shortName || "").trim().toUpperCase(),
+      revenueCategoryCode: formData.revenueCategoryCode.trim().toUpperCase(),
+      revenueCategoryName: formData.revenueCategoryName.trim(),
+      companyId: currentCompany,
       updatedAt: now,
       updatedBy: "Finance Admin",
     };
 
-    setDivisions((prev) =>
-      prev.map((d) => (d.divisionId === updatedRecord.divisionId ? updatedRecord : d))
+    setCategories((prev) =>
+      prev.map((c) => (c.revenueCategoryId === updatedRecord.revenueCategoryId ? updatedRecord : c))
     );
     setFormData(updatedRecord);
-    setToastMessage(`Saved Division '${updatedRecord.divisionName}' successfully.`);
+    setToastMessage(`Saved Revenue Category '${updatedRecord.revenueCategoryName}' successfully.`);
   };
 
   // Revert Form Edits
   const handleResetForm = () => {
     setFormData({ ...activeRecord });
-    setToastMessage(`Reverted changes for '${activeRecord.divisionName}'.`);
+    setToastMessage(`Reverted changes for '${activeRecord.revenueCategoryName}'.`);
   };
 
   // Toggle Activation Flow
@@ -234,36 +224,25 @@ export function DivisionMasterView() {
       year: "numeric",
     });
 
-    const updatedRecord: DivisionModel = {
+    const updatedRecord: RevenueCategoryModel = {
       ...formData,
       status: targetStatus,
       updatedAt: now,
       updatedBy: "Finance Admin",
     };
 
-    setDivisions((prev) =>
-      prev.map((d) => (d.divisionId === updatedRecord.divisionId ? updatedRecord : d))
+    setCategories((prev) =>
+      prev.map((c) => (c.revenueCategoryId === updatedRecord.revenueCategoryId ? updatedRecord : c))
     );
     setFormData(updatedRecord);
     setToastMessage(
-      `Division '${updatedRecord.divisionName}' is now ${targetStatus.toUpperCase()}.`
+      `Revenue Category '${updatedRecord.revenueCategoryName}' is now ${targetStatus.toUpperCase()}.`
     );
   };
 
   // Attempt Delete Flow with Protection Checks
   const handleDeleteAttempt = () => {
-    // Check 1: Child Divisions Protection
-    if (childDivisions.length > 0) {
-      setDeleteDialogProps({
-        isOpen: true,
-        reason: "has_children",
-        childCount: childDivisions.length,
-        transactionCount: formData.transactionCount || 0,
-      });
-      return;
-    }
-
-    // Check 2: Transaction Reference Protection
+    // Transaction Reference Protection
     if (formData.hasTransactions || (formData.transactionCount || 0) > 0) {
       setDeleteDialogProps({
         isOpen: true,
@@ -274,21 +253,21 @@ export function DivisionMasterView() {
       return;
     }
 
-    // Permitted to delete if 0 transactions and 0 child divisions
-    setDivisions((prev) => prev.filter((d) => d.divisionId !== formData.divisionId));
-    setSelectedDivisionId(divisions[0]?.divisionId || "DIV-001");
-    setToastMessage(`Deleted Division '${formData.divisionName}'.`);
+    // Permitted to delete if 0 transactions
+    setCategories((prev) => prev.filter((c) => c.revenueCategoryId !== formData.revenueCategoryId));
+    setSelectedCategoryId(categories[0]?.revenueCategoryId || "RC-001");
+    setToastMessage(`Deleted Revenue Category '${formData.revenueCategoryName}'.`);
   };
 
   return (
     <ModulePageShell
       eyebrow="Accounts & Masters"
-      title="Division Master"
-      description="Manage hotel departments and cost centers used for financial reporting."
+      title="Revenue Category Master"
+      description="Manage hotel revenue categories used for revenue classification and reporting."
       breadcrumbs={[
         { label: "Accounts", href: "/accounts/dashboard" },
         { label: "Masters", href: "/accounts/masters" },
-        { label: "Division Master" },
+        { label: "Revenue Category Master" },
       ]}
       toast={toastMessage}
       onDismissToast={() => setToastMessage(null)}
@@ -297,17 +276,17 @@ export function DivisionMasterView() {
           <Button
             type="button"
             size="sm"
-            onClick={handleNewDivision}
+            onClick={handleNewCategory}
             className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer shadow-xs"
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
-            New Division
+            New Revenue Category
           </Button>
 
           <Button
             type="button"
             size="sm"
-            onClick={handleSaveDivision}
+            onClick={handleSaveCategory}
             className="rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white shadow-xs cursor-pointer"
           >
             <Save className="h-3.5 w-3.5 mr-1" />
@@ -364,18 +343,18 @@ export function DivisionMasterView() {
 
       {/* Main Split Layout: 35% Left List & 65% Right Detail Form */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6 font-sans text-xs">
-        {/* LEFT PANEL: Division List & Filters */}
-        <div className="md:col-span-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col min-h-[580px]">
+        {/* LEFT PANEL: Revenue Categories List & Filters */}
+        <div className="md:col-span-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col min-h-[520px]">
           {/* Header */}
           <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5">
             <div className="flex items-center gap-2">
-              <Building2 className="h-4.5 w-4.5 text-emerald-700" />
+              <PieChart className="h-4.5 w-4.5 text-emerald-700" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                Divisions ({filteredDivisions.length})
+                Revenue Categories ({filteredCategories.length})
               </h3>
             </div>
             <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-              Cost Centers
+              V1 Master
             </span>
           </div>
 
@@ -386,7 +365,7 @@ export function DivisionMasterView() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search code, name, short name..."
+              placeholder="Search code, name, description..."
               className="h-8 w-full rounded-xl border border-slate-300 bg-white pl-8 pr-7 text-xs font-medium text-slate-900 focus:border-emerald-600 focus:outline-none placeholder:text-slate-400"
             />
             {searchQuery && (
@@ -400,58 +379,37 @@ export function DivisionMasterView() {
             )}
           </div>
 
-          {/* Filters: Status & Type */}
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Status
-              </label>
-              <select
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value as "All" | "Active" | "Inactive")
-                }
-                className="h-7 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
-              >
-                <option value="All">All Statuses</option>
-                <option value="Active">Active Only</option>
-                <option value="Inactive">Inactive Only</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Department Type
-              </label>
-              <select
-                value={typeFilter}
-                onChange={(e) =>
-                  setTypeFilter(e.target.value as "All" | DivisionType)
-                }
-                className="h-7 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
-              >
-                <option value="All">All Types</option>
-                <option value="Revenue Department">Revenue</option>
-                <option value="Support Department">Support</option>
-                <option value="Administrative Department">Admin</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
+          {/* Filter: Status */}
+          <div className="mb-3">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+              Status Filter
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as "All" | "Active" | "Inactive")
+              }
+              className="h-7 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Active">Active Only</option>
+              <option value="Inactive">Inactive Only</option>
+            </select>
           </div>
 
-          {/* Divisions List Cards */}
-          <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[500px]">
-            {filteredDivisions.length === 0 ? (
+          {/* Revenue Category List Cards */}
+          <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[440px]">
+            {filteredCategories.length === 0 ? (
               <div className="p-6 text-center text-slate-400 font-medium">
-                No divisions match your search or filter.
+                No revenue categories match your search or filter.
               </div>
             ) : (
-              filteredDivisions.map((item) => {
-                const isSelected = selectedDivisionId === item.divisionId;
+              filteredCategories.map((item) => {
+                const isSelected = selectedCategoryId === item.revenueCategoryId;
                 return (
                   <div
-                    key={item.divisionId}
-                    onClick={() => setSelectedDivisionId(item.divisionId)}
+                    key={item.revenueCategoryId}
+                    onClick={() => setSelectedCategoryId(item.revenueCategoryId)}
                     className={cn(
                       "p-3 rounded-xl border transition-all duration-150 cursor-pointer space-y-2 select-none",
                       isSelected
@@ -463,13 +421,13 @@ export function DivisionMasterView() {
                       <div>
                         <h4 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
                           <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-900 rounded font-mono font-bold text-[10px] border border-emerald-200">
-                            {item.divisionCode}
+                            {item.revenueCategoryCode}
                           </span>
-                          <span>{item.divisionName}</span>
+                          <span>{item.revenueCategoryName}</span>
                         </h4>
-                        {item.shortName && (
-                          <span className="text-[11px] font-medium text-slate-500 block mt-0.5">
-                            Short: <strong className="text-slate-700 font-semibold">{item.shortName}</strong>
+                        {item.description && (
+                          <span className="text-[11px] text-slate-500 block mt-0.5 truncate max-w-[200px]">
+                            {item.description}
                           </span>
                         )}
                       </div>
@@ -487,11 +445,11 @@ export function DivisionMasterView() {
                     </div>
 
                     <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-[11px]">
-                      <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded truncate max-w-[170px]">
-                        {item.divisionType || "Department"}
+                      <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                        Classification
                       </span>
-                      <span className="font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200">
-                        Seq: #{item.sequence}
+                      <span className="font-mono text-slate-500 text-[10px] font-semibold">
+                        {item.revenueCategoryId}
                       </span>
                     </div>
                   </div>
@@ -501,31 +459,26 @@ export function DivisionMasterView() {
           </div>
         </div>
 
-        {/* RIGHT PANEL: Master Details & Edit Form */}
+        {/* RIGHT PANEL: Master Details & Form (Single Page with 2 Sections) */}
         <div className="md:col-span-8 space-y-4">
           {/* Header Card */}
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5 text-emerald-700" />
+                  <PieChart className="h-5 w-5 text-emerald-700" />
                   <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                    Division & Cost Center Details
+                    Revenue Category Details
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Selected: <strong className="text-slate-900">{formData.divisionName}</strong>{" "}
-                  ({formData.divisionCode})
+                  Selected: <strong className="text-slate-900">{formData.revenueCategoryName}</strong>{" "}
+                  ({formData.revenueCategoryCode})
                 </p>
               </div>
 
               {/* Badges */}
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-mono font-bold text-slate-700 border border-slate-200">
-                  <Layers className="h-3.5 w-3.5 text-slate-500" />
-                  Seq #{formData.sequence}
-                </span>
-
                 <span
                   className={cn(
                     "inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-bold border",
@@ -551,105 +504,42 @@ export function DivisionMasterView() {
           {/* Section 1: General Information */}
           <MasterFormSection
             title="General Information"
-            subtitle="Departmental identification, operational type, and sequence ordering."
+            subtitle="Revenue classification identity, reporting code, and operational description."
             icon={<FileText className="h-4 w-4" />}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Division ID (Read-only) */}
-              <FormField label="Division ID">
+              {/* Revenue Category ID (Read-only) */}
+              <FormField label="Revenue Category ID">
                 <TextInput
-                  value={formData.divisionId}
+                  value={formData.revenueCategoryId}
                   readOnly
                   className="bg-slate-50 font-mono font-bold text-slate-700 cursor-not-allowed"
                 />
               </FormField>
 
-              {/* Division Code (Required, unique) */}
+              {/* Revenue Category Code (Required, unique per company) */}
               <FormField
-                label="Division Code"
+                label="Revenue Category Code"
                 required
-                helperText="Unique departmental code used in voucher postings & reporting."
+                helperText="Short uppercase code unique within company (e.g. ROOMS, FNB, BANQUET, SPA, LAUNDRY)."
               >
                 <TextInput
-                  value={formData.divisionCode}
+                  value={formData.revenueCategoryCode}
                   onChange={(e) =>
-                    handleFormChange("divisionCode", e.target.value.toUpperCase())
+                    handleFormChange("revenueCategoryCode", e.target.value.toUpperCase())
                   }
-                  placeholder="e.g. ROOMS, FNB, ENG"
+                  placeholder="e.g. ROOMS, FNB"
                   className="font-mono font-bold text-slate-900"
                 />
               </FormField>
 
-              {/* Division Name (Required) */}
-              <FormField label="Division Name" required className="sm:col-span-2">
+              {/* Revenue Category Name (Required, unique per company) */}
+              <FormField label="Revenue Category Name" required>
                 <TextInput
-                  value={formData.divisionName}
-                  onChange={(e) => handleFormChange("divisionName", e.target.value)}
-                  placeholder="e.g. Rooms Division, Food & Beverage..."
+                  value={formData.revenueCategoryName}
+                  onChange={(e) => handleFormChange("revenueCategoryName", e.target.value)}
+                  placeholder="e.g. Rooms, F&B, Banquet, Spa & Wellness..."
                   className="font-bold text-slate-900"
-                />
-              </FormField>
-
-              {/* Short Name */}
-              <FormField label="Short Name / Alias">
-                <TextInput
-                  value={formData.shortName || ""}
-                  onChange={(e) => handleFormChange("shortName", e.target.value)}
-                  placeholder="e.g. RMS, FNB, HKP"
-                  className="font-semibold text-slate-900"
-                />
-              </FormField>
-
-              {/* Division Type */}
-              <FormField
-                label="Division Type"
-                helperText="Classification for departmental revenue vs overhead reporting."
-              >
-                <SelectInput
-                  value={formData.divisionType || "Support Department"}
-                  onChange={(e) =>
-                    handleFormChange("divisionType", e.target.value as DivisionType)
-                  }
-                >
-                  <option value="Revenue Department">Revenue Department</option>
-                  <option value="Support Department">Support Department</option>
-                  <option value="Administrative Department">Administrative Department</option>
-                  <option value="Other">Other</option>
-                </SelectInput>
-              </FormField>
-
-              {/* Parent Division */}
-              <FormField
-                label="Parent Division (Optional)"
-                helperText="Organizes sub-departments under an overarching divisional head."
-              >
-                <SelectInput
-                  value={formData.parentDivisionId || ""}
-                  onChange={(e) =>
-                    handleFormChange("parentDivisionId", e.target.value || undefined)
-                  }
-                >
-                  <option value="">None (Top-Level Division)</option>
-                  {availableParents.map((parent) => (
-                    <option key={parent.divisionId} value={parent.divisionId}>
-                      {parent.divisionCode} - {parent.divisionName} ({parent.divisionType})
-                    </option>
-                  ))}
-                </SelectInput>
-              </FormField>
-
-              {/* Display Sequence */}
-              <FormField
-                label="Display Sequence"
-                helperText="Controls list ordering in entry dropdowns and financial reports."
-              >
-                <TextInput
-                  type="number"
-                  value={formData.sequence}
-                  onChange={(e) =>
-                    handleFormChange("sequence", parseInt(e.target.value, 10) || 1)
-                  }
-                  className="font-mono font-bold"
                 />
               </FormField>
 
@@ -670,7 +560,7 @@ export function DivisionMasterView() {
                   rows={2}
                   value={formData.description || ""}
                   onChange={(e) => handleFormChange("description", e.target.value)}
-                  placeholder="Operational scope, cost allocation guidelines, or notes..."
+                  placeholder="Revenue scope and departmental accounting classification guidance..."
                 />
               </FormField>
             </div>
@@ -678,9 +568,8 @@ export function DivisionMasterView() {
 
           {/* Section 2: Audit & System Information */}
           <MasterAuditInfo
-            idLabel="Division ID"
-            idValue={formData.divisionId}
-            sequence={formData.sequence}
+            idLabel="Revenue Category ID"
+            idValue={formData.revenueCategoryId}
             status={formData.status}
             createdAt={formData.createdAt}
             updatedAt={formData.updatedAt}
@@ -696,16 +585,10 @@ export function DivisionMasterView() {
         isOpen={showActivationDialog}
         onClose={() => setShowActivationDialog(false)}
         onConfirm={handleToggleActivation}
-        recordName={formData.divisionName}
+        recordName={formData.revenueCategoryName}
         currentStatus={formData.status}
-        hasDependents={
-          childDivisions.length > 0 || (formData.transactionCount || 0) > 0
-        }
-        dependentWarning={
-          childDivisions.length > 0
-            ? `Deactivating division '${formData.divisionName}' will restrict visibility of its ${childDivisions.length} sub-departments in active voucher selection.`
-            : `Deactivating division '${formData.divisionName}' will prevent new journal and payment vouchers from allocating departmental costs to this cost center.`
-        }
+        hasDependents={(formData.transactionCount || 0) > 0}
+        dependentWarning={`Deactivating revenue category '${formData.revenueCategoryName}' (${formData.revenueCategoryCode}) will prevent billing registers and revenue reports from allocating new charges to this category.`}
       />
 
       {/* Delete Protection Alert Dialog */}
@@ -714,9 +597,9 @@ export function DivisionMasterView() {
         onClose={() =>
           setDeleteDialogProps((prev) => ({ ...prev, isOpen: false }))
         }
-        recordName={formData.divisionName}
+        recordName={formData.revenueCategoryName}
         reason={deleteDialogProps.reason}
-        childCount={deleteDialogProps.childCount}
+        childCount={0}
         transactionCount={deleteDialogProps.transactionCount}
       />
     </ModulePageShell>

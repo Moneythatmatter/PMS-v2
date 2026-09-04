@@ -41,10 +41,10 @@ import {
   Send,
   Building,
   CheckCheck,
+  Eye,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Button, Drawer, Modal } from "@/components/ui";
-import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { INITIAL_CUSTOMER_MASTER, CustomerMasterContact } from "./CorporateClientsView";
 import { INITIAL_VENUES_MASTER, VenueSpaceMasterItem } from "./masters/SalesMarketingMastersView";
@@ -533,6 +533,25 @@ export function EventBookingsView() {
   const [paymentAmount, setPaymentAmount] = useState<number>(50000);
   const [paymentMode, setPaymentMode] = useState("UPI / Bank Transfer");
 
+  // Helper to get booking type display configuration
+  const getBookingTypeConfig = (type: CentralBookingType) => {
+    switch (type) {
+      case "Banquet / Event Booking":
+        return { icon: Sparkles, label: "Banquet / Wedding Event", color: "text-purple-700 bg-purple-50 border-purple-200" };
+      case "Conference Booking":
+        return { icon: Building2, label: "Conference / Meeting", color: "text-blue-700 bg-blue-50 border-blue-200" };
+      case "Room Booking":
+        return { icon: Bed, label: "Room Booking Stay", color: "text-amber-700 bg-amber-50 border-amber-200" };
+      case "Restaurant Booking":
+        return { icon: UtensilsCrossed, label: "Restaurant Booking", color: "text-rose-700 bg-rose-50 border-rose-200" };
+      case "Swimming Pool Booking":
+        return { icon: Waves, label: "Swimming Pool Booking", color: "text-cyan-700 bg-cyan-50 border-cyan-200" };
+      case "Private Event / Other":
+      default:
+        return { icon: CalendarDays, label: "Private / Other Event", color: "text-slate-700 bg-slate-100 border-slate-200" };
+    }
+  };
+
   // ─────────────────────────────────────────────────────────────
   // METRICS COMPUTATION
   // ─────────────────────────────────────────────────────────────
@@ -999,41 +1018,87 @@ export function EventBookingsView() {
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: 4 CLEAN V1 KPI CARDS
       ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-4">
-        <HRKPICard
-          label="Total Bookings"
-          value={`${kpiMetrics.totalCount}`}
-          subtitle={`₹${(kpiMetrics.totalContractValue / 100000).toFixed(1)}L Contract Value`}
-          tone="emerald"
-          icon={<CalendarDays className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Booking Queue"
-          value={`${kpiMetrics.queueCount}`}
-          subtitle="Won Deals Awaiting Ingestion"
-          tone="blue"
-          icon={<Inbox className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Tentative Holds"
-          value={`${kpiMetrics.tentativeCount}`}
-          subtitle="Pending Advance Deposit"
-          tone="amber"
-          icon={<Clock className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Confirmed"
-          value={`${kpiMetrics.confirmedCount}`}
-          subtitle="Operationally Locked"
-          tone="purple"
-          icon={<CheckCircle2 className="h-4 w-4" />}
-        />
+      {/* ─────────────────────────────────────────────────────────────
+          SECTION 1: 4 CLEAN V1 KPI CARDS (F&B STYLE)
+      ───────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6 mb-5">
+        {/* Card 1: Total Bookings */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Total Bookings
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <CalendarDays className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.totalCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            ₹{(kpiMetrics.totalContractValue / 100000).toFixed(1)}L contract value
+          </p>
+        </Card>
+
+        {/* Card 2: Booking Queue */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Booking Queue
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 sm:h-8 sm:w-8">
+              <Inbox className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.queueCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Won deals awaiting ingestion
+          </p>
+        </Card>
+
+        {/* Card 3: Tentative Holds */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Tentative Holds
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 sm:h-8 sm:w-8">
+              <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.tentativeCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Pending advance deposit
+          </p>
+        </Card>
+
+        {/* Card 4: Confirmed */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Confirmed
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 sm:h-8 sm:w-8">
+              <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.confirmedCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Operationally locked
+          </p>
+        </Card>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION 2: SCOPE TABS & SEARCH / FILTER CONTROLS
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs space-y-3 mb-4">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs space-y-3 mb-4">
         {/* Scope Tabs */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 overflow-x-auto gap-2">
           <div className="flex items-center gap-1.5">
@@ -1041,7 +1106,7 @@ export function EventBookingsView() {
               type="button"
               onClick={() => setViewScope("ALL")}
               className={cn(
-                "px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5",
                 viewScope === "ALL" ? "bg-slate-900 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
               )}
             >
@@ -1051,10 +1116,10 @@ export function EventBookingsView() {
               type="button"
               onClick={() => setViewScope("QUEUE")}
               className={cn(
-                "px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5",
                 viewScope === "QUEUE"
-                  ? "bg-blue-700 text-white shadow-2xs"
-                  : "text-blue-900 bg-blue-50/60 border border-blue-200/60 hover:bg-blue-100/60"
+                  ? "bg-sky-700 text-white shadow-2xs"
+                  : "text-slate-600 hover:bg-slate-100"
               )}
             >
               <Inbox className="h-3.5 w-3.5" /> Booking Queue ({bookingQueue.length})
@@ -1063,34 +1128,29 @@ export function EventBookingsView() {
               type="button"
               onClick={() => setViewScope("TENTATIVE")}
               className={cn(
-                "px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
-                viewScope === "TENTATIVE" ? "bg-purple-700 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5",
+                viewScope === "TENTATIVE" ? "bg-amber-700 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
               )}
             >
-              <AlertCircle className="h-3.5 w-3.5" /> Tentative Holds ({kpiMetrics.tentativeCount})
+              <Clock className="h-3.5 w-3.5" /> Tentative Holds ({kpiMetrics.tentativeCount})
             </button>
             <button
               type="button"
               onClick={() => setViewScope("CONFIRMED")}
               className={cn(
-                "px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5",
                 viewScope === "CONFIRMED" ? "bg-emerald-700 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
               )}
             >
               <CheckCircle2 className="h-3.5 w-3.5" /> Confirmed ({kpiMetrics.confirmedCount})
             </button>
           </div>
-
-          <span className="text-xs text-slate-500 font-medium hidden md:inline">
-            Showing <strong>{viewScope === "QUEUE" ? filteredQueue.length : filteredBookings.length}</strong>{" "}
-            {viewScope === "QUEUE" ? "queue items" : "bookings"}
-          </span>
         </div>
 
         {/* Search & Filters */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-2.5">
           <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
               placeholder={
@@ -1100,7 +1160,7 @@ export function EventBookingsView() {
               }
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full text-xs rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50 font-medium text-slate-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-400"
+              className="w-full text-xs sm:text-sm rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50/50 font-normal text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300"
             />
           </div>
 
@@ -1109,7 +1169,7 @@ export function EventBookingsView() {
             <select
               value={selectedTypeFilter}
               onChange={(e) => setSelectedTypeFilter(e.target.value)}
-              className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none"
+              className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
             >
               <option value="ALL">All 6 Booking Types</option>
               <option value="Room Booking">Room Booking</option>
@@ -1125,7 +1185,7 @@ export function EventBookingsView() {
               <select
                 value={selectedStatusFilter}
                 onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none"
+                className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
               >
                 <option value="ALL">All Statuses</option>
                 <option value="Draft">Draft</option>
@@ -1141,7 +1201,7 @@ export function EventBookingsView() {
             <select
               value={selectedCategoryFilter}
               onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-              className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none"
+              className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
             >
               <option value="ALL">All Categories</option>
               <option value="Wedding">Wedding</option>
@@ -1159,101 +1219,96 @@ export function EventBookingsView() {
       {/* ─────────────────────────────────────────────────────────────
           SECTION 3: CENTRAL BOOKINGS / QUEUE TABLE
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="px-4 py-3 text-xs text-slate-500 font-medium border-b border-slate-100 flex items-center justify-between">
+          <span>Showing <strong className="text-slate-700 font-semibold">{viewScope === "QUEUE" ? filteredQueue.length : filteredBookings.length}</strong> {viewScope === "QUEUE" ? "queue items" : "bookings"} &bull; Central Bookings Management</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
-            <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 border-b border-slate-200">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50/70 text-xs font-semibold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="py-3 px-4">{viewScope === "QUEUE" ? "Deal ID" : "Booking ID"}</th>
-                <th className="py-3 px-4">{viewScope === "QUEUE" ? "Deal Name & Category" : "Booking Name & Category"}</th>
+                <th className="py-3 px-4">{viewScope === "QUEUE" ? "Deal & Category" : "Booking / Event & ID"}</th>
                 <th className="py-3 px-4">Type</th>
-                <th className="py-3 px-4">Customer &amp; Mobile</th>
-                <th className="py-3 px-4">Venue / Room Space</th>
+                <th className="py-3 px-4">Customer &amp; Contact</th>
+                <th className="py-3 px-4">{viewScope === "QUEUE" ? "Space / Requirement" : "Venue / Room Space"}</th>
                 <th className="py-3 px-4">{viewScope === "QUEUE" ? "Target Date" : "Date"}</th>
                 <th className="py-3 px-4">Pax / Rooms</th>
                 <th className="py-3 px-4">{viewScope === "QUEUE" ? "Deal Value" : "Contract Value"}</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4">BEO / Handover</th>
+                <th className="py-3 px-4 text-center">{viewScope === "QUEUE" ? "Queue Status" : "Status & BEO"}</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-medium">
+            <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
               {viewScope === "QUEUE" ? (
                 filteredQueue.length > 0 ? (
                   filteredQueue.map((item) => (
-                    <tr key={item.dealId} className="hover:bg-blue-50/40 transition">
-                      {/* Deal ID */}
-                      <td className="py-3 px-4 font-mono font-bold text-blue-800">
-                        #{item.dealId}
-                      </td>
-
-                      {/* Deal Name & Category */}
-                      <td className="py-3 px-4">
-                        <strong className="text-slate-900 font-bold block">{item.dealName}</strong>
-                        <span className="text-[10px] text-purple-700 font-semibold">{item.bookingCategory}</span>
+                    <tr key={item.dealId} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                      {/* Deal & Category */}
+                      <td className="py-3.5 px-4">
+                        <strong className="text-slate-900 font-semibold text-xs block">{item.dealName}</strong>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-slate-400 font-mono">#{item.dealId}</span>
+                          <span className="text-slate-300 text-[10px]">&bull;</span>
+                          <span className="text-[11px] text-slate-500">{item.bookingCategory}</span>
+                        </div>
                       </td>
 
                       {/* Type */}
-                      <td className="py-3 px-4">
-                        <span className="bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-semibold inline-block">
+                      <td className="py-3.5 px-4">
+                        <span className="text-[11px] font-semibold text-slate-900 block">
                           {item.bookingType}
                         </span>
                       </td>
 
                       {/* Customer */}
-                      <td className="py-3 px-4">
-                        <span className="font-bold text-slate-900 block">{item.customerName}</span>
-                        <span className="text-[10px] text-emerald-800 font-mono block">{item.mobile}</span>
+                      <td className="py-3.5 px-4">
+                        <span className="text-xs font-semibold text-slate-900 block">{item.customerName}</span>
+                        <span className="text-[11px] text-slate-500 font-mono block mt-0.5">{item.mobile}</span>
                       </td>
 
                       {/* Venue / Room */}
-                      <td className="py-3 px-4 text-slate-500 italic text-[11px]">
+                      <td className="py-3.5 px-4 text-slate-400 italic text-xs">
                         To be assigned in booking
                       </td>
 
                       {/* Date */}
-                      <td className="py-3 px-4 font-mono text-slate-900 font-semibold text-[11px]">
+                      <td className="py-3.5 px-4 font-mono text-slate-900 font-semibold text-xs">
                         {item.proposedDate}
                       </td>
 
                       {/* Pax / Rooms */}
-                      <td className="py-3 px-4 font-mono text-slate-400 text-[11px]">
+                      <td className="py-3.5 px-4 font-mono text-slate-400 text-xs">
                         —
                       </td>
 
                       {/* Contract Value */}
-                      <td className="py-3 px-4 font-mono font-bold text-emerald-900 text-xs">
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900 text-xs">
                         ₹{item.contractValue.toLocaleString("en-IN")}
                       </td>
 
                       {/* Status */}
-                      <td className="py-3 px-4 text-center">
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-block bg-blue-100 text-blue-800 border-blue-200">
-                          Pending Creation
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-sky-50 text-sky-700 border border-sky-200/70">
+                          <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
+                          Pending Ingestion
                         </span>
                       </td>
 
-                      {/* Operational Handover / BEO state */}
-                      <td className="py-3 px-4 text-slate-500 text-[11px]">
-                        Pending Booking
-                      </td>
-
                       {/* Actions */}
-                      <td className="py-3 px-4 text-right">
-                        <Button
+                      <td className="py-3.5 px-4 text-right">
+                        <button
                           type="button"
-                          size="sm"
                           onClick={() => handleConvertFromQueue(item)}
-                          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] rounded-lg px-3 h-7 cursor-pointer flex items-center gap-1 shadow-xs ml-auto"
+                          className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 shadow-2xs hover:bg-emerald-100 cursor-pointer ml-auto"
                         >
                           Create Booking →
-                        </Button>
+                        </button>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={11} className="py-10 text-center text-slate-400 text-xs italic">
+                    <td colSpan={9} className="py-10 text-center text-slate-400 text-xs italic">
                       No won deals currently in the booking queue.
                     </td>
                   </tr>
@@ -1266,87 +1321,85 @@ export function EventBookingsView() {
                       setSelectedBooking(b);
                       setDrawerTab("overview");
                     }}
-                    className="hover:bg-slate-50/80 transition cursor-pointer"
+                    className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                   >
-                    {/* Booking ID */}
-                    <td className="py-3 px-4 font-mono font-bold text-emerald-800">
-                      #{b.bookingId}
-                    </td>
-
                     {/* Booking Name & Category */}
-                    <td className="py-3 px-4">
-                      <strong className="text-slate-900 font-bold block">{b.bookingName}</strong>
-                      <span className="text-[10px] text-purple-700 font-semibold">{b.bookingCategory}</span>
+                    <td className="py-3.5 px-4">
+                      <strong className="text-slate-900 font-semibold text-xs block">{b.bookingName}</strong>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] text-slate-400 font-mono">#{b.bookingId}</span>
+                        <span className="text-slate-300 text-[10px]">&bull;</span>
+                        <span className="text-[11px] text-slate-500">{b.bookingCategory}</span>
+                      </div>
                     </td>
 
                     {/* Type */}
-                    <td className="py-3 px-4">
-                      <span className="bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-semibold inline-block">
+                    <td className="py-3.5 px-4">
+                      <span className="text-[11px] font-semibold text-slate-900 block">
                         {b.bookingType}
                       </span>
                     </td>
 
                     {/* Customer */}
-                    <td className="py-3 px-4">
-                      <span className="font-bold text-slate-900 block">{b.customerName}</span>
-                      <span className="text-[10px] text-emerald-800 font-mono block">{b.mobile}</span>
+                    <td className="py-3.5 px-4">
+                      <span className="text-xs font-semibold text-slate-900 block">{b.customerName}</span>
+                      <span className="text-[11px] text-slate-500 font-mono block mt-0.5">{b.mobile}</span>
                     </td>
 
                     {/* Venue / Room */}
-                    <td className="py-3 px-4 text-slate-800 font-medium">
+                    <td className="py-3.5 px-4 text-slate-800 font-medium text-xs">
                       {b.venueOrRoom}
                     </td>
 
                     {/* Date */}
-                    <td className="py-3 px-4 font-mono text-slate-900 font-semibold text-[11px]">
+                    <td className="py-3.5 px-4 font-mono text-slate-900 font-semibold text-xs">
                       {b.startDate}
                     </td>
 
                     {/* Pax / Rooms */}
-                    <td className="py-3 px-4 font-mono text-slate-700 font-semibold">
+                    <td className="py-3.5 px-4 font-mono text-slate-700 font-medium text-xs">
                       {b.bookingType === "Room Booking" ? `${b.roomCount || 1} Rooms` : `${b.guestCount || 50} Pax`}
                     </td>
 
                     {/* Contract Value */}
-                    <td className="py-3 px-4 font-mono font-bold text-emerald-900 text-xs">
+                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900 text-xs">
                       ₹{b.contractValue.toLocaleString("en-IN")}
                     </td>
 
-                    {/* Status */}
-                    <td className="py-3 px-4 text-center">
+                    {/* Status & BEO */}
+                    <td className="py-3.5 px-4 text-center">
                       <span
                         className={cn(
-                          "px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-block",
+                          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border",
                           b.status === "Confirmed"
-                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200/70"
                             : b.status === "Tentative"
-                            ? "bg-purple-100 text-purple-800 border-purple-200"
+                            ? "bg-amber-50 text-amber-700 border-amber-200/70"
                             : b.status === "Draft"
-                            ? "bg-slate-100 text-slate-700 border-slate-200"
-                            : "bg-rose-100 text-rose-800 border-rose-200"
+                            ? "bg-slate-100 text-slate-600 border-slate-200/70"
+                            : "bg-rose-50 text-rose-700 border-rose-200/70"
                         )}
                       >
+                        <span
+                          className={cn(
+                            "w-1.5 h-1.5 rounded-full",
+                            b.status === "Confirmed"
+                              ? "bg-emerald-600"
+                              : b.status === "Tentative"
+                              ? "bg-amber-600"
+                              : b.status === "Draft"
+                              ? "bg-slate-400"
+                              : "bg-rose-600"
+                          )}
+                        />
                         {b.status}
                       </span>
-                    </td>
-
-                    {/* BEO / Handover Indicator */}
-                    <td className="py-3 px-4">
                       {b.beoRequired ? (
-                        <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded text-[10px] font-semibold inline-flex items-center gap-1">
-                          <FileSpreadsheet className="h-3 w-3" />
+                        <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
                           {b.beoId ? `${b.beoId} (${b.beoStatus || "Draft"})` : "BEO Required"}
                         </span>
                       ) : (
-                        <span
-                          className={cn(
-                            "px-2 py-0.5 rounded text-[10px] font-semibold border inline-flex items-center gap-1",
-                            b.handoverStatus === "Handed Over"
-                              ? "bg-blue-50 text-blue-800 border-blue-200"
-                              : "bg-amber-50 text-amber-800 border-amber-200"
-                          )}
-                        >
-                          <Send className="h-2.5 w-2.5" />
+                        <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
                           {b.destinationDepartment || "Front Office"}{" "}
                           {b.handoverStatus === "Handed Over" ? "✓" : "(Pending)"}
                         </span>
@@ -1354,26 +1407,23 @@ export function EventBookingsView() {
                     </td>
 
                     {/* Actions */}
-                    <td className="py-3 px-4 text-right">
-                      <Button
+                    <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <button
                         type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={() => {
                           setSelectedBooking(b);
                           setDrawerTab("overview");
                         }}
-                        className="text-[11px] font-semibold rounded-lg px-2.5 h-7 cursor-pointer"
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer"
                       >
-                        View
-                      </Button>
+                        <Eye className="h-3 w-3 text-slate-400" /> View
+                      </button>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={11} className="py-10 text-center text-slate-400 text-xs italic">
+                  <td colSpan={9} className="py-10 text-center text-slate-400 text-xs italic">
                     No bookings found matching your selected filters.
                   </td>
                 </tr>
@@ -1689,36 +1739,49 @@ export function EventBookingsView() {
             ───────────────────────────────────────────────────────────── */
             <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1 text-xs">
               {/* STEP PROGRESS BAR */}
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 px-1">
-                {[
-                  { step: 1, label: "Booking Type" },
-                  { step: 2, label: "Customer" },
-                  { step: 3, label: "Booking Details" },
-                  { step: 4, label: "Availability & Save" },
-                ].map((s) => (
-                  <div key={s.step} className="flex items-center gap-1.5">
-                    <span
-                      className={cn(
-                        "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold font-mono",
-                        createStep === s.step
-                          ? "bg-emerald-700 text-white"
-                          : createStep > s.step
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-slate-100 text-slate-400"
-                      )}
-                    >
-                      {createStep > s.step ? "✓" : s.step}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-[11px] font-bold hidden sm:inline",
-                        createStep === s.step ? "text-slate-900" : "text-slate-400"
-                      )}
-                    >
-                      {s.label}
-                    </span>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 px-1 gap-2">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  {[
+                    { step: 1, label: "Booking Type" },
+                    { step: 2, label: "Customer" },
+                    { step: 3, label: "Booking Details" },
+                    { step: 4, label: "Availability & Save" },
+                  ].map((s) => (
+                    <div key={s.step} className="flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold font-mono",
+                          createStep === s.step
+                            ? "bg-emerald-700 text-white"
+                            : createStep > s.step
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-slate-100 text-slate-400"
+                        )}
+                      >
+                        {createStep > s.step ? "✓" : s.step}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-[11px] font-bold hidden sm:inline",
+                          createStep === s.step ? "text-slate-900" : "text-slate-400"
+                        )}
+                      >
+                        {s.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Simple, compact Selected Booking Type Badge */}
+                {createStep > 1 && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs whitespace-nowrap">
+                    {(() => {
+                      const { icon: Icon } = getBookingTypeConfig(formBookingType);
+                      return <Icon className="h-3.5 w-3.5 text-emerald-700" />;
+                    })()}
+                    {formBookingType}
+                  </span>
+                )}
               </div>
 
               {/* ─────────────────────────────────────────────────────────────
@@ -2426,51 +2489,61 @@ export function EventBookingsView() {
         >
           <div className="space-y-4 text-xs">
             {/* Header Card */}
-            <div className="bg-slate-900 text-white p-4 rounded-xl space-y-3">
+            <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-xl space-y-3">
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold block">
-                    {selectedBooking.bookingType} • {selectedBooking.bookingCategory}
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 font-bold block">
+                    {selectedBooking.bookingType} &bull; {selectedBooking.bookingCategory}
                   </span>
-                  <h3 className="text-base font-bold">{selectedBooking.bookingName}</h3>
-                  <p className="text-xs text-slate-300">
-                    Customer: <strong className="text-white">{selectedBooking.customerName}</strong>{" "}
+                  <h3 className="text-base font-bold text-slate-900">{selectedBooking.bookingName}</h3>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Customer: <strong className="text-slate-900">{selectedBooking.customerName}</strong>{" "}
                     {selectedBooking.companyName ? `(${selectedBooking.companyName})` : ""}
                   </p>
                 </div>
                 <span
                   className={cn(
-                    "px-3 py-1 rounded-full text-xs font-bold border",
+                    "px-2.5 py-0.5 rounded-full text-[11px] font-semibold border inline-flex items-center gap-1.5",
                     selectedBooking.status === "Confirmed"
-                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200/70"
                       : selectedBooking.status === "Tentative"
-                      ? "bg-purple-500/20 text-purple-300 border-purple-500/40"
-                      : "bg-slate-700 text-slate-200 border-slate-600"
+                      ? "bg-amber-50 text-amber-700 border-amber-200/70"
+                      : "bg-slate-100 text-slate-700 border-slate-200/70"
                   )}
                 >
+                  <span
+                    className={cn(
+                      "w-1.5 h-1.5 rounded-full",
+                      selectedBooking.status === "Confirmed"
+                        ? "bg-emerald-600"
+                        : selectedBooking.status === "Tentative"
+                        ? "bg-amber-600"
+                        : "bg-slate-400"
+                    )}
+                  />
                   {selectedBooking.status}
                 </span>
               </div>
 
               {/* Quick Summary Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800 text-[11px] font-mono">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-200/80 text-[11px]">
                 <div>
                   <span className="text-slate-400 block text-[10px]">Date</span>
-                  <span className="text-white font-bold">{selectedBooking.startDate}</span>
+                  <span className="text-slate-900 font-mono font-semibold">{selectedBooking.startDate}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Venue / Space</span>
-                  <span className="text-white font-bold truncate block">{selectedBooking.venueOrRoom}</span>
+                  <span className="text-slate-900 font-medium truncate block">{selectedBooking.venueOrRoom}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Contract Value</span>
-                  <span className="text-emerald-400 font-bold">
+                  <span className="text-slate-900 font-mono font-bold">
                     ₹{selectedBooking.contractValue.toLocaleString("en-IN")}
                   </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Balance Due</span>
-                  <span className="text-amber-400 font-bold">
+                  <span className="text-amber-700 font-mono font-bold">
                     ₹{selectedBooking.balanceDue.toLocaleString("en-IN")}
                   </span>
                 </div>

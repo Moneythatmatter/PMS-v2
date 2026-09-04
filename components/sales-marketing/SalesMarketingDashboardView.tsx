@@ -9,6 +9,7 @@ import {
   CalendarDays,
   Target,
   Phone,
+  PhoneCall,
   Megaphone,
   Award,
   DollarSign,
@@ -53,27 +54,111 @@ const MOCK_USER_SUMMARY = {
   achievedAmount: "₹48,20,000",
 };
 
-// Pipeline Funnel Data (By Stage)
+// Pipeline Funnel Data (By Stage) - Subtle Complementary Slate-to-Emerald Palette
 const MOCK_PIPELINE_STAGES = [
-  { stage: "Qualification / Inquiries", count: 14, amount: "₹65,00,000", color: "bg-teal-400 text-teal-950", widthPct: 100 },
-  { stage: "Site Visit / Needs Analysis", count: 9, amount: "₹42,50,000", color: "bg-blue-500 text-white", widthPct: 80 },
-  { stage: "Proposal / Price Quote", count: 6, amount: "₹28,50,000", color: "bg-indigo-500 text-white", widthPct: 62 },
-  { stage: "Contract Negotiation", count: 4, amount: "₹18,20,000", color: "bg-rose-500 text-white", widthPct: 45 },
-  { stage: "Closed Won / Booked", count: 18, amount: "₹48,20,000", color: "bg-emerald-600 text-white", widthPct: 32 },
+  {
+    stage: "Qualification / Inquiries",
+    count: 14,
+    amount: "₹65,00,000",
+    barColor: "bg-slate-400",
+    dotColor: "bg-slate-400",
+    badgeColor: "bg-slate-100 text-slate-700 border-slate-200",
+    widthPct: 100,
+    sharePct: "32%",
+  },
+  {
+    stage: "Site Visit / Needs Analysis",
+    count: 9,
+    amount: "₹42,50,000",
+    barColor: "bg-slate-500",
+    dotColor: "bg-slate-500",
+    badgeColor: "bg-slate-100 text-slate-700 border-slate-200",
+    widthPct: 75,
+    sharePct: "21%",
+  },
+  {
+    stage: "Proposal / Price Quote",
+    count: 6,
+    amount: "₹28,50,000",
+    barColor: "bg-teal-500",
+    dotColor: "bg-teal-500",
+    badgeColor: "bg-teal-50 text-teal-800 border-teal-200/70",
+    widthPct: 52,
+    sharePct: "14%",
+  },
+  {
+    stage: "Contract Negotiation",
+    count: 4,
+    amount: "₹18,20,000",
+    barColor: "bg-emerald-600",
+    dotColor: "bg-emerald-600",
+    badgeColor: "bg-emerald-50 text-emerald-800 border-emerald-200/70",
+    widthPct: 35,
+    sharePct: "9%",
+  },
+  {
+    stage: "Closed Won / Booked",
+    count: 18,
+    amount: "₹48,20,000",
+    barColor: "bg-emerald-700",
+    dotColor: "bg-emerald-700",
+    badgeColor: "bg-emerald-100 text-emerald-900 border-emerald-300",
+    widthPct: 65,
+    sharePct: "24%",
+  },
 ];
 
-// Open Tasks & Scheduled Meetings
+// Open Tasks & Scheduled Meetings (Aligned with ActivitiesView schema)
+const MOCK_MY_ACTIVITIES = [
+  {
+    id: "ACT-1002",
+    title: "Hotel Site Visit — Reddy Family",
+    type: "Site Visit" as const,
+    time: "Today, 11:30 AM",
+    location: "Grand Crystal Ballroom",
+    contactPerson: "Pooja Hegde",
+    priority: "High" as const,
+    status: "Scheduled" as const,
+  },
+  {
+    id: "ACT-1004",
+    title: "Corporate LRA Contract Review — TCS",
+    type: "Call" as const,
+    time: "Today, 03:00 PM",
+    location: "Conference Call",
+    contactPerson: "Sunil Verma",
+    priority: "Medium" as const,
+    status: "Scheduled" as const,
+  },
+  {
+    id: "ACT-1003",
+    title: "Menu Tasting & BEO Finalization",
+    type: "Meeting" as const,
+    time: "Tomorrow, 02:00 PM",
+    location: "Banquet Office",
+    contactPerson: "Sharma Family",
+    priority: "High" as const,
+    status: "Scheduled" as const,
+  },
+];
+
 const MOCK_MY_TASKS = [
-  { id: "TSK-101", subject: "Send Wedding Quotation for 450 Pax", dueDate: "Today, 04:00 PM", priority: "High", status: "In Progress" },
-  { id: "TSK-102", subject: "Follow up with TCS Corporate HR re: LRA Rates", dueDate: "19/08/2026", priority: "Medium", status: "Not Started" },
-  { id: "TSK-103", subject: "Submit Banquet Menu Options for Rotary Gala", dueDate: "20/08/2026", priority: "Urgent", status: "In Progress" },
-  { id: "TSK-104", subject: "Confirm Advance Payment for HDFC Leadership Summit", dueDate: "21/08/2026", priority: "High", status: "Not Started" },
-];
-
-const MOCK_MY_MEETINGS = [
-  { id: "MTG-201", title: "Hotel Site Visit — Reddy Family", type: "Site Visit", time: "Today, 11:30 AM", location: "Grand Crystal Ballroom", attendee: "Pooja Hegde" },
-  { id: "MTG-202", title: "Corporate LRA Contract Review — TCS", type: "Client Call", time: "Today, 03:00 PM", location: "Conference Call", attendee: "Sunil Verma" },
-  { id: "MTG-203", title: "Menu Tasting & BEO Finalization", type: "In-Person", time: "Tomorrow, 02:00 PM", location: "Banquet Office", attendee: "Sharma Family" },
+  {
+    id: "TSK-101",
+    subject: "Send Wedding Quotation for 450 Pax",
+    dueDate: "Today, 04:00 PM",
+    priority: "High" as const,
+    status: "In Progress" as const,
+    deal: "Reddy & Sharma Wedding",
+  },
+  {
+    id: "TSK-102",
+    subject: "Follow up with TCS Corporate HR re: LRA Rates",
+    dueDate: "19/08/2026",
+    priority: "Medium" as const,
+    status: "Not Started" as const,
+    deal: "TCS Annual Corporate LRA",
+  },
 ];
 
 // Deals Closing This Month
@@ -96,6 +181,37 @@ const MOCK_ACTIVE_CAMPAIGNS = [
   { id: "CMP-101", title: "Monsoon Wedding Special Package", channel: "WhatsApp & Instagram", leadsGenerated: 42, conversions: 8, status: "Active" },
   { id: "CMP-102", title: "Q3 Corporate Rate Drive", channel: "Email Broadcast", leadsGenerated: 65, conversions: 14, status: "Active" },
   { id: "CMP-103", title: "Independence Long Weekend Offer", channel: "Meta Ads", leadsGenerated: 89, conversions: 21, status: "Completed" },
+];
+
+// Top Producing Corporate Accounts (Key Accounts Production)
+const MOCK_TOP_CORPORATE_ACCOUNTS = [
+  {
+    id: "CORP-101",
+    companyName: "Tata Consultancy Services (TCS)",
+    tier: "Platinum",
+    roomNights: 142,
+    revenue: "₹18,40,000",
+    contactPerson: "Sunil Verma (Procurement)",
+    contractStatus: "Active LRA",
+  },
+  {
+    id: "CORP-102",
+    companyName: "HDFC Bank Ltd",
+    tier: "Gold",
+    roomNights: 88,
+    revenue: "₹11,20,000",
+    contactPerson: "Anil Deshmukh (Admin)",
+    contractStatus: "Active LRA",
+  },
+  {
+    id: "CORP-103",
+    companyName: "Reliance Industries",
+    tier: "Platinum",
+    roomNights: 65,
+    revenue: "₹9,50,000",
+    contactPerson: "Kavita Rao (HR & Events)",
+    contractStatus: "Active LRA",
+  },
 ];
 
 export function SalesMarketingDashboardView() {
@@ -185,93 +301,167 @@ export function SalesMarketingDashboardView() {
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
               <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <GitCommit className="h-4 w-4 text-teal-600" />
+                <GitCommit className="h-4 w-4 text-emerald-700" />
                 My Pipeline Deals By Stage
               </h3>
               <p className="text-[11px] text-slate-500">Visual funnel breakdown of active corporate &amp; banquet prospects</p>
             </div>
-            <a href="/sales-marketing/crm/pipeline" className="text-xs font-bold text-teal-700 hover:text-teal-800 flex items-center gap-1">
+            <a href="/sales-marketing/crm/pipeline" className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
               Pipeline View <ChevronRight className="h-3.5 w-3.5" />
             </a>
           </div>
 
-          {/* Interactive Stage Funnel Visual */}
-          <div className="space-y-2.5 pt-1">
+          {/* Interactive Clean Stage Funnel Visual */}
+          <div className="space-y-3.5 pt-1">
             {MOCK_PIPELINE_STAGES.map((stg, idx) => (
-              <div key={idx} className="space-y-1">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-teal-500" />
-                    {stg.stage} ({stg.count})
-                  </span>
-                  <span className="font-mono text-slate-900">{stg.amount}</span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-xl h-7 overflow-hidden p-0.5 border border-slate-200">
-                  <div
-                    className={cn("h-full rounded-lg flex items-center justify-between px-3 text-[11px] font-bold transition-all duration-500 shadow-xs", stg.color)}
-                    style={{ width: `${stg.widthPct}%` }}
-                  >
-                    <span>{stg.count} Deals</span>
-                    <span>{stg.amount}</span>
+              <a
+                key={idx}
+                href="/sales-marketing/crm/pipeline"
+                className="block group p-2 -mx-2 rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", stg.dotColor)} />
+                    <span className="font-semibold text-slate-800 group-hover:text-emerald-700 transition-colors">
+                      {stg.stage}
+                    </span>
+                    <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold border", stg.badgeColor)}>
+                      {stg.count} {stg.count === 1 ? "Deal" : "Deals"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400 font-medium">{stg.sharePct}</span>
+                    <span className="font-mono font-bold text-slate-900">{stg.amount}</span>
                   </div>
                 </div>
-              </div>
+
+                {/* Sleek, Modern Progress Bar */}
+                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200/70">
+                  <div
+                    className={cn("h-full rounded-full transition-all duration-500", stg.barColor)}
+                    style={{ width: `${stg.widthPct}%` }}
+                  />
+                </div>
+              </a>
             ))}
+          </div>
+
+          {/* Quick Pipeline Summary Footer */}
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <span>Total Active Pipeline: <strong className="text-slate-800 font-semibold">51 Deals</strong></span>
+            <span>Total Value: <strong className="text-emerald-700 font-bold font-mono">₹2,02,40,000</strong></span>
           </div>
         </div>
 
-        {/* My Tasks & Scheduled Meetings Split Box (5 Cols) */}
+        {/* My Tasks & Scheduled Activities Split Box (5 Cols) */}
         <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
               <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <CheckSquare className="h-4 w-4 text-blue-600" />
-                My Open Tasks &amp; Meetings
+                <CheckSquare className="h-4 w-4 text-emerald-700" />
+                My Open Tasks &amp; Activities
               </h3>
               <p className="text-[11px] text-slate-500">Scheduled follow-ups, calls &amp; client site visits</p>
             </div>
-            <a href="/sales-marketing/workqueue" className="text-xs font-bold text-blue-700 hover:text-blue-800 flex items-center gap-1">
-              Workqueue <ChevronRight className="h-3.5 w-3.5" />
+            <a href="/sales-marketing/crm/activities-calls" className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
+              Activities &amp; Tasks <ChevronRight className="h-3.5 w-3.5" />
             </a>
           </div>
 
-          <div className="space-y-3">
-            {/* Meetings Section */}
+          <div className="space-y-4">
+            {/* Scheduled Activities Section */}
             <div className="space-y-2">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Meetings &amp; Site Visits Today</span>
-              {MOCK_MY_MEETINGS.map((mtg) => (
-                <div key={mtg.id} className="p-2.5 rounded-xl bg-blue-50/60 border border-blue-100 space-y-1">
-                  <div className="flex items-center justify-between font-bold text-slate-900 text-xs">
-                    <span className="flex items-center gap-1.5">
-                      <Video className="h-3.5 w-3.5 text-blue-600" />
-                      {mtg.title}
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] bg-blue-100 text-blue-900 font-extrabold">
-                      {mtg.type}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-600 font-medium">
-                    <span>👤 {mtg.attendee} • 📍 {mtg.location}</span>
-                    <span className="font-mono text-blue-950 font-bold">{mtg.time}</span>
-                  </div>
-                </div>
-              ))}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Scheduled Activities Today</span>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                  {MOCK_MY_ACTIVITIES.length} Scheduled
+                </span>
+              </div>
+              <div className="space-y-2">
+                {MOCK_MY_ACTIVITIES.map((act) => (
+                  <a
+                    key={act.id}
+                    href="/sales-marketing/crm/activities-calls"
+                    className="block p-2.5 rounded-xl bg-white border border-slate-200/80 hover:border-emerald-300 hover:bg-slate-50/70 transition shadow-2xs group"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <span className="p-1.5 rounded-lg bg-slate-100 text-slate-700 shrink-0 mt-0.5">
+                        {act.type === "Site Visit" && <MapPin className="h-3.5 w-3.5 text-purple-700" />}
+                        {act.type === "Call" && <PhoneCall className="h-3.5 w-3.5 text-sky-700" />}
+                        {act.type === "Meeting" && <Building2 className="h-3.5 w-3.5 text-slate-700" />}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1.5 mb-1">
+                          <p className="font-bold text-slate-900 text-xs truncate group-hover:text-emerald-700 transition-colors">
+                            {act.title}
+                          </p>
+                          <span
+                            className={cn(
+                              "px-2 py-0.5 rounded text-[10px] font-bold border shrink-0",
+                              act.type === "Site Visit"
+                                ? "bg-purple-50 text-purple-700 border-purple-200"
+                                : act.type === "Call"
+                                ? "bg-sky-50 text-sky-700 border-sky-200"
+                                : "bg-slate-100 text-slate-700 border-slate-200"
+                            )}
+                          >
+                            {act.type}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-slate-500">
+                          <span className="truncate">👤 {act.contactPerson} • 📍 {act.location}</span>
+                          <span className="font-mono text-slate-900 font-bold shrink-0 ml-2">{act.time}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </a>
+                ))}
+              </div>
             </div>
 
-            {/* Open Tasks Section */}
-            <div className="space-y-2 pt-1 border-t border-slate-100">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Priority Follow-up Tasks</span>
-              {MOCK_MY_TASKS.slice(0, 2).map((tsk) => (
-                <div key={tsk.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                  <div>
-                    <p className="font-bold text-slate-900 text-xs">{tsk.subject}</p>
-                    <p className="text-[10px] text-slate-500 font-mono">Due: {tsk.dueDate}</p>
-                  </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">
-                    {tsk.status}
-                  </span>
-                </div>
-              ))}
+            {/* Open Priority Tasks Section */}
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Priority Follow-up Tasks</span>
+                <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                  {MOCK_MY_TASKS.length} Tasks
+                </span>
+              </div>
+              <div className="space-y-2">
+                {MOCK_MY_TASKS.map((tsk) => (
+                  <a
+                    key={tsk.id}
+                    href="/sales-marketing/crm/activities-calls"
+                    className="block p-2.5 rounded-xl bg-white border border-slate-200/80 hover:border-emerald-300 hover:bg-slate-50/70 transition shadow-2xs group"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <span className="p-1.5 rounded-lg bg-slate-100 text-slate-700 shrink-0 mt-0.5">
+                          <CheckSquare className="h-3.5 w-3.5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 text-xs group-hover:text-emerald-700 transition-colors truncate">
+                            {tsk.subject}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                            💼 {tsk.deal} • Due: {tsk.dueDate}
+                          </p>
+                        </div>
+                      </div>
+                      <span
+                        className={cn(
+                          "px-2 py-0.5 rounded text-[10px] font-bold border shrink-0",
+                          tsk.status === "In Progress"
+                            ? "bg-blue-50 text-blue-800 border-blue-200"
+                            : "bg-slate-100 text-slate-700 border-slate-200"
+                        )}
+                      >
+                        {tsk.status}
+                      </span>
+                    </div>
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -378,64 +568,98 @@ export function SalesMarketingDashboardView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 4: MARKETING CAMPAIGNS & SALES TARGET ACHIEVEMENT
+          SECTION 4: MARKETING CAMPAIGNS & TOP CORPORATE ACCOUNTS
       ───────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Active Campaigns (6 Cols) */}
+        {/* Active Marketing Campaigns (6 Cols) */}
         <div className="lg:col-span-6 bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-            <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-              <Megaphone className="h-4 w-4 text-blue-700" />
-              Active Marketing Campaigns
-            </h3>
-            <a href="/sales-marketing/marketing/campaigns" className="text-xs font-bold text-blue-700 hover:text-blue-800">
-              Manage Campaigns →
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <Megaphone className="h-4 w-4 text-emerald-700" />
+                Active Marketing Campaigns
+              </h3>
+              <p className="text-[11px] text-slate-500">Live promotions, leads generated &amp; conversion metrics</p>
+            </div>
+            <a href="/sales-marketing/marketing/campaigns" className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
+              Manage <ChevronRight className="h-3.5 w-3.5" />
             </a>
           </div>
 
           <div className="space-y-2 text-xs">
             {MOCK_ACTIVE_CAMPAIGNS.map((cmp) => (
-              <div key={cmp.id} className="p-3 rounded-xl bg-blue-50/50 border border-blue-100 flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-slate-900">{cmp.title}</p>
-                  <p className="text-[11px] text-slate-500">{cmp.channel}</p>
+              <a
+                key={cmp.id}
+                href="/sales-marketing/marketing/campaigns"
+                className="block p-3 rounded-xl bg-white border border-slate-200/80 hover:border-emerald-300 hover:bg-slate-50/70 transition shadow-2xs group"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 text-xs group-hover:text-emerald-700 transition-colors truncate">
+                      {cmp.title}
+                    </p>
+                    <p className="text-[11px] text-slate-500">{cmp.channel}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-extrabold text-slate-900">{cmp.leadsGenerated} Leads</p>
+                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      {cmp.conversions} Booked
+                    </span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-extrabold text-blue-950">{cmp.leadsGenerated} Leads</p>
-                  <p className="text-[10px] text-emerald-700 font-bold">{cmp.conversions} Booked</p>
-                </div>
-              </div>
+              </a>
             ))}
           </div>
         </div>
 
-        {/* Monthly Revenue Target Progress (6 Cols) */}
+        {/* Top Producing Corporate Accounts (6 Cols) */}
         <div className="lg:col-span-6 bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-            <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-              <Award className="h-4 w-4 text-amber-600" />
-              Monthly Sales Target Progress
-            </h3>
-            <a href="/sales-marketing/masters/sales-targets-incentives" className="text-xs font-bold text-amber-700 hover:text-amber-800">
-              View Incentive Rules →
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-emerald-700" />
+                Top Key Corporate Accounts
+              </h3>
+              <p className="text-[11px] text-slate-500">Contracted corporate room night production &amp; revenue</p>
+            </div>
+            <a href="/sales-marketing/corporate/clients" className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
+              Corporate Clients <ChevronRight className="h-3.5 w-3.5" />
             </a>
           </div>
 
-          <div className="space-y-3 text-xs p-2 rounded-xl bg-slate-50 border border-slate-200">
-            <div className="flex items-center justify-between font-bold text-slate-900">
-              <span>Overall Revenue Goal</span>
-              <span className="text-emerald-700 font-mono">{MOCK_USER_SUMMARY.targetAchievedPct}% Achieved</span>
-            </div>
-            <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden border border-slate-300">
-              <div
-                className="bg-emerald-600 h-full rounded-full transition-all duration-500 shadow-xs"
-                style={{ width: `${MOCK_USER_SUMMARY.targetAchievedPct}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-xs text-slate-600 font-mono pt-1">
-              <span>Achieved: <strong>{MOCK_USER_SUMMARY.achievedAmount}</strong></span>
-              <span>Monthly Target: <strong>{MOCK_USER_SUMMARY.monthlyTarget}</strong></span>
-            </div>
+          <div className="space-y-2 text-xs">
+            {MOCK_TOP_CORPORATE_ACCOUNTS.map((corp) => (
+              <a
+                key={corp.id}
+                href="/sales-marketing/corporate/clients"
+                className="block p-3 rounded-xl bg-white border border-slate-200/80 hover:border-emerald-300 hover:bg-slate-50/70 transition shadow-2xs group"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <p className="font-bold text-slate-900 text-xs group-hover:text-emerald-700 transition-colors truncate">
+                        {corp.companyName}
+                      </p>
+                      <span
+                        className={cn(
+                          "px-1.5 py-0.5 rounded text-[10px] font-bold border shrink-0",
+                          corp.tier === "Platinum"
+                            ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                            : "bg-amber-50 text-amber-800 border-amber-200"
+                        )}
+                      >
+                        {corp.tier}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 truncate">👤 {corp.contactPerson}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-mono font-bold text-emerald-800 text-xs">{corp.revenue}</p>
+                    <p className="text-[10px] text-slate-500 font-semibold">{corp.roomNights} Room Nights</p>
+                  </div>
+                </div>
+              </a>
+            ))}
           </div>
         </div>
       </div>

@@ -42,8 +42,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Button, Drawer, Modal } from "@/components/ui";
-import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { INITIAL_CENTRAL_BOOKINGS, CentralBookingItem } from "./EventBookingsView";
 import { INITIAL_CUSTOMER_MASTER } from "./CorporateClientsView";
@@ -774,59 +773,113 @@ export function FunctionSheetsBEOView() {
       }
     >
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: 5 CRISP V1 BEO KPI CARDS
+          SECTION 1: 5 CRISP V1 BEO KPI CARDS (F&B DASHBOARD STYLE)
       ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-        <HRKPICard
-          label="Draft BEOs"
-          value={`${kpiMetrics.draftCount}`}
-          subtitle="Work In Progress"
-          tone="amber"
-          icon={<Clock className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Pending Approval"
-          value={`${kpiMetrics.pendingCount}`}
-          subtitle="Manager Review"
-          tone="purple"
-          icon={<AlertCircle className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Approved"
-          value={`${kpiMetrics.approvedCount}`}
-          subtitle="Operationally Locked"
-          tone="emerald"
-          icon={<CheckCircle2 className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Department Shared"
-          value={`${kpiMetrics.sharedCount}`}
-          subtitle="Dispatched to Ops"
-          tone="blue"
-          icon={<Share2 className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Pending Ingestion"
-          value={`${kpiMetrics.pendingCreationCount}`}
-          subtitle="Bookings Awaiting BEO"
-          tone="slate"
-          icon={<FileSpreadsheet className="h-4 w-4" />}
-        />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5 lg:gap-5 mb-5">
+        {/* Card 1: Draft BEOs */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Draft BEOs
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 sm:h-8 sm:w-8">
+              <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.draftCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Work in progress
+          </p>
+        </Card>
+
+        {/* Card 2: Pending Approval */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Pending Approval
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-700 sm:h-8 sm:w-8">
+              <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.pendingCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Manager review
+          </p>
+        </Card>
+
+        {/* Card 3: Approved */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Approved
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.approvedCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Operationally locked
+          </p>
+        </Card>
+
+        {/* Card 4: Department Shared */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Department Shared
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 sm:h-8 sm:w-8">
+              <Share2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.sharedCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Dispatched to ops
+          </p>
+        </Card>
+
+        {/* Card 5: Pending Ingestion */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Pending Ingestion
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700 sm:h-8 sm:w-8">
+              <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.pendingCreationCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Bookings awaiting BEO
+          </p>
+        </Card>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION 2: SCOPE TABS & SEARCH / FILTER CONTROLS
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs space-y-3 mb-4">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs space-y-3 mb-4">
         {/* Scope Tabs */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 overflow-x-auto gap-2">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
             <button
               type="button"
               onClick={() => setViewScope("ALL")}
               className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
-                viewScope === "ALL" ? "bg-slate-900 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
+                viewScope === "ALL" ? "bg-slate-900 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               )}
             >
               <Layers className="h-3.5 w-3.5" /> All BEOs ({beoList.length})
@@ -835,40 +888,40 @@ export function FunctionSheetsBEOView() {
               type="button"
               onClick={() => setViewScope("PENDING_CREATION")}
               className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
                 viewScope === "PENDING_CREATION"
-                  ? "bg-purple-700 text-white shadow-2xs"
-                  : "text-purple-900 bg-purple-50/70 border border-purple-200 hover:bg-purple-100"
+                  ? "bg-slate-900 text-white shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               )}
             >
-              <Plus className="h-3.5 w-3.5" /> Pending Creation ({pendingBEOBookings.length})
+              <FileSpreadsheet className="h-3.5 w-3.5" /> Awaiting BEO ({pendingBEOBookings.length})
             </button>
             <button
               type="button"
               onClick={() => setViewScope("DRAFT")}
               className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
-                viewScope === "DRAFT" ? "bg-amber-700 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
+                viewScope === "DRAFT" ? "bg-slate-900 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               )}
             >
-              <Clock className="h-3.5 w-3.5" /> Draft ({kpiMetrics.draftCount})
+              <Clock className="h-3.5 w-3.5" /> Drafts ({kpiMetrics.draftCount})
             </button>
             <button
               type="button"
               onClick={() => setViewScope("PENDING_APPROVAL")}
               className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
-                viewScope === "PENDING_APPROVAL" ? "bg-purple-700 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
+                viewScope === "PENDING_APPROVAL" ? "bg-slate-900 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               )}
             >
-              <AlertCircle className="h-3.5 w-3.5" /> Pending Approval ({kpiMetrics.pendingCount})
+              <AlertCircle className="h-3.5 w-3.5" /> Under Review ({kpiMetrics.pendingCount})
             </button>
             <button
               type="button"
               onClick={() => setViewScope("APPROVED")}
               className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
-                viewScope === "APPROVED" ? "bg-emerald-700 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
+                viewScope === "APPROVED" ? "bg-slate-900 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               )}
             >
               <CheckCircle2 className="h-3.5 w-3.5" /> Approved ({kpiMetrics.approvedCount})
@@ -877,29 +930,25 @@ export function FunctionSheetsBEOView() {
               type="button"
               onClick={() => setViewScope("SHARED")}
               className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
-                viewScope === "SHARED" ? "bg-blue-700 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
+                viewScope === "SHARED" ? "bg-slate-900 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               )}
             >
-              <Share2 className="h-3.5 w-3.5" /> Department Shared ({kpiMetrics.sharedCount})
+              <Share2 className="h-3.5 w-3.5" /> Shared with Ops ({kpiMetrics.sharedCount})
             </button>
           </div>
-
-          <span className="text-xs text-slate-500 font-medium hidden md:inline">
-            Showing <strong>{viewScope === "PENDING_CREATION" ? pendingBEOBookings.length : filteredBEOs.length}</strong> items
-          </span>
         </div>
 
         {/* Search & Filters */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-2.5">
           <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
               placeholder="Search BEOs by BEO #, Booking #, Event Name, Customer, Venue, or Coordinator..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full text-xs rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50 font-medium text-slate-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-400"
+              className="w-full text-xs sm:text-sm rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50/50 font-normal text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300"
             />
           </div>
 
@@ -907,7 +956,7 @@ export function FunctionSheetsBEOView() {
             <select
               value={selectedStatusFilter}
               onChange={(e) => setSelectedStatusFilter(e.target.value)}
-              className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none"
+              className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
             >
               <option value="ALL">All Statuses</option>
               <option value="Draft">Draft</option>
@@ -921,7 +970,7 @@ export function FunctionSheetsBEOView() {
             <select
               value={selectedTypeFilter}
               onChange={(e) => setSelectedTypeFilter(e.target.value)}
-              className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none"
+              className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
             >
               <option value="ALL">All Event Types</option>
               <option value="Wedding">Wedding</option>
@@ -937,17 +986,20 @@ export function FunctionSheetsBEOView() {
       {/* ─────────────────────────────────────────────────────────────
           SECTION 3: BEO TABLE & PENDING CREATION INGESTION VIEW
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="px-4 py-3 text-xs text-slate-500 font-medium border-b border-slate-100 flex items-center justify-between">
+          <span>Showing <strong className="text-slate-700 font-semibold">{viewScope === "PENDING_CREATION" ? pendingBEOBookings.length : filteredBEOs.length}</strong> {viewScope === "PENDING_CREATION" ? "pending bookings" : "function sheets"} &bull; Banquet Event Orders (BEO)</span>
+        </div>
         <div className="overflow-x-auto">
           {viewScope === "PENDING_CREATION" ? (
             /* PENDING BEO CREATION INGESTION TABLE */
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-purple-50/70 text-[11px] font-semibold text-purple-950 border-b border-purple-200">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50/70 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
                   <th className="py-3 px-4">Booking ID</th>
-                  <th className="py-3 px-4">Event Name &amp; Category</th>
+                  <th className="py-3 px-4">Event &amp; Category</th>
                   <th className="py-3 px-4">Booking Type</th>
-                  <th className="py-3 px-4">Customer</th>
+                  <th className="py-3 px-4">Customer &amp; Contact</th>
                   <th className="py-3 px-4">Venue Space</th>
                   <th className="py-3 px-4">Event Date</th>
                   <th className="py-3 px-4">Pax</th>
@@ -956,42 +1008,42 @@ export function FunctionSheetsBEOView() {
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
+              <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
                 {pendingBEOBookings.length > 0 ? (
                   pendingBEOBookings.map((b) => (
-                    <tr key={b.bookingId} className="hover:bg-purple-50/40 transition">
-                      <td className="py-3 px-4 font-mono font-bold text-purple-900">#{b.bookingId}</td>
-                      <td className="py-3 px-4">
-                        <strong className="text-slate-900 font-bold block">{b.bookingName}</strong>
-                        <span className="text-[10px] text-purple-700">{b.bookingCategory}</span>
+                    <tr key={b.bookingId} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900">#{b.bookingId}</td>
+                      <td className="py-3.5 px-4">
+                        <strong className="text-slate-900 font-semibold text-xs block">{b.bookingName}</strong>
+                        <span className="text-[11px] text-slate-500">{b.bookingCategory}</span>
                       </td>
-                      <td className="py-3 px-4">
-                        <span className="bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-semibold">
+                      <td className="py-3.5 px-4">
+                        <span className="text-[11px] font-semibold text-slate-900 block">
                           {b.bookingType}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
-                        <span className="font-bold text-slate-900 block">{b.customerName}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">{b.mobile}</span>
+                      <td className="py-3.5 px-4">
+                        <span className="text-xs font-semibold text-slate-900 block">{b.customerName}</span>
+                        <span className="text-[11px] text-slate-500 font-mono block mt-0.5">{b.mobile}</span>
                       </td>
-                      <td className="py-3 px-4 text-slate-800">{b.venueOrRoom}</td>
-                      <td className="py-3 px-4 font-mono text-slate-900">{b.startDate}</td>
-                      <td className="py-3 px-4 font-mono">{b.guestCount || 50} Pax</td>
-                      <td className="py-3 px-4 text-slate-600">{b.coordinatorName || "Vikram Malhotra"}</td>
-                      <td className="py-3 px-4 text-center">
-                        <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                      <td className="py-3.5 px-4 text-slate-800 font-medium text-xs">{b.venueOrRoom}</td>
+                      <td className="py-3.5 px-4 font-mono text-slate-900 font-semibold text-xs">{b.startDate}</td>
+                      <td className="py-3.5 px-4 font-mono text-slate-700 font-medium text-xs">{b.guestCount || 50} Pax</td>
+                      <td className="py-3.5 px-4 text-slate-600 text-xs">{b.coordinatorName || "Vikram Malhotra"}</td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/70">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
                           Pending BEO
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        <Button
+                      <td className="py-3.5 px-4 text-right">
+                        <button
                           type="button"
-                          size="sm"
                           onClick={() => handleCreateBEOFromBooking(b)}
-                          className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs rounded-lg px-3.5 h-7 cursor-pointer flex items-center gap-1 shadow-xs ml-auto"
+                          className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700 shadow-2xs hover:bg-purple-100 cursor-pointer ml-auto"
                         >
                           <Plus className="h-3.5 w-3.5" /> Create BEO →
-                        </Button>
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -1006,15 +1058,13 @@ export function FunctionSheetsBEOView() {
             </table>
           ) : (
             /* STANDARD BEO MASTER TABLE */
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 border-b border-slate-200">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50/70 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="py-3 px-4">BEO Number</th>
-                  <th className="py-3 px-4">Booking ID</th>
-                  <th className="py-3 px-4">Event Name &amp; Category</th>
-                  <th className="py-3 px-4">Event Type</th>
-                  <th className="py-3 px-4">Customer</th>
-                  <th className="py-3 px-4">Venue</th>
+                  <th className="py-3 px-4">BEO &amp; Booking #</th>
+                  <th className="py-3 px-4">Event &amp; Category</th>
+                  <th className="py-3 px-4">Customer &amp; Contact</th>
+                  <th className="py-3 px-4">Venue Space</th>
                   <th className="py-3 px-4">Event Date</th>
                   <th className="py-3 px-4">Pax</th>
                   <th className="py-3 px-4">Coordinator</th>
@@ -1022,107 +1072,109 @@ export function FunctionSheetsBEOView() {
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
+              <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
                 {filteredBEOs.length > 0 ? (
                   filteredBEOs.map((beo) => (
                     <tr
                       key={beo.beoId}
                       onClick={() => handleOpenBEODetail(beo)}
-                      className="hover:bg-slate-50/80 transition cursor-pointer"
+                      className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                     >
-                      {/* BEO Number */}
-                      <td className="py-3 px-4 font-mono font-bold text-purple-900">
-                        {beo.beoId} <span className="text-[10px] text-slate-400 font-normal">V{beo.version}</span>
+                      {/* BEO Number & Booking ID */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-1.5">
+                          <strong className="font-mono font-bold text-slate-900 text-xs">{beo.beoId}</strong>
+                          <span className="text-[10px] bg-slate-100 text-slate-600 px-1 py-0.2 rounded font-mono">V{beo.version}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono block mt-0.5">#{beo.bookingId}</span>
                       </td>
 
-                      {/* Booking ID */}
-                      <td className="py-3 px-4 font-mono font-bold text-emerald-800">
-                        #{beo.bookingId}
-                      </td>
-
-                      {/* Event Name */}
-                      <td className="py-3 px-4">
-                        <strong className="text-slate-900 font-bold block">{beo.eventName}</strong>
-                        <span className="text-[10px] text-purple-700 font-semibold">{beo.eventCategory}</span>
-                      </td>
-
-                      {/* Event Type */}
-                      <td className="py-3 px-4">
-                        <span className="bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-semibold">
-                          {beo.bookingType}
-                        </span>
+                      {/* Event Name & Category */}
+                      <td className="py-3.5 px-4">
+                        <strong className="text-slate-900 font-semibold text-xs block">{beo.eventName}</strong>
+                        <span className="text-[11px] text-slate-500">{beo.eventCategory} &bull; {beo.bookingType}</span>
                       </td>
 
                       {/* Customer */}
-                      <td className="py-3 px-4">
-                        <span className="font-bold text-slate-900 block">{beo.contactName}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">{beo.mobile}</span>
+                      <td className="py-3.5 px-4">
+                        <span className="text-xs font-semibold text-slate-900 block">{beo.contactName}</span>
+                        <span className="text-[11px] text-slate-500 font-mono block mt-0.5">{beo.mobile}</span>
                       </td>
 
                       {/* Venue */}
-                      <td className="py-3 px-4 text-slate-800 font-medium">{beo.venueName}</td>
+                      <td className="py-3.5 px-4 text-slate-800 font-medium text-xs">{beo.venueName}</td>
 
                       {/* Event Date */}
-                      <td className="py-3 px-4 font-mono text-slate-900 font-semibold text-[11px]">{beo.startDate}</td>
+                      <td className="py-3.5 px-4 font-mono text-slate-900 font-semibold text-xs">{beo.startDate}</td>
 
                       {/* Pax */}
-                      <td className="py-3 px-4 font-mono text-slate-700">{beo.expectedPax} Pax</td>
+                      <td className="py-3.5 px-4 font-mono text-slate-700 font-medium text-xs">{beo.expectedPax} Pax</td>
 
                       {/* Coordinator */}
-                      <td className="py-3 px-4 text-slate-600 text-[11px]">{beo.coordinatorName}</td>
+                      <td className="py-3.5 px-4 text-slate-600 text-xs">{beo.coordinatorName}</td>
 
                       {/* BEO Status */}
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3.5 px-4 text-center">
                         <span
                           className={cn(
-                            "px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-block",
+                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border",
                             beo.status === "Approved"
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200/70"
                               : beo.status === "Department Shared"
-                              ? "bg-blue-100 text-blue-800 border-blue-200"
+                              ? "bg-sky-50 text-sky-700 border-sky-200/70"
                               : beo.status === "Pending Approval"
-                              ? "bg-purple-100 text-purple-800 border-purple-200"
+                              ? "bg-purple-50 text-purple-700 border-purple-200/70"
                               : beo.status === "Draft"
-                              ? "bg-amber-100 text-amber-800 border-amber-200"
-                              : "bg-slate-100 text-slate-700 border-slate-200"
+                              ? "bg-amber-50 text-amber-700 border-amber-200/70"
+                              : "bg-slate-100 text-slate-600 border-slate-200/70"
                           )}
                         >
+                          <span
+                            className={cn(
+                              "w-1.5 h-1.5 rounded-full",
+                              beo.status === "Approved"
+                                ? "bg-emerald-600"
+                                : beo.status === "Department Shared"
+                                ? "bg-sky-600"
+                                : beo.status === "Pending Approval"
+                                ? "bg-purple-600"
+                                : beo.status === "Draft"
+                                ? "bg-amber-600"
+                                : "bg-slate-400"
+                            )}
+                          />
                           {beo.status}
                         </span>
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <Button
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
                             type="button"
-                            variant="outline"
-                            size="sm"
                             onClick={() => handleOpenBEODetail(beo)}
-                            className="text-[11px] font-semibold h-7 px-2.5 rounded-lg cursor-pointer"
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer"
                           >
-                            View
-                          </Button>
-                          <Button
+                            <Eye className="h-3 w-3 text-slate-400" /> View
+                          </button>
+                          <button
                             type="button"
-                            variant="outline"
-                            size="sm"
                             onClick={() => {
                               setSelectedBEO(beo);
                               setIsPrintModalOpen(true);
                             }}
-                            className="text-[11px] h-7 px-2 rounded-lg text-slate-600 cursor-pointer"
+                            className="inline-flex items-center rounded-md border border-slate-200 bg-white p-1 text-slate-600 shadow-2xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer"
                             title="Print BEO Sheet"
                           >
-                            <Printer className="h-3 w-3" />
-                          </Button>
+                            <Printer className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={11} className="py-10 text-center text-slate-400 text-xs italic">
+                    <td colSpan={9} className="py-10 text-center text-slate-400 text-xs italic">
                       No Function Sheets found matching your filter criteria.
                     </td>
                   </tr>

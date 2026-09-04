@@ -41,7 +41,6 @@ export const salesMarketingNavItems: ModuleNavItem[] = [
     children: [
       { label: "Venues & Spaces", href: "/sales-marketing/masters/venues-spaces", icon: "landmark" },
       { label: "Rates & Commissions", href: "/sales-marketing/masters/rates-commissions", icon: "receipt" },
-      { label: "Targets & Incentives", href: "/sales-marketing/masters/targets-incentives", icon: "award" },
       { label: "Lead Sources", href: "/sales-marketing/masters/lead-sources", icon: "share-2" },
       { label: "Activity Types", href: "/sales-marketing/masters/activity-types", icon: "check-square" },
       { label: "Deal Stages", href: "/sales-marketing/masters/deal-stages", icon: "git-commit" },
@@ -55,7 +54,6 @@ export const salesMarketingNavItems: ModuleNavItem[] = [
     href: "/sales-marketing/settings",
     icon: "settings",
     children: [
-      { label: "Sales Settings", href: "/sales-marketing/masters/crm-masters", icon: "sliders" },
       { label: "Loyalty Points Settings & Earning Rules", href: "/sales-marketing/settings/loyalty-rules", icon: "crown" },
     ],
   },

@@ -495,7 +495,7 @@ export function ProfitLossView() {
       {showCompanyHeading && (
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-xs">
           <h1 className="text-xl font-bold tracking-tight text-slate-900 uppercase">
-            Luxy Hotel Pvt Ltd
+            Hotel & Resorts Private Limited
           </h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
             123 Grand Boulevard, City Center • GSTIN: 27AAAAA0000A1Z5

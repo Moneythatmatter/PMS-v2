@@ -36,10 +36,10 @@ import {
   UserCheck,
   RotateCcw,
   Tag,
+  X,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
-import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { Button, Card, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────
@@ -389,7 +389,7 @@ export const INITIAL_LOYALTY_GUESTS: GuestLoyaltyMember[] = [
   },
   {
     id: "LOY-104",
-    guestName: "Rohan &amp; Sneha Joshi",
+    guestName: "Rohan & Sneha Joshi",
     email: "rohan.joshi@gmail.com",
     phone: "+91 97690 11223",
     tier: "Silver Member",
@@ -472,24 +472,8 @@ export const INITIAL_LOYALTY_GUESTS: GuestLoyaltyMember[] = [
 // ─────────────────────────────────────────────────────────────
 
 export function GuestRetentionLoyaltyView() {
-  const [activeTab, setActiveTab] = useState<"members" | "settings">("members");
-
   const [searchTerm, setSearchTerm] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Loyalty Points Management Rules & Settings State
-  const [pointsSettings, setPointsSettings] = useState({
-    earningRatePerSpend: 1, // 1 Point per ₹100 spent
-    spendAmountUnit: 100, // ₹100
-    roomStayPointsPerNight: 50, // Flat 50 bonus pts per room night
-    diningPointsPerOrder: 20, // Flat 20 bonus pts per dining order
-    minSpendToEarnPoints: 500, // Min ₹500 spend required
-    redemptionValuePerPoint: 0.5, // 1 Point = ₹0.50 discount
-    minPointsToRedeem: 200, // Min 200 pts required to redeem
-    maxRedemptionPercentPerBill: 50, // Max 50% bill paid via points
-    pointsExpiryDays: 365, // Points expire after 1 year (365 days)
-    autoIssueWelcomePoints: 100, // 100 bonus pts on registration
-  });
 
   // Drawer & Modal States
   const [selectedMemberDrawer, setSelectedMemberDrawer] = useState<GuestLoyaltyMember | null>(null);
@@ -521,7 +505,8 @@ export function GuestRetentionLoyaltyView() {
       const matchSearch =
         g.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         g.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        g.phone.includes(searchTerm);
+        g.phone.includes(searchTerm) ||
+        g.tier.toLowerCase().includes(searchTerm.toLowerCase());
       return matchSearch;
     });
   }, [guests, searchTerm]);
@@ -541,7 +526,7 @@ export function GuestRetentionLoyaltyView() {
           type="button"
           size="sm"
           onClick={() => setToastMessage("Issued 1,000 festive bonus reward points to all Gold & Platinum members!")}
-          className="rounded-full text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm flex items-center gap-1.5 px-4 cursor-pointer"
+          className="rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-2xs flex items-center gap-1.5 px-3.5 py-1.5 cursor-pointer"
         >
           <Gift className="h-3.5 w-3.5" /> Issue Bonus Loyalty Points
         </Button>
@@ -550,149 +535,239 @@ export function GuestRetentionLoyaltyView() {
       onDismissToast={() => setToastMessage(null)}
     >
       {/* ─────────────────────────────────────────────────────────────
-          1. TOP SUMMARY CARDS (RETENTION KPI METRICS)
+          1. TOP SUMMARY CARDS (RETENTION KPI METRICS - F&B DASHBOARD STYLE)
          ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 mb-5">
-        <HRKPICard
-          label="Total Loyalty Members"
-          value={`${metrics.totalMembers}`}
-          subtitle={`${metrics.activeCount} Active Members`}
-          tone="emerald"
-          icon={<Crown className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="At-Risk Guests (90+ Days)"
-          value={`${metrics.atRiskCount}`}
-          subtitle="Needs Re-engagement"
-          tone="amber"
-          icon={<AlertTriangle className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Lost / Inactive Guests"
-          value={`${metrics.lostCount}`}
-          subtitle="180+ Days Inactive"
-          tone="purple"
-          icon={<UserX className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Repeat Stay Rate"
-          value={`${metrics.repeatStayRate}`}
-          subtitle="Guest Retention %"
-          tone="blue"
-          icon={<TrendingUp className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Active Points Outstanding"
-          value={`${(metrics.totalPoints / 1000).toFixed(1)}k`}
-          subtitle="Reward Balance"
-          tone="amber"
-          icon={<Sparkles className="h-4 w-4" />}
-        />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-5 mb-5">
+        {/* Card 1: Total Loyalty Members */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Total Loyalty Members
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <Crown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate">
+            {metrics.totalMembers}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
+            {metrics.activeCount} Active Members
+          </p>
+        </Card>
+
+        {/* Card 2: At-Risk Guests */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              At-Risk Guests (90+ Days)
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 sm:h-8 sm:w-8">
+              <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate">
+            {metrics.atRiskCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
+            Needs Re-engagement
+          </p>
+        </Card>
+
+        {/* Card 3: Lost / Inactive Guests */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Lost / Inactive Guests
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-700 sm:h-8 sm:w-8">
+              <UserX className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate">
+            {metrics.lostCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
+            180+ Days Inactive
+          </p>
+        </Card>
+
+        {/* Card 4: Repeat Stay Rate */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Repeat Stay Rate
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 sm:h-8 sm:w-8">
+              <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate">
+            {metrics.repeatStayRate}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
+            Guest Retention %
+          </p>
+        </Card>
+
+        {/* Card 5: Active Points Outstanding */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Active Points Outstanding
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 sm:h-8 sm:w-8">
+              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate">
+            {(metrics.totalPoints / 1000).toFixed(1)}k
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
+            Reward Balance
+          </p>
+        </Card>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
           2. LOYALTY MEMBERS DIRECTORY
          ───────────────────────────────────────────────────────────── */}
       <div className="space-y-4">
-        {/* SEARCH & FILTERS BAR */}
-          {/* SEARCH & FILTERS BAR */}
-          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 flex-1 min-w-[280px]">
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search member name, email or phone..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-7 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800"
-                />
-              </div>
-
-            </div>
-
-            <div className="text-xs font-bold text-slate-500">
-              Showing <span className="text-slate-900">{filteredGuests.length}</span> members
-            </div>
+        {/* SEARCH & CONTROLS BAR */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+          <div className="relative w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search member name, email or phone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-8 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50 font-medium text-slate-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-900 focus:border-slate-900 transition"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-md cursor-pointer"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
           </div>
 
-          {/* MEMBERS TABLE */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-700">
-                <thead className="bg-slate-50/80 text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
-                  <tr>
-                    <th className="py-3.5 px-4">Member Name &amp; Contact</th>
-                    <th className="py-3.5 px-4 text-center">Last Stay</th>
-                    <th className="py-3.5 px-4 text-center">Total Stays</th>
-                    <th className="py-3.5 px-4 text-right">Lifetime Spend</th>
-                    <th className="py-3.5 px-4 text-center">Reward Points Balance</th>
-                    <th className="py-3.5 px-4 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredGuests.length > 0 ? (
-                    filteredGuests.map((guest) => (
-                      <tr key={guest.id} className="hover:bg-slate-50/70 transition">
-                        <td className="py-3.5 px-4">
-                          <strong className="text-xs font-bold text-slate-900 block">{guest.guestName}</strong>
-                          <span className="text-[10px] text-slate-400">
-                            {guest.email} • {guest.phone}
-                          </span>
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center">
-                          <strong className="text-slate-800 font-mono text-[11px] block">{guest.lastStayDate}</strong>
-                          <span
-                            className={cn(
-                              "text-[10px] font-bold",
-                              guest.lastVisitAgeDays > 90 ? "text-amber-800" : "text-slate-400"
-                            )}
-                          >
-                            {guest.lastVisitAgeDays} Days Ago
-                          </span>
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center font-bold font-mono text-slate-800">
-                          {guest.totalStays} Stays
-                        </td>
-
-                        <td className="py-3.5 px-4 text-right font-extrabold font-mono text-slate-900">
-                          ₹{guest.totalSpend.toLocaleString()}
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center font-extrabold font-mono text-emerald-800 text-sm">
-                          {guest.rewardPointsBalance.toLocaleString()} Pts
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedMemberDrawer(guest);
-                              setDrawerActiveTab("overview");
-                            }}
-                            className="rounded-lg text-xs font-bold px-3 h-7 border-slate-200 cursor-pointer"
-                          >
-                            <Eye className="h-3 w-3 mr-1" /> Profile Drawer
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={9} className="py-8 text-center text-slate-500 text-xs">
-                        No loyalty members found matching your search filters.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          <div className="text-xs text-slate-500">
+            Showing <strong className="font-semibold text-slate-800">{filteredGuests.length}</strong> of {guests.length} members • <span className="text-slate-500">Guest Loyalty &amp; Retention Register</span>
           </div>
         </div>
+
+        {/* MEMBERS TABLE */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-700">
+              <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                <tr>
+                  <th className="py-3 px-4 text-left">MEMBER &amp; CONTACT</th>
+                  <th className="py-3 px-4 text-left">TIER &amp; STATUS</th>
+                  <th className="py-3 px-4 text-center">LAST STAY</th>
+                  <th className="py-3 px-4 text-center">TOTAL STAYS</th>
+                  <th className="py-3 px-4 text-right">LIFETIME SPEND</th>
+                  <th className="py-3 px-4 text-center">REWARD POINTS</th>
+                  <th className="py-3 px-4 text-right">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredGuests.length > 0 ? (
+                  filteredGuests.map((guest) => (
+                    <tr key={guest.id} className="hover:bg-slate-50/80 transition">
+                      <td className="py-3 px-4">
+                        <strong className="text-xs font-bold text-slate-900 block">{guest.guestName}</strong>
+                        <span className="text-[10px] text-slate-500">
+                          {guest.email} • {guest.phone}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={cn(
+                              "px-2 py-0.5 rounded text-[10px] font-bold border",
+                              guest.tier === "Platinum VIP"
+                                ? "bg-purple-50 text-purple-800 border-purple-200"
+                                : guest.tier === "Gold Preferred"
+                                ? "bg-amber-50 text-amber-800 border-amber-200"
+                                : guest.tier === "Silver Member"
+                                ? "bg-slate-100 text-slate-800 border-slate-200"
+                                : "bg-slate-50 text-slate-700 border-slate-200"
+                            )}
+                          >
+                            {guest.tier}
+                          </span>
+                          <span
+                            className={cn(
+                              "px-2 py-0.5 rounded-full text-[10px] font-semibold",
+                              guest.retentionStatus === "Active"
+                                ? "bg-emerald-50 text-emerald-700"
+                                : guest.retentionStatus === "At Risk"
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-rose-50 text-rose-700"
+                            )}
+                          >
+                            {guest.retentionStatus}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-4 text-center">
+                        <strong className="text-slate-800 font-mono text-xs block">{guest.lastStayDate}</strong>
+                        <span
+                          className={cn(
+                            "text-[10px] font-semibold",
+                            guest.lastVisitAgeDays > 90 ? "text-amber-700" : "text-slate-400"
+                          )}
+                        >
+                          {guest.lastVisitAgeDays} Days Ago
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4 text-center font-bold font-mono text-slate-900">
+                        {guest.totalStays} Stays
+                      </td>
+
+                      <td className="py-3 px-4 text-right font-bold font-mono text-slate-900">
+                        ₹{guest.totalSpend.toLocaleString("en-IN")}
+                      </td>
+
+                      <td className="py-3 px-4 text-center font-bold font-mono text-emerald-800">
+                        {guest.rewardPointsBalance.toLocaleString("en-IN")} Pts
+                      </td>
+
+                      <td className="py-3 px-4 text-right">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedMemberDrawer(guest);
+                            setDrawerActiveTab("overview");
+                          }}
+                          className="rounded-lg text-xs font-semibold px-2.5 h-7 border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer shadow-2xs"
+                        >
+                          <Eye className="h-3 w-3 mr-1 text-slate-500" /> View Profile
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-500 text-xs">
+                      No loyalty members found matching your search filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
 
       {/* ─────────────────────────────────────────────────────────────
           7. FULL MEMBER PROFILE & RETENTION DRAWER
@@ -710,8 +785,10 @@ export function GuestRetentionLoyaltyView() {
                 type="button"
                 onClick={() => setDrawerActiveTab("overview")}
                 className={cn(
-                  "px-3 py-1.5 rounded-lg font-bold transition text-[11px]",
-                  drawerActiveTab === "overview" ? "bg-emerald-700 text-white" : "text-slate-600 hover:bg-slate-100"
+                  "px-3 py-1.5 rounded-lg text-xs transition cursor-pointer",
+                  drawerActiveTab === "overview"
+                    ? "bg-slate-900 text-white shadow-2xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
                 )}
               >
                 Overview
@@ -720,8 +797,10 @@ export function GuestRetentionLoyaltyView() {
                 type="button"
                 onClick={() => setDrawerActiveTab("history")}
                 className={cn(
-                  "px-3 py-1.5 rounded-lg font-bold transition text-[11px]",
-                  drawerActiveTab === "history" ? "bg-emerald-700 text-white" : "text-slate-600 hover:bg-slate-100"
+                  "px-3 py-1.5 rounded-lg text-xs transition cursor-pointer",
+                  drawerActiveTab === "history"
+                    ? "bg-slate-900 text-white shadow-2xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
                 )}
               >
                 Stay History
@@ -730,8 +809,10 @@ export function GuestRetentionLoyaltyView() {
                 type="button"
                 onClick={() => setDrawerActiveTab("ledger")}
                 className={cn(
-                  "px-3 py-1.5 rounded-lg font-bold transition text-[11px]",
-                  drawerActiveTab === "ledger" ? "bg-emerald-700 text-white" : "text-slate-600 hover:bg-slate-100"
+                  "px-3 py-1.5 rounded-lg text-xs transition cursor-pointer",
+                  drawerActiveTab === "ledger"
+                    ? "bg-slate-900 text-white shadow-2xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
                 )}
               >
                 Points Ledger

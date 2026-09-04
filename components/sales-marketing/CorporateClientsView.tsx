@@ -33,8 +33,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Button, Drawer, Modal } from "@/components/ui";
-import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────
@@ -664,56 +663,99 @@ export function CorporateClientsView() {
           onClick={handleOpenAddModal}
           className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 px-3.5 h-8.5"
         >
-          <Plus className="h-4 w-4" /> + Add Contact
+          <Plus className="h-4 w-4" /> Add Contact
         </Button>
       }
     >
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: TOP KPI CARDS (CUSTOMER MASTER METRICS)
       ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <HRKPICard
-          label="Total Contacts Master"
-          value={`${kpiMetrics.totalContacts}`}
-          subtitle="Unique Customers & Partners"
-          tone="emerald"
-          icon={<Users className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="VIP & Key Accounts"
-          value={`${kpiMetrics.vipCount}`}
-          subtitle="High Priority Master Records"
-          tone="purple"
-          icon={<Award className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Corporate & Trade"
-          value={`${kpiMetrics.corporateCount}`}
-          subtitle="B2B & Event Partner Accounts"
-          tone="blue"
-          icon={<Building2 className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Open Opportunities"
-          value={`${kpiMetrics.openOpportunitiesCount}`}
-          subtitle="Active Deals in Pipeline"
-          tone="amber"
-          icon={<Briefcase className="h-4 w-4" />}
-        />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6 mb-5">
+        {/* Card 1: Total Contacts Master */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Total Contacts Master
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.totalContacts}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Unique customers &amp; partners
+          </p>
+        </Card>
+
+        {/* Card 2: VIP & Key Accounts */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              VIP &amp; Key Accounts
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 sm:h-8 sm:w-8">
+              <Award className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.vipCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            High priority master records
+          </p>
+        </Card>
+
+        {/* Card 3: Corporate & Trade */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Corporate &amp; Trade
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 sm:h-8 sm:w-8">
+              <Building2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.corporateCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            B2B &amp; partner accounts
+          </p>
+        </Card>
+
+        {/* Card 4: Open Opportunities */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Open Opportunities
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 sm:h-8 sm:w-8">
+              <Briefcase className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {kpiMetrics.openOpportunitiesCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Active deals in pipeline
+          </p>
+        </Card>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION 2: SEARCH & FILTERS TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs mb-4 flex flex-col md:flex-row items-center justify-between gap-3">
+      <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs mb-4 flex flex-col md:flex-row items-center justify-between gap-3">
         <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             type="text"
             placeholder="Search by Contact Name, Mobile, Email, Company, or Contact ID (#CONT-1001)..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full text-xs rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50 font-medium text-slate-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-400"
+            className="w-full text-xs sm:text-sm rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50/50 font-normal text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300"
           />
         </div>
 
@@ -722,7 +764,7 @@ export function CorporateClientsView() {
           <select
             value={selectedTypeFilter}
             onChange={(e) => setSelectedTypeFilter(e.target.value)}
-            className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none"
+            className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
           >
             <option value="ALL">All Contact Types</option>
             <option value="Individual">Individual</option>
@@ -737,7 +779,7 @@ export function CorporateClientsView() {
           <select
             value={selectedCategoryFilter}
             onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-            className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none"
+            className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
           >
             <option value="ALL">All Categories</option>
             <option value="Regular Customer">Regular Customer</option>
@@ -753,7 +795,7 @@ export function CorporateClientsView() {
           <select
             value={selectedStatusFilter}
             onChange={(e) => setSelectedStatusFilter(e.target.value)}
-            className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none"
+            className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
           >
             <option value="ALL">All Statuses</option>
             <option value="Active">Active</option>
@@ -765,28 +807,26 @@ export function CorporateClientsView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 3: EXACT CONTACT TABLE (SPECIFIED SCHEMA)
+          SECTION 3: STREAMLINED CONTACT MASTER TABLE
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="px-4 py-3 text-xs text-slate-500 font-medium border-b border-slate-100 flex items-center justify-between">
+          <span>Showing <strong className="text-slate-700 font-semibold">{filteredContacts.length}</strong> of <strong className="text-slate-700 font-semibold">{contacts.length}</strong> contacts &bull; Customer Master Directory</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
-            <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 border-b border-slate-200">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50/70 text-xs font-semibold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="py-3 px-4">Contact ID</th>
-                <th className="py-3 px-4">Contact Name</th>
-                <th className="py-3 px-4">Type</th>
-                <th className="py-3 px-4">Category</th>
-                <th className="py-3 px-4">Mobile Number</th>
-                <th className="py-3 px-4">Email</th>
+                <th className="py-3 px-4">Contact / ID</th>
+                <th className="py-3 px-4">Category &amp; Type</th>
+                <th className="py-3 px-4">Contact Info</th>
                 <th className="py-3 px-4">Company / Organization</th>
-                <th className="py-3 px-4 text-center">Total Bookings</th>
-                <th className="py-3 px-4">Last Booking Date</th>
-                <th className="py-3 px-4 text-center">Current Open Deals</th>
+                <th className="py-3 px-4">Engagement &amp; Deals</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-medium">
+            <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
               {filteredContacts.length > 0 ? (
                 filteredContacts.map((contact) => {
                   const openDeals = getOpenDealsCount(contact);
@@ -797,42 +837,39 @@ export function CorporateClientsView() {
                         setSelectedContact(contact);
                         setDrawerTab("profile");
                       }}
-                      className="hover:bg-slate-50/80 transition cursor-pointer"
+                      className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                     >
-                      {/* 1. Contact ID */}
-                      <td className="py-3 px-4 font-mono font-bold text-emerald-800">
-                        #{contact.contactId}
-                      </td>
-
-                      {/* 2. Contact Name */}
-                      <td className="py-3 px-4">
-                        <strong className="text-slate-900 font-bold block">
+                      {/* 1. Contact / ID */}
+                      <td className="py-3.5 px-4">
+                        <strong className="text-slate-900 font-semibold text-xs block">
                           {contact.contactName}
                         </strong>
-                        {contact.designation && (
-                          <span className="text-[10px] text-slate-400 block truncate max-w-[150px]">
-                            {contact.designation}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-slate-400 font-mono">#{contact.contactId}</span>
+                          {contact.designation && (
+                            <>
+                              <span className="text-slate-300 text-[10px]">&bull;</span>
+                              <span className="text-[11px] text-slate-500 truncate max-w-[130px]">
+                                {contact.designation}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </td>
 
-                      {/* 3. Type */}
-                      <td className="py-3 px-4">
-                        <span className="bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-semibold inline-block">
+                      {/* 2. Category & Type */}
+                      <td className="py-3.5 px-4">
+                        <span className="text-[11px] font-semibold text-slate-900 block">
+                          {contact.category}
+                        </span>
+                        <span className="text-[10px] text-slate-500 block">
                           {contact.contactType}
                         </span>
                       </td>
 
-                      {/* 4. Category */}
-                      <td className="py-3 px-4">
-                        <span className="text-[10px] text-purple-800 font-semibold bg-purple-50 border border-purple-200 px-2 py-0.5 rounded inline-block">
-                          {contact.category}
-                        </span>
-                      </td>
-
-                      {/* 5. Mobile Number */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1 font-mono text-emerald-900 font-semibold">
+                      {/* 3. Contact Info */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-1 font-mono text-slate-900 font-semibold text-xs">
                           <span>{contact.mobileNumber}</span>
                           <a
                             href={`tel:${contact.mobileNumber}`}
@@ -843,78 +880,83 @@ export function CorporateClientsView() {
                             <Phone className="h-3 w-3" />
                           </a>
                         </div>
-                      </td>
-
-                      {/* 6. Email */}
-                      <td className="py-3 px-4">
-                        <span className="text-[11px] text-slate-600 font-mono truncate block max-w-[160px]">
+                        <span className="text-[11px] text-slate-500 font-mono truncate block max-w-[160px] mt-0.5">
                           {contact.emailAddress || "—"}
                         </span>
                       </td>
 
-                      {/* 7. Company / Organization */}
-                      <td className="py-3 px-4 text-slate-800">
-                        <span className="font-semibold block truncate max-w-[160px]">
+                      {/* 4. Company / Organization */}
+                      <td className="py-3.5 px-4">
+                        <span className="text-xs font-semibold text-slate-900 block truncate max-w-[160px]">
                           {contact.companyName || "—"}
                         </span>
-                      </td>
-
-                      {/* 8. Total Bookings */}
-                      <td className="py-3 px-4 text-center">
-                        <span className="bg-slate-100 text-slate-900 font-mono font-bold px-2 py-0.5 rounded-full text-xs">
-                          {contact.bookings.length} {contact.bookings.length === 1 ? "Booking" : "Bookings"}
-                        </span>
-                      </td>
-
-                      {/* 9. Last Booking Date */}
-                      <td className="py-3 px-4 font-mono text-[11px] text-slate-600">
-                        {getLastBookingDate(contact)}
-                      </td>
-
-                      {/* 10. Current Open Deals */}
-                      <td className="py-3 px-4 text-center">
-                        {openDeals > 0 ? (
-                          <span className="bg-amber-50 text-amber-800 border border-amber-200 font-semibold px-2 py-0.5 rounded text-[10px] inline-block">
-                            {openDeals} Open {openDeals === 1 ? "Deal" : "Deals"}
+                        {contact.city && (
+                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                            {contact.city}{contact.state ? `, ${contact.state}` : ""}
                           </span>
-                        ) : (
-                          <span className="text-slate-400 font-mono text-[11px]">—</span>
                         )}
                       </td>
 
-                      {/* 11. Status */}
-                      <td className="py-3 px-4 text-center">
+                      {/* 5. Engagement & Deals */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-slate-900 text-xs">
+                            {contact.bookings.length} {contact.bookings.length === 1 ? "Booking" : "Bookings"}
+                          </span>
+                          {openDeals > 0 && (
+                            <span className="bg-amber-50 text-amber-700 border border-amber-200/70 font-semibold px-1.5 py-0.5 rounded text-[10px]">
+                              {openDeals} Open Deal{openDeals > 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                          Last: {getLastBookingDate(contact)}
+                        </span>
+                      </td>
+
+                      {/* 6. Status */}
+                      <td className="py-3.5 px-4 text-center">
                         <span
                           className={cn(
-                            "px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-block",
+                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border",
                             contact.status === "VIP"
-                              ? "bg-purple-100 text-purple-800 border-purple-200"
+                              ? "bg-purple-50 text-purple-700 border-purple-200/70"
                               : contact.status === "Active"
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200/70"
                               : contact.status === "Blacklisted"
-                              ? "bg-rose-100 text-rose-800 border-rose-200"
-                              : "bg-slate-100 text-slate-600 border-slate-200"
+                              ? "bg-rose-50 text-rose-700 border-rose-200/70"
+                              : "bg-slate-100 text-slate-600 border-slate-200/70"
                           )}
                         >
+                          <span
+                            className={cn(
+                              "w-1.5 h-1.5 rounded-full",
+                              contact.status === "VIP"
+                                ? "bg-purple-600"
+                                : contact.status === "Active"
+                                ? "bg-emerald-600"
+                                : contact.status === "Blacklisted"
+                                ? "bg-rose-600"
+                                : "bg-slate-400"
+                            )}
+                          />
                           {contact.status}
                         </span>
                       </td>
 
-                      {/* 12. Actions */}
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <Button
+                      {/* 7. Actions */}
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
                             type="button"
-                            variant="outline"
-                            size="sm"
                             onClick={() => {
                               setSelectedContact(contact);
                               setDrawerTab("profile");
                             }}
-                            className="text-[11px] font-semibold rounded-lg px-2.5 h-7 cursor-pointer border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer"
                           >
-                            View
-                          </Button>
+                            <Eye className="h-3 w-3 text-slate-400" /> View
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -922,7 +964,7 @@ export function CorporateClientsView() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={12} className="py-10 text-center text-slate-400 text-xs italic">
+                  <td colSpan={7} className="py-10 text-center text-slate-400 text-xs italic">
                     No customer master records found matching your filters.
                   </td>
                 </tr>
@@ -1046,71 +1088,71 @@ export function CorporateClientsView() {
                 type="button"
                 onClick={() => setDrawerTab("profile")}
                 className={cn(
-                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap",
+                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5",
                   drawerTab === "profile" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                📋 Profile
+                <User className="h-3.5 w-3.5" /> Profile
               </button>
               <button
                 type="button"
                 onClick={() => setDrawerTab("opportunities")}
                 className={cn(
-                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap",
+                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5",
                   drawerTab === "opportunities" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                ⚡ Open Opportunities ({getOpenDealsCount(selectedContact)})
+                <Briefcase className="h-3.5 w-3.5" /> Opportunities ({getOpenDealsCount(selectedContact)})
               </button>
               <button
                 type="button"
                 onClick={() => setDrawerTab("leads")}
                 className={cn(
-                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap",
+                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5",
                   drawerTab === "leads" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                🎯 Inquiries ({selectedContact.leads.length})
+                <Target className="h-3.5 w-3.5" /> Inquiries ({selectedContact.leads.length})
               </button>
               <button
                 type="button"
                 onClick={() => setDrawerTab("deals")}
                 className={cn(
-                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap",
+                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5",
                   drawerTab === "deals" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                💼 Deal History ({selectedContact.deals.length})
+                <Layers className="h-3.5 w-3.5" /> Deal History ({selectedContact.deals.length})
               </button>
               <button
                 type="button"
                 onClick={() => setDrawerTab("activities")}
                 className={cn(
-                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap",
+                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5",
                   drawerTab === "activities" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                📞 Activities ({selectedContact.activities.length})
+                <Phone className="h-3.5 w-3.5" /> Activities ({selectedContact.activities.length})
               </button>
               <button
                 type="button"
                 onClick={() => setDrawerTab("bookings")}
                 className={cn(
-                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap",
+                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5",
                   drawerTab === "bookings" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                📅 Bookings ({selectedContact.bookings.length})
+                <Calendar className="h-3.5 w-3.5" /> Bookings ({selectedContact.bookings.length})
               </button>
               <button
                 type="button"
                 onClick={() => setDrawerTab("notes")}
                 className={cn(
-                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap",
+                  "flex-1 py-1.5 px-2.5 rounded-lg text-center transition cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5",
                   drawerTab === "notes" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                📝 Notes &amp; Remarks
+                <FileText className="h-3.5 w-3.5" /> Notes &amp; Remarks
               </button>
             </div>
 

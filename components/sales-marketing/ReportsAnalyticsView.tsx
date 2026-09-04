@@ -22,7 +22,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Button } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────
@@ -238,45 +238,113 @@ export function ReportsAnalyticsView() {
   }, []);
 
   // ─────────────────────────────────────────────────────────────
-  // CSV EXPORT HANDLER
+  // CSV EXPORT HANDLER (CLEAN, RFC-COMPLIANT & EXCEL-READY)
   // ─────────────────────────────────────────────────────────────
   const handleExportCSV = () => {
-    const csvRows = [
-      ["HOTEL PMS - SALES & MARKETING EXECUTIVE REPORT"],
-      [`Generated: ${new Date().toLocaleString()}`, `Range: ${dateRangePreset}`],
-      [],
-      ["1. EXECUTIVE SUMMARY"],
-      ["Total Leads", totalLeadsCount],
-      ["Qualified Leads", qualifiedLeadsCount],
-      ["Open Deals Count", openDealsCount],
-      ["Open Pipeline Value (INR)", openPipelineValue],
-      ["Won Deals Count", wonDealsCount],
-      ["Deal Win Rate", `${dealWinRate}%`],
-      ["Booking Contract Value (INR)", totalBookingContractValue],
-      ["Realized Revenue (INR)", totalRealizedRevenue],
-      [],
-      ["2. LEAD SOURCE PERFORMANCE"],
-      ["Source ID", "Source Name", "Category", "Leads", "Deals", "Won", "Booking Value", "Realized Revenue", "Win Rate %"],
-      ...leadSourcePerformance.map((s) => [
-        s.sourceId,
-        s.sourceName,
-        s.category,
-        s.leadsCount,
-        s.dealsCount,
-        s.wonCount,
-        s.bookingValue,
-        s.realizedRevenue,
-        `${s.conversionRate}%`,
+    const escapeCSV = (val: string | number | null | undefined): string => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val);
+      if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return `"${str}"`;
+    };
+
+    const headers = [
+      "REPORT SECTION",
+      "METRIC / ITEM NAME",
+      "CATEGORY / TYPE",
+      "VOLUME / COUNT",
+      "CONTRACT VALUE (INR)",
+      "REALIZED CASH (INR)",
+      "CONVERSION / WIN RATE",
+      "TIMEFRAME / STATUS",
+    ];
+
+    const dataRows: (string | number)[][] = [
+      // 1. Executive Summary
+      ["1. Executive Summary", "Active Pipeline Value", "Commercial Funnel", `${openDealsCount} Open Deals`, openPipelineValue, 0, "—", dateRangePreset],
+      ["1. Executive Summary", "Total Contract Value", "Central Reservations", `${filteredBookings.length} Bookings`, totalBookingContractValue, 0, "—", dateRangePreset],
+      ["1. Executive Summary", "Realized Revenue", "Advance & Settled Cash", `${filteredBookings.length} Bookings`, 0, totalRealizedRevenue, "—", dateRangePreset],
+      ["1. Executive Summary", "Commercial Win Rate", "Won / Closed Ratio", `${wonDealsCount} Won of ${totalClosedDeals > 0 ? totalClosedDeals : 1} Closed`, 0, 0, `${dealWinRate}%`, dateRangePreset],
+      ["1. Executive Summary", "Total Inbound Leads", "CRM Inquiries", `${totalLeadsCount} Leads`, 0, 0, `${totalLeadsCount > 0 ? Math.round((qualifiedLeadsCount / totalLeadsCount) * 100) : 0}% Qualified`, dateRangePreset],
+
+      // 2. Lifecycle Funnel
+      ...funnelSteps.map((step) => [
+        "2. Lifecycle Funnel",
+        step.label,
+        "Lead Progression",
+        step.count,
+        0,
+        0,
+        `${step.pct}%`,
+        step.isFinal ? "Won / Confirmed" : "In Progress",
+      ]),
+
+      // 3. Lead Source Performance
+      ...leadSourcePerformance.map((src) => [
+        "3. Lead Source Performance",
+        src.sourceName,
+        src.category,
+        `${src.leadsCount} Leads / ${src.dealsCount} Deals`,
+        src.bookingValue,
+        src.realizedRevenue,
+        `${src.conversionRate}%`,
+        `#${src.sourceId}`,
+      ]),
+
+      // 4. Pipeline by Stage
+      ...pipelineStagesBreakdown.map((p) => [
+        "4. Pipeline by Stage",
+        p.stage,
+        "Pipeline Stage Breakdown",
+        `${p.count} Deals`,
+        p.value,
+        0,
+        "—",
+        "Active Funnel",
+      ]),
+
+      // 5. Campaign Performance & ROI
+      ...campaignROI.map((c) => [
+        "5. Campaign Performance",
+        c.name,
+        c.type,
+        `${c.leads} Leads / ${c.won} Won`,
+        c.contractValue,
+        c.realizedRevenue,
+        c.roiText,
+        `#${c.code}`,
+      ]),
+
+      // 6. Booking Performance by Type
+      ...bookingTypeStats.map((b) => [
+        "6. Booking Performance",
+        b.type,
+        "Booking Category Breakdown",
+        `${b.count} Bookings`,
+        b.contractValue,
+        b.realizedRevenue,
+        "—",
+        "Confirmed",
       ]),
     ];
 
-    const csvContent = "data:text/csv;charset=utf-8," + csvRows.map((e) => e.join(",")).join("\n");
+    const csvContent =
+      "\uFEFF" +
+      [headers, ...dataRows]
+        .map((row) => row.map(escapeCSV).join(","))
+        .join("\r\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodeURI(csvContent));
-    link.setAttribute("download", `PMS_Sales_Marketing_Report_${Date.now()}.csv`);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `PMS_Sales_Marketing_Report_${dateRangePreset}_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -295,7 +363,7 @@ export function ReportsAnalyticsView() {
             variant="outline"
             size="sm"
             onClick={handleResetFilters}
-            className="text-xs h-8 px-3 rounded-lg border-slate-200 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
+            className="text-xs h-8 px-3 rounded-lg border-slate-200 text-slate-700 bg-white hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer shadow-2xs"
           >
             <RefreshCw className="h-3.5 w-3.5 text-slate-500" /> Reset
           </Button>
@@ -304,7 +372,7 @@ export function ReportsAnalyticsView() {
             type="button"
             size="sm"
             onClick={handleExportCSV}
-            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs h-8 px-3.5 rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer"
+            className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs h-8 px-3.5 rounded-lg shadow-2xs flex items-center gap-1.5 cursor-pointer"
           >
             <Download className="h-3.5 w-3.5" /> Export CSV
           </Button>
@@ -314,19 +382,19 @@ export function ReportsAnalyticsView() {
       {/* ─────────────────────────────────────────────────────────────
           1. CLEAN TOP FILTER BAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5 text-xs flex-1">
           {/* Date Preset */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/80">
             {(["TODAY", "WEEK", "MONTH", "QUARTER", "YEAR", "ALL"] as DateRangePreset[]).map((preset) => (
               <button
                 key={preset}
                 type="button"
                 onClick={() => setDateRangePreset(preset)}
                 className={cn(
-                  "px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer",
+                  "px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer",
                   dateRangePreset === preset
-                    ? "bg-white text-slate-900 shadow-xs"
+                    ? "bg-slate-900 text-white shadow-2xs"
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
@@ -349,7 +417,7 @@ export function ReportsAnalyticsView() {
           <select
             value={selectedLeadSource}
             onChange={(e) => setSelectedLeadSource(e.target.value)}
-            className="p-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-700 text-xs focus:outline-none"
+            className="p-1.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 text-xs focus:outline-none focus:ring-1 focus:ring-slate-900"
           >
             <option value="ALL">All Lead Sources</option>
             {INITIAL_LEAD_SOURCES.map((s) => (
@@ -363,7 +431,7 @@ export function ReportsAnalyticsView() {
           <select
             value={selectedBookingType}
             onChange={(e) => setSelectedBookingType(e.target.value)}
-            className="p-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-700 text-xs focus:outline-none"
+            className="p-1.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 text-xs focus:outline-none focus:ring-1 focus:ring-slate-900"
           >
             <option value="ALL">All Booking Types</option>
             <option value="Banquet / Event">Banquet / Event</option>
@@ -376,7 +444,7 @@ export function ReportsAnalyticsView() {
           <select
             value={selectedExecutive}
             onChange={(e) => setSelectedExecutive(e.target.value)}
-            className="p-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-700 text-xs focus:outline-none"
+            className="p-1.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 text-xs focus:outline-none focus:ring-1 focus:ring-slate-900"
           >
             <option value="ALL">All Executives</option>
             <option value="Amit Kumar">Amit Kumar</option>
@@ -387,98 +455,98 @@ export function ReportsAnalyticsView() {
         </div>
 
         <span className="text-xs text-slate-500 font-medium">
-          Showing <strong>{filteredLeads.length}</strong> Leads • <strong>{filteredDeals.length}</strong> Deals • <strong>{filteredBookings.length}</strong> Bookings
+          Showing <strong className="text-slate-800">{filteredLeads.length}</strong> Leads • <strong className="text-slate-800">{filteredDeals.length}</strong> Deals • <strong className="text-slate-800">{filteredBookings.length}</strong> Bookings
         </span>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. 6 EXECUTIVE STAT CARDS (CLEAN & DIRECT)
+          2. CONSOLIDATED EXECUTIVE STAT CARDS (4 NON-REDUNDANT CARDS)
       ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">Total Leads</span>
-            <strong className="text-xl font-bold text-slate-900 font-mono mt-0.5 block">{totalLeadsCount}</strong>
-            <span className="text-[10px] text-slate-500">Inbound inquiries</span>
-          </div>
-          <div className="h-9 w-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700">
-            <Users className="h-4.5 w-4.5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">Qualified Leads</span>
-            <strong className="text-xl font-bold text-purple-900 font-mono mt-0.5 block">{qualifiedLeadsCount}</strong>
-            <span className="text-[10px] text-purple-700 font-medium">
-              {totalLeadsCount > 0 ? Math.round((qualifiedLeadsCount / totalLeadsCount) * 100) : 0}% Qualified
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6 mb-5">
+        {/* Card 1: Active Pipeline Value */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Active Pipeline Value
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 sm:h-8 sm:w-8">
+              <Flame className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </span>
           </div>
-          <div className="h-9 w-9 rounded-lg bg-purple-50 flex items-center justify-center text-purple-700 border border-purple-100">
-            <ShieldCheck className="h-4.5 w-4.5" />
-          </div>
-        </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
+            ₹{(openPipelineValue / 100000).toFixed(1)}L
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
+            {openDealsCount} Active Deals in Funnel
+          </p>
+        </Card>
 
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">Open Deals</span>
-            <strong className="text-xl font-bold text-amber-900 font-mono mt-0.5 block">{openDealsCount}</strong>
-            <span className="text-[10px] text-amber-800 font-mono">₹{(openPipelineValue / 100000).toFixed(1)}L Value</span>
+        {/* Card 2: Total Contracted Value */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Total Contract Value
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 sm:h-8 sm:w-8">
+              <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
           </div>
-          <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center text-amber-700 border border-amber-100">
-            <Flame className="h-4.5 w-4.5" />
-          </div>
-        </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
+            ₹{(totalBookingContractValue / 100000).toFixed(1)}L
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
+            {filteredBookings.length} Confirmed Bookings
+          </p>
+        </Card>
 
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">Won Deals</span>
-            <strong className="text-xl font-bold text-emerald-900 font-mono mt-0.5 block">{wonDealsCount}</strong>
-            <span className="text-[10px] text-emerald-700 font-bold">{dealWinRate}% Win Rate</span>
+        {/* Card 3: Realized Revenue */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Realized Revenue
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
           </div>
-          <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700 border border-emerald-100">
-            <Award className="h-4.5 w-4.5" />
-          </div>
-        </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
+            ₹{(totalRealizedRevenue / 100000).toFixed(1)}L
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
+            Posted &amp; Settled Advances
+          </p>
+        </Card>
 
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">Booking Value</span>
-            <strong className="text-xl font-bold text-slate-900 font-mono mt-0.5 block">
-              ₹{(totalBookingContractValue / 100000).toFixed(1)}L
-            </strong>
-            <span className="text-[10px] text-slate-500">Contract total</span>
+        {/* Card 4: Deal Win Rate */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Deal Win Rate
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <Award className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
           </div>
-          <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700 border border-blue-100">
-            <DollarSign className="h-4.5 w-4.5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">Realized Revenue</span>
-            <strong className="text-xl font-bold text-emerald-900 font-mono mt-0.5 block">
-              ₹{(totalRealizedRevenue / 100000).toFixed(1)}L
-            </strong>
-            <span className="text-[10px] text-emerald-700 font-semibold">Posted / settled cash</span>
-          </div>
-          <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700 border border-emerald-100">
-            <CheckCircle2 className="h-4.5 w-4.5" />
-          </div>
-        </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
+            {dealWinRate}%
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
+            {wonDealsCount} Won of {totalClosedDeals > 0 ? totalClosedDeals : 1} Closed Deals
+          </p>
+        </Card>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
           3. LEAD CONVERSION FUNNEL
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs mb-6 space-y-3">
-        <div className="flex items-center justify-between">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs mb-5 space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
           <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-purple-700" />
+            <TrendingUp className="h-4 w-4 text-emerald-600" />
             <strong className="text-xs font-bold text-slate-900">Lead → Deal Lifecycle Funnel</strong>
           </div>
           <span className="text-[11px] text-slate-500">
-            Inbound: <strong>{totalLeadsCount}</strong> • Converted: <strong>{convertedToDealsCount}</strong> • Won: <strong>{wonDealsCount}</strong>
+            Inbound: <strong className="text-slate-800">{totalLeadsCount}</strong> • Converted: <strong className="text-slate-800">{convertedToDealsCount}</strong> • Won: <strong className="text-emerald-700 font-bold">{wonDealsCount}</strong>
           </span>
         </div>
 
@@ -489,7 +557,7 @@ export function ReportsAnalyticsView() {
               className={cn(
                 "p-3.5 rounded-xl border flex flex-col justify-between transition",
                 step.isFinal
-                  ? "bg-emerald-50/50 border-emerald-300"
+                  ? "bg-emerald-50/60 border-emerald-200"
                   : "bg-slate-50/70 border-slate-200"
               )}
             >
@@ -500,7 +568,7 @@ export function ReportsAnalyticsView() {
                     "text-[10px] font-bold font-mono px-1.5 py-0.5 rounded",
                     step.isFinal
                       ? "bg-emerald-100 text-emerald-800"
-                      : "bg-slate-200 text-slate-700"
+                      : "bg-slate-200/80 text-slate-700"
                   )}
                 >
                   {step.pct}%
@@ -527,13 +595,13 @@ export function ReportsAnalyticsView() {
       {/* ─────────────────────────────────────────────────────────────
           4. LEAD SOURCE PERFORMANCE TABLE
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs mb-6 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs mb-5 overflow-hidden">
         <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <strong className="text-xs font-bold text-slate-900">Performance by Standard Lead Source</strong>
           <button
             type="button"
             onClick={() => router.push("/sales-marketing/masters/lead-sources")}
-            className="text-[11px] font-semibold text-purple-700 hover:underline flex items-center gap-1 cursor-pointer"
+            className="text-[11px] font-semibold text-slate-700 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
           >
             Lead Sources Master <ArrowRight className="h-3 w-3" />
           </button>
@@ -541,39 +609,39 @@ export function ReportsAnalyticsView() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
-            <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 border-b border-slate-200">
+            <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
               <tr>
-                <th className="py-2.5 px-3.5">Source ID</th>
-                <th className="py-2.5 px-3.5">Lead Source</th>
-                <th className="py-2.5 px-3.5">Category</th>
-                <th className="py-2.5 px-3.5 text-center">Inbound Leads</th>
-                <th className="py-2.5 px-3.5 text-center">Deals Created</th>
-                <th className="py-2.5 px-3.5 text-center">Won Deals</th>
-                <th className="py-2.5 px-3.5 text-right font-mono">Contract Value</th>
-                <th className="py-2.5 px-3.5 text-right font-mono">Realized Revenue</th>
-                <th className="py-2.5 px-3.5 text-center">Win Rate</th>
+                <th className="py-3 px-3.5">SOURCE ID</th>
+                <th className="py-3 px-3.5">LEAD SOURCE</th>
+                <th className="py-3 px-3.5">CATEGORY</th>
+                <th className="py-3 px-3.5 text-center">INBOUND LEADS</th>
+                <th className="py-3 px-3.5 text-center">DEALS CREATED</th>
+                <th className="py-3 px-3.5 text-center">WON DEALS</th>
+                <th className="py-3 px-3.5 text-right font-mono">CONTRACT VALUE</th>
+                <th className="py-3 px-3.5 text-right font-mono">REALIZED REVENUE</th>
+                <th className="py-3 px-3.5 text-center">WIN RATE</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
               {leadSourcePerformance.map((src) => (
-                <tr key={src.sourceId} className="hover:bg-slate-50/80">
-                  <td className="py-2.5 px-3.5 font-mono font-bold text-emerald-800">#{src.sourceId}</td>
-                  <td className="py-2.5 px-3.5 font-bold text-slate-900">{src.sourceName}</td>
-                  <td className="py-2.5 px-3.5">
-                    <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded text-[10px]">
+                <tr key={src.sourceId} className="hover:bg-slate-50/80 transition">
+                  <td className="py-3 px-3.5 font-mono font-bold text-slate-900">#{src.sourceId}</td>
+                  <td className="py-3 px-3.5 font-bold text-slate-900">{src.sourceName}</td>
+                  <td className="py-3 px-3.5">
+                    <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-semibold">
                       {src.category}
                     </span>
                   </td>
-                  <td className="py-2.5 px-3.5 text-center font-bold text-slate-800 font-mono">{src.leadsCount}</td>
-                  <td className="py-2.5 px-3.5 text-center font-mono text-slate-700">{src.dealsCount}</td>
-                  <td className="py-2.5 px-3.5 text-center font-mono font-bold text-emerald-800">{src.wonCount}</td>
-                  <td className="py-2.5 px-3.5 text-right font-mono font-bold text-slate-900">
+                  <td className="py-3 px-3.5 text-center font-bold text-slate-900 font-mono">{src.leadsCount}</td>
+                  <td className="py-3 px-3.5 text-center font-mono text-slate-700">{src.dealsCount}</td>
+                  <td className="py-3 px-3.5 text-center font-mono font-bold text-emerald-800">{src.wonCount}</td>
+                  <td className="py-3 px-3.5 text-right font-mono font-bold text-slate-900">
                     ₹{src.bookingValue.toLocaleString("en-IN")}
                   </td>
-                  <td className="py-2.5 px-3.5 text-right font-mono font-bold text-emerald-900">
+                  <td className="py-3 px-3.5 text-right font-mono font-bold text-emerald-900">
                     ₹{src.realizedRevenue.toLocaleString("en-IN")}
                   </td>
-                  <td className="py-2.5 px-3.5 text-center">
+                  <td className="py-3 px-3.5 text-center">
                     <span
                       className={cn(
                         "px-2 py-0.5 rounded-full text-[10px] font-bold border inline-block",
@@ -597,9 +665,9 @@ export function ReportsAnalyticsView() {
       {/* ─────────────────────────────────────────────────────────────
           5. TWO-COLUMN: PIPELINE BY STAGE + CAMPAIGN ROI
       ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
         {/* Pipeline Value by Stage */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
           <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Target className="h-4 w-4 text-emerald-700" />
@@ -608,7 +676,7 @@ export function ReportsAnalyticsView() {
             <button
               type="button"
               onClick={() => router.push("/sales-marketing/crm/pipeline")}
-              className="text-[11px] font-semibold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
+              className="text-[11px] font-semibold text-slate-700 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
             >
               Open Pipeline <ArrowRight className="h-3 w-3" />
             </button>
@@ -644,16 +712,16 @@ export function ReportsAnalyticsView() {
         </div>
 
         {/* Marketing Campaign Performance & ROI */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
           <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-blue-700" />
+              <Sparkles className="h-4 w-4 text-emerald-700" />
               <strong className="text-xs font-bold text-slate-900">Campaigns &amp; Realized ROI</strong>
             </div>
             <button
               type="button"
               onClick={() => router.push("/sales-marketing/marketing/campaigns")}
-              className="text-[11px] font-semibold text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
+              className="text-[11px] font-semibold text-slate-700 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
             >
               View Campaigns <ArrowRight className="h-3 w-3" />
             </button>
@@ -661,32 +729,32 @@ export function ReportsAnalyticsView() {
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 border-b border-slate-200">
+              <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-3">Campaign</th>
-                  <th className="py-2.5 px-3 text-right font-mono">Spend</th>
-                  <th className="py-2.5 px-3 text-center">Leads</th>
-                  <th className="py-2.5 px-3 text-center">Won</th>
-                  <th className="py-2.5 px-3 text-right font-mono">Realized Cash</th>
-                  <th className="py-2.5 px-3 text-center">ROI</th>
+                  <th className="py-3 px-3">CAMPAIGN</th>
+                  <th className="py-3 px-3 text-right font-mono">SPEND</th>
+                  <th className="py-3 px-3 text-center">LEADS</th>
+                  <th className="py-3 px-3 text-center">WON</th>
+                  <th className="py-3 px-3 text-right font-mono">REALIZED CASH</th>
+                  <th className="py-3 px-3 text-center">ROI</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
                 {campaignROI.slice(0, 5).map((c) => (
-                  <tr key={c.code} className="hover:bg-slate-50/80">
-                    <td className="py-2 px-3">
-                      <strong className="text-slate-900 block text-[11px]">{c.name}</strong>
+                  <tr key={c.code} className="hover:bg-slate-50/80 transition">
+                    <td className="py-2.5 px-3">
+                      <strong className="text-slate-900 block text-xs">{c.name}</strong>
                       <span className="text-[10px] text-slate-400 font-mono">#{c.code}</span>
                     </td>
-                    <td className="py-2 px-3 text-right font-mono text-slate-700 text-[11px]">
+                    <td className="py-2.5 px-3 text-right font-mono text-slate-700 text-xs">
                       {c.spend > 0 ? `₹${(c.spend / 1000).toFixed(0)}k` : "—"}
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-[11px]">{c.leads}</td>
-                    <td className="py-2 px-3 text-center font-mono font-bold text-emerald-800 text-[11px]">{c.won}</td>
-                    <td className="py-2 px-3 text-right font-mono font-bold text-emerald-900 text-[11px]">
+                    <td className="py-2.5 px-3 text-center font-mono text-xs">{c.leads}</td>
+                    <td className="py-2.5 px-3 text-center font-mono font-bold text-emerald-800 text-xs">{c.won}</td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-900 text-xs">
                       ₹{(c.realizedRevenue / 100000).toFixed(1)}L
                     </td>
-                    <td className="py-2 px-3 text-center">
+                    <td className="py-2.5 px-3 text-center">
                       <span
                         className={cn(
                           "px-2 py-0.5 rounded-full text-[10px] font-bold border inline-block font-mono",
@@ -711,36 +779,36 @@ export function ReportsAnalyticsView() {
       ───────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-4">
         {/* Booking Performance by Type */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
           <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
             <strong className="text-xs font-bold text-slate-900">Booking Performance by Type</strong>
             <button
               type="button"
               onClick={() => router.push("/sales-marketing/banquets/bookings-enquiries")}
-              className="text-[11px] font-semibold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
+              className="text-[11px] font-semibold text-slate-700 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
             >
               Event Bookings <ArrowRight className="h-3 w-3" />
             </button>
           </div>
 
           <table className="w-full text-left text-xs text-slate-700">
-            <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 border-b border-slate-200">
+            <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
               <tr>
-                <th className="py-2.5 px-3.5">Booking Type</th>
-                <th className="py-2.5 px-3.5 text-center">Bookings</th>
-                <th className="py-2.5 px-3.5 text-right font-mono">Contract Value</th>
-                <th className="py-2.5 px-3.5 text-right font-mono">Realized Cash</th>
+                <th className="py-3 px-3.5">BOOKING TYPE</th>
+                <th className="py-3 px-3.5 text-center">BOOKINGS</th>
+                <th className="py-3 px-3.5 text-right font-mono">CONTRACT VALUE</th>
+                <th className="py-3 px-3.5 text-right font-mono">REALIZED CASH</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
               {bookingTypeStats.map((bt) => (
-                <tr key={bt.type} className="hover:bg-slate-50/80">
-                  <td className="py-2.5 px-3.5 font-bold text-slate-900">{bt.type}</td>
-                  <td className="py-2.5 px-3.5 text-center font-bold text-slate-800 font-mono">{bt.count}</td>
-                  <td className="py-2.5 px-3.5 text-right font-mono font-bold text-slate-900">
+                <tr key={bt.type} className="hover:bg-slate-50/80 transition">
+                  <td className="py-3 px-3.5 font-bold text-slate-900">{bt.type}</td>
+                  <td className="py-3 px-3.5 text-center font-bold text-slate-900 font-mono">{bt.count}</td>
+                  <td className="py-3 px-3.5 text-right font-mono font-bold text-slate-900">
                     ₹{bt.contractValue.toLocaleString("en-IN")}
                   </td>
-                  <td className="py-2.5 px-3.5 text-right font-mono font-bold text-emerald-900">
+                  <td className="py-3 px-3.5 text-right font-mono font-bold text-emerald-900">
                     ₹{bt.realizedRevenue.toLocaleString("en-IN")}
                   </td>
                 </tr>
@@ -750,7 +818,7 @@ export function ReportsAnalyticsView() {
         </div>
 
         {/* Actionable Operational Alerts */}
-        <div className="bg-white rounded-xl border border-amber-200 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-xl border border-amber-200 shadow-2xs overflow-hidden">
           <div className="p-3.5 bg-amber-50/70 border-b border-amber-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-amber-700" />
@@ -773,7 +841,7 @@ export function ReportsAnalyticsView() {
                 size="sm"
                 variant="outline"
                 onClick={() => router.push("/sales-marketing/crm/activities-calls")}
-                className="text-[11px] h-7 text-rose-800 border-rose-300 hover:bg-rose-100"
+                className="text-xs h-7 rounded-lg text-rose-800 border-rose-300 hover:bg-rose-100 font-semibold cursor-pointer shadow-2xs"
               >
                 Review →
               </Button>
@@ -792,7 +860,7 @@ export function ReportsAnalyticsView() {
                 size="sm"
                 variant="outline"
                 onClick={() => router.push("/sales-marketing/banquets/venue-availability")}
-                className="text-[11px] h-7 text-amber-900 border-amber-300 hover:bg-amber-100"
+                className="text-xs h-7 rounded-lg text-amber-900 border-amber-300 hover:bg-amber-100 font-semibold cursor-pointer shadow-2xs"
               >
                 Calendar →
               </Button>
@@ -811,7 +879,7 @@ export function ReportsAnalyticsView() {
                 size="sm"
                 variant="outline"
                 onClick={() => router.push("/sales-marketing/crm/pipeline")}
-                className="text-[11px] h-7 text-purple-900 border-purple-300 hover:bg-purple-100"
+                className="text-xs h-7 rounded-lg text-purple-900 border-purple-300 hover:bg-purple-100 font-semibold cursor-pointer shadow-2xs"
               >
                 Pipeline →
               </Button>

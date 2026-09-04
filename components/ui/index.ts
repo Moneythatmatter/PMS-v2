@@ -8,3 +8,4 @@ export { Modal } from "./Modal";
 export { Drawer } from "./Drawer";
 export { StatusBadge } from "./StatusBadge";
 export { SearchSelect } from "./SearchSelect";
+export { ActionMenu, type ActionMenuItem } from "./ActionMenu";

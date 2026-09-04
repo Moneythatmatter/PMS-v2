@@ -33,10 +33,14 @@ import {
   UserCheck,
   Briefcase,
   HelpCircle,
+  Eye,
+  ExternalLink,
+  FileText,
+  MoreHorizontal,
+  PhoneCall,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Button, Drawer, Modal } from "@/components/ui";
-import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { Button, Card, Drawer, Modal, ActionMenu, ActionMenuItem } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { CsvLeadImportModal } from "./shared/CsvLeadImportModal";
 
@@ -821,6 +825,116 @@ export function LeadsInquiriesView() {
     setToastMessage(`✓ Successfully imported ${newImportedLeads.length} leads from CSV!`);
   };
 
+  // Mark Lead as Lost / Drop
+  const handleMarkLost = (lead: LeadRecordItem) => {
+    const reason = prompt(
+      "Enter reason for dropping/marking lead as lost (optional):",
+      "Client chose another venue / Budget mismatch"
+    );
+    if (reason === null) return;
+
+    const timestamp = "Today";
+    const updatedList = leads.map((l) => {
+      if (l.id === lead.id) {
+        return {
+          ...l,
+          status: "Lost" as LeadStatus,
+          timeline: [
+            {
+              id: `T-${Date.now()}`,
+              date: timestamp,
+              title: "Lead Marked as Lost",
+              actor: l.assignedExecutive,
+              notes: reason || "Lead marked as dropped/lost.",
+            },
+            ...l.timeline,
+          ],
+        };
+      }
+      return l;
+    });
+
+    setLeads(updatedList);
+    if (selectedLead?.id === lead.id) {
+      const updated = updatedList.find((l) => l.id === lead.id);
+      if (updated) setSelectedLead(updated);
+    }
+    setToastMessage(`✓ Lead #${lead.id} marked as Lost.`);
+  };
+
+  // Construct Action Menu Items for Reusable ActionMenu
+  const getLeadActionMenuItems = (lead: LeadRecordItem): ActionMenuItem[] => {
+    const items: ActionMenuItem[] = [
+      {
+        label: "View Lead Details",
+        icon: Eye,
+        onClick: () => {
+          setSelectedLead(lead);
+          setDrawerTab("overview");
+        },
+      },
+      {
+        label: "Add Quick Note",
+        icon: FileText,
+        onClick: () => {
+          setNotingLead(lead);
+          setNoteText("");
+        },
+      },
+    ];
+
+    if (lead.status === "New") {
+      items.push({
+        label: "Contact Lead",
+        icon: Phone,
+        variant: "primary",
+        onClick: () => {
+          setContactingLead(lead);
+          setContactForm({ method: "Phone Call", notes: "" });
+        },
+      });
+    }
+
+    if (lead.status === "Contacted") {
+      items.push({
+        label: "Mark as Qualified",
+        icon: CheckCircle2,
+        variant: "success",
+        onClick: () => handleMarkQualified(lead),
+      });
+    }
+
+    if (lead.status === "Qualified") {
+      items.push({
+        label: "Move to Pipeline Deal",
+        icon: Zap,
+        variant: "success",
+        onClick: () => handleOpenMoveToPipeline(lead),
+      });
+    }
+
+    if (lead.status === "Converted") {
+      items.push({
+        label: "Open Pipeline Deal",
+        icon: ExternalLink,
+        variant: "primary",
+        onClick: () => router.push(`/sales-marketing/crm/pipeline?leadId=${lead.id}`),
+      });
+    }
+
+    if (lead.status !== "Converted" && lead.status !== "Lost") {
+      items.push({ label: "divider", divider: true });
+      items.push({
+        label: "Mark as Lost / Drop",
+        icon: X,
+        variant: "danger",
+        onClick: () => handleMarkLost(lead),
+      });
+    }
+
+    return items;
+  };
+
   return (
     <ModulePageShell
       eyebrow="Lead & Sales Management"
@@ -857,51 +971,94 @@ export function LeadsInquiriesView() {
       }
     >
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: INQUIRIES OPERATIONAL KPI CARDS
+          SECTION 1: INQUIRIES OPERATIONAL KPI CARDS (F&B DASHBOARD STYLE)
       ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <HRKPICard
-          label="Total Inquiries"
-          value={`${summaryMetrics.totalLeads}`}
-          subtitle="All Active Records"
-          tone="emerald"
-          icon={<Inbox className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="New Inquiries"
-          value={`${summaryMetrics.newCount}`}
-          subtitle="Awaiting First Response"
-          tone="amber"
-          icon={<Clock className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Qualified Leads"
-          value={`${summaryMetrics.qualifiedCount}`}
-          subtitle="Ready for Pipeline Deal"
-          tone="purple"
-          icon={<UserCheck className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Converted to Deals"
-          value={`${summaryMetrics.convertedCount}`}
-          subtitle="Active in Pipeline"
-          tone="blue"
-          icon={<Zap className="h-5 w-5" />}
-        />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6 mb-5">
+        {/* Card 1: Total Inquiries */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Total Inquiries
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <Inbox className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {summaryMetrics.totalLeads}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            All active records
+          </p>
+        </Card>
+
+        {/* Card 2: New Inquiries */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              New Inquiries
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 sm:h-8 sm:w-8">
+              <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {summaryMetrics.newCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Awaiting first response
+          </p>
+        </Card>
+
+        {/* Card 3: Qualified Leads */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Qualified Leads
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 sm:h-8 sm:w-8">
+              <UserCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {summaryMetrics.qualifiedCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Ready for pipeline deal
+          </p>
+        </Card>
+
+        {/* Card 4: Converted to Deals */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Converted to Deals
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <Zap className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {summaryMetrics.convertedCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Active in pipeline
+          </p>
+        </Card>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION 2: SEARCH & FILTER TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs mb-4 flex flex-col md:flex-row items-center justify-between gap-3">
+      <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/80 shadow-xs mb-4 flex flex-col md:flex-row items-center justify-between gap-3">
         <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by Lead ID (#LEAD-001), Client Name, Mobile, Email, Company, or Requirements..."
+            placeholder="Search by Lead ID (#LEAD-001), Client Name, Mobile, Email, Company..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full text-xs rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50 font-medium text-slate-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-400"
+            className="w-full text-xs sm:text-sm rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50/50 font-normal text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300"
           />
         </div>
 
@@ -910,7 +1067,7 @@ export function LeadsInquiriesView() {
           <select
             value={selectedTypeFilter}
             onChange={(e) => setSelectedTypeFilter(e.target.value)}
-            className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none"
+            className="text-xs rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
           >
             <option value="ALL">All Booking Types</option>
             <option value="Room Booking">Room Booking</option>
@@ -926,7 +1083,7 @@ export function LeadsInquiriesView() {
           <select
             value={selectedSourceFilter}
             onChange={(e) => setSelectedSourceFilter(e.target.value)}
-            className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none"
+            className="text-xs rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
           >
             <option value="ALL">All Lead Sources</option>
             <option value="Google Ads">Google Ads</option>
@@ -946,7 +1103,7 @@ export function LeadsInquiriesView() {
           <select
             value={selectedStatusFilter}
             onChange={(e) => setSelectedStatusFilter(e.target.value)}
-            className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none"
+            className="text-xs rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
           >
             <option value="ALL">All Statuses</option>
             <option value="New">New</option>
@@ -959,25 +1116,28 @@ export function LeadsInquiriesView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 3: COMPACT LEADS TABLE (EXACT SCHEMA SPECIFIED)
+          SECTION 3: CLEAN LEADS TABLE (MATCHING F&B / FRONT OFFICE SPEC)
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="px-4 py-3 text-xs text-slate-500 font-medium border-b border-slate-100 flex items-center justify-between">
+          <span>Showing <strong className="text-slate-700 font-semibold">{filteredLeads.length}</strong> of <strong className="text-slate-700 font-semibold">{leads.length}</strong> records &bull; Inquiries Register</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
-            <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 border-b border-slate-200">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50/70 text-xs font-semibold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="py-3 px-4">Lead ID</th>
-                <th className="py-3 px-4">Lead Name</th>
-                <th className="py-3 px-4">Mobile Number</th>
+                <th className="py-3 px-4">Lead #</th>
+                <th className="py-3 px-4">Guest / Client</th>
+                <th className="py-3 px-4">Phone</th>
                 <th className="py-3 px-4">Booking Type</th>
-                <th className="py-3 px-4">Lead Source</th>
+                <th className="py-3 px-4">Source</th>
                 <th className="py-3 px-4">Campaign</th>
-                <th className="py-3 px-4">Created Date</th>
+                <th className="py-3 px-4">Date</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-medium">
+            <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
               {filteredLeads.length > 0 ? (
                 filteredLeads.map((lead) => (
                   <tr
@@ -986,165 +1146,86 @@ export function LeadsInquiriesView() {
                       setSelectedLead(lead);
                       setDrawerTab("overview");
                     }}
-                    className="hover:bg-slate-50/80 transition cursor-pointer"
+                    className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                   >
                     {/* 1. Lead ID */}
-                    <td className="py-3 px-4 font-mono font-bold text-emerald-800">
+                    <td className="py-3.5 px-4 font-mono text-xs font-semibold text-slate-800">
                       #{lead.id}
                     </td>
 
                     {/* 2. Lead Name */}
-                    <td className="py-3 px-4">
-                      <strong className="text-slate-900 font-semibold block">{lead.leadName}</strong>
-                      <span className="text-[10px] text-slate-500 block truncate max-w-[180px]">
+                    <td className="py-3.5 px-4">
+                      <span className="text-xs font-semibold text-slate-900 block">{lead.leadName}</span>
+                      <span className="text-[11px] text-slate-500 block truncate max-w-[180px]">
                         {lead.companyName || lead.contactPerson}
                       </span>
                     </td>
 
                     {/* 3. Mobile Number */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-1 font-mono text-slate-900 font-semibold">
-                        <span>{lead.mobileNumber}</span>
-                        <a
-                          href={`tel:${lead.mobileNumber}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-emerald-700 hover:text-emerald-800 p-0.5"
-                          title="Call Lead"
-                        >
-                          <Phone className="h-3 w-3" />
-                        </a>
-                      </div>
+                    <td className="py-3.5 px-4 font-mono text-xs text-slate-600">
+                      {lead.mobileNumber}
                     </td>
 
                     {/* 4. Booking Type */}
-                    <td className="py-3 px-4">
-                      <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded text-[10px] font-semibold inline-block">
-                        {lead.bookingType}
-                      </span>
+                    <td className="py-3.5 px-4 text-xs text-slate-600">
+                      {lead.bookingType}
                     </td>
 
                     {/* 5. Lead Source */}
-                    <td className="py-3 px-4 text-slate-800 font-medium">
+                    <td className="py-3.5 px-4 text-xs text-slate-600">
                       {lead.leadSource}
                     </td>
 
                     {/* 6. Campaign */}
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4 text-xs">
                       {lead.campaignName ? (
-                        <span className="text-slate-900 font-medium truncate block max-w-[150px]">
+                        <span className="text-slate-700 truncate block max-w-[150px]">
                           {lead.campaignName}
                         </span>
                       ) : (
-                        <span className="text-slate-400 italic text-[11px]">Not Linked</span>
+                        <span className="text-slate-400 italic">Not Linked</span>
                       )}
                     </td>
 
                     {/* 7. Created Date */}
-                    <td className="py-3 px-4 font-mono text-slate-600 text-[11px]">
+                    <td className="py-3.5 px-4 font-mono text-xs text-slate-500">
                       {lead.createdDate}
                     </td>
 
                     {/* 8. Status Badge */}
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-3.5 px-4 text-center">
                       <span
                         className={cn(
-                          "px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-block",
+                          "px-2.5 py-0.5 rounded-full text-[11px] font-semibold border inline-block",
                           lead.status === "New"
-                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                            ? "bg-amber-50 text-amber-700 border-amber-200/70"
                             : lead.status === "Contacted"
-                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                            ? "bg-sky-50 text-sky-700 border-sky-200/70"
                             : lead.status === "Qualified"
-                            ? "bg-purple-50 text-purple-700 border-purple-200"
+                            ? "bg-teal-50 text-teal-700 border-teal-200/70"
                             : lead.status === "Converted"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-rose-50 text-rose-700 border-rose-200"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200/70"
+                            : "bg-rose-50 text-rose-700 border-rose-200/70"
                         )}
                       >
                         {lead.status}
                       </span>
                     </td>
 
-                    {/* 9. Actions (Exact Flow Rule by Status) */}
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        <Button
+                    {/* 9. Actions Column */}
+                    <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
                           type="button"
-                          variant="outline"
-                          size="sm"
                           onClick={() => {
                             setSelectedLead(lead);
                             setDrawerTab("overview");
                           }}
-                          className="text-[11px] font-semibold rounded-lg px-2.5 h-7 cursor-pointer border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer"
                         >
-                          View
-                        </Button>
-
-                        {/* Status = New */}
-                        {lead.status === "New" && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => {
-                              setContactingLead(lead);
-                              setContactForm({ method: "Phone Call", notes: "" });
-                            }}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[11px] px-2.5 h-7 rounded-lg shadow-xs cursor-pointer"
-                          >
-                            Contact Lead
-                          </Button>
-                        )}
-
-                        {/* Status = Contacted */}
-                        {lead.status === "Contacted" && (
-                          <>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setNotingLead(lead);
-                                setNoteText("");
-                              }}
-                              className="text-[11px] font-semibold rounded-lg px-2 h-7 cursor-pointer border-slate-200 text-slate-700 bg-white hover:bg-slate-50"
-                            >
-                              Add Note
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => handleMarkQualified(lead)}
-                              className="bg-purple-700 hover:bg-purple-800 text-white font-semibold text-[11px] px-2.5 h-7 rounded-lg shadow-xs cursor-pointer"
-                            >
-                              Mark Qualified
-                            </Button>
-                          </>
-                        )}
-
-                        {/* Status = Qualified */}
-                        {lead.status === "Qualified" && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => handleOpenMoveToPipeline(lead)}
-                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] px-3 h-7 rounded-lg shadow-xs cursor-pointer flex items-center gap-1"
-                          >
-                            Move To Pipeline →
-                          </Button>
-                        )}
-
-                        {/* Status = Converted */}
-                        {lead.status === "Converted" && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => router.push(`/sales-marketing/crm/pipeline?leadId=${lead.id}`)}
-                            className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-[11px] px-2.5 h-7 rounded-lg shadow-xs cursor-pointer border-transparent"
-                          >
-                            View Deal
-                          </Button>
-                        )}
+                          <Eye className="h-3 w-3 text-slate-400" /> View
+                        </button>
+                        <ActionMenu items={getLeadActionMenuItems(lead)} />
                       </div>
                     </td>
                   </tr>

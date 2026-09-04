@@ -29,8 +29,7 @@ import {
   Hotel,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
-import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { Button, Card, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────
@@ -330,7 +329,7 @@ export function VenueAvailabilityView() {
             type="button"
             size="sm"
             onClick={() => setToastMessage("Booking process is executed by Front Office. Sales & Marketing has View-Only access.")}
-            className="rounded-full text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white shadow-sm flex items-center gap-1.5 px-4 cursor-pointer"
+            className="rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-2xs flex items-center gap-1.5 px-3.5 py-1.5 cursor-pointer"
           >
             <Lock className="h-3.5 w-3.5 text-amber-400" /> Front Office Managed Booking
           </Button>
@@ -340,79 +339,118 @@ export function VenueAvailabilityView() {
       onDismissToast={() => setToastMessage(null)}
     >
       {/* 1. SUMMARY CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 mb-5">
-        <HRKPICard
-          label="Banquet Venues"
-          value={`${dateMetrics.totalHalls}`}
-          subtitle="Halls & Lawns"
-          tone="emerald"
-          icon={<Building2 className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Confirmed Events"
-          value={`${dateMetrics.confirmedCount}`}
-          subtitle={`For ${selectedDate}`}
-          tone="blue"
-          icon={<CheckCircle2 className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Tentative Holds"
-          value={`${dateMetrics.tentativeCount}`}
-          subtitle={`For ${selectedDate}`}
-          tone="amber"
-          icon={<Clock className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Slots Available"
-          value={`${dateMetrics.availableCount}`}
-          subtitle="Morning / Evening Slots"
-          tone="emerald"
-          icon={<Sparkles className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Hotel Rooms Avail."
-          value={`${dateMetrics.totalRoomsAvailable} / ${dateMetrics.totalRoomsInventory}`}
-          subtitle="Real-time FO Inventory"
-          tone="purple"
-          icon={<Bed className="h-4 w-4" />}
-        />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+        <Card className="p-4 bg-white border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Banquet Venues</span>
+            <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+              <Building2 className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+            {dateMetrics.totalHalls}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            Halls &amp; Lawns
+          </div>
+        </Card>
+
+        <Card className="p-4 bg-white border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Confirmed Events</span>
+            <div className="h-8 w-8 rounded-lg bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+            {dateMetrics.confirmedCount}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            For {selectedDate}
+          </div>
+        </Card>
+
+        <Card className="p-4 bg-white border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Tentative Holds</span>
+            <div className="h-8 w-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+              <Clock className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+            {dateMetrics.tentativeCount}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            For {selectedDate}
+          </div>
+        </Card>
+
+        <Card className="p-4 bg-white border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Slots Available</span>
+            <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+              <Sparkles className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+            {dateMetrics.availableCount}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            Morning / Evening Slots
+          </div>
+        </Card>
+
+        <Card className="p-4 bg-white border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Hotel Rooms Avail.</span>
+            <div className="h-8 w-8 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
+              <Bed className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+            {dateMetrics.totalRoomsAvailable} <span className="text-sm font-semibold text-slate-400">/ {dateMetrics.totalRoomsInventory}</span>
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            Real-time FO Inventory
+          </div>
+        </Card>
       </div>
 
-      {/* 2. SLEEK FRONT-OFFICE STYLE FILTER BAR */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
+      {/* 2. FILTER & CONTROLS BAR */}
+      <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs mb-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* View Mode Tabs */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
             <button
               type="button"
               onClick={() => setViewMode("venues")}
               className={cn(
-                "px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer",
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
                 viewMode === "venues"
-                  ? "bg-white text-emerald-800 shadow-xs border border-slate-200/60"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-slate-900 text-white shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               )}
             >
-              <Building2 className="h-3.5 w-3.5 text-emerald-700" /> Venue &amp; Hall Matrix
+              <Building2 className="h-3.5 w-3.5" /> Venue &amp; Hall Matrix
             </button>
 
             <button
               type="button"
               onClick={() => setViewMode("rooms")}
               className={cn(
-                "px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer",
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
                 viewMode === "rooms"
-                  ? "bg-white text-emerald-800 shadow-xs border border-slate-200/60"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-slate-900 text-white shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               )}
             >
-              <Hotel className="h-3.5 w-3.5 text-emerald-700" /> Room Availability (FO)
+              <Hotel className="h-3.5 w-3.5" /> Room Availability (FO)
             </button>
           </div>
 
-          {/* Search & Target Date */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="relative w-64">
+          {/* Search & Target Date Controls */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-56 sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="text"
@@ -423,7 +461,7 @@ export function VenueAvailabilityView() {
                 }
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white text-slate-800 font-medium"
+                className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-800 font-medium placeholder:text-slate-400"
               />
               {searchTerm && (
                 <button
@@ -436,17 +474,18 @@ export function VenueAvailabilityView() {
               )}
             </div>
 
-            {/* Target Date & Range Preset Switches */}
+            {/* Target Date Input */}
             <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
               <Calendar className="h-3.5 w-3.5 text-slate-500" />
               <input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
               />
             </div>
 
+            {/* Range Presets */}
             <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80">
               <button
                 type="button"
@@ -455,9 +494,9 @@ export function VenueAvailabilityView() {
                   setSelectedDate(new Date().toISOString().split("T")[0]);
                 }}
                 className={cn(
-                  "px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer",
+                  "px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer",
                   timeRange === "day"
-                    ? "bg-white text-emerald-800 shadow-xs border border-slate-200/60"
+                    ? "bg-white text-slate-900 shadow-2xs"
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
@@ -467,9 +506,9 @@ export function VenueAvailabilityView() {
                 type="button"
                 onClick={() => setTimeRange("week")}
                 className={cn(
-                  "px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer",
+                  "px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer",
                   timeRange === "week"
-                    ? "bg-white text-emerald-800 shadow-xs border border-slate-200/60"
+                    ? "bg-white text-slate-900 shadow-2xs"
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
@@ -479,9 +518,9 @@ export function VenueAvailabilityView() {
                 type="button"
                 onClick={() => setTimeRange("month")}
                 className={cn(
-                  "px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer",
+                  "px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer",
                   timeRange === "month"
-                    ? "bg-white text-emerald-800 shadow-xs border border-slate-200/60"
+                    ? "bg-white text-slate-900 shadow-2xs"
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
@@ -493,7 +532,7 @@ export function VenueAvailabilityView() {
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="text-xs rounded-lg border border-slate-200 py-1.5 px-3 bg-white font-bold text-slate-800 focus:ring-2 focus:ring-emerald-600"
+                className="text-xs rounded-lg border border-slate-200 py-1.5 px-3 bg-white font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer"
               >
                 <option value="ALL">All Categories</option>
                 <option value="Indoor Hall">Indoor Hall</option>
@@ -507,27 +546,37 @@ export function VenueAvailabilityView() {
         </div>
       </div>
 
-      {/* 3. MATRIX DISPLAY BASED ON PILL SELECTION */}
+      {/* 3. RECORD COUNT BAR */}
+      <div className="flex items-center justify-between text-xs text-slate-500 mb-2 px-1">
+        <span>
+          Showing <strong className="text-slate-800">{viewMode === "venues" ? filteredVenues.length : filteredRooms.length}</strong> {viewMode === "venues" ? "venues" : "room categories"} • Real-Time Availability Matrix
+        </span>
+        <span className="text-[11px] text-slate-400">
+          Target Date: {selectedDate} ({timeRange.toUpperCase()})
+        </span>
+      </div>
+
+      {/* 4. MATRIX DISPLAY BASED ON PILL SELECTION */}
       {viewMode === "venues" ? (
         /* VENUE AVAILABILITY MATRIX GRID (VIEW-ONLY) */
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50/80 text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
+              <thead className="bg-slate-50/80 text-[11px] font-semibold tracking-wider text-slate-500 uppercase border-b border-slate-200">
                 {timeRange === "day" ? (
                   <tr>
-                    <th className="py-3.5 px-4">Venue / Hall Specs</th>
-                    <th className="py-3.5 px-4 text-center">Capacity</th>
-                    <th className="py-3.5 px-4 text-center">Morning Slot (09:00 - 15:00)</th>
-                    <th className="py-3.5 px-4 text-center">Evening Slot (18:00 - 23:30)</th>
-                    <th className="py-3.5 px-4 text-right">Tariff (Full Day)</th>
+                    <th className="py-3 px-4">Venue / Hall Specs</th>
+                    <th className="py-3 px-4 text-center">Capacity</th>
+                    <th className="py-3 px-4 text-center">Morning Slot (09:00 - 15:00)</th>
+                    <th className="py-3 px-4 text-center">Evening Slot (18:00 - 23:30)</th>
+                    <th className="py-3 px-4 text-right">Tariff (Full Day)</th>
                   </tr>
                 ) : (
                   <tr>
-                    <th className="py-3.5 px-4 min-w-[200px] sticky left-0 bg-slate-50 border-r border-slate-200 z-10">
+                    <th className="py-3 px-4 min-w-[200px] sticky left-0 bg-slate-50 border-r border-slate-200 z-10">
                       Venue / Hall Specs
                     </th>
-                    <th className="py-3.5 px-3 text-center min-w-[80px]">Capacity</th>
+                    <th className="py-3 px-3 text-center min-w-[80px]">Capacity</th>
                     {dateColumns.map((col) => {
                       const isSelected = col.iso === selectedDate;
                       return (
@@ -539,9 +588,9 @@ export function VenueAvailabilityView() {
                           }}
                           title="Click to view single day detail for this date"
                           className={cn(
-                            "py-3.5 px-3 text-center min-w-[110px] border-l border-slate-200/60 cursor-pointer transition select-none",
+                            "py-3 px-3 text-center min-w-[110px] border-l border-slate-200/60 cursor-pointer transition select-none",
                             isSelected
-                              ? "bg-emerald-700 text-white font-extrabold"
+                              ? "bg-slate-900 text-white font-bold"
                               : "hover:bg-slate-100 text-slate-600"
                           )}
                         >
@@ -549,7 +598,7 @@ export function VenueAvailabilityView() {
                         </th>
                       );
                     })}
-                    <th className="py-3.5 px-4 text-right min-w-[110px]">Tariff</th>
+                    <th className="py-3 px-4 text-right min-w-[110px]">Tariff</th>
                   </tr>
                 )}
               </thead>
@@ -564,25 +613,34 @@ export function VenueAvailabilityView() {
                       return (
                         <tr key={venue.id} className="hover:bg-slate-50/70 transition">
                           {/* Venue Info */}
-                          <td className="py-3.5 px-4">
-                            <strong className="text-xs font-bold text-slate-900 block">{venue.name}</strong>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
-                              <span className="bg-slate-100 px-1.5 py-0.5 rounded font-semibold text-slate-600">{venue.category}</span>
+                          <td className="py-3 px-4">
+                            <strong className="text-xs font-semibold text-slate-900 block">{venue.name}</strong>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                              <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-600">{venue.category}</span>
                               <span>{venue.areaSqFt.toLocaleString()} sq. ft.</span>
                             </div>
                           </td>
 
                           {/* Capacity */}
-                          <td className="py-3.5 px-4 text-center font-medium">
-                            <span className="font-extrabold text-slate-800 font-mono text-xs">{venue.maxCapacity}</span>
+                          <td className="py-3 px-4 text-center font-medium">
+                            <span className="font-bold text-slate-800 font-mono text-xs">{venue.maxCapacity}</span>
                             <span className="block text-[10px] text-slate-400">Pax</span>
                           </td>
 
                           {/* Morning Slot */}
-                          <td className="py-3.5 px-4 text-center">
+                          <td className="py-3 px-4 text-center">
                             {fullDayBooking ? (
-                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-300 text-[11px] font-bold">
-                                <span className="h-2 w-2 rounded-full bg-purple-600" />
+                              <div
+                                onClick={() =>
+                                  setSelectedSlotModal({
+                                    venue,
+                                    slot: "Full Day (09:00 - 23:30)",
+                                    booking: fullDayBooking,
+                                  })
+                                }
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-xs font-semibold hover:bg-purple-100 transition cursor-pointer"
+                              >
+                                <span className="h-1.5 w-1.5 rounded-full bg-purple-600" />
                                 <span>Full Day: {fullDayBooking.eventName}</span>
                               </div>
                             ) : morningBooking ? (
@@ -595,13 +653,18 @@ export function VenueAvailabilityView() {
                                   })
                                 }
                                 className={cn(
-                                  "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer border transition shadow-2xs",
+                                  "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer border transition",
                                   morningBooking.bookingStatus === "Confirmed"
-                                    ? "bg-gradient-to-r from-emerald-600 to-emerald-700 text-white border-emerald-500"
-                                    : "bg-amber-100 text-amber-900 border-amber-300"
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                                    : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
                                 )}
                               >
-                                <span className={cn("h-2 w-2 rounded-full", morningBooking.bookingStatus === "Confirmed" ? "bg-white" : "bg-amber-600")} />
+                                <span
+                                  className={cn(
+                                    "h-1.5 w-1.5 rounded-full",
+                                    morningBooking.bookingStatus === "Confirmed" ? "bg-emerald-600" : "bg-amber-500"
+                                  )}
+                                />
                                 <span>{morningBooking.eventName} ({morningBooking.bookingStatus})</span>
                               </div>
                             ) : (
@@ -612,7 +675,7 @@ export function VenueAvailabilityView() {
                                     slot: "Morning (09:00 - 15:00)",
                                   })
                                 }
-                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/90 hover:bg-emerald-100 transition cursor-pointer text-[11px] font-semibold"
+                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50/70 text-emerald-700 border border-emerald-200/80 hover:bg-emerald-100 transition cursor-pointer text-xs font-semibold"
                                 title="Available Slot - Click for details"
                               >
                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -622,10 +685,19 @@ export function VenueAvailabilityView() {
                           </td>
 
                           {/* Evening Slot */}
-                          <td className="py-3.5 px-4 text-center">
+                          <td className="py-3 px-4 text-center">
                             {fullDayBooking ? (
-                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-300 text-[11px] font-bold">
-                                <span className="h-2 w-2 rounded-full bg-purple-600" />
+                              <div
+                                onClick={() =>
+                                  setSelectedSlotModal({
+                                    venue,
+                                    slot: "Full Day (09:00 - 23:30)",
+                                    booking: fullDayBooking,
+                                  })
+                                }
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-xs font-semibold hover:bg-purple-100 transition cursor-pointer"
+                              >
+                                <span className="h-1.5 w-1.5 rounded-full bg-purple-600" />
                                 <span>Full Day: {fullDayBooking.eventName}</span>
                               </div>
                             ) : eveningBooking ? (
@@ -638,13 +710,18 @@ export function VenueAvailabilityView() {
                                   })
                                 }
                                 className={cn(
-                                  "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer border transition shadow-2xs",
+                                  "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer border transition",
                                   eveningBooking.bookingStatus === "Confirmed"
-                                    ? "bg-gradient-to-r from-emerald-600 to-emerald-700 text-white border-emerald-500"
-                                    : "bg-amber-100 text-amber-900 border-amber-300"
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                                    : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
                                 )}
                               >
-                                <span className={cn("h-2 w-2 rounded-full", eveningBooking.bookingStatus === "Confirmed" ? "bg-white" : "bg-amber-600")} />
+                                <span
+                                  className={cn(
+                                    "h-1.5 w-1.5 rounded-full",
+                                    eveningBooking.bookingStatus === "Confirmed" ? "bg-emerald-600" : "bg-amber-500"
+                                  )}
+                                />
                                 <span>{eveningBooking.eventName} ({eveningBooking.bookingStatus})</span>
                               </div>
                             ) : (
@@ -655,7 +732,7 @@ export function VenueAvailabilityView() {
                                     slot: "Evening (18:00 - 23:30)",
                                   })
                                 }
-                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/90 hover:bg-emerald-100 transition cursor-pointer text-[11px] font-semibold"
+                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50/70 text-emerald-700 border border-emerald-200/80 hover:bg-emerald-100 transition cursor-pointer text-xs font-semibold"
                                 title="Available Slot - Click for details"
                               >
                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -665,11 +742,11 @@ export function VenueAvailabilityView() {
                           </td>
 
                           {/* Tariff */}
-                          <td className="py-3.5 px-4 text-right">
-                            <span className="font-extrabold text-slate-900 font-mono text-xs">
+                          <td className="py-3 px-4 text-right">
+                            <span className="font-bold text-slate-900 font-mono text-xs">
                               ₹{venue.fullDayRate.toLocaleString()}
                             </span>
-                            <span className="block text-[10px] text-slate-400">₹{venue.halfDayRate.toLocaleString()} Half Day</span>
+                            <span className="block text-[10px] text-slate-400 font-mono">₹{venue.halfDayRate.toLocaleString()} Half Day</span>
                           </td>
                         </tr>
                       );
@@ -679,8 +756,8 @@ export function VenueAvailabilityView() {
                     return (
                       <tr key={venue.id} className="hover:bg-slate-50/70 transition">
                         <td className="py-3 px-4 sticky left-0 bg-white border-r border-slate-200 z-10">
-                          <strong className="text-xs font-bold text-slate-900 block truncate">{venue.name}</strong>
-                          <span className="text-[10px] text-slate-500 font-medium">{venue.category}</span>
+                          <strong className="text-xs font-semibold text-slate-900 block truncate">{venue.name}</strong>
+                          <span className="text-[11px] text-slate-500 font-medium">{venue.category}</span>
                         </td>
                         <td className="py-3 px-3 text-center">
                           <span className="font-mono text-xs font-bold text-slate-800">{venue.maxCapacity}</span>
@@ -699,7 +776,7 @@ export function VenueAvailabilityView() {
                                     setTimeRange("day");
                                   }}
                                   title={`Full Day: ${fullDayBooking.eventName} - Click to open day view`}
-                                  className="w-10 h-7 rounded-xl bg-purple-600 text-white font-extrabold flex items-center justify-center mx-auto cursor-pointer shadow-2xs hover:scale-105 transition text-[10px]"
+                                  className="w-10 h-7 rounded-lg bg-purple-600 text-white font-bold flex items-center justify-center mx-auto cursor-pointer shadow-2xs hover:scale-105 transition text-[10px]"
                                 >
                                   FD
                                 </div>
@@ -712,7 +789,7 @@ export function VenueAvailabilityView() {
                                         setTimeRange("day");
                                       }}
                                       title={`Morning: ${morningBooking.eventName} - Click to open day view`}
-                                      className="w-7 h-7 rounded-xl bg-emerald-600 text-white font-extrabold flex items-center justify-center cursor-pointer shadow-2xs hover:scale-105 transition text-[9px]"
+                                      className="w-7 h-7 rounded-lg bg-emerald-600 text-white font-bold flex items-center justify-center cursor-pointer shadow-2xs hover:scale-105 transition text-[9px]"
                                     >
                                       AM
                                     </div>
@@ -724,7 +801,7 @@ export function VenueAvailabilityView() {
                                         setTimeRange("day");
                                       }}
                                       title={`Evening: ${eveningBooking.eventName} - Click to open day view`}
-                                      className="w-7 h-7 rounded-xl bg-amber-500 text-white font-extrabold flex items-center justify-center cursor-pointer shadow-2xs hover:scale-105 transition text-[9px]"
+                                      className="w-7 h-7 rounded-lg bg-amber-500 text-white font-bold flex items-center justify-center cursor-pointer shadow-2xs hover:scale-105 transition text-[9px]"
                                     >
                                       PM
                                     </div>
@@ -737,7 +814,7 @@ export function VenueAvailabilityView() {
                                     setTimeRange("day");
                                   }}
                                   title={`Available on ${col.formatted} - Click to view single day availability`}
-                                  className="w-10 h-7 rounded-xl bg-emerald-100/70 border border-emerald-200/90 hover:bg-emerald-200 cursor-pointer transition mx-auto"
+                                  className="w-10 h-7 rounded-lg bg-emerald-50 border border-emerald-200/80 hover:bg-emerald-100 cursor-pointer transition mx-auto"
                                 />
                               )}
                             </td>
@@ -762,25 +839,25 @@ export function VenueAvailabilityView() {
         </div>
       ) : (
         /* ROOM AVAILABILITY MATRIX GRID (VIEW-ONLY, MATCHING VENUE MATRIX) */
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50/80 text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
+              <thead className="bg-slate-50/80 text-[11px] font-semibold tracking-wider text-slate-500 uppercase border-b border-slate-200">
                 {timeRange === "day" ? (
                   <tr>
-                    <th className="py-3.5 px-4">Room Category</th>
-                    <th className="py-3.5 px-4 text-center">Total Inventory</th>
-                    <th className="py-3.5 px-4 text-center">Available Vacant Rooms</th>
-                    <th className="py-3.5 px-4 text-center">Booked / Occupied</th>
-                    <th className="py-3.5 px-4 text-center">Maintenance</th>
-                    <th className="py-3.5 px-4 text-right">Tariff / Night</th>
+                    <th className="py-3 px-4">Room Category</th>
+                    <th className="py-3 px-4 text-center">Total Inventory</th>
+                    <th className="py-3 px-4 text-center">Available Vacant Rooms</th>
+                    <th className="py-3 px-4 text-center">Booked / Occupied</th>
+                    <th className="py-3 px-4 text-center">Maintenance</th>
+                    <th className="py-3 px-4 text-right">Tariff / Night</th>
                   </tr>
                 ) : (
                   <tr>
-                    <th className="py-3.5 px-4 min-w-[200px] sticky left-0 bg-slate-50 border-r border-slate-200 z-10">
+                    <th className="py-3 px-4 min-w-[200px] sticky left-0 bg-slate-50 border-r border-slate-200 z-10">
                       Room Category
                     </th>
-                    <th className="py-3.5 px-3 text-center min-w-[70px]">Inventory</th>
+                    <th className="py-3 px-3 text-center min-w-[70px]">Inventory</th>
                     {dateColumns.map((col) => {
                       const isSelected = col.iso === selectedDate;
                       return (
@@ -792,9 +869,9 @@ export function VenueAvailabilityView() {
                           }}
                           title="Click to view single day detail for this date"
                           className={cn(
-                            "py-3.5 px-3 text-center min-w-[110px] border-l border-slate-200/60 cursor-pointer transition select-none",
+                            "py-3 px-3 text-center min-w-[110px] border-l border-slate-200/60 cursor-pointer transition select-none",
                             isSelected
-                              ? "bg-emerald-700 text-white font-extrabold"
+                              ? "bg-slate-900 text-white font-bold"
                               : "hover:bg-slate-100 text-slate-600"
                           )}
                         >
@@ -802,7 +879,7 @@ export function VenueAvailabilityView() {
                         </th>
                       );
                     })}
-                    <th className="py-3.5 px-4 text-right min-w-[100px]">Tariff</th>
+                    <th className="py-3 px-4 text-right min-w-[100px]">Tariff</th>
                   </tr>
                 )}
               </thead>
@@ -812,41 +889,41 @@ export function VenueAvailabilityView() {
                     if (timeRange === "day") {
                       return (
                         <tr key={room.id} className="hover:bg-slate-50/70 transition">
-                          <td className="py-3.5 px-4">
-                            <strong className="text-xs font-bold text-slate-900 block">{room.categoryName}</strong>
-                            <span className="text-[10px] text-slate-400">Target Date: {selectedDate}</span>
+                          <td className="py-3 px-4">
+                            <strong className="text-xs font-semibold text-slate-900 block">{room.categoryName}</strong>
+                            <span className="text-[11px] text-slate-400">Target Date: {selectedDate}</span>
                           </td>
 
-                          <td className="py-3.5 px-4 text-center">
-                            <span className="font-extrabold text-slate-800 font-mono text-xs">{room.totalInventory}</span>
+                          <td className="py-3 px-4 text-center">
+                            <span className="font-bold text-slate-800 font-mono text-xs">{room.totalInventory}</span>
                           </td>
 
-                          <td className="py-3.5 px-4 text-center">
-                            <div className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/90 text-[11px] font-bold">
+                          <td className="py-3 px-4 text-center">
+                            <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/90 text-xs font-semibold">
                               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                               <span>{room.availableRooms} Available</span>
                             </div>
                           </td>
 
-                          <td className="py-3.5 px-4 text-center">
-                            <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-semibold">
-                              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                          <td className="py-3 px-4 text-center">
+                            <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-800 border border-sky-200 text-xs font-semibold">
+                              <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
                               <span>{room.bookedRooms} Booked</span>
                             </div>
                           </td>
 
-                          <td className="py-3.5 px-4 text-center">
-                            <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold">
+                          <td className="py-3 px-4 text-center">
+                            <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-semibold">
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                               <span>{room.maintenanceRooms} Maintenance</span>
                             </div>
                           </td>
 
-                          <td className="py-3.5 px-4 text-right">
-                            <span className="font-extrabold text-slate-900 font-mono text-xs">
+                          <td className="py-3 px-4 text-right">
+                            <span className="font-bold text-slate-900 font-mono text-xs">
                               ₹{room.startingPrice.toLocaleString()}
                             </span>
-                            <span className="block text-[10px] text-slate-400">/ Night</span>
+                            <span className="block text-[10px] text-slate-400 font-mono">/ Night</span>
                           </td>
                         </tr>
                       );
@@ -856,8 +933,8 @@ export function VenueAvailabilityView() {
                     return (
                       <tr key={room.id} className="hover:bg-slate-50/70 transition">
                         <td className="py-3 px-4 sticky left-0 bg-white border-r border-slate-200 z-10">
-                          <strong className="text-xs font-bold text-slate-900 block truncate">{room.categoryName}</strong>
-                          <span className="text-[10px] text-slate-500 font-medium">{room.totalInventory} Rooms Total</span>
+                          <strong className="text-xs font-semibold text-slate-900 block truncate">{room.categoryName}</strong>
+                          <span className="text-[11px] text-slate-500 font-medium">{room.totalInventory} Rooms Total</span>
                         </td>
 
                         <td className="py-3 px-3 text-center">
@@ -879,7 +956,7 @@ export function VenueAvailabilityView() {
                                     setTimeRange("day");
                                   }}
                                   title={`Fully Booked on ${col.formatted}`}
-                                  className="w-10 h-7 rounded-xl bg-slate-200 text-slate-700 font-extrabold flex items-center justify-center mx-auto cursor-pointer shadow-2xs hover:scale-105 transition text-[9px]"
+                                  className="w-10 h-7 rounded-lg bg-slate-200 text-slate-700 font-bold flex items-center justify-center mx-auto cursor-pointer shadow-2xs hover:scale-105 transition text-[9px]"
                                 >
                                   FULL
                                 </div>
@@ -890,7 +967,7 @@ export function VenueAvailabilityView() {
                                     setTimeRange("day");
                                   }}
                                   title={`${avail} rooms available on ${col.formatted} - Click to view single day details`}
-                                  className="w-10 h-7 rounded-xl bg-emerald-100/80 border border-emerald-200 text-emerald-900 font-extrabold flex items-center justify-center mx-auto cursor-pointer hover:bg-emerald-200 transition text-[10px] shadow-2xs"
+                                  className="w-10 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold flex items-center justify-center mx-auto cursor-pointer hover:bg-emerald-100 transition text-[10px] shadow-2xs"
                                 >
                                   {avail}
                                 </div>
@@ -918,7 +995,7 @@ export function VenueAvailabilityView() {
         </div>
       )}
 
-      {/* 4. SLOT DETAILS VIEW MODAL (READ-ONLY) */}
+      {/* 5. SLOT DETAILS VIEW MODAL (READ-ONLY) */}
       {selectedSlotModal && (
         <Modal
           isOpen={Boolean(selectedSlotModal)}
@@ -931,7 +1008,7 @@ export function VenueAvailabilityView() {
             <div className="space-y-4 text-xs">
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
                 <div className="flex justify-between items-center">
-                  <strong className="text-sm font-extrabold text-slate-900">{selectedSlotModal.booking.eventName}</strong>
+                  <strong className="text-sm font-bold text-slate-900">{selectedSlotModal.booking.eventName}</strong>
                   <StatusBadge status={selectedSlotModal.booking.bookingStatus} />
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-700 pt-1">
@@ -960,7 +1037,7 @@ export function VenueAvailabilityView() {
                   variant="outline"
                   size="sm"
                   onClick={() => setSelectedSlotModal(null)}
-                  className="rounded-full text-xs font-bold px-4"
+                  className="rounded-lg text-xs font-semibold px-4"
                 >
                   Close
                 </Button>
@@ -968,8 +1045,8 @@ export function VenueAvailabilityView() {
             </div>
           ) : (
             <div className="space-y-4 text-xs">
-              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
-                <h4 className="text-sm font-extrabold text-emerald-900 flex items-center gap-1.5">
+              <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/90 space-y-2">
+                <h4 className="text-sm font-bold text-emerald-900 flex items-center gap-1.5">
                   <CheckCircle2 className="h-4 w-4 text-emerald-700" /> Slot Available
                 </h4>
                 <p className="text-slate-700">
@@ -989,7 +1066,7 @@ export function VenueAvailabilityView() {
                   variant="outline"
                   size="sm"
                   onClick={() => setSelectedSlotModal(null)}
-                  className="rounded-full text-xs font-bold px-4"
+                  className="rounded-lg text-xs font-semibold px-4"
                 >
                   Close
                 </Button>
@@ -1001,3 +1078,4 @@ export function VenueAvailabilityView() {
     </ModulePageShell>
   );
 }
+

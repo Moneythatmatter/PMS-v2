@@ -32,8 +32,7 @@ import {
   Filter,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Button, Drawer, Modal } from "@/components/ui";
-import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { INITIAL_HOTEL_DEALS, HotelDealItem } from "./DealsPipelineView";
 import {
@@ -610,43 +609,86 @@ export function ActivitiesView() {
       }
     >
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: TOP KPI CARDS (CALCULATED FROM CENTRAL DATA)
+          SECTION 1: TOP KPI CARDS (F&B DASHBOARD STYLE)
       ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <HRKPICard
-          label="Today's Calls"
-          value={`${metrics.todayCalls}`}
-          subtitle="Scheduled / In Progress"
-          tone="amber"
-          icon={<PhoneCall className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Upcoming Site Visits"
-          value={`${metrics.upcomingVisits}`}
-          subtitle="Venue Inspections"
-          tone="blue"
-          icon={<MapPin className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Overdue Follow-ups"
-          value={`${metrics.overdueCount}`}
-          subtitle="Requires Immediate Action"
-          tone="rose"
-          icon={<AlertTriangle className="h-4 w-4" />}
-        />
-        <HRKPICard
-          label="Completed Activities"
-          value={`${metrics.completedCount}`}
-          subtitle="Logged With Outcomes"
-          tone="emerald"
-          icon={<CheckCircle2 className="h-4 w-4" />}
-        />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6 mb-5">
+        {/* Card 1: Today's Calls */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Today&apos;s Calls
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 sm:h-8 sm:w-8">
+              <PhoneCall className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {metrics.todayCalls}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Scheduled / in progress
+          </p>
+        </Card>
+
+        {/* Card 2: Upcoming Site Visits */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Upcoming Site Visits
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 sm:h-8 sm:w-8">
+              <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {metrics.upcomingVisits}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Venue inspections
+          </p>
+        </Card>
+
+        {/* Card 3: Overdue Follow-ups */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Overdue Follow-ups
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-700 sm:h-8 sm:w-8">
+              <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {metrics.overdueCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Requires immediate action
+          </p>
+        </Card>
+
+        {/* Card 4: Completed Activities */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Completed Activities
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
+            {metrics.completedCount}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+            Logged with outcomes
+          </p>
+        </Card>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION 2: VIEW TABS & FILTERS TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs space-y-3 mb-4">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs space-y-3 mb-4">
         {/* TABS ROW */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 overflow-x-auto gap-2">
           <div className="flex items-center gap-1.5">
@@ -654,7 +696,7 @@ export function ActivitiesView() {
               type="button"
               onClick={() => setViewTab("ALL")}
               className={cn(
-                "px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5",
                 viewTab === "ALL" ? "bg-slate-900 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
               )}
             >
@@ -664,7 +706,7 @@ export function ActivitiesView() {
               type="button"
               onClick={() => setViewTab("TODAY")}
               className={cn(
-                "px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5",
                 viewTab === "TODAY" ? "bg-amber-700 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
               )}
             >
@@ -674,29 +716,25 @@ export function ActivitiesView() {
               type="button"
               onClick={() => setViewTab("OVERDUE")}
               className={cn(
-                "px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5",
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5",
                 viewTab === "OVERDUE" ? "bg-rose-700 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
               )}
             >
               <AlertTriangle className="h-3.5 w-3.5" /> Overdue ({metrics.overdueCount})
             </button>
           </div>
-
-          <span className="text-xs text-slate-500 font-medium hidden md:inline">
-            Showing <strong>{filteredActivities.length}</strong> activities
-          </span>
         </div>
 
         {/* SEARCH & MULTI-FILTER CONTROLS */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-2.5">
           <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
               placeholder="Search by Customer, Deal Name, Opportunity ID, Next Action, or Executive..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full text-xs rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50 font-medium text-slate-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-400"
+              className="w-full text-xs sm:text-sm rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50/50 font-normal text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300"
             />
           </div>
 
@@ -705,7 +743,7 @@ export function ActivitiesView() {
             <select
               value={selectedTypeFilter}
               onChange={(e) => setSelectedTypeFilter(e.target.value)}
-              className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none"
+              className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
             >
               <option value="ALL">All Types</option>
               <option value="Call">Call</option>
@@ -721,7 +759,7 @@ export function ActivitiesView() {
             <select
               value={selectedStatusFilter}
               onChange={(e) => setSelectedStatusFilter(e.target.value)}
-              className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none"
+              className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
             >
               <option value="ALL">All Statuses</option>
               <option value="Scheduled">Scheduled</option>
@@ -734,7 +772,7 @@ export function ActivitiesView() {
             <select
               value={selectedExecutiveFilter}
               onChange={(e) => setSelectedExecutiveFilter(e.target.value)}
-              className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none"
+              className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
             >
               <option value="ALL">All Executives</option>
               <option value="Vikram Malhotra">Vikram Malhotra</option>
@@ -746,7 +784,7 @@ export function ActivitiesView() {
             <select
               value={selectedPriorityFilter}
               onChange={(e) => setSelectedPriorityFilter(e.target.value)}
-              className="text-xs font-semibold rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none"
+              className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
             >
               <option value="ALL">All Priorities</option>
               <option value="High">High Priority</option>
@@ -758,17 +796,20 @@ export function ActivitiesView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 3: CLEAN ACTIVITY TABLE
+          SECTION 3: CLEAN ACTIVITY TABLE (MATCHING F&B / FRONT OFFICE SPEC)
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="px-4 py-3 text-xs text-slate-500 font-medium border-b border-slate-100 flex items-center justify-between">
+          <span>Showing <strong className="text-slate-700 font-semibold">{filteredActivities.length}</strong> of <strong className="text-slate-700 font-semibold">{activitiesList.length}</strong> activities &bull; Sales Execution Center</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 border-b border-slate-200">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50/70 text-xs font-semibold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="py-3 px-4">Activity Type</th>
-                <th className="py-3 px-4">Lead / Customer</th>
+                <th className="py-3 px-4">Activity</th>
+                <th className="py-3 px-4">Guest / Client</th>
                 <th className="py-3 px-4">Deal &amp; Value</th>
-                <th className="py-3 px-4">Pipeline Stage</th>
+                <th className="py-3 px-4">Stage</th>
                 <th className="py-3 px-4">Schedule &amp; Owner</th>
                 <th className="py-3 px-4">Priority</th>
                 <th className="py-3 px-4">Next Action</th>
@@ -776,77 +817,79 @@ export function ActivitiesView() {
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+            <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
               {filteredActivities.length > 0 ? (
                 filteredActivities.map((act) => (
                   <tr
                     key={act.id}
                     onClick={() => setSelectedDrawerActivity(act)}
-                    className="hover:bg-slate-50/80 transition cursor-pointer"
+                    className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                   >
                     {/* Activity Type */}
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2">
-                        <span className="p-1.5 rounded-md bg-slate-100 text-slate-700 shrink-0">
+                        <span className="p-1.5 rounded-lg bg-slate-100 text-slate-600 shrink-0">
                           {act.activityType === "Call" && <PhoneCall className="h-3.5 w-3.5 text-amber-700" />}
-                          {act.activityType === "Site Visit" && <MapPin className="h-3.5 w-3.5 text-purple-700" />}
-                          {act.activityType === "Follow Up" && <Clock className="h-3.5 w-3.5 text-blue-700" />}
+                          {act.activityType === "Site Visit" && <MapPin className="h-3.5 w-3.5 text-teal-700" />}
+                          {act.activityType === "Follow Up" && <Clock className="h-3.5 w-3.5 text-sky-700" />}
                           {act.activityType === "WhatsApp" && <MessageSquare className="h-3.5 w-3.5 text-emerald-700" />}
-                          {act.activityType === "Email" && <Mail className="h-3.5 w-3.5 text-sky-700" />}
+                          {act.activityType === "Email" && <Mail className="h-3.5 w-3.5 text-indigo-700" />}
                           {act.activityType === "Meeting" && <Building2 className="h-3.5 w-3.5 text-slate-700" />}
                           {act.activityType === "Task" && <CheckSquare className="h-3.5 w-3.5 text-slate-700" />}
                         </span>
                         <div>
-                          <strong className="text-slate-900 font-bold block">{act.activityType}</strong>
+                          <strong className="text-slate-900 font-semibold block">{act.activityType}</strong>
                           <span className="text-[10px] text-slate-400 font-mono">#{act.id}</span>
                         </div>
                       </div>
                     </td>
 
                     {/* Lead / Customer */}
-                    <td className="py-3 px-4">
-                      <strong className="text-slate-900 font-semibold block">{act.contactPerson}</strong>
-                      <span className="text-[10px] text-slate-500 block truncate max-w-[140px]">
+                    <td className="py-3.5 px-4">
+                      <span className="text-xs font-semibold text-slate-900 block">{act.contactPerson}</span>
+                      <span className="text-[11px] text-slate-500 block truncate max-w-[140px]">
                         {act.companyName || act.leadName}
                       </span>
-                      <span className="text-[10px] text-emerald-800 font-mono block">{act.mobileNumber}</span>
+                      <span className="text-[11px] text-slate-600 font-mono block">{act.mobileNumber}</span>
                     </td>
 
                     {/* Deal & Value */}
-                    <td className="py-3 px-4">
-                      <strong className="text-slate-900 font-semibold block truncate max-w-[160px]">
+                    <td className="py-3.5 px-4">
+                      <span className="text-xs font-semibold text-slate-900 block truncate max-w-[160px]">
                         {act.dealName}
-                      </strong>
-                      <span className="font-mono text-emerald-900 font-bold text-xs">
+                      </span>
+                      <span className="font-mono text-slate-900 font-semibold text-xs">
                         ₹{act.expectedRevenue.toLocaleString("en-IN")}
                       </span>
                     </td>
 
                     {/* Pipeline Stage */}
-                    <td className="py-3 px-4">
-                      <span className="bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-bold inline-block">
+                    <td className="py-3.5 px-4">
+                      <span className="bg-slate-100 text-slate-700 border border-slate-200/80 px-2 py-0.5 rounded text-[10px] font-medium inline-block">
                         {act.pipelineStage}
                       </span>
                     </td>
 
                     {/* Schedule & Owner */}
-                    <td className="py-3 px-4">
-                      <span className="text-slate-900 font-mono font-semibold block text-[11px]">
-                        {act.activityDate} • {act.activityTime}
+                    <td className="py-3.5 px-4">
+                      <span className="text-slate-800 font-mono font-medium block text-xs">
+                        {act.activityDate} &bull; {act.activityTime}
                       </span>
-                      <span className="text-[10px] text-slate-500 block">👤 {act.assignedExecutive}</span>
+                      <span className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <User className="h-3 w-3 text-slate-400" /> {act.assignedExecutive}
+                      </span>
                     </td>
 
                     {/* Priority */}
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4">
                       <span
                         className={cn(
-                          "px-2 py-0.5 rounded text-[10px] font-bold border",
+                          "px-2 py-0.5 rounded text-[10px] font-semibold border inline-block",
                           act.priority === "High"
-                            ? "bg-rose-50 text-rose-800 border-rose-200"
+                            ? "bg-rose-50 text-rose-700 border-rose-200/70"
                             : act.priority === "Medium"
-                            ? "bg-blue-50 text-blue-800 border-blue-200"
-                            : "bg-slate-100 text-slate-600 border-slate-200"
+                            ? "bg-amber-50 text-amber-700 border-amber-200/70"
+                            : "bg-slate-100 text-slate-600 border-slate-200/70"
                         )}
                       >
                         {act.priority}
@@ -854,10 +897,10 @@ export function ActivitiesView() {
                     </td>
 
                     {/* Next Action */}
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4">
                       {act.nextAction ? (
                         <div className="max-w-[170px]">
-                          <span className="text-slate-900 font-semibold block text-[11px] truncate">
+                          <span className="text-slate-800 font-medium block text-xs truncate">
                             {act.nextAction}
                           </span>
                           <span className="text-[10px] text-slate-400 font-mono block">
@@ -865,22 +908,22 @@ export function ActivitiesView() {
                           </span>
                         </div>
                       ) : (
-                        <span className="text-slate-400 text-[10px] italic">No next action</span>
+                        <span className="text-slate-400 text-xs italic">No next action</span>
                       )}
                     </td>
 
                     {/* Status */}
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-3.5 px-4 text-center">
                       <span
                         className={cn(
-                          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
+                          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border",
                           act.status === "Completed"
-                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200/70"
                             : act.status === "Scheduled"
-                            ? "bg-blue-50 text-blue-800 border-blue-200"
+                            ? "bg-sky-50 text-sky-700 border-sky-200/70"
                             : act.status === "Overdue"
-                            ? "bg-rose-50 text-rose-800 border-rose-200"
-                            : "bg-slate-100 text-slate-600 border-slate-200"
+                            ? "bg-rose-50 text-rose-700 border-rose-200/70"
+                            : "bg-slate-100 text-slate-600 border-slate-200/70"
                         )}
                       >
                         <span
@@ -889,7 +932,7 @@ export function ActivitiesView() {
                             act.status === "Completed"
                               ? "bg-emerald-600"
                               : act.status === "Scheduled"
-                              ? "bg-blue-600"
+                              ? "bg-sky-600"
                               : act.status === "Overdue"
                               ? "bg-rose-600"
                               : "bg-slate-400"
@@ -900,27 +943,24 @@ export function ActivitiesView() {
                     </td>
 
                     {/* Actions */}
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1.5">
                         {act.status !== "Completed" ? (
-                          <Button
+                          <button
                             type="button"
-                            size="sm"
                             onClick={() => handleOpenCompletionModal(act)}
-                            className="text-[11px] font-bold h-7 px-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg shadow-xs cursor-pointer"
+                            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 shadow-2xs hover:bg-emerald-100 cursor-pointer"
                           >
-                            <Check className="h-3 w-3 mr-1" /> Mark Done
-                          </Button>
+                            <Check className="h-3 w-3" /> Mark Done
+                          </button>
                         ) : (
-                          <Button
+                          <button
                             type="button"
-                            variant="outline"
-                            size="sm"
                             onClick={() => setSelectedDrawerActivity(act)}
-                            className="text-[11px] font-semibold h-7 px-2.5 rounded-lg border-slate-200 text-slate-700 cursor-pointer"
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer"
                           >
-                            View
-                          </Button>
+                            <Eye className="h-3 w-3 text-slate-400" /> View
+                          </button>
                         )}
                       </div>
                     </td>

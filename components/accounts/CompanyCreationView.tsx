@@ -1,49 +1,32 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Building2,
   Search,
   Plus,
   Save,
   X,
-  Printer,
-  Download,
-  Trash2,
-  CheckCircle2,
   Phone,
   Mail,
   MapPin,
-  FileText,
-  CreditCard,
-  Building,
-  DollarSign,
-  Percent,
-  SlidersHorizontal,
-  Filter,
-  RefreshCw,
-  Clock,
-  Receipt,
   FileCheck2,
-  Paperclip,
-  History,
+  RefreshCw,
   Info,
   ChevronRight,
   Upload,
   Calendar,
-  Globe,
   ShieldCheck,
-  Settings,
-  Layers,
-  Users,
+  Ban,
+  CheckCircle2,
+  Coins,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   FormField,
   TextInput,
   SelectInput,
-  TextAreaInput,
-  StatMiniCard,
   FODatePicker,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
@@ -67,23 +50,16 @@ export function CompanyCreationView() {
     [companies, selectedId]
   );
 
-  // Form State (Derived from active company for full editing)
+  // Form State (Derived from active company for editing)
   const [formData, setFormData] = useState<CompanyRecord>(activeCompany);
 
   // Update formData when activeCompany changes
-  React.useEffect(() => {
+  useEffect(() => {
     setFormData({ ...activeCompany });
   }, [activeCompany]);
 
-  // Sectional Tab State (Similar to Company Settings / Party Master)
-  const [formTab, setFormTab] = useState<
-    "general" | "address" | "registration" | "config"
-  >("general");
-
-  // Tab State for Bottom Activity Panel
-  const [activeTab, setActiveTab] = useState<
-    "branches" | "users" | "fy" | "audit" | "docs"
-  >("branches");
+  // Sectional Tab State (3 Core Identity Tabs Only)
+  const [formTab, setFormTab] = useState<"general" | "address" | "registration">("general");
 
   // Notification Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -94,12 +70,13 @@ export function CompanyCreationView() {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         return (
-          c.companyName.toLowerCase().includes(q) ||
-          c.companyCode.toLowerCase().includes(q) ||
-          c.gstNumber.toLowerCase().includes(q) ||
-          c.panNumber.toLowerCase().includes(q) ||
-          c.state.toLowerCase().includes(q) ||
-          c.status.toLowerCase().includes(q)
+          (c.tradeName || "").toLowerCase().includes(q) ||
+          (c.legalName || "").toLowerCase().includes(q) ||
+          (c.companyCode || "").toLowerCase().includes(q) ||
+          (c.gstNumber || "").toLowerCase().includes(q) ||
+          (c.panNumber || "").toLowerCase().includes(q) ||
+          (c.state || "").toLowerCase().includes(q) ||
+          (c.status || "").toLowerCase().includes(q)
         );
       }
       return true;
@@ -117,125 +94,116 @@ export function CompanyCreationView() {
     const newRecord: CompanyRecord = {
       id: `cmp-${Date.now()}`,
       companyCode: `CMP-${nextNum}`,
-      companyName: "NEW ENTERPRISE HOTEL PVT LTD",
-      legalName: "New Enterprise Hotel & Hospitality Private Limited",
-      alias: "NEW HOTEL",
+      tradeName: "",
+      legalName: "",
+      alias: "",
       companyType: "Private Limited",
       businessNature: "Hospitality & Hotel Operations",
       status: "Active",
+
+      addressLine1: "",
+      addressLine2: "",
+      city: "",
+      district: "",
+      state: "",
+      pincode: "",
+      country: "India",
+
+      primaryContact: "",
+      mobile: "",
+      telephone: "",
+      email: "",
+      website: "",
 
       gstNumber: "",
       panNumber: "",
       tanNumber: "",
       cinNumber: "",
       msmeNumber: "",
-      registrationDate: "2026-04-01",
+      registrationDate: "",
+      taxRegion: "",
 
-      addressLine1: "",
-      addressLine2: "",
-      city: "Dahej",
-      district: "Bharuch",
-      state: "Gujarat",
-      pincode: "392130",
-      country: "India",
-
-      primaryContact: "Mr. New Admin",
-      mobile: "",
-      telephone: "",
-      email: "",
-      website: "",
-
-      baseCurrency: "INR",
-      financialYear: "01/04/2026 - 31/03/2027",
-      fyStartMonth: "April",
-      fyEndMonth: "March",
-      accountingMethod: "Accrual Basis Accounting",
-      lockPeriodBeforeDate: "2026-03-31",
-
-      taxRegion: "Gujarat - 24",
       gstApplicable: true,
-      eInvoicingEnabled: true,
-      tdsApplicable: true,
-      tcsApplicable: false,
 
-      nightAuditAutoPost: true,
-      posAutoPost: true,
-      mandatoryCostCenter: false,
-      cityLedgerTransferAuto: true,
+      baseCurrencyId: "INR",
+      currentFiscalYearId: "FY-2026-27",
 
-      autoVoucherNo: true,
-      voucherResetFrequency: "Annually",
-      allowBackDatedVouchers: true,
-      allowFutureDatedVouchers: false,
-
-      remarks: "",
-      createdDate: "01/04/2026",
-      lastModified: "Today",
-
-      branchesCount: 1,
-      usersCount: 5,
+      createdAt: "Today",
+      updatedAt: "Today",
     };
 
     setCompanies([newRecord, ...companies]);
     setSelectedId(newRecord.id);
     setFormData(newRecord);
+    setFormTab("general");
     setToastMessage(`Prepared new Company Creation record (${newRecord.companyCode}).`);
   };
 
-  const handleSaveCompany = () => {
-    if (!formData.companyName.trim()) {
-      setToastMessage("Please enter a valid Company Name.");
+  // Validation & Save Handler
+  const handleSaveCompany = (andNew = false) => {
+    if (!formData.tradeName?.trim()) {
+      setToastMessage("Please enter the Company Trade Name.");
+      setFormTab("general");
       return;
     }
-    setCompanies((prev) =>
-      prev.map((c) => (c.id === formData.id ? formData : c))
+
+    if (!formData.legalName?.trim()) {
+      setToastMessage("Please enter the Legal Registered Name.");
+      setFormTab("general");
+      return;
+    }
+
+    // Duplicate Company Code check (for newly edited or altered codes)
+    const isDuplicateCode = companies.some(
+      (c) => c.id !== formData.id && c.companyCode.toUpperCase() === formData.companyCode.toUpperCase()
     );
-    setToastMessage(`Company record '${formData.companyName}' (${formData.companyCode}) saved successfully!`);
-  };
-
-  const handleSaveAndNew = () => {
-    handleSaveCompany();
-    handleNewCompany();
-  };
-
-  const handleDeleteCompany = () => {
-    if (companies.length <= 1) {
-      setToastMessage("Cannot delete the last remaining Company record.");
+    if (isDuplicateCode) {
+      setToastMessage(`Company Code '${formData.companyCode}' is already in use by another entity.`);
       return;
     }
-    setCompanies((prev) => prev.filter((c) => c.id !== formData.id));
-    const remaining = companies.filter((c) => c.id !== formData.id);
-    if (remaining.length > 0) {
-      setSelectedId(remaining[0].id);
+
+    setCompanies((prev) =>
+      prev.map((c) =>
+        c.id === formData.id
+          ? {
+              ...formData,
+              updatedAt: "Just now",
+            }
+          : c
+      )
+    );
+
+    setToastMessage(`Saved Legal Company Record for '${formData.tradeName}'.`);
+
+    if (andNew) {
+      handleNewCompany();
     }
-    setToastMessage(`Deleted company '${formData.companyName}'.`);
   };
 
-  const handleExportCSV = () => {
-    const csvHeader = "CompanyCode,CompanyName,LegalName,CompanyType,State,GSTIN,Status\n";
-    const csvRows = filteredCompanies
-      .map(
-        (c) =>
-          `"${c.companyCode}","${c.companyName}","${c.legalName}","${c.companyType}","${c.state}","${c.gstNumber}","${c.status}"`
-      )
-      .join("\n");
-    const blob = new Blob([csvHeader + csvRows], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Company_Master_Export_${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setToastMessage("Exported Company Master records to CSV.");
+  // Non-destructive Deactivation / Activation Handler
+  const handleToggleDeactivate = () => {
+    const nextStatus = formData.status === "Active" ? "Inactive" : "Active";
+    const updated = { ...formData, status: nextStatus as "Active" | "Inactive", updatedAt: "Just now" };
+    setFormData(updated);
+    setCompanies((prev) => prev.map((c) => (c.id === formData.id ? updated : c)));
+    setToastMessage(
+      nextStatus === "Inactive"
+        ? `Deactivated company '${formData.tradeName}'. Transactions will be protected.`
+        : `Activated company '${formData.tradeName}'.`
+    );
+  };
+
+  // Refresh / Reset Edits Handler
+  const handleRefresh = () => {
+    setFormData({ ...activeCompany });
+    setToastMessage("Reset unsaved changes to active company record.");
   };
 
   return (
     <ModulePageShell
       eyebrow="Accounts & Masters"
       title="Company Creation"
-      description="Create and configure companies for multi-company accounting operations."
+      description="Create and maintain the primary business legal identity and statutory company registration."
       breadcrumbs={[
         { label: "Accounts", href: "/accounts/dashboard" },
         { label: "Masters", href: "/accounts/masters" },
@@ -259,7 +227,7 @@ export function CompanyCreationView() {
           <Button
             type="button"
             size="sm"
-            onClick={handleSaveCompany}
+            onClick={() => handleSaveCompany(false)}
             className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
           >
             <Save className="h-3.5 w-3.5 mr-1" />
@@ -270,10 +238,9 @@ export function CompanyCreationView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleSaveAndNew}
-            className="rounded-xl text-xs font-bold bg-white text-slate-800 border-slate-300 hover:bg-slate-50 cursor-pointer"
+            onClick={() => handleSaveCompany(true)}
+            className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
           >
-            <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
             Save & New
           </Button>
 
@@ -281,705 +248,618 @@ export function CompanyCreationView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleDeleteCompany}
-            className="rounded-xl text-xs font-semibold bg-white border-rose-200 hover:bg-rose-50 text-rose-700 cursor-pointer"
+            onClick={handleToggleDeactivate}
+            className={cn(
+              "rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 cursor-pointer",
+              formData.status === "Active" ? "text-amber-700 hover:text-amber-800" : "text-emerald-700 hover:text-emerald-800"
+            )}
           >
-            <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
-            Delete
+            {formData.status === "Active" ? (
+              <>
+                <Ban className="h-3.5 w-3.5 mr-1 text-amber-600" />
+                Deactivate
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                Activate
+              </>
+            )}
           </Button>
 
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => window.print()}
+            onClick={handleRefresh}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
           >
-            <Printer className="h-3.5 w-3.5 mr-1 text-slate-500" />
-            Print
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleExportCSV}
-            className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
-          >
-            <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
-            Export
+            <RefreshCw className="h-3.5 w-3.5 mr-1 text-slate-500" />
+            Refresh
           </Button>
         </div>
       }
     >
-      {/* Top Target Company Selector Bar (Identical to Company Settings UI) */}
-      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1 min-w-[280px]">
-            <Building2 className="h-5 w-5 text-emerald-600 shrink-0" />
-            <div className="flex-1">
-              <span className="font-bold text-xs text-slate-600 block">Target Company Entity:</span>
-              <select
-                value={selectedId}
-                onChange={(e) => setSelectedId(e.target.value)}
-                className="h-8 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-900 focus:border-emerald-500 focus:outline-none"
-              >
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.companyName} ({c.companyCode}) — {c.companyType}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-            <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-slate-700 border border-slate-200 font-mono">
-              <Calendar className="h-3.5 w-3.5 text-slate-600" />
-              FY: {formData.financialYear}
-            </span>
-
-            <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1 text-emerald-800 font-bold border border-emerald-200">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
-              Status: {formData.status} Company
-            </span>
-
-            <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-slate-800 font-mono font-bold border border-slate-200">
-              Currency: {formData.baseCurrency} (₹)
-            </span>
-          </div>
+      {/* Informational Scope Notice */}
+      <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 flex items-start gap-2.5 text-xs text-slate-700">
+        <Info className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
+        <div>
+          <span className="font-bold text-emerald-950">Company Legal Identity Master:</span>{" "}
+          <span>
+            This master defines the legal entity operating the PMS. Detailed accounting behavior, fiscal year calendar, tax slabs, and operational posting rules are managed under their respective master pages (Company Settings, Fiscal Year, and Tax Master).
+          </span>
         </div>
       </div>
 
-      {/* Main Split Screen (35% Left / 65% Right) */}
+      {/* Main 2-Column Split Layout */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
-        {/* LEFT PANEL (35% Desktop / 40% Tablet / 100% Mobile) - Company List */}
+        {/* LEFT COLUMN: Registered Companies List (4 cols) */}
         <div className="md:col-span-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col min-h-[620px]">
           <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5">
             <div className="flex items-center gap-2">
               <Building2 className="h-4.5 w-4.5 text-emerald-600" />
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
-                Company List ({filteredCompanies.length})
+                Registered Entities
               </h3>
             </div>
             <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-              Multi-Company
+              {companies.length} {companies.length === 1 ? "Entity" : "Entities"}
             </span>
           </div>
 
-          {/* Quick Search */}
-          <div className="mb-3 relative">
+          {/* Search Box */}
+          <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by Name, Code, GSTIN..."
-              className="h-8 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-xs font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none"
+              placeholder="Search companies..."
+              className="h-8 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-8 text-xs font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Company Cards Container */}
-          <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[620px]">
-            {filteredCompanies.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 font-medium text-xs">
-                No company records found.
-              </div>
-            ) : (
-              filteredCompanies.map((item) => {
-                const isSelected = selectedId === item.id;
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => setSelectedId(item.id)}
-                    className={cn(
-                      "p-3 rounded-xl border transition-all duration-150 cursor-pointer space-y-1.5",
-                      isSelected
-                        ? "bg-emerald-50/90 border-emerald-500 ring-1 ring-emerald-500 shadow-2xs"
-                        : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/70"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <span className="font-mono font-bold text-[11px] text-slate-500 block">
-                          {item.companyCode}
+          {/* Company Cards List */}
+          <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[540px]">
+            {filteredCompanies.map((c) => {
+              const isSelected = c.id === selectedId;
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => setSelectedId(c.id)}
+                  className={cn(
+                    "p-3 rounded-xl border transition-all cursor-pointer select-none",
+                    isSelected
+                      ? "border-emerald-600 bg-emerald-50/80 shadow-xs ring-1 ring-emerald-600/30"
+                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/70 bg-white"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                          {c.companyCode}
                         </span>
-                        <h4 className="font-bold text-xs text-slate-900 leading-snug">
-                          {item.companyName}
-                        </h4>
+                        <span
+                          className={cn(
+                            "text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase",
+                            c.status === "Active"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-slate-200 text-slate-700"
+                          )}
+                        >
+                          {c.status}
+                        </span>
                       </div>
-                      <span
-                        className={cn(
-                          "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 border",
-                          item.status === "Active"
-                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                            : "bg-slate-100 text-slate-600 border-slate-200"
-                        )}
-                      >
-                        {item.status}
-                      </span>
+                      <h4 className="text-xs font-bold text-slate-900 line-clamp-1">
+                        {c.tradeName || c.legalName || "Untitled Company"}
+                      </h4>
+                      {c.legalName && c.legalName !== c.tradeName && (
+                        <p className="text-[11px] text-slate-500 line-clamp-1 font-medium">
+                          {c.legalName}
+                        </p>
+                      )}
                     </div>
-
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 text-[11px]">
-                      <span className="inline-flex items-center gap-1 font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-                        <MapPin className="h-3 w-3 text-slate-500" />
-                        {item.city}, {item.state}
-                      </span>
-
-                      <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
-                        FY: {item.financialYear.split(" - ")[0]}
-                      </span>
-                    </div>
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 shrink-0 transition-transform mt-1",
+                        isSelected ? "text-emerald-700 translate-x-0.5" : "text-slate-400"
+                      )}
+                    />
                   </div>
-                );
-              })
+
+                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-medium text-slate-500">
+                    <span>{c.companyType}</span>
+                    <span>{c.state || c.country || "India"}</span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredCompanies.length === 0 && (
+              <div className="text-center py-8 text-xs text-slate-400">
+                No registered entities match your search.
+              </div>
             )}
           </div>
         </div>
 
-        {/* RIGHT PANEL (65% Desktop / 60% Tablet / 100% Mobile) - Sectional Tabs + Summary Card */}
-        <div className="md:col-span-8 space-y-4 font-sans text-xs">
-          {/* Section Navigation Tabs (IDENTICAL TO COMPANY SETTINGS TAB BAR) */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-xs flex border-b border-slate-200 overflow-x-auto gap-1">
-            {[
-              { id: "general", label: "General & Legal Info", icon: Building2 },
-              { id: "address", label: "Address & Contact", icon: MapPin },
-              { id: "registration", label: "Registration & Tax", icon: FileCheck2 },
-              { id: "config", label: "Financial & System Config", icon: Settings },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = formTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setFormTab(tab.id as any)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap cursor-pointer",
-                    isActive
-                      ? "bg-emerald-700 text-white shadow-xs"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
+        {/* RIGHT COLUMN: 3-Tab Company Identity Form (8 cols) */}
+        <div className="md:col-span-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+          {/* Header Bar */}
+          <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                <h3 className="text-base font-bold text-slate-900 uppercase tracking-wider">
+                  {formData.tradeName || formData.legalName || "New Company"}
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Entity ID: <strong className="font-mono text-slate-700">{formData.companyCode}</strong>
+                {formData.legalName && (
+                  <span> • Registered: <em>{formData.legalName}</em></span>
+                )}
+              </p>
+            </div>
+
+            {/* Badges: Entity Type & Status */}
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 border border-slate-200">
+                {formData.companyType}
+              </span>
+
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-xl px-2.5 py-1 text-xs font-bold border",
+                  formData.status === "Active"
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-slate-100 text-slate-600 border-slate-200"
+                )}
+              >
+                {formData.status === "Active" ? "Active Entity" : "Inactive / Suspended"}
+              </span>
+            </div>
           </div>
 
-            {/* TAB CONTENT CONTAINERS */}
-            <div className="p-2 space-y-4">
-              {/* 🏢 TAB 1: GENERAL & LEGAL INFO */}
-              {formTab === "general" && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-4">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-emerald-600" />
-                      Company Particulars & Legal Identity
-                    </h3>
+          {/* TAB SELECTION HEADER (3 TABS ONLY) */}
+          <div className="flex border-b border-slate-200 gap-2 pb-0 text-xs">
+            <button
+              type="button"
+              onClick={() => setFormTab("general")}
+              className={cn(
+                "flex items-center gap-1.5 py-2 px-3.5 font-bold border-b-2 transition-all cursor-pointer",
+                formTab === "general"
+                  ? "border-emerald-700 text-emerald-800 bg-emerald-50/50 rounded-t-lg"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              )}
+            >
+              <Building2 className="h-4 w-4" />
+              1. General & Legal Info
+            </button>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <FormField label="Company Code (Auto)" required>
-                        <TextInput
-                          value={formData.companyCode}
-                          readOnly
-                          className="bg-slate-100 font-mono font-bold text-slate-800 cursor-not-allowed h-9"
-                        />
-                      </FormField>
+            <button
+              type="button"
+              onClick={() => setFormTab("address")}
+              className={cn(
+                "flex items-center gap-1.5 py-2 px-3.5 font-bold border-b-2 transition-all cursor-pointer",
+                formTab === "address"
+                  ? "border-emerald-700 text-emerald-800 bg-emerald-50/50 rounded-t-lg"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              )}
+            >
+              <MapPin className="h-4 w-4" />
+              2. Address & Contact
+            </button>
 
-                      <FormField label="Company Trade Name" required>
-                        <TextInput
-                          value={formData.companyName}
-                          onChange={(e) => handleFormChange("companyName", e.target.value)}
-                          placeholder="Enter trade name..."
-                          className="font-bold text-slate-900 bg-white h-9"
-                        />
-                      </FormField>
+            <button
+              type="button"
+              onClick={() => setFormTab("registration")}
+              className={cn(
+                "flex items-center gap-1.5 py-2 px-3.5 font-bold border-b-2 transition-all cursor-pointer",
+                formTab === "registration"
+                  ? "border-emerald-700 text-emerald-800 bg-emerald-50/50 rounded-t-lg"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              )}
+            >
+              <FileCheck2 className="h-4 w-4" />
+              3. Registration & Tax
+            </button>
+          </div>
 
-                      <FormField label="Legal Registered Name" required>
-                        <TextInput
-                          value={formData.legalName}
-                          onChange={(e) => handleFormChange("legalName", e.target.value)}
-                          placeholder="Official registered company name..."
-                          className="font-semibold text-slate-800 bg-white h-9"
-                        />
-                      </FormField>
-                    </div>
+          {/* TAB CONTENT PANELS */}
+          <div className="text-xs space-y-4 pt-1">
+            {/* 🏢 TAB 1: GENERAL & LEGAL INFO */}
+            {formTab === "general" && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-emerald-600" />
+                    Company Identity Particulars
+                  </h3>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                      <FormField label="Alias / Short Code">
-                        <TextInput
-                          value={formData.alias}
-                          onChange={(e) => handleFormChange("alias", e.target.value)}
-                          placeholder="e.g. LUXY HOTEL"
-                          className="bg-white h-9"
-                        />
-                      </FormField>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <FormField label="Company Code (System Auto)" required>
+                      <TextInput
+                        value={formData.companyCode || ""}
+                        readOnly
+                        className="bg-slate-100 font-mono font-bold text-slate-800 cursor-not-allowed h-9"
+                      />
+                    </FormField>
 
-                      <FormField label="Company Entity Type">
-                        <SelectInput
-                          value={formData.companyType}
-                          onChange={(e) => handleFormChange("companyType", e.target.value)}
-                          className="bg-white font-semibold h-9"
-                        >
-                          <option value="Private Limited">Private Limited</option>
-                          <option value="Public Limited">Public Limited</option>
-                          <option value="Partnership">Partnership</option>
-                          <option value="Sole Proprietorship">Sole Proprietorship</option>
-                          <option value="LLP">LLP</option>
-                        </SelectInput>
-                      </FormField>
+                    <FormField label="Company Trade Name" required>
+                      <TextInput
+                        value={formData.tradeName || ""}
+                        onChange={(e) => handleFormChange("tradeName", e.target.value)}
+                        placeholder="e.g. Hotel & Resorts"
+                        className="font-bold text-slate-900 bg-white h-9"
+                      />
+                    </FormField>
 
-                      <FormField label="Business Nature">
-                        <TextInput
-                          value={formData.businessNature}
-                          onChange={(e) => handleFormChange("businessNature", e.target.value)}
-                          placeholder="Hospitality Operations"
-                          className="bg-white h-9"
-                        />
-                      </FormField>
+                    <FormField label="Legal Registered Name" required>
+                      <TextInput
+                        value={formData.legalName || ""}
+                        onChange={(e) => handleFormChange("legalName", e.target.value)}
+                        placeholder="e.g. Hotel & Resorts Private Limited"
+                        className="font-semibold text-slate-800 bg-white h-9"
+                      />
+                    </FormField>
+                  </div>
 
-                      <FormField label="System Status">
-                        <SelectInput
-                          value={formData.status}
-                          onChange={(e) => handleFormChange("status", e.target.value)}
-                          className="bg-white font-bold h-9 text-slate-900"
-                        >
-                          <option value="Active">Active</option>
-                          <option value="Inactive">Inactive</option>
-                        </SelectInput>
-                      </FormField>
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <FormField label="Alias / Short Code">
+                      <TextInput
+                        value={formData.alias || ""}
+                        onChange={(e) => handleFormChange("alias", e.target.value)}
+                        placeholder="e.g. HRPL"
+                        className="bg-white h-9"
+                      />
+                    </FormField>
 
-                    {/* Logo Upload Box */}
-                    <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <Upload className="h-4 w-4 text-emerald-600" />
-                        <span className="font-bold text-slate-800">Company Logo & Branding Upload:</span>
-                        <span className="text-[11px] text-slate-500">(PNG / JPEG max 2MB)</span>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setToastMessage("Company logo uploaded.")}
-                        className="h-8 text-xs font-bold bg-white border-slate-300 hover:bg-slate-50 text-slate-800 cursor-pointer"
+                    <FormField label="Company Entity Type" required>
+                      <SelectInput
+                        value={formData.companyType || "Private Limited"}
+                        onChange={(e) => handleFormChange("companyType", e.target.value)}
+                        className="bg-white font-semibold h-9"
                       >
-                        Browse File
-                      </Button>
+                        <option value="Private Limited">Private Limited</option>
+                        <option value="Public Limited">Public Limited</option>
+                        <option value="LLP">LLP</option>
+                        <option value="Partnership">Partnership</option>
+                        <option value="Sole Proprietorship">Sole Proprietorship</option>
+                        <option value="Other">Other</option>
+                      </SelectInput>
+                    </FormField>
+
+                    <FormField label="Business Nature">
+                      <TextInput
+                        value={formData.businessNature || ""}
+                        onChange={(e) => handleFormChange("businessNature", e.target.value)}
+                        placeholder="e.g. Hospitality & Hotel Operations"
+                        className="bg-white h-9"
+                      />
+                    </FormField>
+
+                    <FormField label="System Status">
+                      <SelectInput
+                        value={formData.status || "Active"}
+                        onChange={(e) => handleFormChange("status", e.target.value)}
+                        className="bg-white font-bold h-9 text-slate-900"
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </SelectInput>
+                    </FormField>
+                  </div>
+
+                  {/* Reference Indicators Box (Read-Only Cross-Master References) */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1.5 text-slate-600">
+                        <Coins className="h-3.5 w-3.5 text-amber-600" />
+                        <span className="font-semibold">Base Currency:</span>
+                        <span className="font-bold text-slate-900 bg-amber-50 px-2 py-0.5 rounded text-[11px] border border-amber-200">
+                          {formData.baseCurrencyId || "INR"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-slate-600">
+                        <Calendar className="h-3.5 w-3.5 text-blue-600" />
+                        <span className="font-semibold">Current FY:</span>
+                        <span className="font-bold text-slate-900 bg-blue-50 px-2 py-0.5 rounded text-[11px] border border-blue-200">
+                          {formData.currentFiscalYearId || "FY-2026-27"}
+                        </span>
+                      </div>
                     </div>
+                    <span className="text-[11px] text-slate-400 italic">
+                      Referenced from Currency & Fiscal Year Masters
+                    </span>
+                  </div>
+
+                  {/* Logo Upload Box */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Upload className="h-4 w-4 text-emerald-600" />
+                      <span className="font-bold text-slate-800">Company Logo & Branding:</span>
+                      <span className="text-[11px] text-slate-500">(Optional PNG / JPEG)</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setToastMessage("Company logo uploaded.")}
+                      className="h-8 text-xs font-bold bg-white border-slate-300 hover:bg-slate-50 text-slate-800 cursor-pointer"
+                    >
+                      Browse File
+                    </Button>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* 📍 TAB 2: ADDRESS & CONTACT */}
-              {formTab === "address" && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-4">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-emerald-600" />
-                      Registered Address & Location
-                    </h3>
+            {/* 📍 TAB 2: ADDRESS & CONTACT */}
+            {formTab === "address" && (
+              <div className="space-y-4">
+                {/* Registered Address */}
+                <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-emerald-600" />
+                    Registered Legal Address
+                  </h3>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <FormField label="Address Line 1">
-                        <TextInput
-                          value={formData.addressLine1}
-                          onChange={(e) => handleFormChange("addressLine1", e.target.value)}
-                          placeholder="Registered street address..."
-                          className="bg-white h-9"
-                        />
-                      </FormField>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField label="Registered Address Line 1">
+                      <TextInput
+                        value={formData.addressLine1 || ""}
+                        onChange={(e) => handleFormChange("addressLine1", e.target.value)}
+                        placeholder="Registered street address, premise name..."
+                        className="bg-white h-9"
+                      />
+                    </FormField>
 
-                      <FormField label="Address Line 2">
-                        <TextInput
-                          value={formData.addressLine2}
-                          onChange={(e) => handleFormChange("addressLine2", e.target.value)}
-                          placeholder="Building, industrial zone..."
-                          className="bg-white h-9"
-                        />
-                      </FormField>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      <FormField label="City">
-                        <TextInput
-                          value={formData.city}
-                          onChange={(e) => handleFormChange("city", e.target.value)}
-                          className="bg-white h-9 font-semibold"
-                        />
-                      </FormField>
-
-                      <FormField label="District">
-                        <TextInput
-                          value={formData.district}
-                          onChange={(e) => handleFormChange("district", e.target.value)}
-                          className="bg-white h-9"
-                        />
-                      </FormField>
-
-                      <FormField label="State">
-                        <TextInput
-                          value={formData.state}
-                          onChange={(e) => handleFormChange("state", e.target.value)}
-                          className="bg-white h-9 font-semibold"
-                        />
-                      </FormField>
-
-                      <FormField label="Pincode">
-                        <TextInput
-                          value={formData.pincode}
-                          onChange={(e) => handleFormChange("pincode", e.target.value)}
-                          className="bg-white h-9 font-mono"
-                        />
-                      </FormField>
-                    </div>
+                    <FormField label="Registered Address Line 2">
+                      <TextInput
+                        value={formData.addressLine2 || ""}
+                        onChange={(e) => handleFormChange("addressLine2", e.target.value)}
+                        placeholder="Building, landmark, industrial zone..."
+                        className="bg-white h-9"
+                      />
+                    </FormField>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-4">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-emerald-600" />
-                      Primary Contact Particulars
-                    </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <FormField label="City">
+                      <TextInput
+                        value={formData.city || ""}
+                        onChange={(e) => handleFormChange("city", e.target.value)}
+                        placeholder="City"
+                        className="bg-white h-9 font-semibold"
+                      />
+                    </FormField>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <FormField label="Primary Contact Person">
-                        <TextInput
-                          value={formData.primaryContact}
-                          onChange={(e) => handleFormChange("primaryContact", e.target.value)}
-                          className="bg-white h-9 font-semibold text-slate-900"
-                        />
-                      </FormField>
+                    <FormField label="District">
+                      <TextInput
+                        value={formData.district || ""}
+                        onChange={(e) => handleFormChange("district", e.target.value)}
+                        placeholder="District"
+                        className="bg-white h-9"
+                      />
+                    </FormField>
 
-                      <FormField label="Mobile Number">
-                        <TextInput
-                          value={formData.mobile}
-                          onChange={(e) => handleFormChange("mobile", e.target.value)}
-                          className="bg-white h-9 font-mono"
-                        />
-                      </FormField>
+                    <FormField label="State">
+                      <TextInput
+                        value={formData.state || ""}
+                        onChange={(e) => handleFormChange("state", e.target.value)}
+                        placeholder="State"
+                        className="bg-white h-9 font-semibold"
+                      />
+                    </FormField>
 
-                      <FormField label="Telephone">
-                        <TextInput
-                          value={formData.telephone}
-                          onChange={(e) => handleFormChange("telephone", e.target.value)}
-                          className="bg-white h-9 font-mono"
-                        />
-                      </FormField>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <FormField label="Official Email Address">
-                        <TextInput
-                          type="email"
-                          value={formData.email}
-                          onChange={(e) => handleFormChange("email", e.target.value)}
-                          className="bg-white h-9"
-                        />
-                      </FormField>
-
-                      <FormField label="Company Website">
-                        <TextInput
-                          value={formData.website}
-                          onChange={(e) => handleFormChange("website", e.target.value)}
-                          className="bg-white h-9"
-                        />
-                      </FormField>
-                    </div>
+                    <FormField label="Pincode">
+                      <TextInput
+                        value={formData.pincode || ""}
+                        onChange={(e) => handleFormChange("pincode", e.target.value)}
+                        placeholder="e.g. 392130"
+                        className="bg-white h-9 font-mono"
+                      />
+                    </FormField>
                   </div>
-                </div>
-              )}
 
-              {/* 📜 TAB 3: REGISTRATION & TAX */}
-              {formTab === "registration" && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-4">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
-                      <FileCheck2 className="h-4 w-4 text-emerald-600" />
-                      Statutory Tax & Company Registrations
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <FormField label="GST Number (GSTIN)">
-                        <TextInput
-                          value={formData.gstNumber}
-                          onChange={(e) => handleFormChange("gstNumber", e.target.value)}
-                          placeholder="15-digit GSTIN"
-                          className="font-mono uppercase font-bold text-slate-900 bg-white h-9"
-                        />
-                      </FormField>
-
-                      <FormField label="PAN Number">
-                        <TextInput
-                          value={formData.panNumber}
-                          onChange={(e) => handleFormChange("panNumber", e.target.value)}
-                          placeholder="10-digit PAN"
-                          className="font-mono uppercase font-bold text-slate-900 bg-white h-9"
-                        />
-                      </FormField>
-
-                      <FormField label="TAN Number">
-                        <TextInput
-                          value={formData.tanNumber}
-                          onChange={(e) => handleFormChange("tanNumber", e.target.value)}
-                          placeholder="TAN Number"
-                          className="font-mono uppercase bg-white h-9"
-                        />
-                      </FormField>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <FormField label="CIN Number">
-                        <TextInput
-                          value={formData.cinNumber}
-                          onChange={(e) => handleFormChange("cinNumber", e.target.value)}
-                          placeholder="Corporate Identification No"
-                          className="font-mono uppercase bg-white h-9"
-                        />
-                      </FormField>
-
-                      <FormField label="MSME Udyam Registration">
-                        <TextInput
-                          value={formData.msmeNumber}
-                          onChange={(e) => handleFormChange("msmeNumber", e.target.value)}
-                          placeholder="UDYAM Registration"
-                          className="bg-white h-9"
-                        />
-                      </FormField>
-
-                      <FormField label="Registration Date">
-                        <FODatePicker
-                          value={formData.registrationDate}
-                          onChange={(val) => handleFormChange("registrationDate", val)}
-                        />
-                      </FormField>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <FormField label="Tax Region / State Code">
-                        <TextInput
-                          value={formData.taxRegion}
-                          onChange={(e) => handleFormChange("taxRegion", e.target.value)}
-                          className="bg-white font-semibold h-9"
-                        />
-                      </FormField>
-
-                      <FormField label="Base Currency">
-                        <SelectInput
-                          value={formData.baseCurrency}
-                          onChange={(e) => handleFormChange("baseCurrency", e.target.value)}
-                          className="bg-white font-bold h-9"
-                        >
-                          <option value="INR">INR (₹) - Indian Rupee</option>
-                          <option value="USD">USD ($) - US Dollar</option>
-                          <option value="EUR">EUR (€) - Euro</option>
-                        </SelectInput>
-                      </FormField>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-white p-3 rounded-xl border border-slate-200">
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={formData.gstApplicable}
-                          onChange={(e) => handleFormChange("gstApplicable", e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 h-4 w-4"
-                        />
-                        <span>GST Applicable</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={formData.eInvoicingEnabled}
-                          onChange={(e) => handleFormChange("eInvoicingEnabled", e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 h-4 w-4"
-                        />
-                        <span>E-Invoicing Active</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={formData.tdsApplicable}
-                          onChange={(e) => handleFormChange("tdsApplicable", e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 h-4 w-4"
-                        />
-                        <span>TDS Deduction</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={formData.tcsApplicable}
-                          onChange={(e) => handleFormChange("tcsApplicable", e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 h-4 w-4"
-                        />
-                        <span>TCS Collection</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ⚙️ TAB 4: FINANCIAL & SYSTEM CONFIG */}
-              {formTab === "config" && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-4">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
-                      <Settings className="h-4 w-4 text-emerald-600" />
-                      Financial Period & Operational Toggles
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <FormField label="Financial Year Period">
-                        <TextInput
-                          value={formData.financialYear}
-                          onChange={(e) => handleFormChange("financialYear", e.target.value)}
-                          className="bg-white font-mono font-bold h-9"
-                        />
-                      </FormField>
-
-                      <FormField label="Accounting Method">
-                        <SelectInput
-                          value={formData.accountingMethod}
-                          onChange={(e) => handleFormChange("accountingMethod", e.target.value)}
-                          className="bg-white font-semibold h-9"
-                        >
-                          <option value="Accrual Basis Accounting">Accrual Basis Accounting</option>
-                          <option value="Cash Basis Accounting">Cash Basis Accounting</option>
-                        </SelectInput>
-                      </FormField>
-
-                      <FormField label="Lock Financial Period Prior To">
-                        <TextInput
-                          type="date"
-                          value={formData.lockPeriodBeforeDate}
-                          onChange={(e) => handleFormChange("lockPeriodBeforeDate", e.target.value)}
-                          className="bg-white font-mono h-9"
-                        />
-                      </FormField>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-3 rounded-xl border border-slate-200">
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={formData.nightAuditAutoPost}
-                          onChange={(e) => handleFormChange("nightAuditAutoPost", e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 h-4 w-4"
-                        />
-                        <span>Night Audit Auto-Post Sales</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={formData.posAutoPost}
-                          onChange={(e) => handleFormChange("posAutoPost", e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 h-4 w-4"
-                        />
-                        <span>Restaurant POS Day-End Auto Post</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={formData.mandatoryCostCenter}
-                          onChange={(e) => handleFormChange("mandatoryCostCenter", e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 h-4 w-4"
-                        />
-                        <span>Mandatory Cost Center Allocation</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={formData.cityLedgerTransferAuto}
-                          onChange={(e) => handleFormChange("cityLedgerTransferAuto", e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 h-4 w-4"
-                        />
-                        <span>Checkout City Ledger Auto Transfer</span>
-                      </label>
-                    </div>
-
-                    <FormField label="Company Configuration Remarks">
-                      <TextAreaInput
-                        rows={3}
-                        value={formData.remarks}
-                        onChange={(e) => handleFormChange("remarks", e.target.value)}
-                        placeholder="Enter configuration notes..."
-                        className="bg-white"
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField label="Country">
+                      <TextInput
+                        value={formData.country || "India"}
+                        onChange={(e) => handleFormChange("country", e.target.value)}
+                        className="bg-white h-9 font-semibold"
                       />
                     </FormField>
                   </div>
                 </div>
-              )}
-            </div>
 
-          {/* Bottom Property Activity Panel (Branches, Users, Audit) */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-            <div className="flex border-b border-slate-200 gap-1 pb-1">
-              {[
-                { id: "branches", label: `Branches (${formData.branchesCount})`, icon: Building },
-                { id: "users", label: `Users (${formData.usersCount})`, icon: Users },
-                { id: "fy", label: "Financial Years", icon: Calendar },
-                { id: "audit", label: "Audit Logs", icon: History },
-                { id: "docs", label: "Documents", icon: Paperclip },
-              ].map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={cn(
-                      "flex items-center gap-1.5 py-1.5 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer",
-                      isActive
-                        ? "bg-slate-100 text-emerald-800 border border-slate-200 shadow-2xs"
-                        : "text-slate-600 hover:bg-slate-50"
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5 text-emerald-700" />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+                {/* Primary Contact Particulars */}
+                <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-emerald-600" />
+                    Company Contact Information
+                  </h3>
 
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700">
-              {activeTab === "branches" && (
-                <div className="space-y-1 font-semibold">
-                  <p>• Dahej Resort Branch — Active (Branch Code: BR-01)</p>
-                  <p>• Vadodara Corporate Sales Office — Active (Branch Code: BR-02)</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <FormField label="Primary Contact Person">
+                      <TextInput
+                        value={formData.primaryContact || ""}
+                        onChange={(e) => handleFormChange("primaryContact", e.target.value)}
+                        placeholder="e.g. General Manager / Director"
+                        className="bg-white h-9 font-semibold text-slate-900"
+                      />
+                    </FormField>
+
+                    <FormField label="Mobile Number">
+                      <TextInput
+                        value={formData.mobile || ""}
+                        onChange={(e) => handleFormChange("mobile", e.target.value)}
+                        placeholder="+91 00000 00000"
+                        className="bg-white h-9 font-mono"
+                      />
+                    </FormField>
+
+                    <FormField label="Telephone">
+                      <TextInput
+                        value={formData.telephone || ""}
+                        onChange={(e) => handleFormChange("telephone", e.target.value)}
+                        placeholder="Landline / Board No."
+                        className="bg-white h-9 font-mono"
+                      />
+                    </FormField>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField label="Official Email Address">
+                      <TextInput
+                        type="email"
+                        value={formData.email || ""}
+                        onChange={(e) => handleFormChange("email", e.target.value)}
+                        placeholder="official@company.com"
+                        className="bg-white h-9"
+                      />
+                    </FormField>
+
+                    <FormField label="Company Website">
+                      <TextInput
+                        value={formData.website || ""}
+                        onChange={(e) => handleFormChange("website", e.target.value)}
+                        placeholder="www.company.com"
+                        className="bg-white h-9"
+                      />
+                    </FormField>
+                  </div>
                 </div>
-              )}
-              {activeTab === "users" && (
-                <div className="space-y-1 font-semibold">
-                  <p>• Jayesh Patel (General Manager) — Admin Rights</p>
-                  <p>• Abhijit Suthar (Senior Accountant) — Full Financial Posting</p>
-                  <p>• Priya Verma (Front Desk Manager) — Guest Billing Only</p>
+              </div>
+            )}
+
+            {/* 📜 TAB 3: REGISTRATION & TAX IDENTITY */}
+            {formTab === "registration" && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+                    <FileCheck2 className="h-4 w-4 text-emerald-600" />
+                    Statutory Tax & Company Registrations
+                  </h3>
+
+                  {/* GST Applicability Toggle */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-4">
+                    <div>
+                      <span className="font-bold text-slate-900 block text-xs">
+                        GST Registered / Applicable
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Specify whether this company entity operates under Goods & Services Tax.
+                      </span>
+                    </div>
+
+                    <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(formData.gstApplicable)}
+                        onChange={(e) => handleFormChange("gstApplicable", e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600 h-4 w-4 focus:ring-emerald-500"
+                      />
+                      <span>{formData.gstApplicable ? "Yes (Applicable)" : "No (Exempt / Unregistered)"}</span>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <FormField label="GSTIN (GST Number)">
+                      <TextInput
+                        value={formData.gstNumber || ""}
+                        onChange={(e) => handleFormChange("gstNumber", e.target.value.toUpperCase())}
+                        placeholder="15-digit GSTIN"
+                        disabled={!formData.gstApplicable}
+                        className={cn(
+                          "font-mono uppercase font-bold text-slate-900 h-9",
+                          !formData.gstApplicable ? "bg-slate-100 cursor-not-allowed text-slate-400" : "bg-white"
+                        )}
+                      />
+                    </FormField>
+
+                    <FormField label="PAN (Permanent Account Number)">
+                      <TextInput
+                        value={formData.panNumber || ""}
+                        onChange={(e) => handleFormChange("panNumber", e.target.value.toUpperCase())}
+                        placeholder="10-digit PAN"
+                        className="font-mono uppercase font-bold text-slate-900 bg-white h-9"
+                      />
+                    </FormField>
+
+                    <FormField label="TAN (Tax Deduction Number)">
+                      <TextInput
+                        value={formData.tanNumber || ""}
+                        onChange={(e) => handleFormChange("tanNumber", e.target.value.toUpperCase())}
+                        placeholder="TAN Number"
+                        className="font-mono uppercase bg-white h-9"
+                      />
+                    </FormField>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <FormField label="CIN (Corporate Identification No)">
+                      <TextInput
+                        value={formData.cinNumber || ""}
+                        onChange={(e) => handleFormChange("cinNumber", e.target.value.toUpperCase())}
+                        placeholder="Corporate Identification No"
+                        className="font-mono uppercase bg-white h-9"
+                      />
+                    </FormField>
+
+                    <FormField label="MSME / Udyam Registration">
+                      <TextInput
+                        value={formData.msmeNumber || ""}
+                        onChange={(e) => handleFormChange("msmeNumber", e.target.value)}
+                        placeholder="UDYAM-XX-00-0000000"
+                        className="bg-white h-9"
+                      />
+                    </FormField>
+
+                    <FormField label="Registration Date">
+                      <FODatePicker
+                        value={formData.registrationDate || ""}
+                        onChange={(val) => handleFormChange("registrationDate", val)}
+                      />
+                    </FormField>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField label="State / Tax Region Code">
+                      <TextInput
+                        value={formData.taxRegion || ""}
+                        onChange={(e) => handleFormChange("taxRegion", e.target.value)}
+                        placeholder="e.g. Gujarat (24)"
+                        className="bg-white font-semibold h-9"
+                      />
+                    </FormField>
+                  </div>
+
+                  {/* Informational Guidance on Tax Master */}
+                  <div className="p-3 rounded-xl bg-slate-100/80 border border-slate-200 text-slate-600 text-[11px] space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                      <Info className="h-3.5 w-3.5 text-emerald-700" />
+                      Tax Rules & Rate Slabs Note:
+                    </div>
+                    <p>
+                      GST tax rates (5%, 12%, 18%, 28%), room tariff thresholds, restaurant F&B tax slabs, and banquet tax rules are configured under <strong>Accounts → Masters → Tax / GST Master</strong>.
+                    </p>
+                  </div>
                 </div>
-              )}
-              {activeTab === "fy" && (
-                <div className="space-y-1 font-mono font-semibold">
-                  <p>• FY 2026-2027: 01/04/2026 to 31/03/2027 (Active & Open)</p>
-                  <p>• FY 2025-2026: 01/04/2025 to 31/03/2026 (Audited & Locked)</p>
-                </div>
-              )}
-              {activeTab === "audit" && (
-                <p className="font-mono text-slate-600">
-                  Last amended by <strong>ABHIJIT</strong> on 28/07/2026 at 14:35:10
-                </p>
-              )}
-              {activeTab === "docs" && (
-                <p className="font-semibold text-slate-800">
-                  Incorporation Certificate & GST Registration files attached.
-                </p>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -15,16 +15,9 @@ import {
 } from "lucide-react";
 import { Modal, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { INITIAL_ACTIVITY_TYPES } from "../masters/SalesMarketingMastersView";
 
-export type SharedActivityType =
-  | "Phone Call"
-  | "Site Visit"
-  | "Follow-up"
-  | "Meeting"
-  | "WhatsApp"
-  | "Email"
-  | "Task / Note"
-  | "Proposal Sent";
+export type SharedActivityType = string;
 
 export type SharedActivityPriority = "High" | "Medium" | "Low";
 export type SharedActivityStatus = "Upcoming" | "Scheduled" | "Completed" | "Overdue" | "Cancelled";
@@ -106,15 +99,17 @@ export interface AddActivityModalProps {
   }[];
 }
 
-const ACTIVITY_TYPES: { type: SharedActivityType; label: string; icon: any }[] = [
-  { type: "Phone Call", label: "Call", icon: Phone },
-  { type: "Site Visit", label: "Site Visit", icon: MapPin },
-  { type: "Follow-up", label: "Follow-up", icon: Clock },
-  { type: "Meeting", label: "Meeting", icon: Users },
-  { type: "WhatsApp", label: "WhatsApp", icon: MessageSquare },
-  { type: "Email", label: "Email", icon: Mail },
-  { type: "Task / Note", label: "Note", icon: CheckSquare },
-];
+const getActivityIcon = (typeName: string) => {
+  const lower = typeName.toLowerCase();
+  if (lower.includes("call") || lower.includes("phone")) return Phone;
+  if (lower.includes("visit") || lower.includes("site")) return MapPin;
+  if (lower.includes("follow")) return Clock;
+  if (lower.includes("meet")) return Users;
+  if (lower.includes("whatsapp")) return MessageSquare;
+  if (lower.includes("mail")) return Mail;
+  if (lower.includes("task") || lower.includes("note")) return CheckSquare;
+  return CheckCircle2;
+};
 
 export function AddActivityModal({
   isOpen,
@@ -344,14 +339,17 @@ export function AddActivityModal({
             Activity Type *
           </label>
           <div className="flex flex-wrap gap-1.5">
-            {ACTIVITY_TYPES.map((opt) => {
-              const Icon = opt.icon;
-              const isSelected = activityType === opt.type;
+            {INITIAL_ACTIVITY_TYPES.filter((item) => item.status === "Active").map((opt) => {
+              const Icon = getActivityIcon(opt.typeName);
+              const isSelected =
+                activityType === opt.typeName ||
+                (opt.typeName === "Call" && activityType === "Phone Call") ||
+                (opt.typeName === "Follow Up" && activityType === "Follow-up");
               return (
                 <button
                   type="button"
-                  key={opt.type}
-                  onClick={() => setActivityType(opt.type)}
+                  key={opt.activityTypeId}
+                  onClick={() => setActivityType(opt.typeName)}
                   className={cn(
                     "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer",
                     isSelected
@@ -360,7 +358,7 @@ export function AddActivityModal({
                   )}
                 >
                   <Icon className={cn("h-3.5 w-3.5", isSelected ? "text-emerald-400" : "text-slate-500")} />
-                  <span>{opt.label}</span>
+                  <span>{opt.typeName}</span>
                 </button>
               );
             })}

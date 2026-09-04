@@ -49,7 +49,7 @@ function itemCount(order: FbOrder) {
 }
 
 function isOrderCancelled(order: FbOrder) {
-  const lifecycle = String(order.lifecycleStatus ?? "").toUpperCase();
+  const lifecycle = String((order as any).lifecycleStatus ?? "").toUpperCase();
   return lifecycle === "CANCELLED" || order.status === "Cancelled" || order.status === "Rejected";
 }
 
@@ -259,12 +259,7 @@ export function FbAllOrdersView() {
   }, [orders, statusTab, search]);
 
   const activeCount = useMemo(
-    () =>
-      orders.filter(
-        (o) =>
-          !["Settled", "Rejected", "Cancelled"].includes(String(o.status)) &&
-          String(o.lifecycleStatus ?? "").toUpperCase() !== "CANCELLED",
-      ).length,
+    () => orders.filter((o) => !isOrderCancelled(o) && o.status !== "Settled").length,
     [orders],
   );
 

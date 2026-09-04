@@ -7,21 +7,18 @@ import {
   Printer,
   Download,
   Search,
-  Scale,
-  Maximize2,
-  Minimize2,
   CheckCircle2,
   SlidersHorizontal,
   X,
   Calendar,
-  Layers,
   FileSpreadsheet,
-  AlertCircle,
   Filter,
   Loader2,
   BookOpen,
   ChevronDown,
   Building2,
+  Eye,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -30,7 +27,6 @@ import {
   StatMiniCard,
   Drawer,
   Modal,
-  AlertBanner,
   FODatePicker,
   formatINR,
 } from "@/components/frontoffice/ui";
@@ -38,9 +34,12 @@ import { ModulePageShell } from "@/components/pms";
 import {
   sampleGeneralLedgerData,
   sampleGroups,
-  sampleLedgers,
+  sampleLedgersList,
   sampleVoucherTypes,
+  resolvePartyName,
+  resolveDivisionName,
   GeneralLedgerEntry,
+  LedgerAccountOption,
 } from "@/app/data/accounts/generalLedgerData";
 import { cn } from "@/lib/utils";
 
@@ -49,13 +48,16 @@ export function GeneralLedgerView() {
   const [showFilters, setShowFilters] = useState(false);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
-  // Search Modal for Ledger (Matching WINHMS Image 3)
+  // Search Modal for Ledger Selection
   const [ledgerModalOpen, setLedgerModalOpen] = useState(false);
   const [ledgerSearchQuery, setLedgerSearchQuery] = useState("");
 
-  // Primary Selection Controls
+  // Voucher Detail Drill-Down Modal State (Read-Only)
+  const [selectedVoucherForModal, setSelectedVoucherForModal] = useState<GeneralLedgerEntry | null>(null);
+
+  // Primary Selection Controls (ID-based / Group-based)
   const [selectedGroup, setSelectedGroup] = useState("<ALL>");
-  const [selectedLedger, setSelectedLedger] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [selectedVoucherType, setSelectedVoucherType] = useState("<ALL>");
 
   // Date Range Controls
@@ -64,24 +66,27 @@ export function GeneralLedgerView() {
   const [appliedFromDate, setAppliedFromDate] = useState("2026-04-01");
   const [appliedToDate, setAppliedToDate] = useState("2027-03-31");
   const [datePreset, setDatePreset] = useState("fy26");
-  const [sortOn, setSortOn] = useState<"seqNo" | "acId">("seqNo");
+  const [sortOn, setSortOn] = useState<"seqNo" | "vouchDt">("seqNo");
 
-  // Checkboxes matching WINHMS screenshot (Image 1 & 4)
+  // Report display options (lean V1)
   const [cummulativeBalance, setCummulativeBalance] = useState(true);
   const [showCompanyHeading, setShowCompanyHeading] = useState(true);
-  const [pageSkipRequired, setPageSkipRequired] = useState(false);
-  const [showSubLedger, setShowSubLedger] = useState(true);
   const [showDrTrn, setShowDrTrn] = useState(true);
   const [showCrTrn, setShowCrTrn] = useState(true);
   const [suppressZero, setSuppressZero] = useState(false);
-  const [analysisCode, setAnalysisCode] = useState(false);
 
-  // Search filter query
+  // Search filter query (searches Voucher #, Particulars, Party, Account, Division)
   const [searchQuery, setSearchQuery] = useState("");
 
   // Action Loading & Toast State
   const [isDisplayLoading, setIsDisplayLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Active selected account object
+  const activeAccount = useMemo(() => {
+    if (!selectedAccountId) return null;
+    return sampleLedgersList.find((l) => l.accountId === selectedAccountId) || null;
+  }, [selectedAccountId]);
 
   // Preset Date Range Selector
   const handleDatePreset = (preset: string) => {
@@ -95,8 +100,8 @@ export function GeneralLedgerView() {
       newFrom = "2026-04-01";
       newTo = "2026-06-30";
     } else if (preset === "thisMonth") {
-      newFrom = "2026-07-01";
-      newTo = "2026-07-31";
+      newFrom = "2026-04-01";
+      newTo = "2026-04-30";
     }
     setFromDate(newFrom);
     setToDate(newTo);
@@ -107,47 +112,109 @@ export function GeneralLedgerView() {
     setIsDisplayLoading(true);
     setAppliedFromDate(fromDate);
     setAppliedToDate(toDate);
-    const ledgerLabel = selectedLedger.trim() ? selectedLedger : "All Ledgers";
+    const ledgerLabel = activeAccount ? `${activeAccount.accountCode} - ${activeAccount.accountName}` : "All Ledgers";
     setToastMessage(`General Ledger refreshed for ${ledgerLabel} (${fromDate} to ${toDate}).`);
     setTimeout(() => {
       setIsDisplayLoading(false);
-    }, 350);
+    }, 250);
   };
 
   // Filtered Ledger Data
   const filteredData = useMemo(() => {
     return sampleGeneralLedgerData.filter((item) => {
-      // Group Filter
-      if (selectedGroup !== "<ALL>" && item.group !== selectedGroup) return false;
+      // Group Filter (Hierarchy Match)
+      if (selectedGroup !== "<ALL>") {
+        if (selectedGroup === "Assets" && item.nature !== "Asset") return false;
+        else if (selectedGroup === "Liabilities" && item.nature !== "Liability") return false;
+        else if (selectedGroup === "Income" && item.nature !== "Income") return false;
+        else if (selectedGroup === "Expenses" && item.nature !== "Expense") return false;
+        else if (
+          selectedGroup !== "Assets" &&
+          selectedGroup !== "Liabilities" &&
+          selectedGroup !== "Income" &&
+          selectedGroup !== "Expenses" &&
+          item.group !== selectedGroup
+        ) {
+          return false;
+        }
+      }
 
-      // Ledger Filter (If entered/selected)
-      if (selectedLedger.trim() !== "") {
-        const lq = selectedLedger.trim().toLowerCase();
-        if (!item.ledger.toLowerCase().includes(lq)) return false;
+      // Ledger Filter (by accountId)
+      if (selectedAccountId && item.accountId !== selectedAccountId) {
+        return false;
       }
 
       // Voucher Type Filter
       if (selectedVoucherType !== "<ALL>" && item.trnType !== selectedVoucherType) return false;
 
       // DR / CR Trn Filters
-      if (!showDrTrn && item.drAmt > 0) return false;
-      if (!showCrTrn && item.crAmt > 0) return false;
+      if (!showDrTrn && item.drAmt > 0 && !item.isOpeningBalance) return false;
+      if (!showCrTrn && item.crAmt > 0 && !item.isOpeningBalance) return false;
 
-      // Search Query Filter
-      if (searchQuery) {
+      // Suppress Zero Filter
+      if (suppressZero && item.drAmt === 0 && item.crAmt === 0) return false;
+
+      // Global Search Filter (Voucher #, Particulars, Party, Account, Division)
+      if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        return (
-          item.vouchNo.toLowerCase().includes(q) ||
-          item.particulars.toLowerCase().includes(q) ||
-          item.ledger.toLowerCase().includes(q)
-        );
+        const partyName = resolvePartyName(item.partyId).toLowerCase();
+        const divisionName = resolveDivisionName(item.divisionId).toLowerCase();
+        const matchesVouchNo = item.vouchNo.toLowerCase().includes(q);
+        const matchesParticulars = item.particulars.toLowerCase().includes(q);
+        const matchesAccount = item.accountName.toLowerCase().includes(q) || item.accountCode.toLowerCase().includes(q);
+        const matchesParty = partyName.includes(q);
+        const matchesDivision = divisionName.includes(q);
+
+        if (!matchesVouchNo && !matchesParticulars && !matchesAccount && !matchesParty && !matchesDivision) {
+          return false;
+        }
       }
 
       return true;
     });
-  }, [selectedGroup, selectedLedger, selectedVoucherType, showDrTrn, showCrTrn, searchQuery]);
+  }, [
+    selectedGroup,
+    selectedAccountId,
+    selectedVoucherType,
+    showDrTrn,
+    showCrTrn,
+    suppressZero,
+    searchQuery,
+  ]);
 
-  // Total Calculations
+  // Account Nature-Aware Dynamic Running Balance Calculation
+  const rowsWithRunningBalance = useMemo(() => {
+    let running = 0;
+    const isCreditOriented = activeAccount?.nature === "Liability" || activeAccount?.nature === "Income";
+
+    return filteredData.map((row) => {
+      let netMovement = 0;
+      if (isCreditOriented) {
+        // For Liability & Income: Credit increases balance, Debit decreases balance
+        netMovement = row.crAmt - row.drAmt;
+      } else {
+        // For Assets & Expenses: Debit increases balance, Credit decreases balance
+        netMovement = row.drAmt - row.crAmt;
+      }
+
+      running += netMovement;
+
+      let balType: "Dr" | "Cr" = "Dr";
+      if (isCreditOriented) {
+        balType = running >= 0 ? "Cr" : "Dr";
+      } else {
+        balType = running >= 0 ? "Dr" : "Cr";
+      }
+
+      return {
+        ...row,
+        computedRunningBal: Math.abs(running),
+        computedBalType: balType,
+      };
+    });
+  }, [filteredData, activeAccount]);
+
+  // Dynamic Total Calculations
   const totals = useMemo(() => {
     return filteredData.reduce(
       (acc, item) => {
@@ -159,12 +226,27 @@ export function GeneralLedgerView() {
     );
   }, [filteredData]);
 
-  const closingBalance = totals.totalDr - totals.totalCr;
+  // Dynamic Closing Balance
+  const isCreditOriented = activeAccount?.nature === "Liability" || activeAccount?.nature === "Income";
+  const netDiff = isCreditOriented
+    ? totals.totalCr - totals.totalDr
+    : totals.totalDr - totals.totalCr;
+  const closingBalanceType: "Dr" | "Cr" = isCreditOriented
+    ? netDiff >= 0 ? "Cr" : "Dr"
+    : netDiff >= 0 ? "Dr" : "Cr";
+
+  // Count operational vouchers (excluding opening balance baseline from operational count)
+  const operationalVoucherCount = filteredData.filter((item) => !item.isOpeningBalance).length;
 
   // Filtered Ledgers for Modal Search
-  const filteredModalLedgers = sampleLedgers.filter((l) =>
-    l.toLowerCase().includes(ledgerSearchQuery.toLowerCase())
-  );
+  const filteredModalLedgers = sampleLedgersList.filter((l) => {
+    const q = ledgerSearchQuery.toLowerCase();
+    return (
+      l.accountName.toLowerCase().includes(q) ||
+      l.accountCode.toLowerCase().includes(q) ||
+      l.group.toLowerCase().includes(q)
+    );
+  });
 
   // Badge Color Helper for Transaction Types
   const getTrnTypeBadgeClass = (type: string) => {
@@ -182,7 +264,47 @@ export function GeneralLedgerView() {
     }
   };
 
-  // Shared Filter Controls Component (3 Equal Cards like Trial Balance)
+  // CSV Export
+  const handleExportCSV = () => {
+    const headers = [
+      "Voucher Date",
+      "Voucher No",
+      "Particulars",
+      "Party",
+      "Division",
+      "Account Code",
+      "Account Name",
+      "Type",
+      "DR Amount",
+      "CR Amount",
+      "Running Balance",
+    ];
+
+    const rows = rowsWithRunningBalance.map((r) => [
+      r.vouchDt,
+      r.vouchNo,
+      `"${r.particulars.replace(/"/g, '""')}"`,
+      `"${resolvePartyName(r.partyId)}"`,
+      `"${resolveDivisionName(r.divisionId)}"`,
+      r.accountCode,
+      `"${r.accountName}"`,
+      r.trnType,
+      r.drAmt,
+      r.crAmt,
+      `${r.computedRunningBal} ${r.computedBalType}`,
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `General_Ledger_${appliedFromDate}_to_${appliedToDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Shared Filter Controls Component
   const FilterFormContent = () => (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
       {/* Box 1: Group, Ledger & Voucher Type Selection */}
@@ -194,10 +316,13 @@ export function GeneralLedgerView() {
 
         {/* Group Dropdown */}
         <div className="space-y-1">
-          <label className="text-[11px] font-semibold text-slate-600">Group:</label>
+          <label className="text-[11px] font-semibold text-slate-600">Group / Nature:</label>
           <select
             value={selectedGroup}
-            onChange={(e) => setSelectedGroup(e.target.value)}
+            onChange={(e) => {
+              setSelectedGroup(e.target.value);
+              setSelectedAccountId(""); // Reset specific account when switching group
+            }}
             className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
           >
             {sampleGroups.map((grp) => (
@@ -208,23 +333,36 @@ export function GeneralLedgerView() {
           </select>
         </div>
 
-        {/* Ledger Input + Binoculars Modal Button */}
+        {/* Ledger Selector with Search Modal */}
         <div className="space-y-1">
-          <label className="text-[11px] font-semibold text-slate-600">Ledger:</label>
+          <label className="text-[11px] font-semibold text-slate-600">Specific Ledger Account:</label>
           <div className="flex items-center gap-1.5">
-            <TextInput
-              value={selectedLedger}
-              onChange={(e) => setSelectedLedger(e.target.value)}
-              placeholder="Type or select ledger..."
-              className="h-8 text-xs rounded-lg flex-1"
-            />
+            <div className="flex-1 truncate rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 h-8 flex items-center">
+              {activeAccount ? (
+                <span className="truncate">
+                  <strong className="text-emerald-700">{activeAccount.accountCode}</strong> - {activeAccount.accountName}
+                </span>
+              ) : (
+                <span className="text-slate-400">All Accounts in Scope</span>
+              )}
+            </div>
+            {selectedAccountId && (
+              <button
+                type="button"
+                onClick={() => setSelectedAccountId("")}
+                className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center shrink-0 cursor-pointer"
+                title="Clear selected account"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => setLedgerModalOpen(true)}
               className="h-8 px-2.5 border-slate-200 bg-white text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 rounded-lg shadow-2xs flex items-center gap-1 cursor-pointer shrink-0"
-              title="Search Ledger List"
+              title="Lookup Account"
             >
               <Search className="h-3.5 w-3.5 text-emerald-600" />
               <span className="text-[11px] font-bold">Find</span>
@@ -234,7 +372,7 @@ export function GeneralLedgerView() {
 
         {/* Voucher Type Dropdown */}
         <div className="space-y-1">
-          <label className="text-[11px] font-semibold text-slate-600">Voucher Type (Vouch Ty):</label>
+          <label className="text-[11px] font-semibold text-slate-600">Voucher Type:</label>
           <select
             value={selectedVoucherType}
             onChange={(e) => setSelectedVoucherType(e.target.value)}
@@ -264,7 +402,7 @@ export function GeneralLedgerView() {
               onChange={(e) => setCummulativeBalance(e.target.checked)}
               className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
             />
-            <span className="text-[11px]">Cummulative Bal</span>
+            <span className="text-[11px]">Cumulative Bal</span>
           </label>
 
           <label className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 border border-slate-200 cursor-pointer hover:border-emerald-300">
@@ -284,7 +422,7 @@ export function GeneralLedgerView() {
               onChange={(e) => setShowDrTrn(e.target.checked)}
               className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
             />
-            <span className="text-[11px]">DR Trn</span>
+            <span className="text-[11px]">DR Postings</span>
           </label>
 
           <label className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 border border-slate-200 cursor-pointer hover:border-emerald-300">
@@ -294,47 +432,17 @@ export function GeneralLedgerView() {
               onChange={(e) => setShowCrTrn(e.target.checked)}
               className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
             />
-            <span className="text-[11px]">CR Trn</span>
+            <span className="text-[11px]">CR Postings</span>
           </label>
 
-          <label className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 border border-slate-200 cursor-pointer hover:border-emerald-300">
+          <label className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 border border-slate-200 cursor-pointer hover:border-emerald-300 col-span-2">
             <input
               type="checkbox"
               checked={suppressZero}
               onChange={(e) => setSuppressZero(e.target.checked)}
               className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
             />
-            <span className="text-[11px]">Suppress Zero</span>
-          </label>
-
-          <label className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 border border-slate-200 cursor-pointer hover:border-emerald-300">
-            <input
-              type="checkbox"
-              checked={showSubLedger}
-              onChange={(e) => setShowSubLedger(e.target.checked)}
-              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <span className="text-[11px]">Sub Ledger</span>
-          </label>
-
-          <label className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 border border-slate-200 cursor-pointer hover:border-emerald-300">
-            <input
-              type="checkbox"
-              checked={pageSkipRequired}
-              onChange={(e) => setPageSkipRequired(e.target.checked)}
-              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <span className="text-[11px]">Page Skip</span>
-          </label>
-
-          <label className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 border border-slate-200 cursor-pointer hover:border-emerald-300">
-            <input
-              type="checkbox"
-              checked={analysisCode}
-              onChange={(e) => setAnalysisCode(e.target.checked)}
-              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <span className="text-[11px]">Analysis Code</span>
+            <span className="text-[11px]">Suppress Zero Balances</span>
           </label>
         </div>
       </div>
@@ -406,8 +514,8 @@ export function GeneralLedgerView() {
           <span className="font-bold text-slate-600 text-[11px] uppercase tracking-wider">Sort On:</span>
           <div className="flex items-center gap-1.5 font-medium">
             {[
-              { id: "seqNo", label: "Seq. No" },
-              { id: "acId", label: "AC ID" },
+              { id: "seqNo", label: "Voucher Date" },
+              { id: "vouchDt", label: "Sequence #" },
             ].map((opt) => {
               const active = sortOn === opt.id;
               return (
@@ -466,7 +574,7 @@ export function GeneralLedgerView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => alert("General Ledger statement exported to CSV successfully.")}
+            onClick={handleExportCSV}
             className="rounded-xl text-xs font-medium bg-white shadow-xs"
           >
             <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
@@ -512,7 +620,10 @@ export function GeneralLedgerView() {
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
             <BookOpen className="h-3.5 w-3.5 text-emerald-700" />
-            Active Ledger: <span className="underline">{selectedLedger.trim() ? selectedLedger : "<ALL>"}</span>
+            Active Ledger:{" "}
+            <span className="underline">
+              {activeAccount ? `${activeAccount.accountCode} - ${activeAccount.accountName}` : selectedGroup !== "<ALL>" ? `Group: ${selectedGroup}` : "All Ledgers"}
+            </span>
           </span>
 
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
@@ -581,37 +692,43 @@ export function GeneralLedgerView() {
         />
         <StatMiniCard
           label="Closing Running Balance"
-          value={`${formatINR(Math.abs(closingBalance))} ${closingBalance >= 0 ? "Dr" : "Cr"}`}
-          sublabel="Current active ledger balance"
+          value={`${formatINR(Math.abs(netDiff))} ${closingBalanceType}`}
+          sublabel={activeAccount ? `Account Nature: ${activeAccount.nature}` : "Consolidated Ledger Position"}
           accent="#16a34a"
           icon={CheckCircle2}
         />
       </div>
 
-      {/* Official Company Heading Block */}
+      {/* Company Heading Block */}
       {showCompanyHeading && (
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-xs">
           <h1 className="text-xl font-bold tracking-tight text-slate-900 uppercase">
-            Luxy Hotel Pvt Ltd
+            Hotel & Resorts Private Limited
           </h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            123 Grand Boulevard, City Center • GSTIN: 27AAAAA0000A1Z5
+            Grand Boulevard, Hospitality District • GSTIN: 27AAAAA0000A1Z5
           </p>
           <div className="my-2.5 border-t border-slate-100 max-w-xs mx-auto" />
           <h2 className="text-xs font-bold tracking-widest text-emerald-800 uppercase">
-            GENERAL LEDGER STATEMENT {selectedLedger.trim() ? `— ${selectedLedger.toUpperCase()}` : "— ALL LEDGERS"}
+            GENERAL LEDGER STATEMENT{" "}
+            {activeAccount
+              ? `— ${activeAccount.accountCode} ${activeAccount.accountName.toUpperCase()}`
+              : selectedGroup !== "<ALL>"
+              ? `— GROUP: ${selectedGroup.toUpperCase()}`
+              : "— ALL LEDGERS"}
           </h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            For the Period: <span className="font-semibold text-slate-700">{appliedFromDate}</span> to <span className="font-semibold text-slate-700">{appliedToDate}</span>
+            For the Period: <span className="font-semibold text-slate-700">{appliedFromDate}</span> to{" "}
+            <span className="font-semibold text-slate-700">{appliedToDate}</span>
           </p>
         </div>
       )}
 
-      {/* Ledger Name Search Modal (WINHMS Image 3 Replica) */}
+      {/* Account Lookup Modal */}
       <Modal
         open={ledgerModalOpen}
         onClose={() => setLedgerModalOpen(false)}
-        title="Ledger Name Search"
+        title="Chart of Accounts - Ledger Lookup"
       >
         <div className="space-y-3 p-1">
           <div className="relative">
@@ -620,30 +737,36 @@ export function GeneralLedgerView() {
               type="text"
               value={ledgerSearchQuery}
               onChange={(e) => setLedgerSearchQuery(e.target.value)}
-              placeholder="Search Ledger Name (e.g. YES BANK, Cash, Yatra...)"
+              placeholder="Search by account code, name, or group..."
               className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 font-medium"
             />
           </div>
 
           <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white">
             {filteredModalLedgers.length === 0 ? (
-              <div className="p-4 text-center text-xs text-slate-500">No ledgers match your search.</div>
+              <div className="p-4 text-center text-xs text-slate-500">No accounts match your search.</div>
             ) : (
-              filteredModalLedgers.map((lName) => (
+              filteredModalLedgers.map((acc) => (
                 <button
-                  key={lName}
+                  key={acc.accountId}
                   type="button"
                   onClick={() => {
-                    setSelectedLedger(lName);
+                    setSelectedAccountId(acc.accountId);
                     setLedgerModalOpen(false);
                   }}
                   className={cn(
-                    "w-full px-3.5 py-2 text-left text-xs font-medium transition-colors flex items-center justify-between hover:bg-emerald-50 hover:text-emerald-900",
-                    selectedLedger === lName ? "bg-amber-100/80 font-bold text-amber-900" : "text-slate-700"
+                    "w-full px-3.5 py-2 text-left text-xs font-medium transition-colors flex items-center justify-between hover:bg-emerald-50 hover:text-emerald-900 cursor-pointer",
+                    selectedAccountId === acc.accountId ? "bg-amber-100/80 font-bold text-amber-900" : "text-slate-700"
                   )}
                 >
-                  <span>{lName}</span>
-                  {selectedLedger === lName && <span className="text-[10px] uppercase font-bold text-amber-800">Selected</span>}
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-emerald-700">{acc.accountCode}</span>
+                    <span>{acc.accountName}</span>
+                    <span className="text-[10px] text-slate-400 font-normal">({acc.group})</span>
+                  </div>
+                  {selectedAccountId === acc.accountId && (
+                    <span className="text-[10px] uppercase font-bold text-amber-800">Selected</span>
+                  )}
                 </button>
               ))
             )}
@@ -663,6 +786,130 @@ export function GeneralLedgerView() {
         </div>
       </Modal>
 
+      {/* Read-Only Voucher Detail Modal (Drill-Down) */}
+      <Modal
+        open={Boolean(selectedVoucherForModal)}
+        onClose={() => setSelectedVoucherForModal(null)}
+        title={`Voucher Inquiry: ${selectedVoucherForModal?.vouchNo || ""}`}
+      >
+        {selectedVoucherForModal && (
+          <div className="space-y-4 p-1">
+            {/* Read-Only Notice */}
+            <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 border border-slate-200">
+              <Eye className="h-4 w-4 text-emerald-700" />
+              <span>General Ledger Inquiry (Strictly Read-Only Transaction Breakdown)</span>
+            </div>
+
+            {/* Voucher Meta Details */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-200 text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Voucher Number</span>
+                <span className="font-bold text-slate-900">{selectedVoucherForModal.vouchNo}</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Voucher Date</span>
+                <span className="font-semibold text-slate-800">{selectedVoucherForModal.vouchDt}</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Voucher Type</span>
+                <span
+                  className={cn(
+                    "inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wider mt-0.5",
+                    getTrnTypeBadgeClass(selectedVoucherForModal.trnType)
+                  )}
+                >
+                  {selectedVoucherForModal.trnType}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Source Module</span>
+                <span className="font-semibold text-emerald-800">{selectedVoucherForModal.sourceModule}</span>
+              </div>
+            </div>
+
+            {/* PMS Dimensions (Party & Division) */}
+            <div className="grid grid-cols-2 gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-200 text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Party</span>
+                <span className="font-bold text-slate-900">{resolvePartyName(selectedVoucherForModal.partyId)}</span>
+                {selectedVoucherForModal.partyId && (
+                  <span className="text-[10px] text-slate-400 font-mono block">ID: {selectedVoucherForModal.partyId}</span>
+                )}
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Division / Cost Center</span>
+                <span className="font-bold text-slate-900">{resolveDivisionName(selectedVoucherForModal.divisionId)}</span>
+                {selectedVoucherForModal.divisionId && (
+                  <span className="text-[10px] text-slate-400 font-mono block">ID: {selectedVoucherForModal.divisionId}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Narration */}
+            <div className="rounded-xl border border-slate-200 p-3 bg-white space-y-1 text-xs">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Particulars / Narration</span>
+              <p className="font-medium text-slate-800">{selectedVoucherForModal.particulars}</p>
+            </div>
+
+            {/* Accounting Distribution Breakdown Table */}
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] border-b border-slate-200">
+                    <th className="px-3 py-2">Side</th>
+                    <th className="px-3 py-2">Account</th>
+                    <th className="px-3 py-2 text-right">Debit (₹)</th>
+                    <th className="px-3 py-2 text-right">Credit (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {selectedVoucherForModal.drAccounts.map((dr, idx) => (
+                    <tr key={`dr-${idx}`}>
+                      <td className="px-3 py-2 font-bold text-blue-700">Dr</td>
+                      <td className="px-3 py-2 font-medium text-slate-900">
+                        <span className="font-mono text-slate-500 mr-1.5">{dr.accountCode}</span>
+                        {dr.accountName}
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatINR(dr.amount)}</td>
+                      <td className="px-3 py-2 text-right text-slate-400">-</td>
+                    </tr>
+                  ))}
+                  {selectedVoucherForModal.crAccounts.map((cr, idx) => (
+                    <tr key={`cr-${idx}`}>
+                      <td className="px-3 py-2 font-bold text-rose-700">Cr</td>
+                      <td className="px-3 py-2 font-medium text-slate-900">
+                        <span className="font-mono text-slate-500 mr-1.5">{cr.accountCode}</span>
+                        {cr.accountName}
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-400">-</td>
+                      <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatINR(cr.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Audit Stamp */}
+            <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+              <span>Created By: <strong>{selectedVoucherForModal.createdBy}</strong></span>
+              <span>Timestamp: <strong>{selectedVoucherForModal.createdDate}</strong></span>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedVoucherForModal(null)}
+                className="text-xs font-semibold"
+              >
+                Close Inquiry
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Main General Ledger Table Card */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
         {/* Table Search Toolbar */}
@@ -676,7 +923,7 @@ export function GeneralLedgerView() {
                 General Ledger Transactions
               </h2>
               <p className="text-[11px] text-slate-500 font-medium">
-                Double click or tap any voucher row to view details.
+                Double click or tap any voucher row to view accounting distribution.
               </p>
             </div>
           </div>
@@ -688,13 +935,13 @@ export function GeneralLedgerView() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search voucher # or particulars..."
+                placeholder="Search voucher #, particulars, party..."
                 className="h-8 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-7 text-xs text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -702,65 +949,77 @@ export function GeneralLedgerView() {
             </div>
 
             <span className="rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600 border border-slate-200 shrink-0">
-              {filteredData.length} records
+              {operationalVoucherCount} operational vouchers
             </span>
           </div>
         </div>
 
-        {/* Desktop Table Layout (hidden md:block) */}
+        {/* Desktop Table Layout */}
         <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full text-left text-xs">
-            {/* Table Multi-Header */}
+            {/* Table Header */}
             <thead>
               <tr className="bg-slate-100/90 text-slate-700 border-b border-slate-200 font-bold uppercase text-[11px] tracking-wider">
-                <th className="px-3.5 py-2.5 border-r border-slate-200 w-28">Vouch Dt</th>
-                <th className="px-3.5 py-2.5 border-r border-slate-200 w-32">Vouch No</th>
-                <th className="px-4 py-2.5 border-r border-slate-200 min-w-[220px]">Particulars</th>
-                <th className="px-3.5 py-2.5 border-r border-slate-200 w-28 text-center">Trn Type</th>
-                <th className="px-3.5 py-2.5 border-r border-slate-200 text-right w-32">DR_Amt (₹)</th>
-                <th className="px-3.5 py-2.5 border-r border-slate-200 text-right w-32">CR_Amt (₹)</th>
+                <th className="px-3 py-2.5 border-r border-slate-200 w-24">Vouch Dt</th>
+                <th className="px-3 py-2.5 border-r border-slate-200 w-32">Vouch No</th>
+                <th className="px-3.5 py-2.5 border-r border-slate-200 min-w-[200px]">Particulars</th>
+                <th className="px-3 py-2.5 border-r border-slate-200 w-36">Party</th>
+                <th className="px-3 py-2.5 border-r border-slate-200 w-28">Division</th>
+                <th className="px-2.5 py-2.5 border-r border-slate-200 w-24 text-center">Type</th>
+                <th className="px-3 py-2.5 border-r border-slate-200 text-right w-28">DR Amount (₹)</th>
+                <th className="px-3 py-2.5 border-r border-slate-200 text-right w-28">CR Amount (₹)</th>
                 {cummulativeBalance && (
-                  <th className="px-3.5 py-2.5 text-right w-36">Running Bal (₹)</th>
+                  <th className="px-3 py-2.5 text-right w-32">Running Bal (₹)</th>
                 )}
               </tr>
             </thead>
 
             {/* Table Rows */}
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredData.map((row) => (
+              {rowsWithRunningBalance.map((row) => (
                 <tr
                   key={row.id}
-                  className="hover:bg-emerald-50/40 transition-colors cursor-pointer"
-                  onDoubleClick={() => alert(`Viewing voucher details for ${row.vouchNo}`)}
+                  className={cn(
+                    "hover:bg-emerald-50/40 transition-colors cursor-pointer",
+                    row.isOpeningBalance && "bg-amber-50/40 font-semibold"
+                  )}
+                  onDoubleClick={() => setSelectedVoucherForModal(row)}
+                  onClick={() => setSelectedVoucherForModal(row)}
                 >
-                  <td className="px-3.5 py-2.5 border-r border-slate-100 text-slate-600 font-medium">
+                  <td className="px-3 py-2.5 border-r border-slate-100 text-slate-600 font-medium">
                     {row.vouchDt}
                   </td>
-                  <td className="px-3.5 py-2.5 border-r border-slate-100 font-bold text-slate-800">
+                  <td className="px-3 py-2.5 border-r border-slate-100 font-bold text-slate-800 font-mono">
                     {row.vouchNo}
                   </td>
-                  <td className="px-4 py-2.5 border-r border-slate-100 font-semibold text-slate-900">
+                  <td className="px-3.5 py-2.5 border-r border-slate-100 font-semibold text-slate-900">
                     {row.particulars}
                   </td>
-                  <td className="px-3.5 py-2.5 border-r border-slate-100 text-center">
+                  <td className="px-3 py-2.5 border-r border-slate-100 text-slate-700 truncate max-w-[150px]">
+                    {resolvePartyName(row.partyId)}
+                  </td>
+                  <td className="px-3 py-2.5 border-r border-slate-100 text-slate-600 font-medium">
+                    {resolveDivisionName(row.divisionId)}
+                  </td>
+                  <td className="px-2.5 py-2.5 border-r border-slate-100 text-center">
                     <span
                       className={cn(
-                        "inline-block px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider",
+                        "inline-block px-1.5 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider",
                         getTrnTypeBadgeClass(row.trnType)
                       )}
                     >
                       {row.trnType}
                     </span>
                   </td>
-                  <td className="px-3.5 py-2.5 border-r border-slate-100 text-right font-semibold text-slate-800">
+                  <td className="px-3 py-2.5 border-r border-slate-100 text-right font-semibold text-slate-800">
                     {row.drAmt > 0 ? formatINR(row.drAmt) : "-"}
                   </td>
-                  <td className="px-3.5 py-2.5 border-r border-slate-100 text-right font-semibold text-slate-800">
+                  <td className="px-3 py-2.5 border-r border-slate-100 text-right font-semibold text-slate-800">
                     {row.crAmt > 0 ? formatINR(row.crAmt) : "-"}
                   </td>
                   {cummulativeBalance && (
-                    <td className="px-3.5 py-2.5 text-right font-bold text-emerald-900 bg-slate-50/50">
-                      {formatINR(row.runningBalance)} {row.balanceType}
+                    <td className="px-3 py-2.5 text-right font-bold text-emerald-900 bg-slate-50/50">
+                      {formatINR(row.computedRunningBal)} {row.computedBalType}
                     </td>
                   )}
                 </tr>
@@ -770,18 +1029,18 @@ export function GeneralLedgerView() {
             {/* Table Footer Totals */}
             <tfoot>
               <tr className="bg-slate-100/90 font-black text-xs border-t-2 border-slate-300 text-slate-900 uppercase">
-                <td colSpan={4} className="px-4 py-2.5 text-right border-r border-slate-200">
+                <td colSpan={6} className="px-4 py-2.5 text-right border-r border-slate-200">
                   TOTAL GENERAL LEDGER POSTINGS:
                 </td>
-                <td className="px-3.5 py-2.5 text-right border-r border-slate-200 text-slate-900">
+                <td className="px-3 py-2.5 text-right border-r border-slate-200 text-slate-900">
                   {formatINR(totals.totalDr)}
                 </td>
-                <td className="px-3.5 py-2.5 text-right border-r border-slate-200 text-slate-900">
+                <td className="px-3 py-2.5 text-right border-r border-slate-200 text-slate-900">
                   {formatINR(totals.totalCr)}
                 </td>
                 {cummulativeBalance && (
-                  <td className="px-3.5 py-2.5 text-right text-emerald-950 font-black bg-emerald-100/70">
-                    {formatINR(Math.abs(closingBalance))} {closingBalance >= 0 ? "Dr" : "Cr"}
+                  <td className="px-3 py-2.5 text-right text-emerald-950 font-black bg-emerald-100/70">
+                    {formatINR(Math.abs(netDiff))} {closingBalanceType}
                   </td>
                 )}
               </tr>
@@ -789,15 +1048,16 @@ export function GeneralLedgerView() {
           </table>
         </div>
 
-        {/* Mobile Stacked Card View (md:hidden) */}
+        {/* Mobile Stacked Card View */}
         <div className="md:hidden space-y-3">
-          {filteredData.map((row) => (
+          {rowsWithRunningBalance.map((row) => (
             <div
               key={row.id}
-              className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2"
+              onClick={() => setSelectedVoucherForModal(row)}
+              className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2 cursor-pointer hover:border-emerald-300 transition-colors"
             >
               <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-slate-900">{row.vouchNo}</span>
+                <span className="font-bold text-xs text-slate-900 font-mono">{row.vouchNo}</span>
                 <span
                   className={cn(
                     "px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider",
@@ -809,6 +1069,17 @@ export function GeneralLedgerView() {
               </div>
 
               <p className="text-xs font-semibold text-slate-800">{row.particulars}</p>
+
+              <div className="grid grid-cols-2 gap-1.5 text-[11px] text-slate-600 pt-1">
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Party</span>
+                  <span className="font-medium truncate">{resolvePartyName(row.partyId)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Division</span>
+                  <span className="font-medium">{resolveDivisionName(row.divisionId)}</span>
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-100 pt-2 text-slate-600">
                 <div>
@@ -826,7 +1097,7 @@ export function GeneralLedgerView() {
               {cummulativeBalance && (
                 <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-xs font-bold text-emerald-900 bg-emerald-50/50 -mx-3.5 -mb-3.5 p-2.5 rounded-b-xl">
                   <span className="text-[11px] uppercase tracking-wider text-slate-600 font-semibold">Running Balance:</span>
-                  <span>{formatINR(row.runningBalance)} {row.balanceType}</span>
+                  <span>{formatINR(row.computedRunningBal)} {row.computedBalType}</span>
                 </div>
               )}
             </div>

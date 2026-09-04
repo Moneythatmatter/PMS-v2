@@ -1,6 +1,6 @@
+import { redirect } from "next/navigation";
 import { SalesMarketingBlankView } from "@/components/sales-marketing/SalesMarketingBlankView";
 import { SalesMarketingDashboardView } from "@/components/sales-marketing/SalesMarketingDashboardView";
-import { WorkqueueView } from "@/components/sales-marketing/WorkqueueView";
 import { LeadsInquiriesView } from "@/components/sales-marketing/LeadsInquiriesView";
 import { CorporateClientsView } from "@/components/sales-marketing/CorporateClientsView";
 import { EventBookingsView } from "@/components/sales-marketing/EventBookingsView";
@@ -29,8 +29,9 @@ export default async function SalesMarketingPage({
     return <SalesMarketingDashboardView />;
   }
 
+  // Legacy / Orphan Route Protection: Redirect workqueue to active Activities page
   if (slugPath === "workqueue" || slugPath === "my-tasks") {
-    return <WorkqueueView />;
+    redirect("/sales-marketing/crm/activities-calls");
   }
 
   if (slugPath === "marketing/campaigns" || slugPath === "campaigns") {
@@ -77,7 +78,11 @@ export default async function SalesMarketingPage({
     return <PromosDiscountsView />;
   }
 
-  if (slugPath === "settings/loyalty-rules" || slugPath === "loyalty-rules") {
+  if (
+    slugPath === "settings" ||
+    slugPath === "settings/loyalty-rules" ||
+    slugPath === "loyalty-rules"
+  ) {
     return <LoyaltyPointsSettingsView />;
   }
 
@@ -91,22 +96,19 @@ export default async function SalesMarketingPage({
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 8 MASTERS ROUTES
+  // 7 APPROVED PMS V1 MASTERS ROUTES
   // ─────────────────────────────────────────────────────────────
-  if (slugPath === "masters" || slugPath === "masters/crm-masters") {
-    return <SalesMarketingMastersView initialTab="venues-halls" />;
-  }
-
-  if (slugPath === "masters/venues-spaces" || slugPath === "masters/venues-halls" || slugPath === "masters/venue-hall-master") {
+  if (
+    slugPath === "masters" ||
+    slugPath === "masters/venues-spaces" ||
+    slugPath === "masters/venues-halls" ||
+    slugPath === "masters/venue-hall-master"
+  ) {
     return <SalesMarketingMastersView initialTab="venues-halls" />;
   }
 
   if (slugPath === "masters/rates-commissions" || slugPath === "masters/tariff-commission-rules") {
     return <SalesMarketingMastersView initialTab="rates-commissions" />;
-  }
-
-  if (slugPath === "masters/targets-incentives" || slugPath === "masters/sales-targets-incentives") {
-    return <SalesMarketingMastersView initialTab="targets-incentives" />;
   }
 
   if (slugPath === "masters/lead-sources") {

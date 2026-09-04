@@ -788,16 +788,16 @@ export function ReprintVoucherView() {
               {/* Hotel Header Block */}
               <div className="text-center space-y-1 border-b border-slate-300 pb-3">
                 <h1 className="text-lg font-bold tracking-wide text-slate-900 font-sans">
-                  Luxy hotel
+                  Hotel & Resorts Private Limited
                 </h1>
                 <p className="text-[11px] text-slate-600 leading-tight">
-                  Luxy Hotel GACL Chowkdi, Dahej Bharuch Main Road, Dahej, Dist Bharuch. Gujarat Gujarat 392130
+                  GACL Chowkdi, Dahej Bharuch Main Road, Dahej, Dist Bharuch. Gujarat 392130
                 </p>
                 <p className="text-[11px] text-slate-600">
-                  Phone: 7069990770
+                  Phone: +91 7069990770
                 </p>
                 <p className="text-[11px] text-slate-600">
-                  E-Mail: gm@hotelluxy.com Web: www.hotelluxy.com
+                  E-Mail: accounts@hotelresorts.com Web: www.hotelresorts.com
                 </p>
                 <p className="text-[11px] font-bold text-slate-800">
                   GSTIN: 24AAIFL8217G1ZC State: GUJARAT
