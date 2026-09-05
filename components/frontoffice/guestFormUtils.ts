@@ -58,6 +58,21 @@ export function guestMatchesQuery(guest: GuestProfile, query: string): boolean {
   return haystack.includes(q);
 }
 
+export function guestProfileToCheckInDetails(guest: GuestProfile) {
+  return {
+    gender: guest.gender || "",
+    dob: guest.dob || "",
+    nationality: guest.nationality || "",
+    address: guest.address || "",
+    city: guest.city || "",
+    state: guest.state || "",
+    country: guest.country || "",
+    pincode: guest.pincode || "",
+    idProofType: guest.idType || "",
+    idNumber: guest.idNumber || "",
+  };
+}
+
 export function guestToFormFields(guest: GuestProfile) {
   const { firstName, lastName } = splitGuestName(guest.name);
   return {
@@ -78,6 +93,5 @@ export function guestToFormFields(guest: GuestProfile) {
     pincode: guest.pincode || "",
     preferences: guest.preferences || [],
     loyaltyPoints: guest.loyaltyPoints || 0,
-    totalStays: guest.totalStays || 0,
   };
 }

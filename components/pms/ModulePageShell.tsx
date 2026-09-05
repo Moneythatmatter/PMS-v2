@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 interface ModulePageShellProps {
   toast?: string | null;
+  toastVariant?: "success" | "error";
   onDismissToast?: () => void;
   eyebrow?: string;
   title: string;
@@ -60,6 +61,7 @@ interface ModulePageShellProps {
 
 export function ModulePageShell({
   toast,
+  toastVariant = "success",
   onDismissToast,
   eyebrow = "Front Office",
   title,
@@ -119,7 +121,23 @@ export function ModulePageShell({
   return (
     <div className="space-y-5">
       {toast && onDismissToast && (
-        <AlertBanner variant="success" message={toast} onDismiss={onDismissToast} />
+        <div className="fixed top-5 right-5 z-[70] max-w-md w-[calc(100vw-2.5rem)] sm:w-auto shadow-xl animate-in fade-in slide-in-from-top-3">
+          <AlertBanner
+            variant={
+              toastVariant === "error" ||
+              (toast &&
+                (toast.toLowerCase().includes("please") ||
+                  toast.toLowerCase().includes("cannot") ||
+                  toast.toLowerCase().includes("failed") ||
+                  toast.toLowerCase().includes("error") ||
+                  toast.toLowerCase().includes("invalid")))
+                ? "error"
+                : toastVariant
+            }
+            message={toast}
+            onDismiss={onDismissToast}
+          />
+        </div>
       )}
 
       <FOPageHeader

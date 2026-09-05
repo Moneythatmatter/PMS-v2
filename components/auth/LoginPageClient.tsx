@@ -10,7 +10,7 @@ export function LoginPageClient() {
   const { login } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get("next") || "/dashboard";
+  const nextPath = searchParams.get("next") || "/properties";
 
   const [email, setEmail] = useState("admin@gmail.com");
   const [password, setPassword] = useState("123456");
@@ -24,7 +24,7 @@ export function LoginPageClient() {
     setBusy(true);
     try {
       await login(email, password);
-      router.replace(nextPath.startsWith("/") ? nextPath : "/dashboard");
+      router.replace(nextPath.startsWith("/") ? nextPath : "/properties");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {

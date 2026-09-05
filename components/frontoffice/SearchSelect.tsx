@@ -19,6 +19,9 @@ interface SearchSelectProps {
   inputClassName?: string;
   /** Allow committing typed text that is not in the options list. */
   allowCustom?: boolean;
+  /** When a selection exists, lock the input (clear via X only). */
+  lockInputWhenSelected?: boolean;
+  disabled?: boolean;
 }
 
 export function SearchSelect({
@@ -30,6 +33,8 @@ export function SearchSelect({
   className,
   inputClassName,
   allowCustom = false,
+  lockInputWhenSelected = false,
+  disabled = false,
 }: SearchSelectProps) {
   const searchOptions: SearchOption[] = useMemo(
     () =>
@@ -54,6 +59,8 @@ export function SearchSelect({
       className={className}
       inputClassName={inputClassName}
       allowCustom={allowCustom}
+      lockInputWhenSelected={lockInputWhenSelected}
+      disabled={disabled}
     />
   );
 }

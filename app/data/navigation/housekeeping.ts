@@ -7,8 +7,8 @@ export const housekeepingNavItems: ModuleNavItem[] = [
     href: "/housekeeping/operations",
     icon: "sparkles",
     children: [
-      { label: "Cleaning Tasks", href: "/housekeeping/operations/room-cleaning", icon: "sparkles" },
       { label: "Room Status", href: "/housekeeping/operations/rooms", icon: "bed" },
+      { label: "Cleaning Tasks", href: "/housekeeping/operations/room-cleaning", icon: "sparkles" },
       { label: "Public Area", href: "/housekeeping/operations/public-cleaning", icon: "trees" },
       { label: "Cleaning Inspection", href: "/housekeeping/operations/inspection", icon: "user-check" },
       { label: "Guest Requests", href: "/housekeeping/housekeeping-requests", icon: "bell" },

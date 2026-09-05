@@ -11,7 +11,6 @@ import {
   Pencil,
   Percent,
   Phone,
-  PieChart,
   Plus,
   RotateCcw,
   Tag,
@@ -21,7 +20,6 @@ import {
 import type {
   BookingSourceMaster,
   CompanyMaster,
-  MarketSegmentMaster,
   TariffPlanMaster,
   RoomTypeMaster,
 } from "@/app/data/frontoffice/masters";
@@ -29,7 +27,6 @@ import { mealPlans, roomTypes } from "@/app/data/frontoffice/constants";
 import {
   bookingSourceService,
   companyService,
-  marketSegmentService,
   tariffPlanService,
   roomTypeService,
 } from "@/services/front-office";
@@ -111,6 +108,98 @@ function MasterTable({
   );
 }
 
+type StatusMasterRow = { id: string; status: string; name: string };
+
+function masterActionsColumn<T extends StatusMasterRow>(
+  onEdit: (row: T) => void,
+  onDeactivate: (row: T) => void,
+  onReactivate: (row: T) => void,
+) {
+  return {
+    key: "actions",
+    header: "Actions",
+    render: (r: T) => (
+      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          title="Edit"
+          className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-emerald-700"
+          onClick={() => onEdit(r)}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        {r.status === "Active" ? (
+          <button
+            type="button"
+            title="Deactivate (soft delete)"
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600"
+            onClick={() => onDeactivate(r)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            title="Reactivate"
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700"
+            onClick={() => onReactivate(r)}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+    ),
+  };
+}
+
+function MasterPreviewActionsFooter<T extends StatusMasterRow>({
+  row,
+  onClose,
+  onEdit,
+  onDeactivate,
+  onReactivate,
+  saving,
+}: {
+  row: T;
+  onClose: () => void;
+  onEdit: (row: T) => void;
+  onDeactivate: (row: T) => void;
+  onReactivate: (row: T) => void;
+  saving?: boolean;
+}) {
+  return (
+    <div className="flex w-full flex-wrap gap-2">
+      <Button variant="outline" onClick={onClose}>
+        Close
+      </Button>
+      <Button variant="outline" className="gap-1.5" onClick={() => onEdit(row)}>
+        <Pencil className="h-3.5 w-3.5" />
+        Edit
+      </Button>
+      {row.status === "Active" ? (
+        <Button
+          variant="outline"
+          className="gap-1.5 text-red-600 hover:bg-red-50"
+          onClick={() => onDeactivate(row)}
+          disabled={saving}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Deactivate
+        </Button>
+      ) : (
+        <Button
+          className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
+          onClick={() => onReactivate(row)}
+          disabled={saving}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Reactivate
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function RoomTypesView() {
   const [items, setItems] = useState<RoomTypeMaster[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,15 +207,17 @@ export function RoomTypesView() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<RoomTypeMaster | null>(null);
   const [preview, setPreview] = useState<RoomTypeMaster | null>(null);
+  const [softDeleteTarget, setSoftDeleteTarget] = useState<RoomTypeMaster | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const [saving, setSaving] = useState(false);
 
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [baseRate, setBaseRate] = useState("");
-  const [totalRooms, setTotalRooms] = useState("1");
-  const [maxOccupancy, setMaxOccupancy] = useState("2");
 
   useEffect(() => {
     let cancelled = false;
@@ -169,48 +260,103 @@ export function RoomTypesView() {
     () => ({
       total: items.length,
       active: items.filter((r) => r.status === "Active").length,
-      rooms: items.reduce((s, r) => s + r.totalRooms, 0),
-      avgRate: Math.round(
-        items.reduce((s, r) => s + r.baseRate, 0) / items.length,
-      ),
+      avgRate:
+        items.length > 0
+          ? Math.round(items.reduce((s, r) => s + r.baseRate, 0) / items.length)
+          : 0,
     }),
     [items],
   );
 
   const resetForm = () => {
+    setEditing(null);
     setCode("");
     setName("");
     setDescription("");
     setBaseRate("");
-    setTotalRooms("1");
-    setMaxOccupancy("2");
+  };
+
+  const showToast = (message: string, variant: "success" | "error" = "success") => {
+    setToastVariant(variant);
+    setToast(message);
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setFormOpen(true);
+  };
+
+  const openEdit = (row: RoomTypeMaster) => {
+    setEditing(row);
+    setCode(row.code);
+    setName(row.name);
+    setDescription(row.description);
+    setBaseRate(String(row.baseRate));
+    setPreview(null);
+    setFormOpen(true);
   };
 
   const handleSave = async () => {
     if (!code.trim() || !name.trim() || !baseRate) {
-      setToast("Please fill code, name, and base rate.");
+      showToast("Please fill code, name, and base rate.", "error");
       return;
     }
+    setSaving(true);
     try {
-      const record = await roomTypeService.create({
+      const payload = {
         code: code.toUpperCase(),
         name,
         description: description || `${name} room category`,
         baseRate: parseFloat(baseRate),
-        maxOccupancy: parseInt(maxOccupancy, 10) || 2,
-        maxAdults: parseInt(maxOccupancy, 10) || 2,
-        maxChildren: 1,
-        totalRooms: parseInt(totalRooms, 10) || 1,
-        sizeSqFt: 250,
-        amenities: ["Wi-Fi", "AC", "TV"],
-        status: "Active",
-      });
-      setItems((prev) => [record, ...prev]);
+        sizeSqFt: editing?.sizeSqFt ?? 250,
+        amenities: editing?.amenities ?? ["Wi-Fi", "AC", "TV"],
+        status: editing?.status ?? "Active",
+      };
+      if (editing) {
+        const record = await roomTypeService.update(editing.id, payload);
+        setItems((prev) => prev.map((r) => (r.id === editing.id ? record : r)));
+        showToast(`Room type "${name}" updated.`);
+      } else {
+        const record = await roomTypeService.create({ ...payload, status: "Active" });
+        setItems((prev) => [record, ...prev]);
+        showToast(`Room type "${name}" added successfully.`);
+      }
       setFormOpen(false);
       resetForm();
-      setToast(`Room type "${name}" added successfully.`);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Failed to save");
+      showToast(e instanceof Error ? e.message : "Failed to save", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSoftDelete = async () => {
+    if (!softDeleteTarget) return;
+    setSaving(true);
+    try {
+      const record = await roomTypeService.update(softDeleteTarget.id, { status: "Inactive" });
+      setItems((prev) => prev.map((r) => (r.id === softDeleteTarget.id ? record : r)));
+      setSoftDeleteTarget(null);
+      setPreview(null);
+      showToast(`"${softDeleteTarget.name}" deactivated.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to deactivate", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReactivate = async (row: RoomTypeMaster) => {
+    setSaving(true);
+    try {
+      const record = await roomTypeService.update(row.id, { status: "Active" });
+      setItems((prev) => prev.map((r) => (r.id === row.id ? record : r)));
+      setPreview(null);
+      showToast(`"${row.name}" reactivated.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to reactivate", "error");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -221,21 +367,18 @@ export function RoomTypesView() {
     <>
     <ModulePageShell
       toast={toast}
+      toastVariant={toastVariant}
       onDismissToast={() => setToast(null)}
       eyebrow="Front Office · Masters"
       title="Room Types"
-      description="Manage room categories, occupancy limits, and base rates."
+      description="Manage room categories and base rates."
       primaryAction={{
         label: "Add Room Type",
-        onClick: () => {
-          resetForm();
-          setFormOpen(true);
-        },
+        onClick: openCreate,
       }}
       stats={[
         { label: "Room Types", value: stats.total, icon: BedDouble },
         { label: "Active", value: stats.active, accent: "#10b981", icon: CheckCircle2 },
-        { label: "Total Rooms", value: stats.rooms, icon: Users },
         { label: "Avg. Base Rate", value: formatINR(stats.avgRate), accent: "#15803d", icon: IndianRupee },
       ]}
       search={search}
@@ -278,34 +421,30 @@ export function RoomTypesView() {
                 render: (r: RoomTypeMaster) => formatINR(r.baseRate),
               },
               {
-                key: "rooms",
-                header: "Rooms",
-                render: (r: RoomTypeMaster) => r.totalRooms,
-              },
-              {
-                key: "occ",
-                header: "Max Occ.",
-                render: (r: RoomTypeMaster) => r.maxOccupancy,
-              },
-              {
                 key: "status",
                 header: "Status",
                 render: (r: RoomTypeMaster) => <StatusBadge status={r.status} />,
               },
+              masterActionsColumn(openEdit, setSoftDeleteTarget, handleReactivate),
             ]}
           />
     </ModulePageShell>
 
       <Drawer
         open={formOpen}
-        onClose={() => setFormOpen(false)}
-        title="Add Room Type"
-        description="Create a new room category."
+        onClose={() => {
+          setFormOpen(false);
+          resetForm();
+        }}
+        title={editing ? "Edit Room Type" : "Add Room Type"}
+        description={editing ? "Update this room category." : "Create a new room category."}
         width="md"
         footer={
           <>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave}>Save</Button>
+            <Button variant="outline" onClick={() => { setFormOpen(false); resetForm(); }}>Cancel</Button>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : editing ? "Update" : "Save"}
+            </Button>
           </>
         }
       >
@@ -321,14 +460,6 @@ export function RoomTypesView() {
           <FormField label="Base Rate (₹)" required>
             <TextInput type="number" value={baseRate} onChange={(e) => setBaseRate(e.target.value)} />
           </FormField>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Total Rooms">
-              <TextInput type="number" value={totalRooms} onChange={(e) => setTotalRooms(e.target.value)} />
-            </FormField>
-            <FormField label="Max Occupancy">
-              <TextInput type="number" value={maxOccupancy} onChange={(e) => setMaxOccupancy(e.target.value)} />
-            </FormField>
-          </div>
           <FormField label="Description">
             <TextAreaInput value={description} onChange={(e) => setDescription(e.target.value)} />
           </FormField>
@@ -341,7 +472,18 @@ export function RoomTypesView() {
         title={preview?.name ?? ""}
         description={preview ? `${preview.code} · ${preview.sizeSqFt} sq ft` : undefined}
         width="md"
-        footer={<Button variant="outline" onClick={() => setPreview(null)}>Close</Button>}
+        footer={
+          preview ? (
+            <MasterPreviewActionsFooter
+              row={preview}
+              onClose={() => setPreview(null)}
+              onEdit={openEdit}
+              onDeactivate={setSoftDeleteTarget}
+              onReactivate={handleReactivate}
+              saving={saving}
+            />
+          ) : undefined
+        }
       >
         {preview && (
           <div className="space-y-5">
@@ -357,10 +499,6 @@ export function RoomTypesView() {
             <p className="text-sm text-slate-600">{preview.description}</p>
             <dl className="grid grid-cols-2 gap-3 text-sm">
               {[
-                ["Total Rooms", preview.totalRooms],
-                ["Max Occupancy", preview.maxOccupancy],
-                ["Max Adults", preview.maxAdults],
-                ["Max Children", preview.maxChildren],
                 ["Size", `${preview.sizeSqFt} sq ft`],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg border border-slate-100 p-3">
@@ -382,6 +520,21 @@ export function RoomTypesView() {
           </div>
         )}
       </Drawer>
+
+      <ConfirmModal
+        open={!!softDeleteTarget}
+        onClose={() => setSoftDeleteTarget(null)}
+        onConfirm={handleSoftDelete}
+        title="Deactivate room type?"
+        message={
+          softDeleteTarget
+            ? `"${softDeleteTarget.name}" will be marked Inactive and hidden from active pickers (soft delete).`
+            : ""
+        }
+        confirmLabel="Deactivate"
+        variant="danger"
+        loading={saving}
+      />
     </>
   );
 }
@@ -393,8 +546,12 @@ export function TariffPlansView() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<TariffPlanMaster | null>(null);
   const [preview, setPreview] = useState<TariffPlanMaster | null>(null);
+  const [softDeleteTarget, setSoftDeleteTarget] = useState<TariffPlanMaster | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const [saving, setSaving] = useState(false);
 
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -453,6 +610,7 @@ export function TariffPlansView() {
   );
 
   const resetForm = () => {
+    setEditing(null);
     setCode("");
     setName("");
     setRoomType("All Types");
@@ -461,32 +619,94 @@ export function TariffPlansView() {
     setMinNights("1");
   };
 
+  const showToast = (message: string, variant: "success" | "error" = "success") => {
+    setToastVariant(variant);
+    setToast(message);
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setFormOpen(true);
+  };
+
+  const openEdit = (row: TariffPlanMaster) => {
+    setEditing(row);
+    setCode(row.code);
+    setName(row.name);
+    setRoomType(row.roomType);
+    setBaseRate(String(row.baseRate));
+    setMealPlan(row.mealPlan);
+    setMinNights(String(row.minNights));
+    setPreview(null);
+    setFormOpen(true);
+  };
+
   const handleSave = async () => {
     if (!code.trim() || !name.trim() || !baseRate) {
-      setToast("Please fill code, name, and base rate.");
+      showToast("Please fill code, name, and base rate.", "error");
       return;
     }
+    setSaving(true);
     try {
       const rate = parseFloat(baseRate);
-      const record = await tariffPlanService.create({
+      const payload = {
         code: code.toUpperCase(),
         name,
         roomType,
         baseRate: rate,
-        weekendRate: Math.round(rate * 1.2),
+        weekendRate: editing?.weekendRate ?? Math.round(rate * 1.2),
         mealPlan,
-        cancellationPolicy: "Standard cancellation policy applies",
+        cancellationPolicy: editing?.cancellationPolicy ?? "Standard cancellation policy applies",
         minNights: parseInt(minNights, 10) || 1,
-        validFrom: "2026-01-01",
-        validTo: "2026-12-31",
-        status: "Active",
-      });
-      setItems((prev) => [record, ...prev]);
+        validFrom: editing?.validFrom ?? "2026-01-01",
+        validTo: editing?.validTo ?? "2026-12-31",
+        status: editing?.status ?? "Active",
+      };
+      if (editing) {
+        const record = await tariffPlanService.update(editing.id, payload);
+        setItems((prev) => prev.map((r) => (r.id === editing.id ? record : r)));
+        showToast(`Tariff plan "${name}" updated.`);
+      } else {
+        const record = await tariffPlanService.create({ ...payload, status: "Active" });
+        setItems((prev) => [record, ...prev]);
+        showToast(`Tariff plan "${name}" added successfully.`);
+      }
       setFormOpen(false);
       resetForm();
-      setToast(`Tariff plan "${name}" added successfully.`);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Failed to save");
+      showToast(e instanceof Error ? e.message : "Failed to save", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSoftDelete = async () => {
+    if (!softDeleteTarget) return;
+    setSaving(true);
+    try {
+      const record = await tariffPlanService.update(softDeleteTarget.id, { status: "Inactive" });
+      setItems((prev) => prev.map((r) => (r.id === softDeleteTarget.id ? record : r)));
+      setSoftDeleteTarget(null);
+      setPreview(null);
+      showToast(`"${softDeleteTarget.name}" deactivated.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to deactivate", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReactivate = async (row: TariffPlanMaster) => {
+    setSaving(true);
+    try {
+      const record = await tariffPlanService.update(row.id, { status: "Active" });
+      setItems((prev) => prev.map((r) => (r.id === row.id ? record : r)));
+      setPreview(null);
+      showToast(`"${row.name}" reactivated.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to reactivate", "error");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -496,7 +716,7 @@ export function TariffPlansView() {
   return (
     <div className="space-y-5">
       {toast && (
-        <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />
+        <AlertBanner variant={toastVariant} message={toast} onDismiss={() => setToast(null)} />
       )}
 
       <FOPageHeader
@@ -504,7 +724,7 @@ export function TariffPlansView() {
         title="Tariff Plans"
         description="Configure nightly tariffs, meal plans, and cancellation policies."
         action={
-          <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800" onClick={() => { resetForm(); setFormOpen(true); }}>
+          <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800" onClick={openCreate}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Add Tariff Plan
           </Button>
@@ -571,20 +791,23 @@ export function TariffPlansView() {
                 header: "Status",
                 render: (r: TariffPlanMaster) => <StatusBadge status={r.status} />,
               },
+              masterActionsColumn(openEdit, setSoftDeleteTarget, handleReactivate),
             ]}
           />
         </div>
 
       <Drawer
         open={formOpen}
-        onClose={() => setFormOpen(false)}
-        title="Add Tariff Plan"
-        description="Create a new tariff plan."
+        onClose={() => { setFormOpen(false); resetForm(); }}
+        title={editing ? "Edit Tariff Plan" : "Add Tariff Plan"}
+        description={editing ? "Update this tariff plan." : "Create a new tariff plan."}
         width="md"
         footer={
           <>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave}>Save</Button>
+            <Button variant="outline" onClick={() => { setFormOpen(false); resetForm(); }}>Cancel</Button>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : editing ? "Update" : "Save"}
+            </Button>
           </>
         }
       >
@@ -629,7 +852,18 @@ export function TariffPlansView() {
         title={preview?.name ?? ""}
         description={preview?.code}
         width="md"
-        footer={<Button variant="outline" onClick={() => setPreview(null)}>Close</Button>}
+        footer={
+          preview ? (
+            <MasterPreviewActionsFooter
+              row={preview}
+              onClose={() => setPreview(null)}
+              onEdit={openEdit}
+              onDeactivate={setSoftDeleteTarget}
+              onReactivate={handleReactivate}
+              saving={saving}
+            />
+          ) : null
+        }
       >
         {preview && (
           <div className="space-y-5">
@@ -665,302 +899,27 @@ export function TariffPlansView() {
           </div>
         )}
       </Drawer>
+
+      <ConfirmModal
+        open={!!softDeleteTarget}
+        onClose={() => setSoftDeleteTarget(null)}
+        onConfirm={handleSoftDelete}
+        title="Deactivate tariff plan?"
+        message={
+          softDeleteTarget
+            ? `"${softDeleteTarget.name}" will be marked Inactive (soft delete).`
+            : ""
+        }
+        confirmLabel="Deactivate"
+        variant="danger"
+        loading={saving}
+      />
     </div>
   );
 }
 
 /** @deprecated Use TariffPlansView */
 export const RatePlansView = TariffPlansView;
-
-export function MarketSegmentsView() {
-  const [items, setItems] = useState<MarketSegmentMaster[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [formOpen, setFormOpen] = useState(false);
-  const [preview, setPreview] = useState<MarketSegmentMaster | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState<MarketSegmentMaster["category"]>("Corporate");
-  const [discount, setDiscount] = useState("0");
-  const [description, setDescription] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        const data = await marketSegmentService.list();
-        if (!cancelled) {
-          setItems(data);
-          setError(null);
-        }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return items.filter((r) => {
-      const matchesCat = categoryFilter === "all" || r.category === categoryFilter;
-      return (
-        matchesCat &&
-        (r.name.toLowerCase().includes(q) ||
-          r.code.toLowerCase().includes(q) ||
-          r.category.toLowerCase().includes(q))
-      );
-    });
-  }, [items, search, categoryFilter]);
-
-  const stats = useMemo(
-    () => ({
-      total: items.length,
-      active: items.filter((r) => r.status === "Active").length,
-      categories: new Set(items.map((r) => r.category)).size,
-    }),
-    [items],
-  );
-
-  const categoryColors: Record<MarketSegmentMaster["category"], string> = {
-    Corporate: "bg-emerald-50 text-emerald-800",
-    Leisure: "bg-emerald-50 text-emerald-700",
-    OTA: "bg-purple-50 text-purple-700",
-    Government: "bg-amber-50 text-amber-700",
-    Group: "bg-pink-50 text-pink-700",
-  };
-
-  const resetForm = () => {
-    setCode("");
-    setName("");
-    setCategory("Corporate");
-    setDiscount("0");
-    setDescription("");
-  };
-
-  const handleSave = async () => {
-    if (!code.trim() || !name.trim()) {
-      setToast("Please fill code and name.");
-      return;
-    }
-    try {
-      const record = await marketSegmentService.create({
-        code: code.toUpperCase(),
-        name,
-        category,
-        discountPercent: parseFloat(discount) || 0,
-        description: description || `${name} market segment`,
-        status: "Active",
-      });
-      setItems((prev) => [record, ...prev]);
-      setFormOpen(false);
-      resetForm();
-      setToast(`Market segment "${name}" added successfully.`);
-    } catch (e) {
-      setToast(e instanceof Error ? e.message : "Failed to save");
-    }
-  };
-
-  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
-
-  return (
-    <div className="space-y-5">
-      {toast && (
-        <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />
-      )}
-
-      <FOPageHeader
-        eyebrow="Front Office · Masters"
-        title="Market Segments"
-        description="Define corporate, leisure, OTA, and group booking segments."
-        action={
-          <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800" onClick={() => { resetForm(); setFormOpen(true); }}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Add Segment
-          </Button>
-        }
-      />
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <StatMiniCard label="Segments" value={stats.total} icon={PieChart} />
-        <StatMiniCard label="Active" value={stats.active} accent="#10b981" icon={CheckCircle2} />
-        <StatMiniCard label="Categories" value={stats.categories} accent="#15803d" icon={Building2} />
-      </div>
-
-      <FOSearchToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search code, name, category…"
-        filterPills={{
-          active: categoryFilter,
-          onChange: setCategoryFilter,
-          options: [
-            { id: "all", label: "All" },
-            { id: "Corporate", label: "Corporate" },
-            { id: "Leisure", label: "Leisure" },
-            { id: "OTA", label: "OTA" },
-            { id: "Government", label: "Government" },
-            { id: "Group", label: "Group" },
-          ],
-        }}
-      />
-
-        <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-          <MasterTable
-            rows={filtered as never[]}
-            onRowClick={(r) => setPreview(r as MarketSegmentMaster)}
-            columns={[
-              {
-                key: "code",
-                header: "Code",
-                render: (r: MarketSegmentMaster) => (
-                  <span className="font-mono text-xs font-semibold text-emerald-700">{r.code}</span>
-                ),
-              },
-              {
-                key: "name",
-                header: "Segment",
-                render: (r: MarketSegmentMaster) => (
-                  <div>
-                    <p className="font-medium text-slate-900">{r.name}</p>
-                    <p className="max-w-xs truncate text-xs text-slate-400">{r.description}</p>
-                  </div>
-                ),
-              },
-              {
-                key: "cat",
-                header: "Category",
-                render: (r: MarketSegmentMaster) => (
-                  <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", categoryColors[r.category])}>
-                    {r.category}
-                  </span>
-                ),
-              },
-              {
-                key: "disc",
-                header: "Discount",
-                render: (r: MarketSegmentMaster) => `${r.discountPercent}%`,
-              },
-              {
-                key: "comm",
-                header: "Commission",
-                render: (r: MarketSegmentMaster) =>
-                  r.commissionPercent != null ? `${r.commissionPercent}%` : "—",
-              },
-              {
-                key: "status",
-                header: "Status",
-                render: (r: MarketSegmentMaster) => <StatusBadge status={r.status} />,
-              },
-            ]}
-          />
-        </div>
-
-      <Drawer
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        title="Add Market Segment"
-        description="Define a new booking source segment."
-        width="md"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave}>Save</Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Code" required>
-              <TextInput placeholder="CORP" value={code} onChange={(e) => setCode(e.target.value)} />
-            </FormField>
-            <FormField label="Name" required>
-              <TextInput placeholder="Corporate" value={name} onChange={(e) => setName(e.target.value)} />
-            </FormField>
-          </div>
-          <FormField label="Category">
-            <SelectInput
-              value={category}
-              onChange={(e) => setCategory(e.target.value as MarketSegmentMaster["category"])}
-            >
-              {(["Corporate", "Leisure", "OTA", "Government", "Group"] as const).map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </SelectInput>
-          </FormField>
-          <FormField label="Discount (%)">
-            <TextInput type="number" min="0" max="100" value={discount} onChange={(e) => setDiscount(e.target.value)} />
-          </FormField>
-          <FormField label="Description">
-            <TextAreaInput value={description} onChange={(e) => setDescription(e.target.value)} />
-          </FormField>
-        </div>
-      </Drawer>
-
-      <Drawer
-        open={!!preview}
-        onClose={() => setPreview(null)}
-        title={preview?.name ?? ""}
-        description={preview?.code}
-        width="md"
-        footer={<Button variant="outline" onClick={() => setPreview(null)}>Close</Button>}
-      >
-        {preview && (
-          <div className="space-y-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-                <PieChart className="h-6 w-6" />
-              </div>
-              <div>
-                <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", categoryColors[preview.category])}>
-                  {preview.category}
-                </span>
-                <p className="mt-1 text-2xl font-bold text-slate-900">{preview.discountPercent}% off</p>
-              </div>
-            </div>
-            <p className="text-sm text-slate-600">{preview.description}</p>
-            <dl className="grid grid-cols-2 gap-3 text-sm">
-              {[
-                { icon: Percent, label: "Discount", value: `${preview.discountPercent}%` },
-                {
-                  icon: Percent,
-                  label: "Commission",
-                  value: preview.commissionPercent != null ? `${preview.commissionPercent}%` : "N/A",
-                },
-                {
-                  icon: Users,
-                  label: "Contact",
-                  value: preview.contactPerson ?? "—",
-                },
-                { icon: Building2, label: "Status", value: preview.status },
-              ].map(({ icon: Icon, label, value }) => (
-                <div key={label} className="flex gap-3 rounded-lg border border-slate-100 p-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
-                    <Icon className="h-3.5 w-3.5" />
-                  </div>
-                  <div>
-                    <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</dt>
-                    <dd className="mt-0.5 font-medium text-slate-900">{value}</dd>
-                  </div>
-                </div>
-              ))}
-            </dl>
-          </div>
-        )}
-      </Drawer>
-    </div>
-  );
-}
 
 export function BookingSourcesView() {
   const [items, setItems] = useState<BookingSourceMaster[]>([]);
@@ -1429,8 +1388,12 @@ export function CompaniesView() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<CompanyMaster | null>(null);
   const [preview, setPreview] = useState<CompanyMaster | null>(null);
+  const [softDeleteTarget, setSoftDeleteTarget] = useState<CompanyMaster | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const [saving, setSaving] = useState(false);
 
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -1501,6 +1464,7 @@ export function CompaniesView() {
   };
 
   const resetForm = () => {
+    setEditing(null);
     setCode("");
     setName("");
     setType("Corporate");
@@ -1514,13 +1478,41 @@ export function CompaniesView() {
     setCreditLimit("0");
   };
 
+  const showToast = (message: string, variant: "success" | "error" = "success") => {
+    setToastVariant(variant);
+    setToast(message);
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setFormOpen(true);
+  };
+
+  const openEdit = (row: CompanyMaster) => {
+    setEditing(row);
+    setCode(row.code);
+    setName(row.name);
+    setType(row.type);
+    setContactPerson(row.contactPerson);
+    setEmail(row.email);
+    setPhone(row.phone);
+    setGstNumber(row.gstNumber ?? "");
+    setAddress(row.address);
+    setCity(row.city);
+    setCorporateDiscount(String(row.corporateDiscount));
+    setCreditLimit(String(row.creditLimit));
+    setPreview(null);
+    setFormOpen(true);
+  };
+
   const handleSave = async () => {
     if (!code.trim() || !name.trim() || !contactPerson.trim() || !email.trim() || !phone.trim()) {
-      setToast("Please fill all required fields.");
+      showToast("Please fill all required fields.", "error");
       return;
     }
+    setSaving(true);
     try {
-      const record = await companyService.create({
+      const payload = {
         code: code.toUpperCase(),
         name,
         type,
@@ -1532,14 +1524,53 @@ export function CompaniesView() {
         city: city || "—",
         corporateDiscount: parseFloat(corporateDiscount) || 0,
         creditLimit: parseFloat(creditLimit) || 0,
-        status: "Active",
-      });
-      setItems((prev) => [record, ...prev]);
+        status: editing?.status ?? "Active",
+      };
+      if (editing) {
+        const record = await companyService.update(editing.id, payload);
+        setItems((prev) => prev.map((r) => (r.id === editing.id ? record : r)));
+        showToast(`Company "${name}" updated.`);
+      } else {
+        const record = await companyService.create({ ...payload, status: "Active" });
+        setItems((prev) => [record, ...prev]);
+        showToast(`Company "${name}" added successfully.`);
+      }
       setFormOpen(false);
       resetForm();
-      setToast(`Company "${name}" added successfully.`);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Failed to save");
+      showToast(e instanceof Error ? e.message : "Failed to save", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSoftDelete = async () => {
+    if (!softDeleteTarget) return;
+    setSaving(true);
+    try {
+      const record = await companyService.update(softDeleteTarget.id, { status: "Inactive" });
+      setItems((prev) => prev.map((r) => (r.id === softDeleteTarget.id ? record : r)));
+      setSoftDeleteTarget(null);
+      setPreview(null);
+      showToast(`"${softDeleteTarget.name}" deactivated.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to deactivate", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReactivate = async (row: CompanyMaster) => {
+    setSaving(true);
+    try {
+      const record = await companyService.update(row.id, { status: "Active" });
+      setItems((prev) => prev.map((r) => (r.id === row.id ? record : r)));
+      setPreview(null);
+      showToast(`"${row.name}" reactivated.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to reactivate", "error");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1549,7 +1580,7 @@ export function CompaniesView() {
   return (
     <div className="space-y-5">
       {toast && (
-        <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />
+        <AlertBanner variant={toastVariant} message={toast} onDismiss={() => setToast(null)} />
       )}
 
       <FOPageHeader
@@ -1560,10 +1591,7 @@ export function CompaniesView() {
           <Button
             size="sm"
             className="bg-emerald-700 hover:bg-emerald-800"
-            onClick={() => {
-              resetForm();
-              setFormOpen(true);
-            }}
+            onClick={openCreate}
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Add Company
@@ -1669,20 +1697,23 @@ export function CompaniesView() {
               header: "Status",
               render: (r: CompanyMaster) => <StatusBadge status={r.status} />,
             },
+            masterActionsColumn(openEdit, setSoftDeleteTarget, handleReactivate),
           ]}
         />
       </div>
 
       <Drawer
         open={formOpen}
-        onClose={() => setFormOpen(false)}
-        title="Add Company"
-        description="Register a new corporate or billing company."
+        onClose={() => { setFormOpen(false); resetForm(); }}
+        title={editing ? "Edit Company" : "Add Company"}
+        description={editing ? "Update company details." : "Register a new corporate or billing company."}
         width="md"
         footer={
           <>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave}>Save</Button>
+            <Button variant="outline" onClick={() => { setFormOpen(false); resetForm(); }}>Cancel</Button>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : editing ? "Update" : "Save"}
+            </Button>
           </>
         }
       >
@@ -1770,7 +1801,18 @@ export function CompaniesView() {
         title={preview?.name ?? ""}
         description={preview?.code}
         width="md"
-        footer={<Button variant="outline" onClick={() => setPreview(null)}>Close</Button>}
+        footer={
+          preview ? (
+            <MasterPreviewActionsFooter
+              row={preview}
+              onClose={() => setPreview(null)}
+              onEdit={openEdit}
+              onDeactivate={setSoftDeleteTarget}
+              onReactivate={handleReactivate}
+              saving={saving}
+            />
+          ) : null
+        }
       >
         {preview && (
           <div className="space-y-5">
@@ -1812,6 +1854,21 @@ export function CompaniesView() {
           </div>
         )}
       </Drawer>
+
+      <ConfirmModal
+        open={!!softDeleteTarget}
+        onClose={() => setSoftDeleteTarget(null)}
+        onConfirm={handleSoftDelete}
+        title="Deactivate company?"
+        message={
+          softDeleteTarget
+            ? `"${softDeleteTarget.name}" will be marked Inactive (soft delete).`
+            : ""
+        }
+        confirmLabel="Deactivate"
+        variant="danger"
+        loading={saving}
+      />
     </div>
   );
 }

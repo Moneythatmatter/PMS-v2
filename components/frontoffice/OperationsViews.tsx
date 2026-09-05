@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRightLeft,
   BedDouble,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { InHouseGuest, RoomStatusCard, RoomTransferRecord } from "@/app/data/frontoffice/modules";
 import { reservationService, roomService, transferService } from "@/services/front-office";
+import { todayIso } from "@/lib/reservation-dates";
 import { GuestSearchSelect } from "@/components/frontoffice/GuestSearchSelect";
 import { Button } from "@/components/ui/Button";
 import {
@@ -58,6 +59,31 @@ function SectionCard({
   );
 }
 
+function isRoomVacant(r: RoomStatusCard): boolean {
+  const st = String(r.status || "").trim().toLowerCase();
+  const hasGuest = Boolean(r.guestName && r.guestName.trim());
+  const underMaintenance = Boolean(r.maintenance && r.maintenance !== "OK");
+
+  if (
+    st === "occupied" ||
+    st === "blocked" ||
+    st === "maintenance" ||
+    underMaintenance ||
+    hasGuest
+  ) {
+    return false;
+  }
+
+  return (
+    st === "vacant" ||
+    st.includes("vacant") ||
+    st === "clean" ||
+    st === "ready" ||
+    st === "available" ||
+    st !== "reserved"
+  );
+}
+
 export function RoomTransferView() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -69,13 +95,13 @@ export function RoomTransferView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newRoom, setNewRoom] = useState("");
-  const [transferDate, setTransferDate] = useState(
-    new Date().toISOString().split("T")[0],
-  );
+  const [transferDate, setTransferDate] = useState(todayIso);
   const [reason, setReason] = useState("");
   const [transfers, setTransfers] = useState<RoomTransferRecord[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [previewTransfer, setPreviewTransfer] = useState<RoomTransferRecord | null>(null);
 
   useEffect(() => {
@@ -120,24 +146,35 @@ export function RoomTransferView() {
     return rows;
   }, [transfers, search, statusFilter, sortBy]);
 
-  const availableRooms = useMemo(
-    () =>
-      guest
-        ? roomCards.filter(
-            (r) =>
-              r.status === "Vacant" &&
-              r.roomNo !== guest.room &&
-              r.type === guest.roomType,
-          )
-        : [],
-    [guest, roomCards],
-  );
+  const availableRooms = useMemo(() => {
+    const list = roomCards.filter(
+      (r) => isRoomVacant(r) && (!guest || r.roomNo !== guest.room),
+    );
+
+    const guestType = guest?.roomType?.trim().toLowerCase();
+    return list.sort((a, b) => {
+      if (guestType) {
+        const aSame = a.type?.trim().toLowerCase() === guestType ? 0 : 1;
+        const bSame = b.type?.trim().toLowerCase() === guestType ? 0 : 1;
+        if (aSame !== bSame) return aSame - bSame;
+      }
+      return a.roomNo.localeCompare(b.roomNo, undefined, { numeric: true });
+    });
+  }, [guest, roomCards]);
+
+  const sameTypeCount = useMemo(() => {
+    if (!guest?.roomType) return 0;
+    const target = guest.roomType.trim().toLowerCase();
+    return availableRooms.filter(
+      (r) => r.type?.trim().toLowerCase() === target,
+    ).length;
+  }, [guest, availableRooms]);
 
   const resetForm = () => {
     setGuest(guests[0] ?? null);
     setGuestSearch("");
     setNewRoom("");
-    setTransferDate(new Date().toISOString().split("T")[0]);
+    setTransferDate(todayIso());
     setReason("");
   };
 
@@ -147,17 +184,32 @@ export function RoomTransferView() {
   };
 
   const handleTransfer = async () => {
+    if (isSubmittingRef.current) return;
+
     if (!guest) return;
-    if (!newRoom) {
+    const targetRoomNo = newRoom.split(" ")[0]?.trim();
+    if (!targetRoomNo) {
       setToast("Please select a new room.");
       return;
     }
+    if (targetRoomNo === guest.room) {
+      setToast("Please select a different room from the guest's current room.");
+      return;
+    }
+    if (!transferDate || transferDate < todayIso()) {
+      setToast("Transfer date cannot be in the past.");
+      return;
+    }
+
+    isSubmittingRef.current = true;
+    setSubmitting(true);
+
     try {
       const record = await transferService.create({
         guestName: guest.guestName,
         fromRoom: guest.room,
-        toRoom: newRoom.split(" ")[0],
-        date: new Date(transferDate).toLocaleDateString("en-IN", {
+        toRoom: targetRoomNo,
+        date: new Date(`${transferDate}T00:00:00`).toLocaleDateString("en-IN", {
           day: "numeric",
           month: "short",
           year: "numeric",
@@ -165,12 +217,29 @@ export function RoomTransferView() {
         reason: reason || "Guest request",
         status: "Completed",
       });
+
+      // Update transfer records and close the form immediately
       setTransfers((prev) => [record, ...prev]);
       setTransferOpen(false);
       resetForm();
       setToast(`${guest.guestName} transferred from Room ${guest.room} to ${record.toRoom}.`);
+
+      // Refresh status in background without blocking form closure
+      Promise.all([
+        roomService.status().catch(() => null),
+        reservationService.inHouse().catch(() => null),
+      ]).then(([updatedRooms, updatedInHouse]) => {
+        if (updatedRooms) setRoomCards(updatedRooms);
+        if (updatedInHouse) {
+          const mapped = updatedInHouse as InHouseGuest[];
+          setGuests(mapped);
+        }
+      });
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Failed to transfer");
+    } finally {
+      isSubmittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -202,25 +271,43 @@ export function RoomTransferView() {
           value={newRoom}
           onChange={(e) => setNewRoom(e.target.value)}
         >
-          <option value="">Select available room</option>
-          {availableRooms.map((r) => (
-            <option key={r.roomNo} value={`${r.roomNo} - ${r.type}`}>
-              {r.roomNo} — {r.type} ({r.floor})
-            </option>
-          ))}
+          <option value="">
+            {availableRooms.length === 0
+              ? "No vacant rooms available"
+              : "Select available room"}
+          </option>
+          {availableRooms.map((r) => {
+            const isSameType =
+              guest?.roomType &&
+              r.type?.trim().toLowerCase() === guest.roomType.trim().toLowerCase();
+            return (
+              <option key={r.roomNo} value={`${r.roomNo} - ${r.type}`}>
+                {r.roomNo} — {r.type} ({r.floor}){isSameType ? " · Same Category" : ""}
+              </option>
+            );
+          })}
         </SelectInput>
       </FormField>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField label="Transfer Date">
+        <FormField label="Transfer Date" required>
           <TextInput
             type="date"
+            min={todayIso()}
             value={transferDate}
             onChange={(e) => setTransferDate(e.target.value)}
           />
         </FormField>
         <FormField label="Rate Difference">
-          <TextInput value="No change" readOnly className="text-emerald-600" />
+          <TextInput
+            value={
+              newRoom && guest?.roomType && !newRoom.toLowerCase().includes(guest.roomType.toLowerCase())
+                ? "Category change"
+                : "No change"
+            }
+            readOnly
+            className="text-emerald-600"
+          />
         </FormField>
       </div>
 
@@ -257,7 +344,16 @@ export function RoomTransferView() {
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <StatMiniCard label="Available Same Type" value={availableRooms.length} icon={BedDouble} sublabel="Matching room type" />
+        <StatMiniCard
+          label="Available Same Type"
+          value={sameTypeCount}
+          icon={BedDouble}
+          sublabel={
+            guest?.roomType
+              ? `Matching ${guest.roomType} (${availableRooms.length} total vacant)`
+              : "Matching room type"
+          }
+        />
         <StatMiniCard
           label="Transfers Today"
           value={transfers.filter((t) => t.status === "Completed").length}
@@ -374,18 +470,28 @@ export function RoomTransferView() {
       {/* Transfer form drawer */}
       <Drawer
         open={transferOpen}
-        onClose={() => setTransferOpen(false)}
+        onClose={() => {
+          if (!submitting) setTransferOpen(false);
+        }}
         title="Transfer Room"
         description="Move guest to an available room of the same type."
         width="md"
         footer={
           <>
-            <Button variant="outline" onClick={() => setTransferOpen(false)}>
+            <Button
+              variant="outline"
+              disabled={submitting}
+              onClick={() => setTransferOpen(false)}
+            >
               Cancel
             </Button>
-            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={handleTransfer}>
-              <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
-              Confirm Transfer
+            <Button
+              className="bg-emerald-700 hover:bg-emerald-800"
+              onClick={handleTransfer}
+              disabled={submitting || !newRoom}
+            >
+              <ArrowRightLeft className={cn("mr-1.5 h-3.5 w-3.5", submitting && "animate-spin")} />
+              {submitting ? "Transferring…" : "Confirm Transfer"}
             </Button>
           </>
         }

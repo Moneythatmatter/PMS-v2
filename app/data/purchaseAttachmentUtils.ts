@@ -89,21 +89,28 @@ export function revokeAttachmentUrls(attachments: PurchaseAttachmentRecord[]) {
   }
 }
 
-import type { PRAttachment } from "./purchaseRequisitionsData";
+export type PurchaseAttachmentApiType = "pdf" | "xlsx" | "doc" | "image";
 
-export function attachmentToApiPayload(att: PurchaseAttachmentRecord): PRAttachment {
+export function uiTypeToApiFileType(uiType: PurchaseAttachmentUiType): PurchaseAttachmentApiType {
+  if (uiType === "PDF") return "pdf";
+  if (uiType === "Excel") return "xlsx";
+  if (uiType === "Image") return "image";
+  return "doc";
+}
+
+export function attachmentToApiPayload(att: PurchaseAttachmentRecord): {
+  id: string;
+  fileName: string;
+  fileSize: string;
+  fileType: PurchaseAttachmentApiType;
+  dataUrl?: string;
+  mimeType?: string;
+} {
   return {
     id: att.id,
     fileName: att.fileName,
     fileSize: att.fileSize,
-    fileType:
-      att.fileType === "PDF"
-        ? "pdf"
-        : att.fileType === "Excel"
-          ? "xlsx"
-          : att.fileType === "Image"
-            ? "image"
-            : "doc",
+    fileType: uiTypeToApiFileType(att.fileType),
     dataUrl: att.dataUrl,
     mimeType: att.mimeType,
   };

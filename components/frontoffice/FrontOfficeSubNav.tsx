@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CalendarPlus,
+  DoorOpen,
   List,
   LogIn,
   LogOut,
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 const iconMap = {
   "calendar-plus": CalendarPlus,
+  "door-open": DoorOpen,
   list: List,
   "log-in": LogIn,
   "log-out": LogOut,

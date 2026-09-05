@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { X } from "lucide-react";
+import { GripVertical, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useResizablePanelWidth } from "@/lib/use-resizable-panel-width";
 
 export interface DrawerProps {
   isOpen: boolean;
@@ -13,15 +14,17 @@ export interface DrawerProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl";
+  /** Allow drag-resize from the left edge. Default true. */
+  resizable?: boolean;
 }
 
-const widthClasses = {
-  sm: "max-w-sm",
-  md: "max-w-md",
-  lg: "max-w-lg",
-  xl: "max-w-xl",
-  "2xl": "max-w-2xl",
-};
+const widthKeys = {
+  sm: "sm",
+  md: "md",
+  lg: "lg",
+  xl: "xl",
+  "2xl": "2xl",
+} as const;
 
 export function Drawer({
   isOpen,
@@ -32,7 +35,11 @@ export function Drawer({
   children,
   footer,
   maxWidth = "md",
+  resizable = true,
 }: DrawerProps) {
+  const { panelWidth, onResizeStart, isResizing, resizable: canResize } =
+    useResizablePanelWidth(isOpen, widthKeys[maxWidth], { enabled: resizable });
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -52,37 +59,68 @@ export function Drawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs animate-in fade-in-50">
       <div
+        style={canResize ? { width: panelWidth, maxWidth: "60vw" } : undefined}
         className={cn(
-          "w-full bg-white h-full shadow-2xl flex flex-col justify-between overflow-y-auto animate-in slide-in-from-right duration-200",
-          widthClasses[maxWidth]
+          "relative flex h-full w-full flex-col justify-between overflow-y-auto bg-white shadow-2xl animate-in slide-in-from-right duration-200",
+          !canResize && maxWidth === "sm" && "max-w-sm",
+          !canResize && maxWidth === "md" && "max-w-md",
+          !canResize && maxWidth === "lg" && "max-w-lg",
+          !canResize && maxWidth === "xl" && "max-w-xl",
+          !canResize && maxWidth === "2xl" && "max-w-2xl",
+          !isResizing && canResize && "transition-[width] duration-200",
         )}
         onClick={(e) => e.stopPropagation()}
       >
+        {canResize && (
+          <button
+            type="button"
+            aria-label="Resize drawer"
+            onMouseDown={onResizeStart}
+            className={cn(
+              "group absolute -left-2 top-0 z-30 flex h-full w-4 cursor-col-resize items-center justify-center border-0 bg-transparent p-0",
+              isResizing && "bg-emerald-500/10",
+            )}
+          >
+            <span
+              className={cn(
+                "flex h-14 w-1.5 items-center justify-center rounded-full bg-slate-200 transition-colors",
+                "group-hover:bg-emerald-400 group-active:bg-emerald-500",
+                isResizing && "bg-emerald-500",
+              )}
+            >
+              <GripVertical className="h-3 w-3 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100" />
+            </span>
+          </button>
+        )}
+
         <div>
-          {/* Drawer Header */}
-          <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50 sticky top-0 z-10">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center gap-2">
               {icon}
               <div>
-                <h3 className="font-bold text-sm text-slate-900">{title}</h3>
-                {subtitle && <p className="text-[11px] text-slate-500 font-medium">{subtitle}</p>}
+                <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+                {subtitle && (
+                  <p className="text-[11px] font-medium text-slate-500">{subtitle}</p>
+                )}
               </div>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+              className="cursor-pointer rounded-lg p-1 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
-          {/* Drawer Body */}
-          <div className="p-5 space-y-4">{children}</div>
+          <div className="space-y-4 p-5">{children}</div>
         </div>
 
-        {/* Drawer Footer */}
-        {footer && <div className="p-4 border-t border-slate-200 bg-slate-50 sticky bottom-0 z-10">{footer}</div>}
+        {footer && (
+          <div className="sticky bottom-0 z-10 border-t border-slate-200 bg-slate-50 p-4">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

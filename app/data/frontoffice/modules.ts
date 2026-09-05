@@ -15,6 +15,7 @@ export interface InHouseGuest {
   laundry: number;
   status: ReservationStatus;
   isVip?: boolean;
+  phone?: string;
   email?: string;
   adults: number;
   children: number;
@@ -33,6 +34,7 @@ export interface RoomAvailabilityRow {
   type: string;
   floor: string;
   bedType?: string;
+  maxOccupancy?: number;
   days: Record<string, RoomDayStatus>;
 }
 
@@ -55,7 +57,7 @@ export interface GuestProfile {
   mobile: string;
   email: string;
   nationality: string;
-  totalStays: number;
+  totalStays?: number;
   loyaltyPoints: number;
   idType?: string;
   idNumber?: string;
@@ -202,7 +204,7 @@ export interface MessageRecord {
   room?: string;
   date: string;
   read: boolean;
-  priority: "Normal" | "High";
+  priority: "Low" | "Normal" | "High";
 }
 
 export interface HousekeepingRequest {

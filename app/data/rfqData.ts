@@ -64,9 +64,26 @@ export interface RFQRecord {
   activityTimeline: { stage: string; timestamp: string; note: string; author?: string }[];
 }
 
+/** Legacy / API aliases for RFQ line items */
+type RfqRequestedItemInput = Partial<RFQRequestedItem> & {
+  itemName?: string;
+  itemDescription?: string;
+  requestedQty?: number;
+  uom?: string;
+  estimatedPrice?: number;
+  unitRate?: number;
+};
+
+/** Legacy / API aliases for RFQ vendor rows */
+type RfqVendorInput = Partial<RFQVendorItem> & {
+  vendorId?: string;
+  name?: string;
+  invitedOn?: string;
+};
+
 /** Normalize API / legacy JSON shapes into canonical RFQ line items. */
 export function normalizeRfqRequestedItem(
-  raw: Partial<RFQRequestedItem> & { [key: string]: any },
+  raw: RfqRequestedItemInput,
   index: number,
 ): RFQRequestedItem {
   const r = raw as Record<string, any>;
@@ -84,7 +101,7 @@ export function normalizeRfqRequestedItem(
 
 /** Normalize API / legacy JSON shapes into canonical RFQ vendor rows. */
 export function normalizeRfqVendor(
-  raw: Partial<RFQVendorItem> & { [key: string]: any },
+  raw: Partial<RFQVendorItem> & Record<string, unknown>,
   index: number,
 ): RFQVendorItem {
   const r = raw as Record<string, any>;

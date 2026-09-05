@@ -4,11 +4,21 @@ import type { RoomAvailabilityRow, RoomStatusCard } from "@/app/data/frontoffice
 
 export type RoomDto = RoomMaster;
 
+export type RoomAvailabilityBlock = {
+  roomId: string;
+  roomNo?: string;
+  startDate: string;
+  endDate: string;
+  kind: "maintenance" | "blocked";
+  reason?: string;
+};
+
 export type RoomAvailabilityResponse = {
   start: string;
   month: string;
   days: string[];
   rows: RoomAvailabilityRow[];
+  blocks?: RoomAvailabilityBlock[];
 };
 
 export const roomService = {
@@ -28,4 +38,8 @@ export const roomService = {
       ),
     ),
   status: () => api.get<RoomStatusCard[]>(foPath("/rooms/status")),
+  blocks: (start: string, end: string) =>
+    api.get<RoomAvailabilityBlock[]>(
+      foPath(`/rooms/blocks?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
+    ),
 };

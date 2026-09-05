@@ -39,10 +39,17 @@ import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
 import { formatBookingGuestLine } from "@/lib/reservation-display";
 import { isArrivingOnDate, isArrivingToday, todayIso } from "@/lib/reservation-dates";
+import { BookingLookupSearch } from "@/components/frontoffice/BookingLookupSearch";
+import {
+  findBookingByQuery,
+  reservationToLookupRecord,
+} from "@/lib/booking-lookup";
+import { guestProfileToCheckInDetails } from "@/components/frontoffice/guestFormUtils";
 
 import { bookingTypeOptions } from "@/app/data/frontoffice/checkin";
 
 import { GuestDetailsSection } from "./GuestDetailsSection";
+import type { GuestDetails } from "./GuestDetailsSection";
 import { RoomAssignmentSection } from "./RoomAssignmentSection";
 import { PaymentBillingSection } from "./PaymentBillingSection";
 
@@ -133,6 +140,38 @@ function guestDetailsFromBooking(found: ReservationBooking) {
   };
 }
 
+function mergeGuestDetails(
+  booking: ReservationBooking,
+  profile?: ReturnType<typeof guestProfileToCheckInDetails>,
+) {
+  const fromBooking = guestDetailsFromBooking(booking);
+  if (!profile) return fromBooking;
+  return {
+    gender: profile.gender || fromBooking.gender,
+    dob: profile.dob || fromBooking.dob,
+    nationality: profile.nationality || fromBooking.nationality,
+    address: profile.address || fromBooking.address,
+    city: profile.city || fromBooking.city,
+    state: profile.state || fromBooking.state,
+    country: profile.country || fromBooking.country,
+    pincode: profile.pincode || fromBooking.pincode,
+    idProofType: profile.idProofType || fromBooking.idProofType,
+    idNumber: profile.idNumber || fromBooking.idNumber,
+  };
+}
+
+function profileLockedFields(
+  profile: ReturnType<typeof guestProfileToCheckInDetails>,
+): Partial<Record<keyof ReturnType<typeof guestProfileToCheckInDetails>, boolean>> {
+  const locked: Partial<
+    Record<keyof ReturnType<typeof guestProfileToCheckInDetails>, boolean>
+  > = {};
+  (Object.keys(profile) as (keyof typeof profile)[]).forEach((key) => {
+    if (String(profile[key] || "").trim()) locked[key] = true;
+  });
+  return locked;
+}
+
 function isEligibleForCheckIn(status: string) {
   return (
     status !== "Checked In" &&
@@ -160,6 +199,9 @@ export function CheckInForm() {
   const [vehicle, setVehicle] = useState("");
   const [remarks, setRemarks] = useState("");
   const [idFile, setIdFile] = useState("");
+  const [lockedIdentityFields, setLockedIdentityFields] = useState<
+    Partial<Record<keyof GuestDetails, boolean>>
+  >({});
   const [guestDetails, setGuestDetails] = useState({
     gender: "",
     dob: "",
@@ -244,6 +286,11 @@ export function CheckInForm() {
     [pmsBookings],
   );
 
+  const lookupPool = useMemo(
+    () => eligibleArrivals.map(reservationToLookupRecord),
+    [eligibleArrivals],
+  );
+
   const arrivalsToday = useMemo(
     () => eligibleArrivals.filter((b) => isArrivingToday(b)),
     [eligibleArrivals],
@@ -267,6 +314,10 @@ export function CheckInForm() {
     })}`;
   }, [arrivalDate, isSelectedArrivalDateToday]);
 
+  const hasLockedProfileFields = useMemo(
+    () => Object.values(lockedIdentityFields).some(Boolean),
+    [lockedIdentityFields],
+  );
   const walkInRate = roomTypeRates[walkIn.roomType] ?? 0;
   const walkInTotal = walkInRate * walkIn.nights * walkIn.adults;
   const walkInGuestName =
@@ -278,6 +329,7 @@ export function CheckInForm() {
       : walkInGuestName;
 
   const handleGuestDetailChange = (key: string, value: string) => {
+    if (lockedIdentityFields[key as keyof GuestDetails]) return;
     setGuestDetails((prev) => ({ ...prev, [key]: value }));
     if (value.trim()) {
       setIdentityErrors((prev) => {
@@ -301,6 +353,8 @@ export function CheckInForm() {
     setCheckInMode("reserved");
     setBooking(bookingRecord);
     setBookingId(displayBookingNo(bookingRecord));
+    setLockedIdentityFields({});
+    setIdFile("");
     const preassigned = String(bookingRecord.roomNo || bookingRecord.roomRefId || "").trim();
     const isRealRoom =
       preassigned &&
@@ -317,21 +371,18 @@ export function CheckInForm() {
     if (bookingRecord.guestId) {
       try {
         const guest = await guestService.get(bookingRecord.guestId);
-        setGuestDetails((prev) => ({
-          gender: guest.gender || prev.gender,
-          dob: guest.dob || prev.dob,
-          nationality: guest.nationality || prev.nationality,
-          address: guest.address || prev.address,
-          city: guest.city || prev.city,
-          state: guest.state || prev.state,
-          country: guest.country || prev.country,
-          pincode: guest.pincode || prev.pincode,
-          idProofType: guest.idType || prev.idProofType,
-          idNumber: guest.idNumber || prev.idNumber,
-        }));
+        const profileDetails = guestProfileToCheckInDetails(guest);
+        setGuestDetails(mergeGuestDetails(bookingRecord, profileDetails));
+        setLockedIdentityFields(profileLockedFields(profileDetails));
+        if (profileDetails.idNumber) {
+          setIdFile("On file");
+        }
       } catch {
-        // guest profile optional
+        setGuestDetails(guestDetailsFromBooking(bookingRecord));
+        setLockedIdentityFields({});
       }
+    } else {
+      setLockedIdentityFields({});
     }
 
     setToastVariant("success");
@@ -345,13 +396,13 @@ export function CheckInForm() {
     if (prefillAttempted.current === prefillBookingKey) return;
 
     const eligible = pmsBookings.filter((b) => isEligibleForCheckIn(b.status));
-    const found = eligible.find(
-      (b) =>
-        b.id === prefillBookingKey ||
-        displayBookingNo(b).toLowerCase() === prefillBookingKey.toLowerCase() ||
-        (b.bookingNo ?? "").toLowerCase() === prefillBookingKey.toLowerCase() ||
-        (b.guestNo ?? "").toLowerCase() === prefillBookingKey.toLowerCase(),
+    const foundRecord = findBookingByQuery(
+      eligible.map(reservationToLookupRecord),
+      prefillBookingKey,
     );
+    const found = foundRecord
+      ? eligible.find((b) => b.id === foundRecord.id)
+      : undefined;
 
     if (found) {
       prefillAttempted.current = prefillBookingKey;
@@ -373,22 +424,16 @@ export function CheckInForm() {
       return;
     }
 
-    const pool = pmsBookings.filter((b) => isEligibleForCheckIn(b.status));
-
-    const found = pool.find(
-      (b) =>
-        displayBookingNo(b).toLowerCase() === query.toLowerCase() ||
-        (b.bookingNo ?? "").toLowerCase() === query.toLowerCase() ||
-        (b.guestNo ?? "").toLowerCase() === query.toLowerCase() ||
-        b.id.toLowerCase() === query.toLowerCase() ||
-        b.guestName?.toLowerCase().includes(query.toLowerCase()),
-    );
+    const foundRecord = findBookingByQuery(lookupPool, query);
+    const found = foundRecord
+      ? eligibleArrivals.find((b) => b.id === foundRecord.id)
+      : undefined;
 
     if (found) {
       void loadArrival(found);
     } else {
       setLookupError(
-        `No active arrival found matching "${query}". Try another ID or switch to Walk-in.`,
+        `No active arrival found matching "${query}". Try booking ID, name, phone, or email — or switch to Walk-in.`,
       );
     }
   };
@@ -452,7 +497,9 @@ export function CheckInForm() {
     );
     const missingLabels = missingIdentity.map(([, label]) => label);
 
-    if (!idFile) missingLabels.push("Upload ID Document");
+    if (!idFile && !lockedIdentityFields.idNumber) {
+      missingLabels.push("Upload ID Document");
+    }
     if (!String(roomForApi || "").trim()) missingLabels.push("Assigned Room Number");
     if (checkInMode === "walkin" && !walkIn.paymentMode) {
       missingLabels.push("Payment Mode");
@@ -568,6 +615,17 @@ export function CheckInForm() {
     return list;
   }, [availableRooms, walkIn.roomType, booking?.roomType, assignedRoom]);
 
+  const reservedRoomDisplay = useMemo(() => {
+    const roomKey = String(assignedRoom || booking?.roomNo || "").trim();
+    const roomLabel = roomKey || "TBA";
+    const fromPool = availableRooms.find(
+      (r) => r.roomNo === roomKey || r.roomNo.toLowerCase() === roomKey.toLowerCase(),
+    );
+    const typeLabel =
+      String(booking?.roomType || fromPool?.roomType || "").trim() || "—";
+    return `${roomLabel} · ${typeLabel}`;
+  }, [assignedRoom, booking?.roomNo, booking?.roomType, availableRooms]);
+
   return (
     <div className="space-y-6 select-none">
       {toast && (
@@ -617,6 +675,8 @@ export function CheckInForm() {
             setCheckInMode("walkin");
             setBooking(null);
             setLookupError("");
+            setLockedIdentityFields({});
+            setIdFile("");
           }}
           className={cn(
             "flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all cursor-pointer",
@@ -649,6 +709,20 @@ export function CheckInForm() {
               setCompleted(false);
               setBooking(null);
               setBookingId("");
+              setLockedIdentityFields({});
+              setIdFile("");
+              setGuestDetails({
+                gender: "",
+                dob: "",
+                nationality: "",
+                address: "",
+                city: "",
+                state: "",
+                country: "",
+                pincode: "",
+                idProofType: "",
+                idNumber: "",
+              });
               setWalkIn({ ...defaultWalkIn });
               setWalkInRef(generateWalkInRef());
             }}
@@ -659,9 +733,9 @@ export function CheckInForm() {
         </div>
 
       ) : checkInMode === "reserved" ? (
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(260px,300px)_minmax(0,44rem)] xl:grid-cols-[minmax(280px,320px)_minmax(0,48rem)]">
+        <div className="grid items-start gap-6 lg:grid-cols-5">
           {/* Left — search & arriving list (sticky like Check-Out) */}
-          <div className="w-full space-y-5 lg:sticky lg:top-4 lg:self-start">
+          <div className="space-y-5 lg:sticky lg:top-4 lg:col-span-2 lg:self-start">
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
@@ -672,21 +746,45 @@ export function CheckInForm() {
                     Find Guest
                   </p>
                   <p className="text-xs text-slate-500">
-                    Booking ID or guest name
+                    Booking ID, name, phone, or email
                   </p>
                 </div>
               </div>
               <div className="flex flex-col gap-2">
-                <input
-                  type="text"
-                      value={bookingId}
-                      onChange={(e) => setBookingId(e.target.value)}
-                  onKeyDown={(e) =>
-                    e.key === "Enter" && handleLookupBooking()
-                  }
-                  placeholder="e.g. BK-0 or James Wilson"
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                    />
+                <BookingLookupSearch
+                  items={lookupPool}
+                  query={bookingId}
+                  onQueryChange={(value) => {
+                    setBookingId(value);
+                    setLookupError("");
+                  }}
+                  selectedId={booking?.id}
+                  onSelectItem={(item) => {
+                    const record = eligibleArrivals.find((b) => b.id === item.id);
+                    if (record) void loadArrival(record);
+                  }}
+                  onClear={() => {
+                    setBookingId("");
+                    setBooking(null);
+                    setLookupError("");
+                    setLockedIdentityFields({});
+                    setGuestDetails({
+                      gender: "",
+                      dob: "",
+                      nationality: "",
+                      address: "",
+                      city: "",
+                      state: "",
+                      country: "",
+                      pincode: "",
+                      idProofType: "",
+                      idNumber: "",
+                    });
+                    setIdFile("");
+                  }}
+                  onEnter={() => handleLookupBooking()}
+                  placeholder="e.g. BK-38, Atul, or 98765…"
+                />
                   <Button
                     onClick={() => handleLookupBooking()}
                   className="h-11 gap-2 bg-emerald-700 hover:bg-emerald-800"
@@ -816,7 +914,7 @@ export function CheckInForm() {
           </div>
 
           {/* Right — guest card & registration form */}
-          <div className="min-w-0 space-y-5">
+          <div className="min-w-0 space-y-5 lg:col-span-3">
             {!booking ? (
               <div className="flex h-full min-h-[400px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
@@ -855,6 +953,20 @@ export function CheckInForm() {
                         setBooking(null);
                         setBookingId("");
                         setLookupError("");
+                        setLockedIdentityFields({});
+                        setGuestDetails({
+                          gender: "",
+                          dob: "",
+                          nationality: "",
+                          address: "",
+                          city: "",
+                          state: "",
+                          country: "",
+                          pincode: "",
+                          idProofType: "",
+                          idNumber: "",
+                        });
+                        setIdFile("");
                       }}
                       className="shrink-0 text-xs font-medium text-slate-400 hover:text-slate-600"
                     >
@@ -866,7 +978,7 @@ export function CheckInForm() {
                       {
                         icon: BedDouble,
                         label: "Room",
-                        value: `${assignedRoom || booking.roomNo || "TBA"} · ${booking.roomType}`,
+                        value: reservedRoomDisplay,
                       },
                       {
                         icon: Calendar,
@@ -900,7 +1012,11 @@ export function CheckInForm() {
                 <SectionCard
                   icon={UserCheck}
                   title="Identity & Registration"
-                  description="Verify guest identification and address credentials."
+                  description={
+                    hasLockedProfileFields
+                      ? "Known guest details are loaded from profile and cannot be changed here."
+                      : "Verify guest identification and address credentials."
+                  }
                 >
                   <GuestDetailsSection
                     guestDetails={guestDetails}
@@ -913,6 +1029,7 @@ export function CheckInForm() {
                     }}
                     idFile={idFile}
                     errors={identityErrors}
+                    readOnlyFields={lockedIdentityFields}
                   />
                 </SectionCard>
 
