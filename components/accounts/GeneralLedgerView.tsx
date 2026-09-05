@@ -16,15 +16,11 @@ import {
   Loader2,
   BookOpen,
   ChevronDown,
-  Building2,
   Eye,
-  ShieldAlert,
 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
+import { Button, Card } from "@/components/ui";
 import {
   FormField,
-  TextInput,
-  StatMiniCard,
   Drawer,
   Modal,
   FODatePicker,
@@ -39,7 +35,6 @@ import {
   resolvePartyName,
   resolveDivisionName,
   GeneralLedgerEntry,
-  LedgerAccountOption,
 } from "@/app/data/accounts/generalLedgerData";
 import { cn } from "@/lib/utils";
 
@@ -252,56 +247,89 @@ export function GeneralLedgerView() {
   const getTrnTypeBadgeClass = (type: string) => {
     switch (type) {
       case "Receipts":
-        return "bg-emerald-100 text-emerald-800 border-emerald-300";
+        return "bg-emerald-50 text-emerald-700 border-emerald-200";
       case "Payments":
-        return "bg-rose-100 text-rose-800 border-rose-300";
+        return "bg-rose-50 text-rose-700 border-rose-200";
       case "Journal":
-        return "bg-blue-100 text-blue-800 border-blue-300";
+        return "bg-blue-50 text-blue-700 border-blue-200";
       case "Opening":
-        return "bg-amber-100 text-amber-800 border-amber-300";
+        return "bg-amber-50 text-amber-700 border-amber-200";
       default:
-        return "bg-slate-100 text-slate-800 border-slate-300";
+        return "bg-slate-100 text-slate-700 border-slate-200";
     }
   };
 
-  // CSV Export
+  // ─────────────────────────────────────────────────────────────
+  // CLEAN EXCEL-READY CSV EXPORT
+  // ─────────────────────────────────────────────────────────────
   const handleExportCSV = () => {
+    const escapeCSV = (val: string | number | null | undefined): string => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val);
+      if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return `"${str}"`;
+    };
+
     const headers = [
-      "Voucher Date",
-      "Voucher No",
-      "Particulars",
-      "Party",
-      "Division",
-      "Account Code",
-      "Account Name",
-      "Type",
-      "DR Amount",
-      "CR Amount",
-      "Running Balance",
+      "VOUCHER DATE",
+      "VOUCHER NO",
+      "PARTICULARS",
+      "PARTY",
+      "DIVISION",
+      "ACCOUNT CODE",
+      "ACCOUNT NAME",
+      "TYPE",
+      "DR AMOUNT (INR)",
+      "CR AMOUNT (INR)",
+      "RUNNING BALANCE",
     ];
 
-    const rows = rowsWithRunningBalance.map((r) => [
+    const dataRows = rowsWithRunningBalance.map((r) => [
       r.vouchDt,
       r.vouchNo,
-      `"${r.particulars.replace(/"/g, '""')}"`,
-      `"${resolvePartyName(r.partyId)}"`,
-      `"${resolveDivisionName(r.divisionId)}"`,
+      r.particulars,
+      resolvePartyName(r.partyId),
+      resolveDivisionName(r.divisionId),
       r.accountCode,
-      `"${r.accountName}"`,
+      r.accountName,
       r.trnType,
       r.drAmt,
       r.crAmt,
       `${r.computedRunningBal} ${r.computedBalType}`,
     ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
+    // Totals Row
+    dataRows.push([
+      "TOTALS",
+      "GRAND TOTAL",
+      "GENERAL LEDGER POSTINGS",
+      "",
+      "",
+      "",
+      "",
+      "",
+      totals.totalDr,
+      totals.totalCr,
+      `${Math.abs(netDiff)} ${closingBalanceType}`,
+    ]);
+
+    const csvContent =
+      "\uFEFF" +
+      [headers, ...dataRows]
+        .map((row) => row.map(escapeCSV).join(","))
+        .join("\r\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `General_Ledger_${appliedFromDate}_to_${appliedToDate}.csv`);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `PMS_General_Ledger_${appliedFromDate}_to_${appliedToDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Shared Filter Controls Component
@@ -498,7 +526,7 @@ export function GeneralLedgerView() {
             size="sm"
             onClick={handleDisplayReport}
             disabled={isDisplayLoading}
-            className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs px-3 shadow-xs shrink-0 disabled:opacity-75 cursor-pointer"
+            className="h-8 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-3.5 shadow-2xs shrink-0 disabled:opacity-75 cursor-pointer rounded-lg"
           >
             {isDisplayLoading ? (
               <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
@@ -524,22 +552,12 @@ export function GeneralLedgerView() {
                   type="button"
                   onClick={() => setSortOn(opt.id as any)}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer select-none",
+                    "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer select-none",
                     active
-                      ? "border-emerald-600 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600/20 shadow-2xs"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:bg-slate-50"
+                      ? "border-slate-900 bg-slate-900 text-white shadow-2xs"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                   )}
                 >
-                  <span
-                    className={cn(
-                      "h-3.5 w-3.5 rounded-full border flex items-center justify-center transition-all shrink-0",
-                      active
-                        ? "border-emerald-600 bg-emerald-600"
-                        : "border-slate-300 bg-white"
-                    )}
-                  >
-                    {active && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
-                  </span>
                   <span>{opt.label}</span>
                 </button>
               );
@@ -552,7 +570,7 @@ export function GeneralLedgerView() {
 
   return (
     <ModulePageShell
-      eyebrow="Accounts & General Ledger"
+      eyebrow="Accounts &amp; General Ledger"
       title="General Ledger Report"
       description="Voucher-level account transactions, debit/credit postings, and running balances."
       toast={toastMessage}
@@ -564,7 +582,7 @@ export function GeneralLedgerView() {
             variant="outline"
             size="sm"
             onClick={() => window.print()}
-            className="rounded-xl text-xs font-medium bg-white shadow-xs"
+            className="rounded-lg text-xs font-semibold bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs hidden sm:inline-flex cursor-pointer"
           >
             <Printer className="h-3.5 w-3.5 mr-1 text-slate-500" />
             Print
@@ -572,28 +590,31 @@ export function GeneralLedgerView() {
 
           <Button
             type="button"
-            variant="outline"
             size="sm"
             onClick={handleExportCSV}
-            className="rounded-xl text-xs font-medium bg-white shadow-xs"
+            className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-2xs cursor-pointer px-3.5"
           >
-            <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
+            <Download className="h-3.5 w-3.5 mr-1" />
             Export CSV
           </Button>
         </div>
       }
+      wrapChildren={false}
     >
       {/* Top Filter Controls Toolbar Bar */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xs">
+      <div className="mt-4 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
         <div className="flex items-center gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => setShowFilters(!showFilters)}
-            className="rounded-xl border-slate-200 text-xs font-semibold gap-1.5 hidden md:inline-flex bg-white text-slate-700"
+            className={cn(
+              "rounded-lg border-slate-200 text-xs font-semibold gap-1.5 transition-all hidden md:inline-flex cursor-pointer shadow-2xs",
+              showFilters ? "bg-slate-100 text-slate-900 border-slate-300" : "text-slate-700 bg-white hover:bg-slate-50"
+            )}
           >
-            <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-600" />
+            <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500" />
             <span>{showFilters ? "Hide Report Controls" : "Report Parameters & Options"}</span>
             <ChevronDown
               className={cn(
@@ -609,7 +630,7 @@ export function GeneralLedgerView() {
             variant="outline"
             size="sm"
             onClick={() => setMobileFilterOpen(true)}
-            className="rounded-xl border-slate-200 text-xs font-semibold gap-1.5 md:hidden bg-white text-slate-700"
+            className="rounded-lg border-slate-200 text-xs font-semibold gap-1.5 md:hidden bg-white text-slate-700"
           >
             <Filter className="h-3.5 w-3.5" />
             <span>Filter</span>
@@ -618,7 +639,7 @@ export function GeneralLedgerView() {
 
         {/* Selected Ledger Badge */}
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800 border border-emerald-200">
             <BookOpen className="h-3.5 w-3.5 text-emerald-700" />
             Active Ledger:{" "}
             <span className="underline">
@@ -626,7 +647,7 @@ export function GeneralLedgerView() {
             </span>
           </span>
 
-          <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200">
             <Calendar className="h-3.5 w-3.5 text-slate-600" />
             FY 2026 - 27
           </span>
@@ -635,19 +656,23 @@ export function GeneralLedgerView() {
 
       {/* Desktop Filter Panel (Collapsible) */}
       {showFilters && (
-        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs animate-in fade-in-50">
-          <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
+        <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs space-y-4 hidden md:block">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4 w-4 text-emerald-600" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                <SlidersHorizontal className="h-4 w-4" />
+              </span>
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                 General Ledger Selection Parameters
               </h3>
             </div>
             <button
+              type="button"
               onClick={() => setShowFilters(false)}
-              className="text-xs text-slate-400 hover:text-slate-600"
+              className="text-xs text-slate-500 hover:text-slate-700 font-medium flex items-center gap-1 cursor-pointer"
             >
-              ✕ Hide Options
+              <X className="h-3.5 w-3.5" />
+              Hide Filters
             </button>
           </div>
           <FilterFormContent />
@@ -660,12 +685,13 @@ export function GeneralLedgerView() {
         onClose={() => setMobileFilterOpen(false)}
         title="General Ledger Options"
       >
-        <div className="p-4">
+        <div className="p-4 space-y-4">
           <FilterFormContent />
-          <div className="mt-4 border-t border-slate-100 pt-3">
+          <div className="pt-2">
             <Button
               type="button"
-              className="w-full bg-emerald-700 text-white"
+              size="sm"
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg"
               onClick={() => setMobileFilterOpen(false)}
             >
               Apply Ledger Filter
@@ -674,36 +700,68 @@ export function GeneralLedgerView() {
         </div>
       </Drawer>
 
-      {/* KPI Cards Grid */}
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatMiniCard
-          label="Total Debit Postings (DR)"
-          value={formatINR(totals.totalDr)}
-          sublabel="Total period debit vouchers"
-          accent="#0284c7"
-          icon={TrendingUp}
-        />
-        <StatMiniCard
-          label="Total Credit Postings (CR)"
-          value={formatINR(totals.totalCr)}
-          sublabel="Total period credit vouchers"
-          accent="#e11d48"
-          icon={TrendingDown}
-        />
-        <StatMiniCard
-          label="Closing Running Balance"
-          value={`${formatINR(Math.abs(netDiff))} ${closingBalanceType}`}
-          sublabel={activeAccount ? `Account Nature: ${activeAccount.nature}` : "Consolidated Ledger Position"}
-          accent="#16a34a"
-          icon={CheckCircle2}
-        />
+      {/* Standard Vertical KPI Cards Grid (F&B / Front Office Style) */}
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {/* Card 1: Total Debit Postings */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Total Debit Postings (DR)
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 sm:h-8 sm:w-8">
+              <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
+            {formatINR(totals.totalDr)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
+            Total period debit vouchers
+          </p>
+        </Card>
+
+        {/* Card 2: Total Credit Postings */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Total Credit Postings (CR)
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-700 sm:h-8 sm:w-8">
+              <TrendingDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
+            {formatINR(totals.totalCr)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
+            Total period credit vouchers
+          </p>
+        </Card>
+
+        {/* Card 3: Closing Running Balance */}
+        <Card className="h-full min-w-0 p-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+              Closing Running Balance
+            </p>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
+              <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
+            {formatINR(Math.abs(netDiff))} {closingBalanceType}
+          </p>
+          <p className="mt-0.5 text-[11px] text-emerald-700 font-semibold sm:text-xs truncate">
+            {activeAccount ? `Account Nature: ${activeAccount.nature}` : "Consolidated Ledger Position"}
+          </p>
+        </Card>
       </div>
 
       {/* Company Heading Block */}
       {showCompanyHeading && (
-        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-xs">
+        <div className="mb-4 rounded-xl border border-slate-200 bg-white p-5 text-center shadow-2xs">
           <h1 className="text-xl font-bold tracking-tight text-slate-900 uppercase">
-            Hotel & Resorts Private Limited
+            Hotel &amp; Resorts Private Limited
           </h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
             Grand Boulevard, Hospitality District • GSTIN: 27AAAAA0000A1Z5
@@ -738,11 +796,11 @@ export function GeneralLedgerView() {
               value={ledgerSearchQuery}
               onChange={(e) => setLedgerSearchQuery(e.target.value)}
               placeholder="Search by account code, name, or group..."
-              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 font-medium"
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 font-medium"
             />
           </div>
 
-          <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white">
+          <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white shadow-2xs">
             {filteredModalLedgers.length === 0 ? (
               <div className="p-4 text-center text-xs text-slate-500">No accounts match your search.</div>
             ) : (
@@ -755,8 +813,8 @@ export function GeneralLedgerView() {
                     setLedgerModalOpen(false);
                   }}
                   className={cn(
-                    "w-full px-3.5 py-2 text-left text-xs font-medium transition-colors flex items-center justify-between hover:bg-emerald-50 hover:text-emerald-900 cursor-pointer",
-                    selectedAccountId === acc.accountId ? "bg-amber-100/80 font-bold text-amber-900" : "text-slate-700"
+                    "w-full px-3.5 py-2 text-left text-xs font-medium transition-colors flex items-center justify-between hover:bg-slate-50 cursor-pointer",
+                    selectedAccountId === acc.accountId ? "bg-slate-100 font-bold text-slate-900" : "text-slate-700"
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -765,7 +823,7 @@ export function GeneralLedgerView() {
                     <span className="text-[10px] text-slate-400 font-normal">({acc.group})</span>
                   </div>
                   {selectedAccountId === acc.accountId && (
-                    <span className="text-[10px] uppercase font-bold text-amber-800">Selected</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-900">Selected</span>
                   )}
                 </button>
               ))
@@ -804,11 +862,11 @@ export function GeneralLedgerView() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-200 text-xs">
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Voucher Number</span>
-                <span className="font-bold text-slate-900">{selectedVoucherForModal.vouchNo}</span>
+                <span className="font-bold text-slate-900 font-mono">{selectedVoucherForModal.vouchNo}</span>
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Voucher Date</span>
-                <span className="font-semibold text-slate-800">{selectedVoucherForModal.vouchDt}</span>
+                <span className="font-semibold text-slate-800 font-mono">{selectedVoucherForModal.vouchDt}</span>
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Voucher Type</span>
@@ -846,16 +904,16 @@ export function GeneralLedgerView() {
             </div>
 
             {/* Narration */}
-            <div className="rounded-xl border border-slate-200 p-3 bg-white space-y-1 text-xs">
+            <div className="rounded-xl border border-slate-200 p-3 bg-white space-y-1 text-xs shadow-2xs">
               <span className="text-[10px] uppercase font-bold text-slate-400 block">Particulars / Narration</span>
               <p className="font-medium text-slate-800">{selectedVoucherForModal.particulars}</p>
             </div>
 
             {/* Accounting Distribution Breakdown Table */}
-            <div className="overflow-hidden rounded-xl border border-slate-200">
+            <div className="overflow-hidden rounded-xl border border-slate-200 shadow-2xs">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] border-b border-slate-200">
+                  <tr className="bg-slate-50 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
                     <th className="px-3 py-2">Side</th>
                     <th className="px-3 py-2">Account</th>
                     <th className="px-3 py-2 text-right">Debit (₹)</th>
@@ -865,12 +923,12 @@ export function GeneralLedgerView() {
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {selectedVoucherForModal.drAccounts.map((dr, idx) => (
                     <tr key={`dr-${idx}`}>
-                      <td className="px-3 py-2 font-bold text-blue-700">Dr</td>
+                      <td className="px-3 py-2 font-bold text-sky-700">Dr</td>
                       <td className="px-3 py-2 font-medium text-slate-900">
                         <span className="font-mono text-slate-500 mr-1.5">{dr.accountCode}</span>
                         {dr.accountName}
                       </td>
-                      <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatINR(dr.amount)}</td>
+                      <td className="px-3 py-2 text-right font-semibold font-mono text-slate-900">{formatINR(dr.amount)}</td>
                       <td className="px-3 py-2 text-right text-slate-400">-</td>
                     </tr>
                   ))}
@@ -882,7 +940,7 @@ export function GeneralLedgerView() {
                         {cr.accountName}
                       </td>
                       <td className="px-3 py-2 text-right text-slate-400">-</td>
-                      <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatINR(cr.amount)}</td>
+                      <td className="px-3 py-2 text-right font-semibold font-mono text-slate-900">{formatINR(cr.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -911,7 +969,7 @@ export function GeneralLedgerView() {
       </Modal>
 
       {/* Main General Ledger Table Card */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs">
         {/* Table Search Toolbar */}
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -936,19 +994,20 @@ export function GeneralLedgerView() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search voucher #, particulars, party..."
-                className="h-8 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-7 text-xs text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="h-8.5 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-8 text-xs text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900 font-medium transition-all"
               />
               {searchQuery && (
                 <button
+                  type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
 
-            <span className="rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600 border border-slate-200 shrink-0">
+            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200 shrink-0">
               {operationalVoucherCount} operational vouchers
             </span>
           </div>
@@ -956,10 +1015,10 @@ export function GeneralLedgerView() {
 
         {/* Desktop Table Layout */}
         <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs border-collapse table-auto">
             {/* Table Header */}
             <thead>
-              <tr className="bg-slate-100/90 text-slate-700 border-b border-slate-200 font-bold uppercase text-[11px] tracking-wider">
+              <tr className="bg-slate-50 text-slate-700 border-b border-slate-200 font-bold uppercase text-[10px] tracking-wider">
                 <th className="px-3 py-2.5 border-r border-slate-200 w-24">Vouch Dt</th>
                 <th className="px-3 py-2.5 border-r border-slate-200 w-32">Vouch No</th>
                 <th className="px-3.5 py-2.5 border-r border-slate-200 min-w-[200px]">Particulars</th>
@@ -980,13 +1039,13 @@ export function GeneralLedgerView() {
                 <tr
                   key={row.id}
                   className={cn(
-                    "hover:bg-emerald-50/40 transition-colors cursor-pointer",
-                    row.isOpeningBalance && "bg-amber-50/40 font-semibold"
+                    "hover:bg-slate-50/80 transition-colors cursor-pointer select-none",
+                    row.isOpeningBalance && "bg-amber-50/30 font-semibold"
                   )}
                   onDoubleClick={() => setSelectedVoucherForModal(row)}
                   onClick={() => setSelectedVoucherForModal(row)}
                 >
-                  <td className="px-3 py-2.5 border-r border-slate-100 text-slate-600 font-medium">
+                  <td className="px-3 py-2.5 border-r border-slate-100 text-slate-600 font-medium font-mono">
                     {row.vouchDt}
                   </td>
                   <td className="px-3 py-2.5 border-r border-slate-100 font-bold text-slate-800 font-mono">
@@ -1004,21 +1063,21 @@ export function GeneralLedgerView() {
                   <td className="px-2.5 py-2.5 border-r border-slate-100 text-center">
                     <span
                       className={cn(
-                        "inline-block px-1.5 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider",
+                        "inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border uppercase tracking-wider",
                         getTrnTypeBadgeClass(row.trnType)
                       )}
                     >
                       {row.trnType}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 border-r border-slate-100 text-right font-semibold text-slate-800">
+                  <td className="px-3 py-2.5 border-r border-slate-100 text-right font-mono font-medium text-slate-800">
                     {row.drAmt > 0 ? formatINR(row.drAmt) : "-"}
                   </td>
-                  <td className="px-3 py-2.5 border-r border-slate-100 text-right font-semibold text-slate-800">
+                  <td className="px-3 py-2.5 border-r border-slate-100 text-right font-mono font-medium text-slate-800">
                     {row.crAmt > 0 ? formatINR(row.crAmt) : "-"}
                   </td>
                   {cummulativeBalance && (
-                    <td className="px-3 py-2.5 text-right font-bold text-emerald-900 bg-slate-50/50">
+                    <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-900 bg-slate-50/50">
                       {formatINR(row.computedRunningBal)} {row.computedBalType}
                     </td>
                   )}
@@ -1028,18 +1087,18 @@ export function GeneralLedgerView() {
 
             {/* Table Footer Totals */}
             <tfoot>
-              <tr className="bg-slate-100/90 font-black text-xs border-t-2 border-slate-300 text-slate-900 uppercase">
-                <td colSpan={6} className="px-4 py-2.5 text-right border-r border-slate-200">
+              <tr className="bg-slate-100 font-bold text-xs border-t-2 border-slate-300 text-slate-900 uppercase">
+                <td colSpan={6} className="px-4 py-2.5 text-right border-r border-slate-200 text-slate-900">
                   TOTAL GENERAL LEDGER POSTINGS:
                 </td>
-                <td className="px-3 py-2.5 text-right border-r border-slate-200 text-slate-900">
+                <td className="px-3 py-2.5 text-right font-mono border-r border-slate-200 text-slate-900">
                   {formatINR(totals.totalDr)}
                 </td>
-                <td className="px-3 py-2.5 text-right border-r border-slate-200 text-slate-900">
+                <td className="px-3 py-2.5 text-right font-mono border-r border-slate-200 text-slate-900">
                   {formatINR(totals.totalCr)}
                 </td>
                 {cummulativeBalance && (
-                  <td className="px-3 py-2.5 text-right text-emerald-950 font-black bg-emerald-100/70">
+                  <td className="px-3 py-2.5 text-right font-mono text-emerald-950 font-bold bg-emerald-100/60">
                     {formatINR(Math.abs(netDiff))} {closingBalanceType}
                   </td>
                 )}
@@ -1054,13 +1113,13 @@ export function GeneralLedgerView() {
             <div
               key={row.id}
               onClick={() => setSelectedVoucherForModal(row)}
-              className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2 cursor-pointer hover:border-emerald-300 transition-colors"
+              className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2 cursor-pointer hover:border-slate-300 transition-colors"
             >
               <div className="flex items-center justify-between">
                 <span className="font-bold text-xs text-slate-900 font-mono">{row.vouchNo}</span>
                 <span
                   className={cn(
-                    "px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider",
+                    "px-2 py-0.5 rounded text-[10px] font-semibold border uppercase tracking-wider",
                     getTrnTypeBadgeClass(row.trnType)
                   )}
                 >
@@ -1084,11 +1143,11 @@ export function GeneralLedgerView() {
               <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-100 pt-2 text-slate-600">
                 <div>
                   <span className="text-[10px] text-slate-400 block uppercase font-bold">Voucher Date</span>
-                  <span className="font-semibold">{row.vouchDt}</span>
+                  <span className="font-semibold font-mono">{row.vouchDt}</span>
                 </div>
                 <div className="text-right">
                   <span className="text-[10px] text-slate-400 block uppercase font-bold">Amount</span>
-                  <span className="font-bold text-slate-900">
+                  <span className="font-bold text-slate-900 font-mono">
                     {row.drAmt > 0 ? `Dr ${formatINR(row.drAmt)}` : `Cr ${formatINR(row.crAmt)}`}
                   </span>
                 </div>
@@ -1097,7 +1156,7 @@ export function GeneralLedgerView() {
               {cummulativeBalance && (
                 <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-xs font-bold text-emerald-900 bg-emerald-50/50 -mx-3.5 -mb-3.5 p-2.5 rounded-b-xl">
                   <span className="text-[11px] uppercase tracking-wider text-slate-600 font-semibold">Running Balance:</span>
-                  <span>{formatINR(row.computedRunningBal)} {row.computedBalType}</span>
+                  <span className="font-mono">{formatINR(row.computedRunningBal)} {row.computedBalType}</span>
                 </div>
               )}
             </div>
