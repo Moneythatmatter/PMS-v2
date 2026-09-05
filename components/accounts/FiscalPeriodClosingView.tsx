@@ -45,7 +45,7 @@ export function FiscalPeriodClosingView() {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   // Period & Company Parameters
-  const [selectedCompany, setSelectedCompany] = useState("Luxy Hotel Pvt Ltd");
+  const [selectedCompany, setSelectedCompany] = useState("Hotel & Resorts Private Limited");
   const [selectedFY, setSelectedFY] = useState("FY 2026-27 (01-Apr-2026 to 31-Mar-2027)");
 
   // WINHMS Security Options

@@ -691,13 +691,13 @@ export function BillCoveringLetterPrintView() {
               {/* Hotel Header Block */}
               <div className="text-center space-y-1 border-b border-slate-300 pb-3">
                 <h1 className="text-lg font-bold tracking-wide text-slate-900 font-sans">
-                  Luxy hotel
+                  Hotel & Resorts Private Limited
                 </h1>
                 <p className="text-[11px] text-slate-600 leading-tight">
-                  Luxy Hotel GACL Chowkdi, Dahej Bharuch Main Road, Dahej, Dist Bharuch. Gujarat Gujarat 392130
+                  GACL Chowkdi, Dahej Bharuch Main Road, Dahej, Dist Bharuch. Gujarat 392130
                 </p>
                 <p className="text-[11px] text-slate-600">
-                  Phone: 7069990770 • E-Mail: gm@hotelluxy.com • Web: www.hotelluxy.com
+                  Phone: +91 7069990770 • E-Mail: accounts@hotelresorts.com • Web: www.hotelresorts.com
                 </p>
                 <p className="text-[11px] font-bold text-slate-800">
                   GSTIN: 24AAIFL8217G1ZC State: GUJARAT
@@ -729,7 +729,7 @@ export function BillCoveringLetterPrintView() {
               <div className="text-xs text-slate-700 space-y-2 leading-relaxed">
                 <p>Dear Sir/Madam,</p>
                 <p>
-                  Please find enclosed herewith our bills for the services rendered at <strong>Luxy Hotel</strong>. We request you to kindly verify the enclosed invoices and process the payment at your earliest convenience.
+                  Please find enclosed herewith our bills for the services rendered. We request you to kindly verify the enclosed invoices and process the payment at your earliest convenience.
                 </p>
               </div>
 
@@ -789,7 +789,7 @@ export function BillCoveringLetterPrintView() {
               <div className="pt-8 grid grid-cols-2 gap-4 text-xs text-slate-800 font-semibold">
                 <div>
                   <p>Thanking You,</p>
-                  <p className="font-bold">Luxy Hotel Accounts Division</p>
+                  <p className="font-bold">Accounts & Finance Division</p>
                   <p className="pt-8 border-t border-slate-400 mt-4">Authorized Signatory</p>
                 </div>
 

@@ -43,6 +43,7 @@ import {
   Filter,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { ModulePageShell } from "@/components/pms";
 import { sampleEmployees, EmployeeItem } from "@/app/data/hr/employeeListData";
 import { cn } from "@/lib/utils";
@@ -216,6 +217,7 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
   const [isAttendanceExpanded, setIsAttendanceExpanded] = useState<boolean>(false);
   const [attendanceDateQuery, setAttendanceDateQuery] = useState<string>("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [activeDocPreview, setActiveDocPreview] = useState<CategorizedDoc | null>(null);
 
   // Activity Log Filter States
   const [activityCategoryFilter, setActivityCategoryFilter] = useState<string>("ALL");
@@ -609,47 +611,6 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
             </div>
           </div>
 
-          {/* SECTION 14: PROFILE COMPLETION WIDGET */}
-          <div className="mb-5 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 p-4 sm:p-5 text-white shadow-xs">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="relative h-14 w-14 flex items-center justify-center rounded-2xl bg-white/10 backdrop-blur-xs border border-white/20 shrink-0 font-black text-lg text-emerald-300">
-                  92%
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-sm sm:text-base text-white">Profile Completion Status</h3>
-                    <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 rounded-full">
-                      High Compliance
-                    </span>
-                  </div>
-                  <p className="text-xs text-emerald-100/80 mt-0.5">
-                    9 of 10 profile sections complete. Only medical fitness renewal is pending.
-                  </p>
-                </div>
-              </div>
-
-              {/* Completion Checklist Pills */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/10 border border-white/20 text-emerald-200 font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Personal
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/10 border border-white/20 text-emerald-200 font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Employment
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/10 border border-white/20 text-emerald-200 font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Documents
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/10 border border-white/20 text-emerald-200 font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Payroll
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-200 font-semibold">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-300" /> Medical (Pending)
-                </span>
-              </div>
-            </div>
-          </div>
-
           {/* SECTION 2 & 13: STICKY PROFILE TABS NAVIGATION */}
           <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-xs py-2 mb-5 border-b border-slate-200">
             <div className="flex overflow-x-auto gap-1.5 scrollbar-none">
@@ -1010,9 +971,9 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto overflow-y-auto max-h-80 rounded-xl border border-slate-100">
                     <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase border-b border-slate-200">
+                      <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase border-b border-slate-200 sticky top-0 z-10 shadow-2xs">
                         <tr>
                           <th className="py-2.5 px-3">Date</th>
                           <th className="py-2.5 px-3">Shift</th>
@@ -1064,7 +1025,6 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                               row.status.toLowerCase().includes(q)
                             );
                           })
-                          .slice(0, attendanceDateQuery.trim() ? 30 : isAttendanceExpanded ? 30 : 7)
                           .map((row, i) => (
                             <tr key={i} className="hover:bg-slate-50 transition-colors">
                               <td className="py-2.5 px-3 font-semibold text-slate-800">{row.date}</td>
@@ -1094,21 +1054,6 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                           ))}
                       </tbody>
                     </table>
-                  </div>
-
-                  {/* Expand / Collapse Footer Banner */}
-                  <div className="pt-2 text-center border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setIsAttendanceExpanded(!isAttendanceExpanded)}
-                      className="text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:underline inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      {isAttendanceExpanded ? (
-                        <>Show Fewer Days (Collapse to 7)</>
-                      ) : (
-                        <>View Full 30 Days Attendance Log ({30 - 7} More Days available) &rarr;</>
-                      )}
-                    </button>
                   </div>
                 </section>
               </div>
@@ -1335,14 +1280,15 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                       {group.docs.map((doc) => (
                         <div
                           key={doc.id}
-                          className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100/80 transition"
+                          onClick={() => setActiveDocPreview(doc)}
+                          className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100 transition cursor-pointer group"
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="p-2 rounded-lg bg-white border border-slate-200 shrink-0">
+                            <div className="p-2 rounded-lg bg-white border border-slate-200 shrink-0 group-hover:border-emerald-300">
                               <FileText className="h-4 w-4 text-emerald-700" />
                             </div>
                             <div className="min-w-0">
-                              <p className="font-bold text-slate-900 truncate">{doc.name}</p>
+                              <p className="font-bold text-slate-900 truncate group-hover:text-emerald-800">{doc.name}</p>
                               <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
                                 <span>{doc.uploadDate || "Pending"}</span>
                                 {doc.fileSize && <span>• {doc.fileSize}</span>}
@@ -1354,15 +1300,10 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                             {renderDocStatusBadge(doc.status)}
                             <button
                               type="button"
-                              onClick={() => setToastMessage(`Opening preview for ${doc.name}...`)}
-                              className="p-1 text-slate-500 hover:text-emerald-700 rounded-md"
-                              title="View Document"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setToastMessage(`Downloading ${doc.name}...`)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setToastMessage(`Downloading ${doc.name}...`);
+                              }}
                               className="p-1 text-slate-500 hover:text-emerald-700 rounded-md"
                               title="Download"
                             >
@@ -1503,6 +1444,73 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
             )}
           </div>
         </>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          DOCUMENT PREVIEW & VIEWER MODAL
+      ───────────────────────────────────────────────────────────── */}
+      {activeDocPreview && (
+        <Modal
+          isOpen={Boolean(activeDocPreview)}
+          onClose={() => setActiveDocPreview(null)}
+          title={activeDocPreview.name}
+          description={`Category: ${activeDocPreview.category} • Uploaded: ${activeDocPreview.uploadDate || "15 Jan 2022"}`}
+          size="md"
+        >
+          <div className="space-y-4 text-xs">
+            {/* Clean Document Placeholder View (Aadhaar / Passport / Certificate Placeholder) */}
+            <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 p-10 flex flex-col items-center justify-center text-center min-h-[200px]">
+              <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200 mb-2">
+                <FileText className="h-6 w-6" />
+              </div>
+              <p className="font-bold text-slate-800 text-sm">{activeDocPreview.name}</p>
+              <p className="text-[11px] text-slate-400 font-medium">Document preview placeholder</p>
+            </div>
+
+            {/* File Details: Size & Format */}
+            <div className="p-3.5 rounded-xl border border-slate-200 bg-white flex items-center justify-between font-medium text-slate-700">
+              <div className="flex items-center gap-4">
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">File Size</span>
+                  <span className="font-mono font-bold text-slate-900">{activeDocPreview.fileSize || "1.8 MB"}</span>
+                </div>
+                <div className="h-6 w-px bg-slate-200" />
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Format</span>
+                  <span className="font-semibold text-slate-900">PDF Document (.pdf)</span>
+                </div>
+              </div>
+
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                {activeDocPreview.status}
+              </span>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setActiveDocPreview(null)}
+                className="rounded-xl text-xs font-semibold"
+              >
+                Close
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setToastMessage(`Downloading ${activeDocPreview.name}...`);
+                  setActiveDocPreview(null);
+                }}
+                className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1.5 shadow-xs"
+              >
+                <Download className="h-3.5 w-3.5" /> Download File
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
     </ModulePageShell>
   );

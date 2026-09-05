@@ -1,159 +1,294 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
-  Building,
   Building2,
-  CheckCircle2,
+  FolderTree,
   Plus,
   Save,
   RotateCcw,
-  Printer,
-  Download,
   Search,
   X,
-  ShieldCheck,
-  FolderOpen,
+  Power,
+  Trash2,
+  Layers,
+  FileText,
+  CheckCircle2,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   FormField,
   TextInput,
   SelectInput,
-  StatMiniCard,
+  TextAreaInput,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
 import {
-  sampleDivisionsData,
-  DivisionRecord,
+  sampleDivisionsList,
+  DivisionModel,
+  DivisionType,
 } from "@/app/data/accounts/divisionData";
+import {
+  CompanySelector,
+  MasterFormSection,
+  MasterAuditInfo,
+  MasterActivationDialog,
+  MasterDeleteProtectionDialog,
+} from "@/components/accounts/MasterComponents";
 import { cn } from "@/lib/utils";
 
 export function DivisionMasterView() {
-  // Master List State
-  const [divisions, setDivisions] = useState<DivisionRecord[]>(sampleDivisionsData);
-  const [selectedId, setSelectedId] = useState<string>(sampleDivisionsData[0].id);
+  // Master Divisions State
+  const [divisions, setDivisions] = useState<DivisionModel[]>(sampleDivisionsList);
+  const [selectedDivisionId, setSelectedDivisionId] = useState<string>("DIV-001");
 
-  // Search State
+  // Company Selector State
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("comp-101");
+
+  // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Inactive">("All");
+  const [typeFilter, setTypeFilter] = useState<"All" | DivisionType>("All");
 
-  // Selected Record
-  const activeRecord = useMemo(
-    () => divisions.find((d) => d.id === selectedId) || divisions[0],
-    [divisions, selectedId]
-  );
-
-  // Form State
-  const [formData, setFormData] = useState<DivisionRecord>(activeRecord);
-
-  // Account Lookup Modal State
-  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
-  const [accountSearchQuery, setAccountSearchQuery] = useState("");
-
-  // Toast Notification
+  // Toast Notification State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Sample GL Accounts for lookup
-  const sampleGLAccounts = [
-    "1100 - Guest Ledger Control A/c",
-    "1200 - City Ledger Control A/c",
-    "2100 - Sundry Creditors Control A/c",
-    "4100 - F&B Revenue Control A/c",
-    "4200 - Spa Revenue Control A/c",
-    "5100 - A&G Expense Control A/c",
-    "5200 - Maintenance Control A/c",
-  ];
+  // Modals & Protection Dialog State
+  const [showActivationDialog, setShowActivationDialog] = useState(false);
+  const [deleteDialogProps, setDeleteDialogProps] = useState<{
+    isOpen: boolean;
+    reason: "system_account" | "has_transactions" | "has_children";
+    childCount: number;
+    transactionCount: number;
+  }>({
+    isOpen: false,
+    reason: "has_transactions",
+    childCount: 0,
+    transactionCount: 0,
+  });
 
-  // Sync Form Data when selected record changes
-  React.useEffect(() => {
+  // Active Selected Record
+  const activeRecord = useMemo(() => {
+    return (
+      divisions.find((d) => d.divisionId === selectedDivisionId) ||
+      divisions[0] || {
+        divisionId: "DIV-001",
+        divisionCode: "ROOMS",
+        divisionName: "Rooms",
+        shortName: "RMS",
+        divisionType: "Revenue Department" as DivisionType,
+        sequence: 1,
+        status: "Active" as const,
+        description: "",
+        companyId: "CMP-001",
+        createdAt: "01 Apr 2024",
+        updatedAt: "01 Apr 2024",
+        createdBy: "Finance Admin",
+        updatedBy: "Finance Admin",
+        hasTransactions: false,
+        transactionCount: 0,
+      }
+    );
+  }, [divisions, selectedDivisionId]);
+
+  // Form State
+  const [formData, setFormData] = useState<DivisionModel>(activeRecord);
+
+  // Sync Form State when selection changes
+  useEffect(() => {
     setFormData({ ...activeRecord });
   }, [activeRecord]);
 
   // Filtered Divisions List
   const filteredDivisions = useMemo(() => {
-    return divisions.filter((d) => {
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return (
-          d.divisionId.toLowerCase().includes(q) ||
-          d.name.toLowerCase().includes(q) ||
-          d.shortName.toLowerCase().includes(q)
-        );
-      }
-      return true;
-    });
-  }, [divisions, searchQuery]);
+    return divisions
+      .filter((d) => {
+        // Status Filter
+        if (statusFilter !== "All" && d.status !== statusFilter) return false;
+        // Division Type Filter
+        if (typeFilter !== "All" && d.divisionType !== typeFilter) return false;
+        // Search Query
+        if (searchQuery) {
+          const q = searchQuery.toLowerCase();
+          return (
+            d.divisionId.toLowerCase().includes(q) ||
+            d.divisionCode.toLowerCase().includes(q) ||
+            d.divisionName.toLowerCase().includes(q) ||
+            (d.shortName && d.shortName.toLowerCase().includes(q)) ||
+            (d.description && d.description.toLowerCase().includes(q))
+          );
+        }
+        return true;
+      })
+      .sort((a, b) => a.sequence - b.sequence);
+  }, [divisions, searchQuery, statusFilter, typeFilter]);
 
-  // Field Change Handler
-  const handleFormChange = (field: keyof DivisionRecord, value: any) => {
+  // Available Parent Divisions (excluding self and any circular descendants)
+  const availableParents = useMemo(() => {
+    return divisions.filter((d) => d.divisionId !== formData.divisionId);
+  }, [divisions, formData.divisionId]);
+
+  // Child divisions count for current record
+  const childDivisions = useMemo(() => {
+    return divisions.filter((d) => d.parentDivisionId === formData.divisionId);
+  }, [divisions, formData.divisionId]);
+
+  // Form Change Handler
+  const handleFormChange = (field: keyof DivisionModel, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Add New Action
+  // Create New Division Handler
   const handleNewDivision = () => {
-    const newRecord: DivisionRecord = {
-      id: `div-${Date.now()}`,
-      divisionId: `DIV0${divisions.length + 1}`,
-      active: true,
-      name: "New Division",
-      shortName: "NEWDIV",
-      unitLedgerAccount: "1100 - Guest Ledger Control A/c",
-      displaySequenceNo: divisions.length + 1,
-      updateBy: "ABHIJIT",
-      updateDate: "24-July-2026",
+    const nextSeq = divisions.length + 1;
+    const nextNum = nextSeq < 10 ? `00${nextSeq}` : nextSeq < 100 ? `0${nextSeq}` : `${nextSeq}`;
+    const newDivisionId = `DIV-${nextNum}`;
+    const now = new Date().toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+
+    const newRecord: DivisionModel = {
+      divisionId: newDivisionId,
+      divisionCode: `DEPT${nextSeq}`,
+      divisionName: "New Department",
+      shortName: `D${nextSeq}`,
+      divisionType: "Support Department",
+      sequence: nextSeq,
+      status: "Active",
+      description: "",
+      companyId: selectedCompanyId,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: "Finance Admin",
+      updatedBy: "Finance Admin",
+      hasTransactions: false,
+      transactionCount: 0,
     };
 
-    setDivisions([newRecord, ...divisions]);
-    setSelectedId(newRecord.id);
+    setDivisions((prev) => [newRecord, ...prev]);
+    setSelectedDivisionId(newRecord.divisionId);
     setFormData(newRecord);
-    setToastMessage(`Created new Division (${newRecord.divisionId}).`);
+    setToastMessage(`Created new Division '${newRecord.divisionName}' (${newRecord.divisionId}).`);
   };
 
-  // Save Action
-  const handleSaveSettings = () => {
-    setDivisions((prev) =>
-      prev.map((d) => (d.id === formData.id ? { ...formData, updateDate: "24-July-2026" } : d))
+  // Save Division Changes
+  const handleSaveDivision = () => {
+    if (!formData.divisionCode.trim()) {
+      setToastMessage("Division Code is required.");
+      return;
+    }
+    if (!formData.divisionName.trim()) {
+      setToastMessage("Division Name is required.");
+      return;
+    }
+
+    // Check code uniqueness among other records
+    const codeExists = divisions.some(
+      (d) =>
+        d.divisionId !== formData.divisionId &&
+        d.divisionCode.trim().toUpperCase() === formData.divisionCode.trim().toUpperCase()
     );
-    setFormData((prev) => ({ ...prev, updateDate: "24-July-2026" }));
-    setToastMessage(`Saved Division '${formData.name}' successfully!`);
+
+    if (codeExists) {
+      setToastMessage(`Division Code '${formData.divisionCode.toUpperCase()}' is already in use.`);
+      return;
+    }
+
+    const now = new Date().toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+
+    const updatedRecord: DivisionModel = {
+      ...formData,
+      divisionCode: formData.divisionCode.trim().toUpperCase(),
+      divisionName: formData.divisionName.trim(),
+      shortName: (formData.shortName || "").trim().toUpperCase(),
+      updatedAt: now,
+      updatedBy: "Finance Admin",
+    };
+
+    setDivisions((prev) =>
+      prev.map((d) => (d.divisionId === updatedRecord.divisionId ? updatedRecord : d))
+    );
+    setFormData(updatedRecord);
+    setToastMessage(`Saved Division '${updatedRecord.divisionName}' successfully.`);
   };
 
-  // Reset Action
-  const handleReset = () => {
+  // Revert Form Edits
+  const handleResetForm = () => {
     setFormData({ ...activeRecord });
-    setToastMessage("Reset Division fields to saved values.");
+    setToastMessage(`Reverted changes for '${activeRecord.divisionName}'.`);
   };
 
-  // Export CSV
-  const handleExportCSV = () => {
-    const csvHeader = "Id,Name,ShortName,UnitLedgerAccount,DisplaySequenceNo,Active\n";
-    const csvRows = filteredDivisions
-      .map(
-        (d) =>
-          `"${d.divisionId}","${d.name}","${d.shortName}","${d.unitLedgerAccount}","${d.displaySequenceNo}","${d.active}"`
-      )
-      .join("\n");
-    const blob = new Blob([csvHeader + csvRows], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Divisions_${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setToastMessage("Exported Divisions to CSV.");
+  // Toggle Activation Flow
+  const handleToggleActivation = () => {
+    const targetStatus = formData.status === "Active" ? "Inactive" : "Active";
+    const now = new Date().toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+
+    const updatedRecord: DivisionModel = {
+      ...formData,
+      status: targetStatus,
+      updatedAt: now,
+      updatedBy: "Finance Admin",
+    };
+
+    setDivisions((prev) =>
+      prev.map((d) => (d.divisionId === updatedRecord.divisionId ? updatedRecord : d))
+    );
+    setFormData(updatedRecord);
+    setToastMessage(
+      `Division '${updatedRecord.divisionName}' is now ${targetStatus.toUpperCase()}.`
+    );
+  };
+
+  // Attempt Delete Flow with Protection Checks
+  const handleDeleteAttempt = () => {
+    // Check 1: Child Divisions Protection
+    if (childDivisions.length > 0) {
+      setDeleteDialogProps({
+        isOpen: true,
+        reason: "has_children",
+        childCount: childDivisions.length,
+        transactionCount: formData.transactionCount || 0,
+      });
+      return;
+    }
+
+    // Check 2: Transaction Reference Protection
+    if (formData.hasTransactions || (formData.transactionCount || 0) > 0) {
+      setDeleteDialogProps({
+        isOpen: true,
+        reason: "has_transactions",
+        childCount: 0,
+        transactionCount: formData.transactionCount || 0,
+      });
+      return;
+    }
+
+    // Permitted to delete if 0 transactions and 0 child divisions
+    setDivisions((prev) => prev.filter((d) => d.divisionId !== formData.divisionId));
+    setSelectedDivisionId(divisions[0]?.divisionId || "DIV-001");
+    setToastMessage(`Deleted Division '${formData.divisionName}'.`);
   };
 
   return (
     <ModulePageShell
       eyebrow="Accounts & Masters"
-      title="Division"
-      description="Define hotel operational divisions, unit ledger account mappings, and display sequence numbers."
+      title="Division Master"
+      description="Manage hotel departments and cost centers used for financial reporting."
       breadcrumbs={[
         { label: "Accounts", href: "/accounts/dashboard" },
         { label: "Masters", href: "/accounts/masters" },
-        { label: "Division" },
+        { label: "Division Master" },
       ]}
       toast={toastMessage}
       onDismissToast={() => setToastMessage(null)}
@@ -161,343 +296,429 @@ export function DivisionMasterView() {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            variant="outline"
             size="sm"
             onClick={handleNewDivision}
-            className="rounded-xl text-xs font-bold bg-white text-slate-800 border-slate-300 hover:bg-slate-50 cursor-pointer"
+            className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer shadow-xs"
           >
-            <Plus className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-            New
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            New Division
           </Button>
 
           <Button
             type="button"
             size="sm"
-            onClick={handleSaveSettings}
-            className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
+            onClick={handleSaveDivision}
+            className="rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white shadow-xs cursor-pointer"
           >
             <Save className="h-3.5 w-3.5 mr-1" />
-            Save
+            Save Changes
           </Button>
 
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleReset}
+            onClick={() => setShowActivationDialog(true)}
+            className={cn(
+              "rounded-xl text-xs font-bold border cursor-pointer",
+              formData.status === "Active"
+                ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+            )}
+          >
+            <Power className="h-3.5 w-3.5 mr-1" />
+            {formData.status === "Active" ? "Deactivate" : "Activate"}
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleDeleteAttempt}
+            className="rounded-xl text-xs font-semibold bg-white border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
+            Delete
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleResetForm}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
           >
             <RotateCcw className="h-3.5 w-3.5 mr-1 text-slate-500" />
-            Refresh
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleExportCSV}
-            className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
-          >
-            <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
-            Report
+            Reset
           </Button>
         </div>
       }
     >
-      {/* Top Active Target Entity Selector Bar */}
-      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1 min-w-[280px]">
-            <Building2 className="h-5 w-5 text-emerald-600 shrink-0" />
-            <div className="flex-1">
-              <span className="font-bold text-xs text-slate-600 block">Target Company Entity:</span>
-              <select
-                value="LUXY HOTEL & RESORTS PRIVATE LIMITED"
-                onChange={() => {}}
-                className="h-8 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-900 focus:border-emerald-500 focus:outline-none"
-              >
-                <option value="LUXY HOTEL & RESORTS PRIVATE LIMITED">
-                  LUXY HOTEL & RESORTS PRIVATE LIMITED (CMP-001)
-                </option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-            <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-slate-700 border border-slate-200 font-mono">
-              <Building className="h-3.5 w-3.5 text-slate-600" />
-              Division: {formData.name} ({formData.divisionId})
-            </span>
-
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-xl px-3 py-1 font-bold border",
-                formData.active
-                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                  : "bg-slate-100 text-slate-700 border-slate-200"
-              )}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
-              Status: {formData.active ? "Active" : "Inactive"}
-            </span>
-          </div>
-        </div>
+      {/* Top Company Selector Bar */}
+      <div className="mb-4">
+        <CompanySelector
+          selectedCompanyId={selectedCompanyId}
+          onCompanyChange={setSelectedCompanyId}
+        />
       </div>
 
-      {/* Main Split View: 35% Left Divisions List / 65% Right Form */}
+      {/* Main Split Layout: 35% Left List & 65% Right Detail Form */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6 font-sans text-xs">
-        {/* LEFT PANEL: Divisions List */}
-        <div className="md:col-span-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col min-h-[500px]">
+        {/* LEFT PANEL: Division List & Filters */}
+        <div className="md:col-span-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col min-h-[580px]">
+          {/* Header */}
           <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5">
             <div className="flex items-center gap-2">
-              <Building className="h-4.5 w-4.5 text-emerald-600" />
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+              <Building2 className="h-4.5 w-4.5 text-emerald-700" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
                 Divisions ({filteredDivisions.length})
               </h3>
             </div>
-            <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-              WINHMS Master
+            <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+              Cost Centers
             </span>
           </div>
 
-          {/* Quick Search */}
-          <div className="mb-3 relative">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          {/* Search Box */}
+          <div className="relative mb-2.5">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search Id, Name, Short Name..."
-              className="h-8 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-xs font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none"
+              placeholder="Search code, name, short name..."
+              className="h-8 w-full rounded-xl border border-slate-300 bg-white pl-8 pr-7 text-xs font-medium text-slate-900 focus:border-emerald-600 focus:outline-none placeholder:text-slate-400"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* List */}
-          <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[460px]">
-            {filteredDivisions.map((item) => {
-              const isSelected = selectedId === item.id;
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => setSelectedId(item.id)}
-                  className={cn(
-                    "p-3 rounded-xl border transition-all duration-150 cursor-pointer space-y-2",
-                    isSelected
-                      ? "bg-emerald-50/90 border-emerald-500 ring-1 ring-emerald-500 shadow-2xs"
-                      : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/70"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="font-bold text-xs text-slate-900 flex items-center gap-1.5 font-mono">
-                        <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-extrabold text-[10px]">
-                          {item.divisionId}
-                        </span>
-                        <span>{item.name}</span>
-                      </h4>
-                      <span className="text-[11px] font-semibold text-slate-500 block mt-0.5">
-                        Short: <strong className="text-slate-700">{item.shortName}</strong>
+          {/* Filters: Status & Type */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Status
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as "All" | "Active" | "Inactive")
+                }
+                className="h-7 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="All">All Statuses</option>
+                <option value="Active">Active Only</option>
+                <option value="Inactive">Inactive Only</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Department Type
+              </label>
+              <select
+                value={typeFilter}
+                onChange={(e) =>
+                  setTypeFilter(e.target.value as "All" | DivisionType)
+                }
+                className="h-7 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="All">All Types</option>
+                <option value="Revenue Department">Revenue</option>
+                <option value="Support Department">Support</option>
+                <option value="Administrative Department">Admin</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Divisions List Cards */}
+          <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[500px]">
+            {filteredDivisions.length === 0 ? (
+              <div className="p-6 text-center text-slate-400 font-medium">
+                No divisions match your search or filter.
+              </div>
+            ) : (
+              filteredDivisions.map((item) => {
+                const isSelected = selectedDivisionId === item.divisionId;
+                return (
+                  <div
+                    key={item.divisionId}
+                    onClick={() => setSelectedDivisionId(item.divisionId)}
+                    className={cn(
+                      "p-3 rounded-xl border transition-all duration-150 cursor-pointer space-y-2 select-none",
+                      isSelected
+                        ? "bg-emerald-50/90 border-emerald-500 ring-1 ring-emerald-500 shadow-2xs"
+                        : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/70"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                          <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-900 rounded font-mono font-bold text-[10px] border border-emerald-200">
+                            {item.divisionCode}
+                          </span>
+                          <span>{item.divisionName}</span>
+                        </h4>
+                        {item.shortName && (
+                          <span className="text-[11px] font-medium text-slate-500 block mt-0.5">
+                            Short: <strong className="text-slate-700 font-semibold">{item.shortName}</strong>
+                          </span>
+                        )}
+                      </div>
+
+                      <span
+                        className={cn(
+                          "text-[9px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 border",
+                          item.status === "Active"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                            : "bg-slate-100 text-slate-600 border-slate-200"
+                        )}
+                      >
+                        {item.status}
                       </span>
                     </div>
 
-                    <span
-                      className={cn(
-                        "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 border",
-                        item.active
-                          ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                          : "bg-slate-100 text-slate-600 border-slate-200"
-                      )}
-                    >
-                      {item.active ? "ACTIVE" : "INACTIVE"}
-                    </span>
+                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-[11px]">
+                      <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded truncate max-w-[170px]">
+                        {item.divisionType || "Department"}
+                      </span>
+                      <span className="font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200">
+                        Seq: #{item.sequence}
+                      </span>
+                    </div>
                   </div>
-
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
-                    <span className="font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded truncate max-w-[180px]">
-                      {item.unitLedgerAccount}
-                    </span>
-                    <span className="font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded font-mono">
-                      Seq: #{item.displaySequenceNo}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 
-        {/* RIGHT PANEL: Form matching EXACT WINHMS Division Dialog */}
+        {/* RIGHT PANEL: Master Details & Edit Form */}
         <div className="md:col-span-8 space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          {/* Header Card */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-emerald-700" />
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                    Division & Cost Center Details
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Selected: <strong className="text-slate-900">{formData.divisionName}</strong>{" "}
+                  ({formData.divisionCode})
+                </p>
+              </div>
+
+              {/* Badges */}
               <div className="flex items-center gap-2">
-                <Building className="h-5 w-5 text-emerald-600" />
-                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  Division Setup Form
-                </h2>
+                <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-mono font-bold text-slate-700 border border-slate-200">
+                  <Layers className="h-3.5 w-3.5 text-slate-500" />
+                  Seq #{formData.sequence}
+                </span>
+
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-bold border",
+                    formData.status === "Active"
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : "bg-slate-100 text-slate-600 border-slate-200"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      formData.status === "Active"
+                        ? "bg-emerald-600"
+                        : "bg-slate-400"
+                    )}
+                  />
+                  {formData.status}
+                </span>
               </div>
-              <span className="font-mono text-xs text-slate-500 font-bold">WINHMS DIVISION DIALOG</span>
             </div>
+          </div>
 
-            <div className="space-y-4 max-w-xl">
-              {/* Id & Active Checkbox Row */}
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <FormField label="Id" required>
-                    <TextInput
-                      value={formData.divisionId}
-                      onChange={(e) => handleFormChange("divisionId", e.target.value.toUpperCase())}
-                      className="bg-white font-mono font-bold text-slate-900 h-9"
-                    />
-                  </FormField>
-                </div>
-
-                <div className="pt-5">
-                  <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-800 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={formData.active}
-                      onChange={(e) => handleFormChange("active", e.target.checked)}
-                      className="rounded border-slate-300 text-emerald-600 h-4 w-4"
-                    />
-                    <span>Active</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Name */}
-              <FormField label="Name" required>
+          {/* Section 1: General Information */}
+          <MasterFormSection
+            title="General Information"
+            subtitle="Departmental identification, operational type, and sequence ordering."
+            icon={<FileText className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Division ID (Read-only) */}
+              <FormField label="Division ID">
                 <TextInput
-                  value={formData.name}
-                  onChange={(e) => handleFormChange("name", e.target.value)}
-                  className="bg-white font-bold text-slate-900 h-9"
+                  value={formData.divisionId}
+                  readOnly
+                  className="bg-slate-50 font-mono font-bold text-slate-700 cursor-not-allowed"
+                />
+              </FormField>
+
+              {/* Division Code (Required, unique) */}
+              <FormField
+                label="Division Code"
+                required
+                helperText="Unique departmental code used in voucher postings & reporting."
+              >
+                <TextInput
+                  value={formData.divisionCode}
+                  onChange={(e) =>
+                    handleFormChange("divisionCode", e.target.value.toUpperCase())
+                  }
+                  placeholder="e.g. ROOMS, FNB, ENG"
+                  className="font-mono font-bold text-slate-900"
+                />
+              </FormField>
+
+              {/* Division Name (Required) */}
+              <FormField label="Division Name" required className="sm:col-span-2">
+                <TextInput
+                  value={formData.divisionName}
+                  onChange={(e) => handleFormChange("divisionName", e.target.value)}
+                  placeholder="e.g. Rooms Division, Food & Beverage..."
+                  className="font-bold text-slate-900"
                 />
               </FormField>
 
               {/* Short Name */}
-              <FormField label="Short Name">
+              <FormField label="Short Name / Alias">
                 <TextInput
-                  value={formData.shortName}
+                  value={formData.shortName || ""}
                   onChange={(e) => handleFormChange("shortName", e.target.value)}
-                  className="bg-white font-semibold text-slate-900 h-9 max-w-xs"
+                  placeholder="e.g. RMS, FNB, HKP"
+                  className="font-semibold text-slate-900"
                 />
               </FormField>
 
-              {/* Unit Ledger Account with Binocular 👓 and Clear ❌ Buttons */}
-              <FormField label="Unit Ledger Account">
-                <div className="flex items-center gap-2">
-                  <TextInput
-                    readOnly
-                    value={formData.unitLedgerAccount}
-                    className="bg-slate-50 font-bold text-slate-900 h-9 flex-1 cursor-not-allowed"
-                  />
-                  {/* Binocular Lookup Button 👓 */}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsAccountModalOpen(true)}
-                    className="h-9 px-3 rounded-xl border-slate-300 hover:bg-slate-100 text-slate-700 font-bold flex items-center gap-1 cursor-pointer"
-                    title="Search Unit Ledger Account"
-                  >
-                    🔍
-                  </Button>
-                  {/* Clear Button ❌ */}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleFormChange("unitLedgerAccount", "")}
-                    className="h-9 px-3 rounded-xl border-slate-300 hover:bg-rose-50 text-rose-600 font-bold cursor-pointer"
-                    title="Clear Selection"
-                  >
-                    ❌
-                  </Button>
-                </div>
+              {/* Division Type */}
+              <FormField
+                label="Division Type"
+                helperText="Classification for departmental revenue vs overhead reporting."
+              >
+                <SelectInput
+                  value={formData.divisionType || "Support Department"}
+                  onChange={(e) =>
+                    handleFormChange("divisionType", e.target.value as DivisionType)
+                  }
+                >
+                  <option value="Revenue Department">Revenue Department</option>
+                  <option value="Support Department">Support Department</option>
+                  <option value="Administrative Department">Administrative Department</option>
+                  <option value="Other">Other</option>
+                </SelectInput>
               </FormField>
 
-              {/* Display Sequence No */}
-              <FormField label="Display Sequence No">
+              {/* Parent Division */}
+              <FormField
+                label="Parent Division (Optional)"
+                helperText="Organizes sub-departments under an overarching divisional head."
+              >
+                <SelectInput
+                  value={formData.parentDivisionId || ""}
+                  onChange={(e) =>
+                    handleFormChange("parentDivisionId", e.target.value || undefined)
+                  }
+                >
+                  <option value="">None (Top-Level Division)</option>
+                  {availableParents.map((parent) => (
+                    <option key={parent.divisionId} value={parent.divisionId}>
+                      {parent.divisionCode} - {parent.divisionName} ({parent.divisionType})
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
+
+              {/* Display Sequence */}
+              <FormField
+                label="Display Sequence"
+                helperText="Controls list ordering in entry dropdowns and financial reports."
+              >
                 <TextInput
                   type="number"
-                  value={formData.displaySequenceNo}
-                  onChange={(e) => handleFormChange("displaySequenceNo", parseInt(e.target.value) || 1)}
-                  className="bg-white font-mono font-bold h-9 max-w-xs"
+                  value={formData.sequence}
+                  onChange={(e) =>
+                    handleFormChange("sequence", parseInt(e.target.value, 10) || 1)
+                  }
+                  className="font-mono font-bold"
+                />
+              </FormField>
+
+              {/* Status */}
+              <FormField label="Status">
+                <SelectInput
+                  value={formData.status}
+                  onChange={(e) => handleFormChange("status", e.target.value)}
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </SelectInput>
+              </FormField>
+
+              {/* Description */}
+              <FormField label="Description & Notes" className="sm:col-span-2">
+                <TextAreaInput
+                  rows={2}
+                  value={formData.description || ""}
+                  onChange={(e) => handleFormChange("description", e.target.value)}
+                  placeholder="Operational scope, cost allocation guidelines, or notes..."
                 />
               </FormField>
             </div>
+          </MasterFormSection>
 
-            {/* WINHMS Exact Bottom Audit Box */}
-            <div className="mt-8 pt-4 border-t border-slate-200 text-slate-500 font-mono text-[11px] flex justify-end">
-              <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-1 min-w-[200px]">
-                <div>
-                  Update By : <strong className="text-slate-800">{formData.updateBy}</strong>
-                </div>
-                <div>
-                  Update Date : <strong className="text-slate-800">{formData.updateDate}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Section 2: Audit & System Information */}
+          <MasterAuditInfo
+            idLabel="Division ID"
+            idValue={formData.divisionId}
+            sequence={formData.sequence}
+            status={formData.status}
+            createdAt={formData.createdAt}
+            updatedAt={formData.updatedAt}
+            createdBy={formData.createdBy || "Finance Admin"}
+            updatedBy={formData.updatedBy || "Finance Admin"}
+            transactionCount={formData.transactionCount || 0}
+          />
         </div>
       </div>
 
-      {/* GL Account Lookup Modal */}
-      {isAccountModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md p-5 space-y-4 font-sans text-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h3 className="font-bold text-sm text-slate-900">Select Unit Ledger Account</h3>
-              <button
-                onClick={() => setIsAccountModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+      {/* Safe Activation / Deactivation Confirmation Dialog */}
+      <MasterActivationDialog
+        isOpen={showActivationDialog}
+        onClose={() => setShowActivationDialog(false)}
+        onConfirm={handleToggleActivation}
+        recordName={formData.divisionName}
+        currentStatus={formData.status}
+        hasDependents={
+          childDivisions.length > 0 || (formData.transactionCount || 0) > 0
+        }
+        dependentWarning={
+          childDivisions.length > 0
+            ? `Deactivating division '${formData.divisionName}' will restrict visibility of its ${childDivisions.length} sub-departments in active voucher selection.`
+            : `Deactivating division '${formData.divisionName}' will prevent new journal and payment vouchers from allocating departmental costs to this cost center.`
+        }
+      />
 
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={accountSearchQuery}
-                onChange={(e) => setAccountSearchQuery(e.target.value)}
-                placeholder="Search GL Ledger Account..."
-                className="h-8 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-xs font-semibold focus:border-emerald-500 focus:outline-none"
-              />
-            </div>
-
-            <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
-              {sampleGLAccounts
-                .filter((acc) => acc.toLowerCase().includes(accountSearchQuery.toLowerCase()))
-                .map((acc) => (
-                  <div
-                    key={acc}
-                    onClick={() => {
-                      handleFormChange("unitLedgerAccount", acc);
-                      setIsAccountModalOpen(false);
-                    }}
-                    className="p-2.5 rounded-xl border border-slate-200 hover:bg-emerald-50 hover:border-emerald-400 cursor-pointer font-bold text-slate-800 flex items-center justify-between"
-                  >
-                    <span>{acc}</span>
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 opacity-0 hover:opacity-100" />
-                  </div>
-                ))}
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsAccountModalOpen(false)}
-                className="rounded-xl text-xs font-semibold cursor-pointer"
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Delete Protection Alert Dialog */}
+      <MasterDeleteProtectionDialog
+        isOpen={deleteDialogProps.isOpen}
+        onClose={() =>
+          setDeleteDialogProps((prev) => ({ ...prev, isOpen: false }))
+        }
+        recordName={formData.divisionName}
+        reason={deleteDialogProps.reason}
+        childCount={deleteDialogProps.childCount}
+        transactionCount={deleteDialogProps.transactionCount}
+      />
     </ModulePageShell>
   );
 }

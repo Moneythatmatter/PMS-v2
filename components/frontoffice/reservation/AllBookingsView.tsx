@@ -578,7 +578,7 @@ export function AllBookingsView() {
               ))}
             </div>
 
-            <div className="hidden overflow-x-auto md:block">
+            <div className="hidden min-h-[280px] overflow-x-auto md:block">
               <table className="w-full min-w-[860px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/80">

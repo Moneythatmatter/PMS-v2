@@ -161,12 +161,12 @@ export function FinancialAnalysisView() {
             <div className="flex-1 max-w-sm">
               <span className="font-bold text-xs text-slate-600 block">Target Company Entity:</span>
               <select
-                value="LUXY HOTEL & RESORTS PRIVATE LIMITED"
+                value="HOTEL & RESORTS PRIVATE LIMITED"
                 onChange={() => {}}
                 className="h-8 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-900 focus:border-emerald-500 focus:outline-none"
               >
-                <option value="LUXY HOTEL & RESORTS PRIVATE LIMITED">
-                  LUXY HOTEL & RESORTS PRIVATE LIMITED (CMP-001)
+                <option value="HOTEL & RESORTS PRIVATE LIMITED">
+                  HOTEL & RESORTS PRIVATE LIMITED (CMP-001)
                 </option>
               </select>
             </div>

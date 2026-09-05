@@ -864,10 +864,10 @@ export function GLTransactionView() {
             <div className="rounded-xl border border-slate-300 bg-white p-6 shadow-xs space-y-4 font-sans text-slate-900">
               <div className="text-center space-y-1 border-b border-slate-300 pb-3">
                 <h1 className="text-lg font-bold tracking-wide text-slate-900 font-sans">
-                  Luxy hotel
+                  Hotel & Resorts Private Limited
                 </h1>
                 <p className="text-[11px] text-slate-600">
-                  Luxy Hotel GACL Chowkdi, Dahej Bharuch Main Road, Dahej, Dist Bharuch. Gujarat Gujarat 392130
+                  GACL Chowkdi, Dahej Bharuch Main Road, Dahej, Dist Bharuch. Gujarat 392130
                 </p>
                 <p className="text-[11px] font-bold text-slate-800">
                   JOURNAL VOUCHER STATEMENT

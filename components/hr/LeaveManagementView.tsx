@@ -228,11 +228,12 @@ export function LeaveManagementView() {
   // Context Employee Selection via SearchSelect Combobox (Improvement #2)
   const [selectedEmpId, setSelectedEmpId] = useState<string>("EMP-0101");
 
-  // Single Line Toolbar Filters
+  // Single-Line Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("ALL");
   const [selectedLeaveType, setSelectedLeaveType] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   // Modals & Side Drawer State
@@ -459,171 +460,92 @@ export function LeaveManagementView() {
       }
     >
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: LEAVE TRENDS DASHBOARD CARDS (Improvement #7)
+          SECTION 1: EMPLOYEE LEAVE QUOTA & UTILIZATION SUMMARY
       ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <HRKPICard
-          label="Pending Requests"
-          value={metrics.pending}
-          subtitle="Requires Approval"
-          tone="amber"
-          icon={<Clock className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Approved This Month"
-          value={metrics.approvedMonth}
-          subtitle="August 2026 Roster"
-          tone="emerald"
-          icon={<CheckCircle2 className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Rejected"
-          value={metrics.rejectedMonth}
-          subtitle="Excluded from Quotas"
-          tone="rose"
-          icon={<AlertCircle className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="On Leave Today"
-          value={`${metrics.onLeaveToday} Staff`}
-          subtitle="Active Property Roster"
-          tone="blue"
-          icon={<Users className="h-5 w-5" />}
-        />
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 2: EMPLOYEE SEARCHSELECT & DETAILED LEAVE BALANCES (Improvements #1 & #2)
-      ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-5">
-        {/* SearchSelect Combobox & Employee Summary Card */}
-        <div className="lg:col-span-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-          <label className="block text-xs font-bold text-slate-700">
-            🔍 Search &amp; Select Employee for Quota Summary:
-          </label>
-          <SearchSelect
-            options={employeeComboboxOptions}
-            value={selectedEmpId}
-            onChange={(val) => setSelectedEmpId(val)}
-            placeholder="Type employee name or ID..."
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs mb-4 space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-2.5">
+          <HREmployeeCell
+            name={selectedEmpObject.employeeName}
+            id={selectedEmpObject.employeeId}
+            avatar={selectedEmpObject.avatar}
+            photoUrl={selectedEmpObject.photoUrl}
+            department={selectedEmpObject.department}
           />
 
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-            <HREmployeeCell
-              name={selectedEmpObject.employeeName}
-              id={selectedEmpObject.employeeId}
-              avatar={selectedEmpObject.avatar}
-              photoUrl={selectedEmpObject.photoUrl}
-              department={selectedEmpObject.department}
+          <div className="w-full md:w-64">
+            <SearchSelect
+              options={employeeComboboxOptions}
+              value={selectedEmpId}
+              onChange={(val) => setSelectedEmpId(val)}
+              placeholder="Search employee for quota..."
             />
           </div>
         </div>
 
-        {/* Detailed Utilization Leave Balance Cards (Improvement #1) */}
-        <div className="lg:col-span-8 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="font-bold text-xs uppercase tracking-wider text-slate-800">
-              Leave Utilization Summary — {selectedEmpObject.employeeName}
-            </h3>
-            <span className="text-[10px] font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-              CL: {selectedEmpObject.balances.casualLeave.remaining} | SL: {selectedEmpObject.balances.sickLeave.remaining} | EL: {selectedEmpObject.balances.earnedLeave.remaining} | COMP: {selectedEmpObject.balances.compOff.remaining}
-            </span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+          {/* Casual Leave */}
+          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+            <span className="text-[10px] font-bold text-slate-500 block uppercase">Casual Leave (CL)</span>
+            <p className="text-base font-extrabold text-slate-900 mt-0.5">
+              {selectedEmpObject.balances.casualLeave.remaining} <span className="text-[11px] font-medium text-slate-400">/ {selectedEmpObject.balances.casualLeave.total} Days</span>
+            </p>
           </div>
 
-          <div className="flex overflow-x-auto gap-3 pb-1 sm:grid sm:grid-cols-4 scrollbar-none">
-            {/* Casual Leave Card */}
-            <div className="min-w-[170px] p-3 rounded-xl bg-blue-50/80 border border-blue-200 space-y-1 shrink-0 sm:shrink">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase text-blue-900">Casual Leave (CL)</span>
-                <span className="text-[9px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
-                  Exp: {selectedEmpObject.balances.casualLeave.expires}
-                </span>
-              </div>
-              <h4 className="text-xl font-black text-blue-950">
-                {selectedEmpObject.balances.casualLeave.remaining} / {selectedEmpObject.balances.casualLeave.total}
-              </h4>
-              <div className="text-[10px] text-blue-800 flex justify-between font-semibold">
-                <span>Used: {selectedEmpObject.balances.casualLeave.used}</span>
-                <span>Pending: {selectedEmpObject.balances.casualLeave.pending}</span>
-              </div>
-            </div>
+          {/* Sick Leave */}
+          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+            <span className="text-[10px] font-bold text-slate-500 block uppercase">Sick Leave (SL)</span>
+            <p className="text-base font-extrabold text-slate-900 mt-0.5">
+              {selectedEmpObject.balances.sickLeave.remaining} <span className="text-[11px] font-medium text-slate-400">/ {selectedEmpObject.balances.sickLeave.total} Days</span>
+            </p>
+          </div>
 
-            {/* Sick Leave Card */}
-            <div className="min-w-[170px] p-3 rounded-xl bg-rose-50/80 border border-rose-200 space-y-1 shrink-0 sm:shrink">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase text-rose-900">Sick Leave (SL)</span>
-                <span className="text-[9px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded">
-                  Exp: {selectedEmpObject.balances.sickLeave.expires}
-                </span>
-              </div>
-              <h4 className="text-xl font-black text-rose-950">
-                {selectedEmpObject.balances.sickLeave.remaining} / {selectedEmpObject.balances.sickLeave.total}
-              </h4>
-              <div className="text-[10px] text-rose-800 flex justify-between font-semibold">
-                <span>Used: {selectedEmpObject.balances.sickLeave.used}</span>
-                <span>Pending: {selectedEmpObject.balances.sickLeave.pending}</span>
-              </div>
-            </div>
+          {/* Earned Leave */}
+          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+            <span className="text-[10px] font-bold text-slate-500 block uppercase">Earned Leave (EL)</span>
+            <p className="text-base font-extrabold text-slate-900 mt-0.5">
+              {selectedEmpObject.balances.earnedLeave.remaining} <span className="text-[11px] font-medium text-slate-400">/ {selectedEmpObject.balances.earnedLeave.total} Days</span>
+            </p>
+          </div>
 
-            {/* Earned Leave Card */}
-            <div className="min-w-[170px] p-3 rounded-xl bg-purple-50/80 border border-purple-200 space-y-1 shrink-0 sm:shrink">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase text-purple-900">Earned Leave (EL)</span>
-                <span className="text-[9px] font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
-                  Exp: {selectedEmpObject.balances.earnedLeave.expires}
-                </span>
-              </div>
-              <h4 className="text-xl font-black text-purple-950">
-                {selectedEmpObject.balances.earnedLeave.remaining} / {selectedEmpObject.balances.earnedLeave.total}
-              </h4>
-              <div className="text-[10px] text-purple-800 flex justify-between font-semibold">
-                <span>Used: {selectedEmpObject.balances.earnedLeave.used}</span>
-                <span>Pending: {selectedEmpObject.balances.earnedLeave.pending}</span>
-              </div>
-            </div>
-
-            {/* Comp Off Card */}
-            <div className="min-w-[170px] p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 space-y-1 shrink-0 sm:shrink">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase text-emerald-900">Compensatory Off</span>
-                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
-                  Exp: {selectedEmpObject.balances.compOff.expires}
-                </span>
-              </div>
-              <h4 className="text-xl font-black text-emerald-950">
-                {selectedEmpObject.balances.compOff.remaining} Days
-              </h4>
-              <div className="text-[10px] text-emerald-800 flex justify-between font-semibold">
-                <span>Used: {selectedEmpObject.balances.compOff.used}</span>
-                <span>Pending: {selectedEmpObject.balances.compOff.pending}</span>
-              </div>
-            </div>
+          {/* Comp Off */}
+          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+            <span className="text-[10px] font-bold text-slate-500 block uppercase">Compensatory Off</span>
+            <p className="text-base font-extrabold text-emerald-800 mt-0.5">
+              {selectedEmpObject.balances.compOff.remaining} Days
+            </p>
           </div>
         </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 3: HOTEL DEPARTMENT STAFFING RISK HEATMAP (Improvement #6)
+          SECTION 3: HOTEL DEPARTMENT STAFFING RISK HEATMAP
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs mb-5 space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-          <h3 className="font-bold text-xs uppercase tracking-wider text-slate-800 flex items-center gap-2">
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-xs text-slate-800 flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 text-emerald-700" />
-            Hotel Department Staffing Risk &amp; Leave Heatmap
+            Department Staffing Risk
           </h3>
-          <span className="text-xs text-slate-500 font-medium">Real-time Coverage Audit</span>
+          <span className="text-[11px] text-slate-500 font-medium">Real-time Coverage Audit</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           {departmentStaffingRisk.map((risk, i) => (
-            <div key={i} className={cn("p-3 rounded-xl border space-y-1", risk.bg)}>
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-900">{risk.dept}</span>
-                <span className="font-extrabold text-[11px]">{risk.riskLevel}</span>
+            <div key={i} className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+              <div>
+                <span className="font-bold text-slate-900 block">{risk.dept}</span>
+                <span className="text-[10px] text-slate-500 font-medium">{risk.onLeave} On Leave</span>
               </div>
-              <p className="text-[11px] font-semibold text-slate-700">
-                {risk.onLeave} Staff Currently on Leave
-              </p>
+              <span className={cn(
+                "px-2 py-0.5 rounded-full text-[10px] font-extrabold border",
+                risk.riskLevel.includes("High")
+                  ? "bg-rose-100 text-rose-800 border-rose-200"
+                  : risk.riskLevel.includes("Moderate")
+                  ? "bg-amber-100 text-amber-800 border-amber-200"
+                  : "bg-emerald-100 text-emerald-800 border-emerald-200"
+              )}>
+                {risk.riskLevel.replace(/[^a-zA-Z ]/g, "").trim()}
+              </span>
             </div>
           ))}
         </div>
@@ -632,35 +554,60 @@ export function LeaveManagementView() {
       {/* ─────────────────────────────────────────────────────────────
           SECTION 4: FILTERS TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs mb-5 space-y-3">
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2 flex-1">
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search Employee..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-slate-50/50 font-medium text-slate-800"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
+          {/* Full-width Rounded Search Input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search Employee, Leave Type..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
 
-            {/* Desktop Filters */}
-            <div className="hidden sm:flex items-center gap-2">
+          {/* Filters Toggle Button (Right) */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
+              <span>Filters</span>
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileFilterOpen(true)}
+              className="md:hidden p-2 rounded-full border border-slate-200 bg-white text-slate-700"
+            >
+              <SlidersHorizontal className="h-4 w-4 text-emerald-700" />
+            </button>
+          </div>
+        </div>
+
+        {/* Collapsible Secondary Filters Drawer Bar */}
+        {showFilterPanel && (
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in-50">
+            <div className="flex flex-wrap items-center gap-2.5">
               <select
                 value={selectedDepartment}
                 onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Departments</option>
                 <option value="Front Office">Front Office</option>
@@ -671,7 +618,7 @@ export function LeaveManagementView() {
               <select
                 value={selectedLeaveType}
                 onChange={(e) => setSelectedLeaveType(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Leave Types</option>
                 {MASTER_LEAVE_TYPES.map((lt) => (
@@ -684,39 +631,29 @@ export function LeaveManagementView() {
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Statuses</option>
-                <option value="Pending">🟡 Pending</option>
-                <option value="Approved">🟢 Approved</option>
-                <option value="Rejected">🔴 Rejected</option>
+                <option value="Pending">Pending</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected</option>
               </select>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm("");
-                  setSelectedDepartment("ALL");
-                  setSelectedLeaveType("ALL");
-                  setSelectedStatus("ALL");
-                }}
-                className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl hover:bg-slate-50 transition"
-              >
-                Reset
-              </button>
             </div>
-          </div>
 
-          {/* Mobile Filter Button */}
-          <button
-            type="button"
-            onClick={() => setIsMobileFilterOpen(true)}
-            className="sm:hidden px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 flex items-center gap-1.5"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Filters
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm("");
+                setSelectedDepartment("ALL");
+                setSelectedLeaveType("ALL");
+                setSelectedStatus("ALL");
+              }}
+              className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
@@ -734,11 +671,9 @@ export function LeaveManagementView() {
                     <th className="py-3 px-4">Department</th>
                     <th className="py-3 px-4">Leave Type</th>
                     <th className="py-3 px-4">Date Range</th>
-                    <th className="py-3 px-4">Total Days</th>
                     <th className="py-3 px-4">Applied Date</th>
                     <th className="py-3 px-4">Approved By</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -780,45 +715,6 @@ export function LeaveManagementView() {
 
                         <td className="py-3 px-4">
                           <StatusBadge status={a.status} />
-                        </td>
-
-                        {/* Quick Approve / Reject Actions (Improvement #4) */}
-                        <td
-                          className="py-3 px-4 text-right"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setViewingLeave(a)}
-                              title="View Leave Details"
-                              className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-
-                            {a.status === "Pending" && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleApprove(a.id, a.employeeName)}
-                                  title="Quick Approve"
-                                  className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition"
-                                >
-                                  <Check className="h-4 w-4" />
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleReject(a.id, a.employeeName)}
-                                  title="Quick Reject"
-                                  className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
-                                >
-                                  <X className="h-4 w-4" />
-                                </button>
-                              </>
-                            )}
-                          </div>
                         </td>
                       </tr>
                     );

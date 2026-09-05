@@ -204,7 +204,7 @@ export interface MessageRecord {
   room?: string;
   date: string;
   read: boolean;
-  priority: "Normal" | "High";
+  priority: "Low" | "Normal" | "High";
 }
 
 export interface HousekeepingRequest {

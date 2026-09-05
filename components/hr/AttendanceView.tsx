@@ -259,6 +259,7 @@ export function AttendanceView() {
   const [selectedShift, setSelectedShift] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [selectedDate, setSelectedDate] = useState("2026-08-08");
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   // Modals & Side Drawer State
@@ -494,44 +495,93 @@ export function AttendanceView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 2: FILTERS TOOLBAR
+          SECTION 2: FILTERS & MODE PILLS TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs mb-5 space-y-3">
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2 flex-1">
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search Employee..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-slate-50/50 font-medium text-slate-800"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+          {/* Search Input (Left / Primary) */}
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search Employee by Name, ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Date Picker & Filters Toggle (Right) */}
+          <div className="flex items-center gap-2 shrink-0">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="text-xs rounded-full border border-slate-200 py-2 px-4.5 bg-white font-bold text-slate-700 shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            />
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
+              <span>Filters</span>
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileFilterOpen(true)}
+              className="md:hidden p-2 rounded-full border border-slate-200 bg-white text-slate-700"
+            >
+              <SlidersHorizontal className="h-4 w-4 text-emerald-700" />
+            </button>
+          </div>
+        </div>
+
+        {/* Concise Status & Mode Switcher Pills (Positioned below Search Input) */}
+        <div className="flex items-center gap-2 overflow-x-auto pt-1 scrollbar-none">
+          {[
+            { id: "ALL", label: "All Logs" },
+            { id: "BIOMETRIC", label: "Biometrics" },
+            { id: "MANUAL", label: "Manual" },
+            { id: "TERMINALS", label: "Terminals" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setAttendanceMode(tab.id as any)}
+              className={cn(
+                "px-3.5 py-1 text-xs font-bold rounded-full transition cursor-pointer border whitespace-nowrap",
+                attendanceMode === tab.id
+                  ? "bg-emerald-700 text-white border-emerald-800 shadow-2xs"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900"
               )}
-            </div>
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-            {/* Desktop Filters */}
-            <div className="hidden sm:flex items-center gap-2">
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
-              />
-
+        {/* Collapsible Secondary Filters Drawer Bar */}
+        {showFilterPanel && (
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in-50">
+            <div className="flex flex-wrap items-center gap-2.5">
               <select
                 value={selectedDepartment}
                 onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Departments</option>
                 <option value="Front Office">Front Office</option>
@@ -545,7 +595,7 @@ export function AttendanceView() {
               <select
                 value={selectedShift}
                 onChange={(e) => setSelectedShift(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Shifts</option>
                 <option value="MS">Morning Shift (MS-01)</option>
@@ -557,42 +607,32 @@ export function AttendanceView() {
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Statuses</option>
-                <option value="Present">🟢 Present</option>
-                <option value="Late">🟡 Late</option>
-                <option value="Absent">🔴 Absent</option>
-                <option value="On Leave">🔵 On Leave</option>
-                <option value="Weekly Off">⚪ Weekly Off</option>
+                <option value="Present">Present</option>
+                <option value="Late">Late</option>
+                <option value="Absent">Absent</option>
+                <option value="On Leave">On Leave</option>
+                <option value="Weekly Off">Weekly Off</option>
               </select>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm("");
-                  setSelectedDepartment("ALL");
-                  setSelectedShift("ALL");
-                  setSelectedStatus("ALL");
-                  setSelectedDate("2026-08-08");
-                }}
-                className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl hover:bg-slate-50 transition"
-              >
-                Reset
-              </button>
             </div>
-          </div>
 
-          {/* Mobile Filter Trigger */}
-          <button
-            type="button"
-            onClick={() => setIsMobileFilterOpen(true)}
-            className="sm:hidden px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 flex items-center gap-1.5"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Filters
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm("");
+                setSelectedDepartment("ALL");
+                setSelectedShift("ALL");
+                setSelectedStatus("ALL");
+                setSelectedDate("2026-08-08");
+              }}
+              className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Desktop Table View */}
@@ -609,7 +649,6 @@ export function AttendanceView() {
                 <th className="py-3 px-4">Worked Hours</th>
                 <th className="py-3 px-4">Device / Verification</th>
                 <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -658,34 +697,6 @@ export function AttendanceView() {
 
                   <td className="py-3 px-4">
                     <StatusBadge status={r.status} />
-                  </td>
-
-                  <td
-                    className="py-3 px-4 text-right"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setViewingRecord(r)}
-                        title="View Attendance Details"
-                        className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPunchEmpId(r.employeeId);
-                          setIsManualPunchModalOpen(true);
-                        }}
-                        title="Manual Edit Punch"
-                        className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                    </div>
                   </td>
                 </tr>
               ))}
@@ -914,6 +925,24 @@ export function AttendanceView() {
                   <p className="text-[10px] text-slate-400 mt-1">Edited by {viewingRecord.editedBy} on {viewingRecord.editedOn}</p>
                 </div>
               )}
+            </div>
+
+            {/* Edit Button Inside Detail View Drawer */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  const targetEmpId = viewingRecord.employeeId;
+                  setViewingRecord(null);
+                  setPunchEmpId(targetEmpId);
+                  setIsManualPunchModalOpen(true);
+                }}
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+                <span>Edit Punch Record</span>
+              </Button>
             </div>
           </>
         )}

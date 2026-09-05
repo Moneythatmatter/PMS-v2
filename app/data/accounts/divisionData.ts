@@ -1,69 +1,164 @@
-export interface DivisionRecord {
-  id: string;
-  divisionId: string;
-  active: boolean;
-  name: string;
-  shortName: string;
-  unitLedgerAccount: string;
-  displaySequenceNo: number;
-  updateBy: string;
-  updateDate: string;
+export type DivisionType =
+  | "Revenue Department"
+  | "Support Department"
+  | "Administrative Department"
+  | "Other";
+
+export interface DivisionModel {
+  divisionId: string; // e.g. "DIV-001" (Primary Key)
+  divisionCode: string; // e.g. "ROOMS"
+  divisionName: string; // e.g. "Rooms"
+  shortName?: string; // e.g. "RMS"
+  divisionType?: DivisionType;
+  parentDivisionId?: string;
+  sequence: number;
+  status: "Active" | "Inactive";
+  description?: string;
+  companyId?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string;
+  updatedBy?: string;
+  hasTransactions?: boolean;
+  transactionCount?: number;
 }
 
-export const sampleDivisionsData: DivisionRecord[] = [
+// Standard Hotel PMS V1 Default Seed Divisions
+export const sampleDivisionsList: DivisionModel[] = [
   {
-    id: "div-01",
-    divisionId: "DIV01",
-    active: true,
-    name: "Rooms Division",
-    shortName: "ROOMS",
-    unitLedgerAccount: "1100 - Guest Ledger Control A/c",
-    displaySequenceNo: 1,
-    updateBy: "ABHIJIT",
-    updateDate: "24-July-2026",
+    divisionId: "DIV-001",
+    divisionCode: "ROOMS",
+    divisionName: "Rooms",
+    shortName: "RMS",
+    divisionType: "Revenue Department",
+    sequence: 1,
+    status: "Active",
+    description: "Front office lodging, resident guest services, and accommodation operations.",
+    companyId: "CMP-001",
+    createdAt: "01 Apr 2024",
+    updatedAt: "10 Jan 2025",
+    createdBy: "Finance Admin",
+    updatedBy: "Finance Admin",
+    hasTransactions: true,
+    transactionCount: 245,
   },
   {
-    id: "div-02",
-    divisionId: "DIV02",
-    active: true,
-    name: "Food & Beverage Division",
+    divisionId: "DIV-002",
+    divisionCode: "FNB",
+    divisionName: "F&B",
     shortName: "FNB",
-    unitLedgerAccount: "4100 - F&B Revenue Control A/c",
-    displaySequenceNo: 2,
-    updateBy: "ABHIJIT",
-    updateDate: "24-July-2026",
+    divisionType: "Revenue Department",
+    sequence: 2,
+    status: "Active",
+    description: "All-day dining restaurant, bar lounges, room service, and culinary cost center.",
+    companyId: "CMP-001",
+    createdAt: "01 Apr 2024",
+    updatedAt: "12 Jan 2025",
+    createdBy: "Finance Admin",
+    updatedBy: "Finance Admin",
+    hasTransactions: true,
+    transactionCount: 180,
   },
   {
-    id: "div-03",
-    divisionId: "DIV03",
-    active: true,
-    name: "Administrative & General",
-    shortName: "ANG",
-    unitLedgerAccount: "5100 - A&G Expense Control A/c",
-    displaySequenceNo: 3,
-    updateBy: "ABHIJIT",
-    updateDate: "20-July-2026",
+    divisionId: "DIV-003",
+    divisionCode: "BANQUET",
+    divisionName: "Banquet",
+    shortName: "BNQ",
+    divisionType: "Revenue Department",
+    sequence: 3,
+    status: "Active",
+    description: "Conference halls, corporate conventions, wedding catering, and private event spaces.",
+    companyId: "CMP-001",
+    createdAt: "01 Apr 2024",
+    updatedAt: "08 Jan 2025",
+    createdBy: "Finance Admin",
+    updatedBy: "Finance Admin",
+    hasTransactions: true,
+    transactionCount: 65,
   },
   {
-    id: "div-04",
-    divisionId: "DIV04",
-    active: true,
-    name: "Property Operations & Maintenance",
-    shortName: "POM",
-    unitLedgerAccount: "5200 - Maintenance Control A/c",
-    displaySequenceNo: 4,
-    updateBy: "JAY ADMIN",
-    updateDate: "18-July-2026",
+    divisionId: "DIV-004",
+    divisionCode: "HOUSEKEEPING",
+    divisionName: "Housekeeping",
+    shortName: "HKP",
+    divisionType: "Support Department",
+    sequence: 4,
+    status: "Active",
+    description: "Room cleaning, linen management, public area hygiene, and floral upkeep.",
+    companyId: "CMP-001",
+    createdAt: "01 Apr 2024",
+    updatedAt: "04 Jan 2025",
+    createdBy: "Finance Admin",
+    updatedBy: "Finance Admin",
+    hasTransactions: true,
+    transactionCount: 95,
   },
   {
-    id: "div-05",
-    divisionId: "DIV05",
-    active: true,
-    name: "Spa & Wellness",
-    shortName: "SPA",
-    unitLedgerAccount: "4200 - Spa Revenue Control A/c",
-    displaySequenceNo: 5,
-    updateBy: "JAY ADMIN",
-    updateDate: "15-July-2026",
+    divisionId: "DIV-005",
+    divisionCode: "ENGINEERING",
+    divisionName: "Engineering & Maintenance",
+    shortName: "ENG",
+    divisionType: "Support Department",
+    sequence: 5,
+    status: "Active",
+    description: "HVAC systems, electrical maintenance, plumbing, boilers, and property upkeep.",
+    companyId: "CMP-001",
+    createdAt: "01 Apr 2024",
+    updatedAt: "03 Jan 2025",
+    createdBy: "Finance Admin",
+    updatedBy: "Finance Admin",
+    hasTransactions: true,
+    transactionCount: 110,
+  },
+  {
+    divisionId: "DIV-006",
+    divisionCode: "SALES",
+    divisionName: "Sales & Marketing",
+    shortName: "MKT",
+    divisionType: "Administrative Department",
+    sequence: 6,
+    status: "Active",
+    description: "Corporate contracts, digital advertising, travel trade promotions, and OTA distribution.",
+    companyId: "CMP-001",
+    createdAt: "01 Apr 2024",
+    updatedAt: "02 Jan 2025",
+    createdBy: "Finance Admin",
+    updatedBy: "Finance Admin",
+    hasTransactions: true,
+    transactionCount: 50,
+  },
+  {
+    divisionId: "DIV-007",
+    divisionCode: "HR",
+    divisionName: "Human Resources",
+    shortName: "HR",
+    divisionType: "Administrative Department",
+    sequence: 7,
+    status: "Active",
+    description: "Recruitment, payroll administration, employee welfare, and staff training programs.",
+    companyId: "CMP-001",
+    createdAt: "01 Apr 2024",
+    updatedAt: "02 Jan 2025",
+    createdBy: "Finance Admin",
+    updatedBy: "Finance Admin",
+    hasTransactions: true,
+    transactionCount: 85,
+  },
+  {
+    divisionId: "DIV-008",
+    divisionCode: "ADMIN",
+    divisionName: "Administration",
+    shortName: "ADM",
+    divisionType: "Administrative Department",
+    sequence: 8,
+    status: "Active",
+    description: "General executive management, legal counsel, insurance, and executive overheads.",
+    companyId: "CMP-001",
+    createdAt: "01 Apr 2024",
+    updatedAt: "02 Jan 2025",
+    createdBy: "Finance Admin",
+    updatedBy: "Finance Admin",
+    hasTransactions: false,
+    transactionCount: 0,
   },
 ];

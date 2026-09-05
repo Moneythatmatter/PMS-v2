@@ -191,11 +191,12 @@ export function OvertimeManagementView() {
   const [records, setRecords] = useState<OvertimeRecord[]>(INITIAL_OVERTIME_RECORDS);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Toolbar Filters
+  // Single-Line Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("ALL");
   const [selectedOtType, setSelectedOtType] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   // Modals & Side Drawer
@@ -460,74 +461,62 @@ export function OvertimeManagementView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 2: DEPARTMENT OVERTIME ANALYSIS (Improvement #6)
+          SECTION 2: FILTERS TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs mb-5 space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-          <h3 className="font-bold text-xs uppercase tracking-wider text-slate-800 flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-emerald-700" />
-            Department Overtime &amp; Payroll Cost Analysis
-          </h3>
-          <span className="text-xs text-slate-500 font-medium font-mono">August 2026 Roster</span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          {departmentOtAnalysis.map((item, i) => (
-            <div key={i} className={cn("p-3 rounded-xl border space-y-1", item.bg)}>
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-900">{item.dept}</span>
-                <span className="font-black text-xs text-emerald-800">{item.cost}</span>
-              </div>
-              <p className="text-[11px] font-semibold text-slate-700">
-                {item.hours} Total OT
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 3: OVERTIME CAP WARNING BANNER (Improvement #7)
-      ───────────────────────────────────────────────────────────── */}
-      <div className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-950 flex items-start gap-3">
-        <AlertTriangle className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
-        <div>
-          <span className="font-bold">Overtime Limit Warning:</span> Chef Vikramjit Singh has accumulated <span className="font-black text-rose-700">42.5 OT Hours</span> this month, exceeding the 35-hour monthly company cap. Review before approving additional requests.
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 4: FILTERS TOOLBAR & MOBILE FILTER TRIGGER
-      ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs mb-5 space-y-3">
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2 flex-1">
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search Employee..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-slate-50/50 font-medium text-slate-800"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
+          {/* Full-width Rounded Search Input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search Employee, Shift Code..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
 
-            {/* Desktop Filters */}
-            <div className="hidden sm:flex items-center gap-2">
+          {/* Filters Toggle Button (Right) */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
+              <span>Filters</span>
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileFilterOpen(true)}
+              className="md:hidden p-2 rounded-full border border-slate-200 bg-white text-slate-700"
+            >
+              <SlidersHorizontal className="h-4 w-4 text-emerald-700" />
+            </button>
+          </div>
+        </div>
+
+        {/* Collapsible Secondary Filters Drawer Bar */}
+        {showFilterPanel && (
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in-50">
+            <div className="flex flex-wrap items-center gap-2.5">
               <select
                 value={selectedDepartment}
                 onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Departments</option>
                 <option value="Front Office">Front Office</option>
@@ -538,7 +527,7 @@ export function OvertimeManagementView() {
               <select
                 value={selectedOtType}
                 onChange={(e) => setSelectedOtType(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All OT Types</option>
                 <option value="Regular OT">Regular OT (1.5x)</option>
@@ -550,43 +539,33 @@ export function OvertimeManagementView() {
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
+                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
               >
                 <option value="ALL">All Statuses</option>
-                <option value="Pending">🟡 Pending</option>
-                <option value="Approved">🟢 Approved</option>
-                <option value="Rejected">🔴 Rejected</option>
+                <option value="Pending">Pending</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected</option>
               </select>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm("");
-                  setSelectedDepartment("ALL");
-                  setSelectedOtType("ALL");
-                  setSelectedStatus("ALL");
-                }}
-                className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl hover:bg-slate-50 transition"
-              >
-                Reset
-              </button>
             </div>
-          </div>
 
-          {/* Mobile Filter Button */}
-          <button
-            type="button"
-            onClick={() => setIsMobileFilterOpen(true)}
-            className="sm:hidden px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 flex items-center gap-1.5"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Filters
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm("");
+                setSelectedDepartment("ALL");
+                setSelectedOtType("ALL");
+                setSelectedStatus("ALL");
+              }}
+              className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 5: MAIN DESKTOP TABLE & MOBILE CARD LAYOUT (Improvements #2, #3, #4, #5)
+          SECTION 3: MAIN DESKTOP TABLE & MOBILE CARD LAYOUT
       ───────────────────────────────────────────────────────────── */}
       {/* Desktop Table View */}
       <div className="hidden sm:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
@@ -602,7 +581,6 @@ export function OvertimeManagementView() {
                 <th className="py-3 px-4">Payable Amount (₹)</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4">Approved By / Date</th>
-                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -626,7 +604,6 @@ export function OvertimeManagementView() {
                     <p className="text-[10px] text-slate-500">{r.designation}</p>
                   </td>
 
-                  {/* OT Type Badge (Improvement #2) */}
                   <td className="py-3 px-4">
                     <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
                       {r.otType} ({r.otRateMultiplier}x)
@@ -636,7 +613,6 @@ export function OvertimeManagementView() {
                   <td className="py-3 px-4 font-medium text-slate-800">{r.date}</td>
                   <td className="py-3 px-4 font-black text-slate-900">+ {r.overtimeHours} Hrs</td>
 
-                  {/* Payroll Impact Payable Amount (Improvement #3) */}
                   <td className="py-3 px-4 font-black text-emerald-800 text-xs">
                     ₹{r.payableAmount.toLocaleString("en-IN")}
                   </td>
@@ -645,58 +621,9 @@ export function OvertimeManagementView() {
                     <StatusBadge status={r.status} />
                   </td>
 
-                  {/* Approval Audit Trail (Improvement #4) */}
                   <td className="py-3 px-4 text-slate-600 text-[11px]">
                     <p className="font-semibold text-slate-800">{r.approvedBy || "—"}</p>
                     <p className="text-[10px] text-slate-400">{r.approvedOn || "Pending"}</p>
-                  </td>
-
-                  {/* Action Column: View, Approve, Reject, Delete (Improvement #5) */}
-                  <td
-                    className="py-3 px-4 text-right"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setViewingRecord(r)}
-                        title="View Audit Details"
-                        className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-
-                      {r.status === "Pending" && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleApprove(r.id, r.employeeName, r.overtimeHours)}
-                            title="Approve Overtime"
-                            className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition"
-                          >
-                            <Check className="h-4 w-4" />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleReject(r.id, r.employeeName)}
-                            title="Reject Overtime"
-                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTargetId(r.id)}
-                        title="Delete Record"
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
                   </td>
                 </tr>
               ))}
@@ -775,12 +702,12 @@ export function OvertimeManagementView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SIDE DRAWER: OVERTIME DETAILS & AUDIT TRAIL (Improvement #4)
+          SIDE DRAWER: OVERTIME DETAILS & AUDIT TRAIL
       ───────────────────────────────────────────────────────────── */}
       <Drawer
         isOpen={Boolean(viewingRecord)}
         onClose={() => setViewingRecord(null)}
-        title="Overtime Audit & Payroll Breakdown"
+        title="Overtime Record Details"
         icon={<Timer className="h-5 w-5 text-emerald-700" />}
         footer={
           viewingRecord && viewingRecord.status === "Pending" ? (
@@ -789,9 +716,9 @@ export function OvertimeManagementView() {
                 type="button"
                 size="sm"
                 onClick={() => handleApprove(viewingRecord.id, viewingRecord.employeeName, viewingRecord.overtimeHours)}
-                className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold h-9"
+                className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-full text-xs font-bold h-9 cursor-pointer"
               >
-                <Check className="mr-1 h-4 w-4" /> Approve Overtime
+                <Check className="mr-1 h-4 w-4" /> Approve
               </Button>
 
               <Button
@@ -799,15 +726,15 @@ export function OvertimeManagementView() {
                 variant="outline"
                 size="sm"
                 onClick={() => handleReject(viewingRecord.id, viewingRecord.employeeName)}
-                className="flex-1 text-rose-700 bg-white border-rose-300 hover:bg-rose-50 rounded-xl text-xs font-bold h-9"
+                className="flex-1 text-rose-700 bg-white border-rose-200 hover:bg-rose-50 rounded-full text-xs font-bold h-9 cursor-pointer"
               >
-                <X className="mr-1 h-4 w-4" /> Reject Overtime
+                <X className="mr-1 h-4 w-4" /> Reject
               </Button>
             </div>
           ) : (
             <div className="text-center w-full">
               <span className="text-xs font-bold text-slate-600">
-                Status: {viewingRecord?.status} (Processed by {viewingRecord?.approvedBy || "HR Admin"})
+                Status: {viewingRecord?.status} {viewingRecord?.approvedBy ? `(by ${viewingRecord.approvedBy})` : ""}
               </span>
             </div>
           )
@@ -825,41 +752,49 @@ export function OvertimeManagementView() {
             />
 
             {/* Payroll Impact Card */}
-            <div className="p-4 rounded-2xl bg-emerald-900 text-white space-y-3 shadow-md">
-              <div className="flex items-center justify-between border-b border-white/15 pb-2">
-                <span className="text-xs text-emerald-200 font-bold uppercase tracking-wider">Payroll Impact</span>
-                <span className="text-xs font-bold text-white bg-white/10 px-2 py-0.5 rounded-md">
-                  Rate: {viewingRecord.otRateMultiplier}x OT
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                <span className="text-xs font-bold text-slate-700 uppercase">Payroll Impact</span>
+                <span className="text-xs font-extrabold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  Rate: {viewingRecord.otRateMultiplier}x
                 </span>
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between pt-1">
                 <div>
-                  <span className="text-[11px] text-emerald-300 block">Total OT Hours</span>
-                  <span className="font-extrabold text-white text-lg">+{viewingRecord.overtimeHours} Hours</span>
+                  <span className="text-[10px] text-slate-400 font-bold block uppercase">Overtime Hours</span>
+                  <span className="font-extrabold text-slate-900 text-base">+{viewingRecord.overtimeHours} Hours</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[11px] text-emerald-300 block">Payable Amount</span>
-                  <span className="font-black text-amber-300 text-xl">₹{viewingRecord.payableAmount.toLocaleString("en-IN")}</span>
+                  <span className="text-[10px] text-slate-400 font-bold block uppercase">Payable Amount</span>
+                  <span className="font-black text-emerald-800 text-base">₹{viewingRecord.payableAmount.toLocaleString("en-IN")}</span>
                 </div>
               </div>
             </div>
 
-            {/* Audit Trail Details (Improvement #4) */}
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-              <span className="font-bold text-slate-800 uppercase block">Approval Audit Log:</span>
-              <div className="flex justify-between py-1 border-b border-slate-200">
-                <span className="text-slate-500">Approved / Processed By:</span>
+            {/* Audit Trail Details */}
+            <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-2 text-xs">
+              <span className="font-bold text-slate-800 uppercase block">Audit Details</span>
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500">Classification:</span>
+                <span className="font-bold text-slate-900">{viewingRecord.otType}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500">Shift Code:</span>
+                <span className="font-bold text-slate-900">{viewingRecord.shiftName} ({viewingRecord.shiftCode})</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500">Approved By:</span>
                 <span className="font-bold text-slate-900">{viewingRecord.approvedBy || "Pending Review"}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-200">
+              <div className="flex justify-between py-1 border-b border-slate-100">
                 <span className="text-slate-500">Approval Date:</span>
                 <span className="font-semibold text-slate-800">{viewingRecord.approvedOn || "Pending"}</span>
               </div>
-              {viewingRecord.approvalRemarks && (
+              {viewingRecord.reason && (
                 <div className="pt-1">
-                  <span className="text-slate-500 block mb-0.5">Remarks:</span>
-                  <p className="italic text-slate-700">"{viewingRecord.approvalRemarks}"</p>
+                  <span className="text-slate-500 font-semibold block mb-0.5">Reason:</span>
+                  <p className="italic text-slate-700">"{viewingRecord.reason}"</p>
                 </div>
               )}
             </div>

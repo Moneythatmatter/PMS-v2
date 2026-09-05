@@ -578,38 +578,38 @@ export function EmployeeDocumentsView() {
     switch (status) {
       case "Verified":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-            🟢 Verified
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+            Verified
           </span>
         );
       case "Pending Verification":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-            🟡 Pending Verification
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
+            Pending
           </span>
         );
       case "Expired":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
-            🔴 Expired
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
+            Expired
           </span>
         );
       case "Missing":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
-            ⚪ Missing
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-300">
+            Missing
           </span>
         );
       case "Uploaded":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-            🔵 Uploaded
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">
+            Uploaded
           </span>
         );
       case "Expiring Soon":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-orange-100 text-orange-800 border border-orange-200">
-            🟠 Expiring Soon ({daysUntilExpiry ?? 13}d)
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+            Expiring Soon ({daysUntilExpiry ?? 13}d)
           </span>
         );
     }
@@ -854,22 +854,6 @@ export function EmployeeDocumentsView() {
                 </span>
               )}
             </div>
-
-            {/* Single-Line Document Statistics Badges */}
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs font-bold">
-              <span className="px-3 py-1 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs">
-                📄 {empSummary.total} Documents
-              </span>
-              <span className="px-3 py-1 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs">
-                🟢 {empSummary.verified} Verified
-              </span>
-              <span className="px-3 py-1 rounded-xl bg-rose-100 text-rose-800 border border-rose-200 shadow-2xs">
-                🔴 {empSummary.expired} Expired
-              </span>
-              <span className="px-3 py-1 rounded-xl bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs">
-                🟡 {empSummary.missing} Missing
-              </span>
-            </div>
           </div>
         )}
       </div>
@@ -922,142 +906,86 @@ export function EmployeeDocumentsView() {
           </div>
         </div>
       </div>
-
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 3: FILTERS TOOLBAR
+          SECTION 3: CLEAN STANDARDIZED MODULE TOOLBAR
       ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs mb-5 space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Row 1: Search Documents & Reset Filters */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search Documents..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-slate-50/50 font-medium text-slate-800"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 self-end md:self-auto">
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs mb-5 flex items-center justify-between gap-3">
+        {/* Full-width Rounded Search Input */}
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search documents by title, category..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
+          />
+          {searchTerm && (
             <button
               type="button"
-              onClick={() => {
-                setSearchTerm("");
-                setSelectedDepartment("ALL");
-                setSelectedCategory("ALL");
-                setSelectedStatus("ALL");
-                setSelectedExpiry("ALL");
-              }}
-              className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl hover:bg-slate-50 transition"
+              onClick={() => setSearchTerm("")}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
             >
-              Reset Filters
+              <X className="h-3.5 w-3.5" />
             </button>
-
-            <div className="flex items-center border border-slate-200 rounded-xl p-0.5 bg-slate-50">
-              <button
-                type="button"
-                onClick={() => setViewMode("categorized")}
-                className={cn(
-                  "px-3 py-1 text-xs font-bold rounded-lg transition flex items-center gap-1.5",
-                  viewMode === "categorized"
-                    ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
-                    : "text-slate-500 hover:text-slate-800"
-                )}
-              >
-                <Layers className="h-3.5 w-3.5" />
-                <span>Categorized View</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("table")}
-                className={cn(
-                  "px-3 py-1 text-xs font-bold rounded-lg transition flex items-center gap-1.5",
-                  viewMode === "table"
-                    ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
-                    : "text-slate-500 hover:text-slate-800"
-                )}
-              >
-                <List className="h-3.5 w-3.5" />
-                <span>Flat Table View</span>
-              </button>
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Row 2: 4 Dropdown Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 pt-2 border-t border-slate-100">
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Department</label>
-            <select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="w-full text-xs rounded-xl border border-slate-200 py-1.5 px-2.5 bg-white font-medium"
-            >
-              <option value="ALL">All Departments</option>
-              <option value="Front Office">Front Office</option>
-              <option value="Housekeeping">Housekeeping</option>
-              <option value="Food & Beverage">Food &amp; Beverage</option>
-              <option value="Kitchen">Kitchen</option>
-              <option value="HR">HR</option>
-              <option value="Accounts">Accounts</option>
-            </select>
-          </div>
+        {/* Right-aligned Filter Dropdowns & View Switchers */}
+        <div className="flex items-center gap-2 shrink-0">
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="text-xs rounded-full border border-slate-200 py-2 px-3 bg-white font-bold text-slate-700 shadow-2xs"
+          >
+            <option value="ALL">All Categories</option>
+            {CATEGORY_DEFINITIONS.map((c) => (
+              <option key={c.category} value={c.category}>
+                {c.category}
+              </option>
+            ))}
+          </select>
 
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Document Category</label>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full text-xs rounded-xl border border-slate-200 py-1.5 px-2.5 bg-white font-medium"
-            >
-              <option value="ALL">All Categories</option>
-              {CATEGORY_DEFINITIONS.map((c) => (
-                <option key={c.category} value={c.category}>
-                  {c.category}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="text-xs rounded-full border border-slate-200 py-2 px-3 bg-white font-bold text-slate-700 shadow-2xs"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="Verified">Verified</option>
+            <option value="Pending Verification">Pending Verification</option>
+            <option value="Expired">Expired</option>
+            <option value="Missing">Missing</option>
+          </select>
 
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Verification Status</label>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full text-xs rounded-xl border border-slate-200 py-1.5 px-2.5 bg-white font-medium"
+          {/* View Mode Switcher */}
+          <div className="flex items-center border border-slate-200 rounded-full p-0.5 bg-slate-50 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setViewMode("categorized")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-bold rounded-full transition flex items-center gap-1.5",
+                viewMode === "categorized"
+                  ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
+                  : "text-slate-500 hover:text-slate-800"
+              )}
             >
-              <option value="ALL">All Statuses</option>
-              <option value="Verified">🟢 Verified</option>
-              <option value="Pending Verification">🟡 Pending Verification</option>
-              <option value="Expired">🔴 Expired</option>
-              <option value="Missing">⚪ Missing</option>
-              <option value="Uploaded">🔵 Uploaded</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Expiry Status</label>
-            <select
-              value={selectedExpiry}
-              onChange={(e) => setSelectedExpiry(e.target.value)}
-              className="w-full text-xs rounded-xl border border-slate-200 py-1.5 px-2.5 bg-white font-medium"
+              <Layers className="h-3.5 w-3.5" />
+              <span>Categorized View</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-bold rounded-full transition flex items-center gap-1.5",
+                viewMode === "table"
+                  ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
+                  : "text-slate-500 hover:text-slate-800"
+              )}
             >
-              <option value="ALL">All Expiry States</option>
-              <option value="EXPIRED">Expired</option>
-              <option value="EXPIRING_SOON">Expiring Soon</option>
-              <option value="VALID">Valid / No Expiry</option>
-            </select>
+              <List className="h-3.5 w-3.5" />
+              <span>Flat Table View</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1103,7 +1031,7 @@ export function EmployeeDocumentsView() {
                       className="inline-flex items-center gap-1.5 bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50 text-xs font-bold rounded-xl px-3 py-1.5 shadow-2xs transition shrink-0 cursor-pointer"
                     >
                       <Plus className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>+ Upload</span>
+                      <span>Upload</span>
                     </button>
 
                     <button type="button" className="p-1 text-slate-400">
@@ -1129,7 +1057,7 @@ export function EmployeeDocumentsView() {
                         </button>
                       </div>
                     ) : (
-                      /* Streamlined Document Table: 3 Icons Only (Preview, Download, Delete) */
+                      /* Streamlined Document Table: 2 Icons Only (Download, Delete) */
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs">
                           <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase border-b border-slate-200">
@@ -1172,21 +1100,12 @@ export function EmployeeDocumentsView() {
                                   {doc.expiryDate || "No Expiry"}
                                 </td>
 
-                                {/* Streamlined Actions: Preview (Eye), Download, Delete */}
+                                {/* Streamlined Actions: Download & Delete */}
                                 <td
                                   className="py-3 px-3 text-right"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <div className="flex items-center justify-end gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => setActiveDrawerDoc(doc)}
-                                      title="Preview Document Details"
-                                      className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
-                                    >
-                                      <Eye className="h-4 w-4" />
-                                    </button>
-
                                     <button
                                       type="button"
                                       onClick={() => setToastMessage(`Downloading ${doc.docTitle}...`)}
@@ -1241,13 +1160,10 @@ export function EmployeeDocumentsView() {
                     <td className="py-3.5 px-4">{renderStatusBadge(doc.status, doc.daysUntilExpiry)}</td>
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1.5">
-                        <button onClick={() => setActiveDrawerDoc(doc)} title="Preview" className="p-1.5 text-slate-500 hover:text-emerald-700">
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => setToastMessage(`Downloading ${doc.docTitle}...`)} title="Download" className="p-1.5 text-slate-500 hover:text-emerald-700">
+                        <button onClick={() => setToastMessage(`Downloading ${doc.docTitle}...`)} title="Download File" className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer">
                           <Download className="h-4 w-4" />
                         </button>
-                        <button onClick={(e) => handleDelete(doc.id, e)} title="Delete" className="p-1.5 text-slate-400 hover:text-rose-600">
+                        <button onClick={(e) => handleDelete(doc.id, e)} title="Delete Document" className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
