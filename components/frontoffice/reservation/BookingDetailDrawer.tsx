@@ -20,10 +20,12 @@ import type { ReservationBooking } from "@/app/data/types";
 import { reservationService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import { Drawer, formatINR } from "@/components/frontoffice/ui";
+import { usePropertyOptional } from "@/components/platform/PropertyProvider";
 import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
 import { checkInHref, checkOutHref } from "@/lib/check-in-navigation";
 import { formatBookingGuestLine } from "@/lib/reservation-display";
+import { printBookingDetail } from "./bookingPrintUtils";
 import { ReservationStatusBadge } from "./ReservationStatusBadge";
 
 function getInitials(name?: string) {
@@ -77,6 +79,8 @@ interface BookingDetailDrawerProps {
 }
 
 export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetailDrawerProps) {
+  const propertyCtx = usePropertyOptional();
+  const propertyName = propertyCtx?.property?.name ?? "IMPACT PMS";
   const [detail, setDetail] = useState<ReservationBooking | null>(booking);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
@@ -123,7 +127,11 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
       footer={
         <>
           <Button variant="outline" onClick={onClose}>Close</Button>
-          <Button variant="outline" className="gap-1.5" onClick={() => window.print()}>
+          <Button
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => printBookingDetail(detail, propertyName)}
+          >
             <Printer className="h-3.5 w-3.5" />
             Print
           </Button>

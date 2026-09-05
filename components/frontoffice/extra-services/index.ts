@@ -8,4 +8,3 @@ export * from "./HousekeepingRequestsView";
 export * from "./MaintenanceRequestsView";
 export * from "./LostFoundView";
 export * from "./MessagesView";
-export * from "./InvoiceHistoryView";

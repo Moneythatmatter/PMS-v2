@@ -11,6 +11,7 @@ import {
   CreditCard,
   FileText,
   LogOut,
+  Loader2,
   Phone,
   Printer,
   Receipt,
@@ -149,6 +150,7 @@ export function CheckOutView() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -346,7 +348,7 @@ export function CheckOutView() {
     : null;
 
   const handleCheckout = async () => {
-    if (!selected || !totals) return;
+    if (!selected || !totals || checkingOut) return;
     if (amountReceived < totals.pending) {
       setLookupError(`Amount received (${formatINR(amountReceived)}) is less than pending balance (${formatINR(totals.pending)}).`);
       return;
@@ -359,6 +361,8 @@ export function CheckOutView() {
       );
       return;
     }
+    setCheckingOut(true);
+    setLookupError("");
     try {
       await reservationService.checkOut(selected.id, {
         paymentMode,
@@ -376,8 +380,16 @@ export function CheckOutView() {
       );
     } catch (e) {
       setLookupError(e instanceof Error ? e.message : "Check-out failed");
+    } finally {
+      setCheckingOut(false);
     }
   };
+
+  const checkoutBlocked =
+    !paymentMode ||
+    amountReceived < (totals?.pending ?? 0) ||
+    (externalReferenceRequired && !externalReference.trim());
+  const checkoutButtonDisabled = checkoutBlocked || checkingOut;
 
   const reset = () => {
     setSelected(null);
@@ -429,6 +441,7 @@ export function CheckOutView() {
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
+                disabled={checkingOut}
                 onClick={() => {
                   if (hasAnyInvoice && activeInvoiceBillId) setShowInvoice(true);
                   else if (splitBilling && billBreakdown && billBreakdown.bills.length > 1) handleGenerateAllInvoices();
@@ -442,6 +455,7 @@ export function CheckOutView() {
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
+                disabled={checkingOut}
                 onClick={() => {
                   if (!hasAnyInvoice) {
                     if (splitBilling && billBreakdown && billBreakdown.bills.length > 1) handleGenerateAllInvoices();
@@ -456,14 +470,14 @@ export function CheckOutView() {
                 size="sm"
                 className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
                 onClick={handleCheckout}
-                disabled={
-                  !paymentMode ||
-                  amountReceived < (totals?.pending ?? 0) ||
-                  (externalReferenceRequired && !externalReference.trim())
-                }
+                disabled={checkoutButtonDisabled}
               >
-                <LogOut className="h-3.5 w-3.5" />
-                Complete Checkout
+                {checkingOut ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <LogOut className="h-3.5 w-3.5" />
+                )}
+                {checkingOut ? "Processing…" : "Complete Checkout"}
               </Button>
             </div>
           ) : null
@@ -471,6 +485,25 @@ export function CheckOutView() {
       />
 
       {/* Stepper */}
+      <div className="relative">
+        {checkingOut && (
+          <div
+            className="absolute inset-0 z-20 flex items-start justify-center rounded-2xl bg-white/75 pt-24 backdrop-blur-[1px]"
+            role="status"
+            aria-live="polite"
+            aria-label="Processing checkout"
+          >
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-lg">
+              <Loader2 className="h-5 w-5 animate-spin text-emerald-700" />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Processing checkout…</p>
+                <p className="text-xs text-slate-500">Settling folio and completing departure</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className={cn(checkingOut && "pointer-events-none select-none opacity-60")}>
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex items-center justify-between gap-2 overflow-x-auto scrollbar-none">
           {steps.map((step, i) => {
@@ -948,20 +981,23 @@ export function CheckOutView() {
                 <Button
                   className="h-12 w-full gap-2 bg-emerald-700 hover:bg-emerald-800 lg:hidden"
                   onClick={handleCheckout}
-                  disabled={
-                    !paymentMode ||
-                    amountReceived < totals.pending ||
-                    (externalReferenceRequired && !externalReference.trim())
-                  }
+                  disabled={checkoutButtonDisabled}
                 >
-                  <LogOut className="h-4 w-4" />
-                  Complete Checkout — {formatINR(totals.pending)}
+                  {checkingOut ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <LogOut className="h-4 w-4" />
+                  )}
+                  {checkingOut ? "Processing checkout…" : `Complete Checkout — ${formatINR(totals.pending)}`}
                 </Button>
               </div>
             )}
           </div>
         </div>
       )}
+
+        </div>
+      </div>
 
       {showInvoice && splitBilling && billBreakdown && billBreakdown.bills.length > 1 && (
         <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">

@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
 import { reservationService } from "@/services/front-office/reservations";
+import { roomService } from "@/services/front-office/rooms";
 import { hkGuestRequestService, hkTaskService } from "@/services/housekeeping";
 import {
   type GuestRequestDto,
@@ -13,6 +13,7 @@ import type { ReservationBooking } from "@/app/data/types";
 import type { HKTask, HkTaskType } from "./HousekeepingTypes";
 import { formatTaskTypeLabel } from "./taskUtils";
 import { Button } from "@/components/ui/Button";
+import { DropdownSelect } from "@/components/ui/DropdownSelect";
 import {
   SelectInput,
   FormField,
@@ -20,7 +21,13 @@ import {
   TextInput,
 } from "@/components/frontoffice/ui";
 import { todayIso } from "@/lib/reservation-dates";
-import { combineDateAndTime } from "@/lib/hk-task-schedule";
+import {
+  clampToMinIsoDate,
+  combineDateAndTime,
+  isPastIsoDate,
+} from "@/lib/hk-task-schedule";
+import { getFoRoomStatusConfig, getFoRoomStatusListBadge } from "@/lib/frontoffice/room-status-colors";
+import { isActiveRoomBookingStatus } from "@/lib/frontoffice/active-booking";
 import { cn } from "@/lib/utils";
 
 function formatGuestRequestLabel(request: GuestRequestDto): string {
@@ -119,12 +126,37 @@ export function CreateCleaningTaskForm({
   const [loadingBooking, setLoadingBooking] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [roomSearch, setRoomSearch] = useState("");
+  const minCleaningDate = todayIso();
+  const [roomStatusByKey, setRoomStatusByKey] = useState<
+    Record<string, { status: string; guestName?: string }>
+  >({});
   const [guestRequests, setGuestRequests] = useState<GuestRequestDto[]>([]);
   const [loadingGuestRequests, setLoadingGuestRequests] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState(
     sourceGuestRequest?.id ?? "",
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void roomService
+      .status()
+      .then((cards) => {
+        if (cancelled) return;
+        const next: Record<string, { status: string; guestName?: string }> = {};
+        for (const card of cards) {
+          const entry = { status: card.status, guestName: card.guestName };
+          if (card.id) next[card.id] = entry;
+          next[card.roomNo] = entry;
+        }
+        setRoomStatusByKey(next);
+      })
+      .catch(() => {
+        if (!cancelled) setRoomStatusByKey({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (sourceGuestRequest) {
@@ -142,8 +174,8 @@ export function CreateCleaningTaskForm({
   }, [sourceGuestRequest, initialRoomId]);
 
   useEffect(() => {
-    if (fromGuestRequest || !roomId.trim()) {
-      if (!fromGuestRequest) setRoomBooking(null);
+    if (!roomId.trim()) {
+      setRoomBooking(null);
       return;
     }
     let cancelled = false;
@@ -153,20 +185,20 @@ export function CreateCleaningTaskForm({
       .then((booking) => {
         if (cancelled) return;
         setRoomBooking(booking);
-        setLinkBooking(true);
-        if (booking.status === "Checked Out") {
-          setTaskType("CHECKOUT_CLEANING");
-        } else if (
-          booking.status === "Checked In" ||
-          booking.status === "In-House"
-        ) {
-          setTaskType("REGULAR_CLEANING");
+        const active = isActiveRoomBookingStatus(booking.status);
+        if (!fromGuestRequest) {
+          setLinkBooking(active);
+          if (booking.status === "Checked Out") {
+            setTaskType("CHECKOUT_CLEANING");
+          } else if (active) {
+            setTaskType("REGULAR_CLEANING");
+          }
         }
       })
       .catch(() => {
         if (!cancelled) {
           setRoomBooking(null);
-          setLinkBooking(false);
+          if (!fromGuestRequest) setLinkBooking(false);
         }
       })
       .finally(() => {
@@ -193,8 +225,12 @@ export function CreateCleaningTaskForm({
       roomId: roomId.trim(),
       requestType: "CLEANING",
     });
-    if (linkBooking && roomBooking?.id) {
-      params.set("bookingId", roomBooking.id);
+    const activeBookingId =
+      linkBooking && roomBooking && isActiveRoomBookingStatus(roomBooking.status)
+        ? roomBooking.id
+        : undefined;
+    if (activeBookingId) {
+      params.set("bookingId", activeBookingId);
     }
 
     void hkGuestRequestService
@@ -224,23 +260,45 @@ export function CreateCleaningTaskForm({
     };
   }, [roomId, roomBooking?.id, linkBooking, fromGuestRequest]);
 
-  const resolvedBookingId = fromGuestRequest
-    ? sourceGuestRequest?.bookingId ?? undefined
-    : linkBooking && roomBooking?.id
-      ? roomBooking.id
+  const activeRoomBooking =
+    roomBooking && isActiveRoomBookingStatus(roomBooking.status)
+      ? roomBooking
+      : null;
+
+  const resolvedBookingId =
+    activeRoomBooking &&
+    (fromGuestRequest || linkBooking) &&
+    (!fromGuestRequest ||
+      !sourceGuestRequest?.bookingId ||
+      sourceGuestRequest.bookingId === activeRoomBooking.id)
+      ? activeRoomBooking.id
       : undefined;
 
-  const filteredRooms = useMemo(() => {
-    const q = roomSearch.trim().toLowerCase();
-    if (!q) return foRooms;
-    return foRooms.filter((room) => {
-      const haystack = [room.roomNo, room.roomType, room.floor, room.bedType]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [foRooms, roomSearch]);
+  const roomOptions = useMemo(
+    () =>
+      foRooms.map((room) => {
+        const id = roomKey(room);
+        const floor = room.floor ? ` (${room.floor})` : "";
+        const statusCard = roomStatusByKey[id] ?? roomStatusByKey[room.roomNo];
+        const status = statusCard?.status ?? "Vacant";
+        const statusConfig = getFoRoomStatusConfig(status);
+        const hintParts = [room.bedType, statusCard?.guestName].filter(Boolean);
+        return {
+          value: id,
+          label: `${room.roomNo} — ${room.roomType ?? "Standard"}${floor}`,
+          hint: hintParts.join(" · ") || undefined,
+          tag: {
+            label: statusConfig.label.toUpperCase(),
+            className: getFoRoomStatusListBadge(status),
+          },
+        };
+      }),
+    [foRooms, roomStatusByKey],
+  );
+
+  const handleCleaningDateChange = (value: string) => {
+    setCleaningDate(clampToMinIsoDate(value, minCleaningDate));
+  };
 
   const handleSubmit = async () => {
     if (!roomId.trim()) {
@@ -249,6 +307,10 @@ export function CreateCleaningTaskForm({
     }
     if (!cleaningDate.trim()) {
       setError("Cleaning date is required.");
+      return;
+    }
+    if (isPastIsoDate(cleaningDate, minCleaningDate)) {
+      setError("Cleaning date cannot be in the past.");
       return;
     }
     if (scheduleEnabled) {
@@ -342,40 +404,15 @@ export function CreateCleaningTaskForm({
               ))}
           </div>
         ) : (
-          <div className="space-y-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <TextInput
-                value={roomSearch}
-                onChange={(e) => setRoomSearch(e.target.value)}
-                placeholder="Search room no., type, floor…"
-                className="pl-9 text-xs"
-              />
-            </div>
-            <SelectInput
-              value={roomId}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                setRoomId(e.target.value)
-              }
-              className="text-xs"
-            >
-              <option value="">Select room…</option>
-              {filteredRooms.map((room) => {
-                const id = roomKey(room);
-                return (
-                  <option key={id} value={id}>
-                    {room.roomNo} — {room.roomType ?? "Standard"}
-                    {room.floor ? ` (${room.floor})` : ""}
-                  </option>
-                );
-              })}
-            </SelectInput>
-            {roomSearch.trim() && filteredRooms.length === 0 && (
-              <p className="text-[11px] text-slate-500">
-                No rooms match &ldquo;{roomSearch.trim()}&rdquo;
-              </p>
-            )}
-          </div>
+          <DropdownSelect
+            value={roomId}
+            onChange={setRoomId}
+            options={roomOptions}
+            placeholder="Select room…"
+            searchable
+            aria-label="Select room"
+            triggerClassName="text-xs"
+          />
         )}
       </FormField>
 
@@ -406,7 +443,7 @@ export function CreateCleaningTaskForm({
           <p className="text-xs text-slate-500">
             Looking up booking for this room…
           </p>
-        ) : roomBooking ? (
+        ) : roomBooking && activeRoomBooking ? (
           <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
             <label className="flex cursor-pointer items-start gap-2 text-xs">
               <input
@@ -417,14 +454,29 @@ export function CreateCleaningTaskForm({
               />
               <span>
                 <span className="block font-bold text-slate-800">
-                  Link to {roomBooking.bookingNo ?? roomBooking.id}
+                  Link to {activeRoomBooking.bookingNo ?? activeRoomBooking.id}
                 </span>
                 <span className="text-slate-600">
-                  {roomBooking.guestName ?? "Guest"} · {roomBooking.status}
-                  {roomBooking.checkOut ? ` · Out ${roomBooking.checkOut}` : ""}
+                  {activeRoomBooking.guestName ?? "Guest"} · {activeRoomBooking.status}
+                  {activeRoomBooking.checkOut
+                    ? ` · Out ${activeRoomBooking.checkOut}`
+                    : ""}
                 </span>
               </span>
             </label>
+          </div>
+        ) : roomBooking ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
+            <span className="block font-semibold text-slate-800">
+              {roomBooking.bookingNo ?? roomBooking.id} · {roomBooking.status}
+            </span>
+            <span className="text-slate-600">
+              {roomBooking.guestName ?? "Guest"}
+              {roomBooking.checkOut ? ` · Out ${roomBooking.checkOut}` : ""}
+            </span>
+            <p className="mt-1.5 text-slate-500">
+              Room is not occupied — task will be created without a booking link.
+            </p>
           </div>
         ) : (
           <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
@@ -459,7 +511,7 @@ export function CreateCleaningTaskForm({
           ) : guestRequests.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
               No open room-cleaning requests
-              {linkBooking && roomBooking?.id ? " for this booking" : " for this room"}.
+              {resolvedBookingId ? " for this booking" : " for this room"}.
             </p>
           ) : (
             <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/50 p-2">
@@ -528,8 +580,9 @@ export function CreateCleaningTaskForm({
           <FormField label="Cleaning Date" required>
             <TextInput
               type="date"
+              min={minCleaningDate}
               value={cleaningDate}
-              onChange={(e) => setCleaningDate(e.target.value)}
+              onChange={(e) => handleCleaningDateChange(e.target.value)}
               className="text-xs"
             />
           </FormField>
@@ -577,8 +630,9 @@ export function CreateCleaningTaskForm({
             <FormField label="Cleaning Date" required>
               <TextInput
                 type="date"
+                min={minCleaningDate}
                 value={cleaningDate}
-                onChange={(e) => setCleaningDate(e.target.value)}
+                onChange={(e) => handleCleaningDateChange(e.target.value)}
                 className="text-xs"
               />
             </FormField>

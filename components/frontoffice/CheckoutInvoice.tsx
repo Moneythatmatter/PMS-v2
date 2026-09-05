@@ -1,34 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, Printer } from "lucide-react";
-import type { CheckoutFolio, CheckoutBillGroup, SplittableChargeKey } from "@/app/data/frontoffice/checkout";
-import { computeCheckoutTotals, SPLITTABLE_CHARGE_LABELS } from "@/app/data/frontoffice/checkout";
+import { computeCheckoutTotals } from "@/app/data/frontoffice/checkout";
 import { Button } from "@/components/ui/Button";
 import { Drawer, formatINR } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import {
+  amountInWords,
+  buildCheckoutInvoiceLineItems,
+  CHECKOUT_INVOICE_HOTEL,
+  downloadCheckoutInvoice,
+  formatCheckoutRoomLabel,
+  printCheckoutInvoice,
+  type CheckoutInvoiceContent,
+} from "@/components/frontoffice/checkoutInvoiceDocument";
 
-const HOTEL = {
-  name: "Grand Plaza Hotel & Resorts",
-  tagline: "Luxury Stay · Premium Service",
-  address: "42 MG Road, Bengaluru, Karnataka — 560001",
-  phone: "+91 80 4567 8900",
-  email: "frontoffice@grandplazahotel.com",
-  gstin: "29AABCG1234F1Z5",
-  pan: "AABCG1234F",
-  state: "Karnataka",
-  stateCode: "29",
-};
-
-export interface InvoiceData {
-  invoiceNo: string;
-  invoiceDate: string;
-  folio: CheckoutFolio;
-  discount: number;
-  paymentMode: string;
-  bill?: CheckoutBillGroup;
-  billTitle?: string;
-}
+export type InvoiceData = CheckoutInvoiceContent;
 
 interface CheckoutInvoiceDrawerProps {
   open: boolean;
@@ -36,92 +24,7 @@ interface CheckoutInvoiceDrawerProps {
   data: InvoiceData | null;
 }
 
-function lineItemForCharge(
-  folio: CheckoutFolio,
-  key: SplittableChargeKey | "roomCharges",
-) {
-  const configs: Record<
-    SplittableChargeKey | "roomCharges",
-    { desc: string; sac: string; qty: number; rate: number; amount: number } | null
-  > = {
-    roomCharges:
-      folio.roomCharges > 0
-        ? {
-            desc: `Room Charges — ${folio.roomType} (Room ${folio.room})`,
-            sac: "996311",
-            qty: folio.nights,
-            rate: Math.round(folio.roomCharges / folio.nights),
-            amount: folio.roomCharges,
-          }
-        : null,
-    restaurantCharges:
-      folio.restaurantCharges > 0
-        ? {
-            desc: "Restaurant / F&B Charges",
-            sac: "996331",
-            qty: 1,
-            rate: folio.restaurantCharges,
-            amount: folio.restaurantCharges,
-          }
-        : null,
-    laundry:
-      folio.laundry > 0
-        ? {
-            desc: "Laundry Services",
-            sac: "999799",
-            qty: 1,
-            rate: folio.laundry,
-            amount: folio.laundry,
-          }
-        : null,
-    miniBar:
-      folio.miniBar > 0
-        ? {
-            desc: "Mini Bar Consumption",
-            sac: "996331",
-            qty: 1,
-            rate: folio.miniBar,
-            amount: folio.miniBar,
-          }
-        : null,
-    extraBed:
-      folio.extraBed > 0
-        ? {
-            desc: "Extra Bed Charges",
-            sac: "996311",
-            qty: 1,
-            rate: folio.extraBed,
-            amount: folio.extraBed,
-          }
-        : null,
-    otherCharges:
-      folio.otherCharges > 0
-        ? {
-            desc: "Miscellaneous Charges",
-            sac: "999799",
-            qty: 1,
-            rate: folio.otherCharges,
-            amount: folio.otherCharges,
-          }
-        : null,
-  };
-
-  return configs[key];
-}
-
-function buildLineItems(folio: CheckoutFolio, bill?: CheckoutBillGroup) {
-  const keys = bill?.chargeKeys ?? [
-    "roomCharges",
-    ...(Object.keys(SPLITTABLE_CHARGE_LABELS) as SplittableChargeKey[]),
-  ];
-
-  return keys
-    .map((key) => lineItemForCharge(folio, key))
-    .filter((item): item is NonNullable<typeof item> => item !== null);
-}
-
 export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDrawerProps) {
-  const printRef = useRef<HTMLDivElement>(null);
   const [fullScreen, setFullScreen] = useState(false);
 
   useEffect(() => {
@@ -140,45 +43,22 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
         discount: bill.discount,
       }
     : computeCheckoutTotals(folio, discount);
-  const lineItems = buildLineItems(folio, bill);
+  const lineItems = buildCheckoutInvoiceLineItems(folio, bill);
   const taxableAmount = bill?.charges ?? totals.charges;
   const billGst = bill?.gst ?? folio.gst;
   const cgst = Math.round(billGst / 2);
   const sgst = Math.round(billGst / 2);
   const advancePaid = bill?.advance ?? folio.advancePaid;
   const billDiscount = bill?.discount ?? discount;
+  const roomLabel = formatCheckoutRoomLabel(folio);
+  const invoiceHeading = bill ? billTitle || "Split Bill Invoice" : "Tax Invoice";
 
   const handlePrint = () => {
-    const content = printRef.current;
-    if (!content) return;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(`
-      <!DOCTYPE html>
-      <html><head>
-        <title>Invoice ${invoiceNo}</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1e293b; padding: 32px; font-size: 13px; }
-          table { width: 100%; border-collapse: collapse; }
-          th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-          th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
-          .header { display: flex; justify-content: space-between; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #1e293b; }
-          .hotel-name { font-size: 22px; font-weight: 700; color: #0f172a; }
-          .totals { margin-top: 16px; }
-          .totals td { border: none; padding: 4px 10px; }
-          .grand { font-size: 16px; font-weight: 700; border-top: 2px solid #1e293b !important; }
-          .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; }
-        </style>
-      </head><body>${content.innerHTML}</body></html>
-    `);
-    win.document.close();
-    win.focus();
-    win.print();
+    printCheckoutInvoice(data);
   };
 
   const handleDownload = () => {
-    handlePrint();
+    downloadCheckoutInvoice(data);
   };
 
   return (
@@ -192,7 +72,9 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
       onToggleFullScreen={() => setFullScreen((v) => !v)}
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
           <Button variant="outline" className="gap-1.5" onClick={handleDownload}>
             <Download className="h-3.5 w-3.5" />
             Download
@@ -205,173 +87,172 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
       }
     >
       <div className={cn(fullScreen && "mx-auto max-w-4xl")}>
-        <div ref={printRef} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        {/* Header */}
-        <div className="flex items-start justify-between border-b-2 border-slate-900 pb-5">
-          <div>
-            <p className="text-xl font-bold text-slate-900">{HOTEL.name}</p>
-            <p className="mt-0.5 text-xs text-slate-500">{HOTEL.tagline}</p>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              {HOTEL.address}<br />
-              {HOTEL.phone} · {HOTEL.email}
-            </p>
-            <p className="mt-2 text-xs text-slate-600">
-              <span className="font-semibold">GSTIN:</span> {HOTEL.gstin}
-              <span className="mx-2">|</span>
-              <span className="font-semibold">PAN:</span> {HOTEL.pan}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-lg font-bold uppercase tracking-wide text-emerald-700">
-              {bill ? "Split Bill Invoice" : "Tax Invoice"}
-            </p>
-            <p className="mt-2 text-sm font-semibold text-slate-900">{invoiceNo}</p>
-            <p className="mt-1 text-xs text-slate-500">Date: {invoiceDate}</p>
-            <p className="mt-1 text-xs text-slate-500">Place of Supply: {HOTEL.state} ({HOTEL.stateCode})</p>
-          </div>
-        </div>
-
-        {/* Bill To / Stay */}
-        <div className="mt-5 grid grid-cols-2 gap-6">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Bill To</p>
-            <p className="mt-1 text-sm font-bold text-slate-900">{folio.guestName}</p>
-            <p className="text-xs text-slate-600">{folio.phone}</p>
-            {folio.email && <p className="text-xs text-slate-600">{folio.email}</p>}
-            <p className="mt-1 text-xs text-slate-500">Booking: {folio.bookingId}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Stay Details</p>
-            <p className="mt-1 text-xs text-slate-700">
-              <span className="font-medium">Room:</span> {folio.room} — {folio.roomType}
-            </p>
-            <p className="text-xs text-slate-700">
-              <span className="font-medium">Check-in:</span> {folio.checkIn}
-            </p>
-            <p className="text-xs text-slate-700">
-              <span className="font-medium">Check-out:</span> {folio.checkOut}
-            </p>
-            <p className="text-xs text-slate-700">
-              <span className="font-medium">Guests:</span> {folio.adults} Adult{folio.adults !== 1 ? "s" : ""}
-              {folio.children > 0 ? `, ${folio.children} Child${folio.children !== 1 ? "ren" : ""}` : ""}
-              · {folio.nights} Night{folio.nights !== 1 ? "s" : ""}
-            </p>
-          </div>
-        </div>
-
-        {/* Line items */}
-        <div className="mt-6 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase text-slate-500">#</th>
-                <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase text-slate-500">Description</th>
-                <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase text-slate-500">SAC</th>
-                <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase text-slate-500">Qty</th>
-                <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase text-slate-500">Rate</th>
-                <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase text-slate-500">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineItems.map((item, i) => (
-                <tr key={item.desc} className="border-b border-slate-100">
-                  <td className="px-2 py-2.5 text-slate-500">{i + 1}</td>
-                  <td className="px-2 py-2.5 font-medium text-slate-800">{item.desc}</td>
-                  <td className="px-2 py-2.5 text-xs text-slate-500">{item.sac}</td>
-                  <td className="px-2 py-2.5 text-right text-slate-700">{item.qty}</td>
-                  <td className="px-2 py-2.5 text-right text-slate-700">{formatINR(item.rate)}</td>
-                  <td className="px-2 py-2.5 text-right font-medium text-slate-900">{formatINR(item.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Totals */}
-        <div className="mt-4 flex justify-end">
-          <table className="w-full max-w-xs text-sm">
-            <tbody>
-              <tr>
-                <td className="py-1.5 text-slate-600">Taxable Amount</td>
-                <td className="py-1.5 text-right font-medium text-slate-900">{formatINR(taxableAmount)}</td>
-              </tr>
-              <tr>
-                <td className="py-1.5 text-slate-600">CGST @ 9%</td>
-                <td className="py-1.5 text-right text-slate-700">{formatINR(cgst)}</td>
-              </tr>
-              <tr>
-                <td className="py-1.5 text-slate-600">SGST @ 9%</td>
-                <td className="py-1.5 text-right text-slate-700">{formatINR(sgst)}</td>
-              </tr>
-              <tr className="border-t border-slate-200">
-                <td className="py-2 font-medium text-slate-800">Subtotal (incl. tax)</td>
-                <td className="py-2 text-right font-semibold text-slate-900">{formatINR(totals.subtotalWithTax)}</td>
-              </tr>
-              {billDiscount > 0 && (
-                <tr>
-                  <td className="py-1.5 text-emerald-600">Discount</td>
-                  <td className="py-1.5 text-right text-emerald-600">− {formatINR(billDiscount)}</td>
-                </tr>
-              )}
-              <tr>
-                <td className="py-1.5 text-emerald-600">Advance Paid</td>
-                <td className="py-1.5 text-right text-emerald-600">− {formatINR(advancePaid)}</td>
-              </tr>
-              <tr className="border-t-2 border-slate-900">
-                <td className="py-3 text-base font-bold text-slate-900">Amount Due</td>
-                <td className="py-3 text-right text-lg font-bold text-emerald-700">{formatINR(totals.pending)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Payment info */}
-        <div className="mt-5 rounded-lg bg-slate-50 px-4 py-3">
-          <p className="text-xs text-slate-600">
-            <span className="font-semibold text-slate-800">Payment Mode:</span> {paymentMode}
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Amount in words: {amountInWords(totals.pending)} Rupees Only
-          </p>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-6 border-t border-slate-200 pt-4">
-          <p className="text-[10px] leading-relaxed text-slate-400">
-            This is a computer-generated tax invoice and does not require a physical signature.
-            Subject to Bengaluru jurisdiction. E.&amp;O.E. GST charged as per applicable rates.
-            For queries contact {HOTEL.email} within 7 days of checkout.
-          </p>
-          <div className="mt-6 flex justify-between text-xs text-slate-500">
-            <div>
-              <p className="font-medium text-slate-700">Guest Signature</p>
-              <div className="mt-8 border-t border-slate-300 pt-1 w-40">________________</div>
-            </div>
-            <div className="text-right">
-              <p className="font-medium text-slate-700">Authorised Signatory</p>
-              <div className="mt-8 border-t border-slate-300 pt-1 w-40 ml-auto">Front Office</div>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          {/* Header band */}
+          <div className="bg-gradient-to-br from-emerald-800 to-emerald-600 px-6 py-6 text-white sm:px-8">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-2xl font-bold">{CHECKOUT_INVOICE_HOTEL.name}</p>
+                <p className="mt-1 text-xs text-emerald-100">{CHECKOUT_INVOICE_HOTEL.tagline}</p>
+                <p className="mt-3 text-xs leading-relaxed text-emerald-50/90">
+                  {CHECKOUT_INVOICE_HOTEL.address}
+                  <br />
+                  {CHECKOUT_INVOICE_HOTEL.phone} · {CHECKOUT_INVOICE_HOTEL.email}
+                </p>
+                <p className="mt-2 text-xs text-emerald-50/90">
+                  GSTIN: {CHECKOUT_INVOICE_HOTEL.gstin} · PAN: {CHECKOUT_INVOICE_HOTEL.pan}
+                </p>
+              </div>
+              <div className="text-left sm:text-right">
+                <span className="inline-flex rounded-full bg-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider">
+                  {invoiceHeading}
+                </span>
+                <p className="mt-3 text-lg font-bold">{invoiceNo}</p>
+                <p className="mt-1 text-xs text-emerald-50/90">Date: {invoiceDate}</p>
+                <p className="mt-0.5 text-xs text-emerald-50/90">
+                  Place of Supply: {CHECKOUT_INVOICE_HOTEL.state} ({CHECKOUT_INVOICE_HOTEL.stateCode})
+                </p>
+              </div>
             </div>
           </div>
+
+          <div className="space-y-6 p-6 sm:p-8">
+            {/* Bill To / Stay */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bill To</p>
+                <p className="mt-2 text-base font-bold text-slate-900">{folio.guestName}</p>
+                <p className="text-sm text-slate-600">{folio.phone}</p>
+                {folio.email && <p className="text-sm text-slate-600">{folio.email}</p>}
+                <p className="mt-1 text-xs text-slate-500">Booking ID: {folio.bookingId}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Stay Details</p>
+                <p className="mt-2 text-sm text-slate-700">
+                  <span className="font-medium">Room:</span> {roomLabel}
+                </p>
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Check-in:</span> {folio.checkIn}
+                </p>
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Check-out:</span> {folio.checkOut}
+                </p>
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Guests:</span> {folio.adults} Adult
+                  {folio.adults !== 1 ? "s" : ""}
+                  {folio.children > 0
+                    ? `, ${folio.children} Child${folio.children !== 1 ? "ren" : ""}`
+                    : ""}
+                  · {folio.nights} Night{folio.nights !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+
+            {/* Line items */}
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-slate-500">#</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-slate-500">
+                      Description
+                    </th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-slate-500">SAC</th>
+                    <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-slate-500">
+                      Qty
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-slate-500">
+                      Rate
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-slate-500">
+                      Amount
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineItems.map((item, i) => (
+                    <tr key={item.desc} className={cn("border-b border-slate-100", i % 2 === 1 && "bg-slate-50/60")}>
+                      <td className="px-3 py-3 text-slate-500">{i + 1}</td>
+                      <td className="px-3 py-3 font-medium text-slate-800">{item.desc}</td>
+                      <td className="px-3 py-3 text-xs text-slate-500">{item.sac}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{item.qty}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{formatINR(item.rate)}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-slate-900">{formatINR(item.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Totals + payment */}
+            <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Payment Information</p>
+                <p className="mt-2 text-sm text-slate-700">
+                  <span className="font-semibold text-slate-900">Mode:</span> {paymentMode}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  <span className="font-semibold text-slate-800">Amount in words:</span>{" "}
+                  {amountInWords(totals.pending)} Rupees Only
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Taxable Amount</span>
+                    <span className="font-medium text-slate-900">{formatINR(taxableAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>CGST @ 9%</span>
+                    <span>{formatINR(cgst)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>SGST @ 9%</span>
+                    <span>{formatINR(sgst)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-slate-200 pt-2 font-medium text-slate-800">
+                    <span>Subtotal (incl. tax)</span>
+                    <span>{formatINR(totals.subtotalWithTax)}</span>
+                  </div>
+                  {billDiscount > 0 && (
+                    <div className="flex justify-between text-emerald-700">
+                      <span>Discount</span>
+                      <span>− {formatINR(billDiscount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-emerald-700">
+                    <span>Advance Paid</span>
+                    <span>− {formatINR(advancePaid)}</span>
+                  </div>
+                  <div className="flex justify-between border-t-2 border-emerald-700 pt-3 text-base font-bold text-slate-900">
+                    <span>Amount Due</span>
+                    <span className="text-lg text-emerald-700">{formatINR(totals.pending)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-dashed border-slate-200 pt-4">
+              <p className="text-[10px] leading-relaxed text-slate-400">
+                This is a computer-generated tax invoice and does not require a physical signature. Subject to
+                Bengaluru jurisdiction. E.&amp;O.E. GST charged as per applicable rates. For queries contact{" "}
+                {CHECKOUT_INVOICE_HOTEL.email} within 7 days of checkout.
+              </p>
+              <div className="mt-6 flex justify-between gap-6 text-xs text-slate-500">
+                <div className="w-40">
+                  <p className="font-medium text-slate-700">Guest Signature</p>
+                  <div className="mt-10 border-t border-slate-300 pt-1">________________</div>
+                </div>
+                <div className="w-40 text-right">
+                  <p className="font-medium text-slate-700">Authorised Signatory</p>
+                  <div className="mt-10 border-t border-slate-300 pt-1">Front Office</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
       </div>
     </Drawer>
   );
-}
-
-function amountInWords(num: number): string {
-  if (num === 0) return "Zero";
-  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
-    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
-  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-
-  function convert(n: number): string {
-    if (n < 20) return ones[n];
-    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");
-    if (n < 1000) return ones[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " + convert(n % 100) : "");
-    if (n < 100000) return convert(Math.floor(n / 1000)) + " Thousand" + (n % 1000 ? " " + convert(n % 1000) : "");
-    return convert(Math.floor(n / 100000)) + " Lakh" + (n % 100000 ? " " + convert(n % 100000) : "");
-  }
-
-  return convert(Math.round(num));
 }

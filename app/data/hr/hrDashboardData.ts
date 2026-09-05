@@ -89,6 +89,30 @@ export const sampleAttendanceBreakdown: AttendanceBreakdown = {
   lateArrivals: 4,
 };
 
+export interface HRWeeklyAttendancePoint {
+  day: string;
+  present: number;
+}
+
+export const sampleWeeklyAttendanceTrend: HRWeeklyAttendancePoint[] = [
+  { day: "Mon", present: 118 },
+  { day: "Tue", present: 122 },
+  { day: "Wed", present: 120 },
+  { day: "Thu", present: 104 },
+  { day: "Fri", present: 126 },
+  { day: "Sat", present: 98 },
+  { day: "Sun", present: 92 },
+];
+
+export const departmentChartColors: Record<string, string> = {
+  Housekeeping: "#16a34a",
+  "F&B Service": "#2563eb",
+  "Kitchen / Culinary": "#f59e0b",
+  "Front Office": "#9333ea",
+  "Maintenance & Eng.": "#e11d48",
+  "HR & Admin": "#6366f1",
+};
+
 export const sampleDepartmentHeadcounts: DepartmentHeadcount[] = [
   { department: "Housekeeping", count: 34, color: "bg-emerald-500" },
   { department: "F&B Service", count: 27, color: "bg-blue-500" },

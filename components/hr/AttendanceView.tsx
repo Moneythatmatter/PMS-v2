@@ -14,7 +14,6 @@ import {
   Printer,
   Info,
   Calendar,
-  Zap,
   SlidersHorizontal,
   X,
   MapPin,
@@ -275,9 +274,12 @@ export function AttendanceView() {
   const [punchStatus, setPunchStatus] = useState<"Present" | "Late" | "Half Day">("Present");
   const [punchReason, setPunchReason] = useState("");
 
-  // Mode Filter Tab State (All Logs | Biometric Reader | Manual Overrides | Biometric Terminal Status)
-  const [attendanceMode, setAttendanceMode] = useState<"ALL" | "BIOMETRIC" | "MANUAL" | "TERMINALS">("ALL");
-  const [isSyncingBiometric, setIsSyncingBiometric] = useState(false);
+  // Mode Filter Tab State (All Logs | Manual Overrides; biometric tabs show coming soon)
+  const [attendanceMode, setAttendanceMode] = useState<"ALL" | "MANUAL">("ALL");
+
+  const showBiometricComingSoon = () => {
+    setToastMessage("Biometric features are coming soon.");
+  };
 
   // Filtered Attendance Records with Mode Filter
   const filteredRecords = useMemo(() => {
@@ -292,29 +294,11 @@ export function AttendanceView() {
       const matchStatus = selectedStatus === "ALL" || r.status === selectedStatus;
 
       let matchMode = true;
-      if (attendanceMode === "BIOMETRIC") matchMode = r.deviceType === "Biometric Reader";
       if (attendanceMode === "MANUAL") matchMode = r.isManualEntry === true || r.deviceType === "Manual Entry";
 
       return matchSearch && matchDept && matchShift && matchStatus && matchMode;
     });
   }, [records, searchTerm, selectedDepartment, selectedShift, selectedStatus, attendanceMode]);
-
-  // Biometric Terminal Hardware Statuses
-  const biometricTerminals = [
-    { id: "TERM-01", name: "Main Lobby Terminal #01", model: "eSSL SilkFB-100", ip: "192.168.1.201", status: "Online", lastSync: "1 min ago", totalLogsToday: 42, location: "Ground Floor Lobby" },
-    { id: "TERM-02", name: "Kitchen Staff Entry #02", model: "ZKTeco SpeedFace-V5L", ip: "192.168.1.202", status: "Online", lastSync: "2 mins ago", totalLogsToday: 28, location: "Basement Kitchen Door" },
-    { id: "TERM-03", name: "Housekeeping Office Terminal", model: "eSSL MB20", ip: "192.168.1.203", status: "Online", lastSync: "4 mins ago", totalLogsToday: 19, location: "1st Floor HK Store" },
-    { id: "TERM-04", name: "Engineering Workshop Terminal", model: "Matrix COSEC DOOR", ip: "192.168.1.204", status: "Offline", lastSync: "45 mins ago", totalLogsToday: 8, location: "Maintenance Block" },
-  ];
-
-  // Handle Trigger Biometric Sync Simulation
-  const handleSyncBiometrics = () => {
-    setIsSyncingBiometric(true);
-    setTimeout(() => {
-      setIsSyncingBiometric(false);
-      setToastMessage("✓ Biometric Sync Complete! 14 new punch logs fetched from 3 online devices.");
-    }, 1200);
-  };
 
   // KPI Metrics
   const metrics = useMemo(() => {
@@ -391,7 +375,7 @@ export function AttendanceView() {
     <ModulePageShell
       eyebrow="Human Resource / Attendance & Leave"
       title="Attendance Management"
-      description="Monitor daily employee attendance punch logs, biometric terminal status, manual punch overrides, and shift compliance."
+      description="Monitor daily employee attendance punch logs, manual punch overrides, and shift compliance."
       breadcrumbs={[
         { label: "Human Resource", href: "/human-resources/dashboard" },
         { label: "Attendance & Leave" },
@@ -412,17 +396,15 @@ export function AttendanceView() {
             + Manual Punch-In / Out
           </Button>
 
-          {/* Functional Biometric Sync Button */}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleSyncBiometrics}
-            disabled={isSyncingBiometric}
+            onClick={showBiometricComingSoon}
             className="rounded-xl text-xs font-bold bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50 shadow-xs cursor-pointer"
           >
-            <Fingerprint className={cn("mr-1.5 h-3.5 w-3.5 text-emerald-600", isSyncingBiometric && "animate-spin")} />
-            {isSyncingBiometric ? "Syncing Devices..." : "Sync Biometrics"}
+            <Fingerprint className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+            Sync Biometrics
           </Button>
 
           <Button
@@ -438,6 +420,46 @@ export function AttendanceView() {
         </div>
       }
     >
+      {/* MODE NAVIGATION SWITCHER TABS (All Logs | Biometric Reader | Manual Overrides | Biometric Terminals) */}
+      <div className="flex overflow-x-auto gap-2 mb-4 scrollbar-none">
+        {[
+          { id: "ALL", label: "All Attendance Logs", count: records.length },
+          { id: "BIOMETRIC", label: "Biometric Hardware Logs", count: records.filter((r) => r.deviceType === "Biometric Reader").length },
+          { id: "MANUAL", label: "Manual Override Logs", count: records.filter((r) => r.isManualEntry || r.deviceType === "Manual Entry").length },
+          { id: "TERMINALS", label: "Biometric Device Status", count: "3/4 Online" },
+        ].map((tab) => {
+          const isBiometricTab = tab.id === "BIOMETRIC" || tab.id === "TERMINALS";
+          const isActive = !isBiometricTab && attendanceMode === tab.id;
+
+          return (
+          <button
+            key={tab.id}
+            onClick={() => {
+              if (isBiometricTab) {
+                showBiometricComingSoon();
+                return;
+              }
+              setAttendanceMode(tab.id as "ALL" | "MANUAL");
+            }}
+            className={cn(
+              "flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border",
+              isActive
+                ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50",
+              isBiometricTab && "opacity-75"
+            )}
+          >
+            <span>{tab.label}</span>
+            <span className={cn(
+              "px-1.5 py-0.5 rounded-md text-[10px] font-black",
+              isActive ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
+            )}>
+              {tab.count}
+            </span>
+          </button>
+          );
+        })}
+      </div>
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: 4 KPI SUMMARY CARDS
       ───────────────────────────────────────────────────────────── */}
@@ -613,82 +635,6 @@ export function AttendanceView() {
         )}
       </div>
 
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 3: BIOMETRIC TERMINAL HARDWARE MONITOR (When TERMINALS tab active)
-      ───────────────────────────────────────────────────────────── */}
-      {attendanceMode === "TERMINALS" ? (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
-            <div>
-              <h3 className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                <Fingerprint className="h-4 w-4 text-emerald-700" />
-                Biometric Terminals Status
-              </h3>
-              <p className="text-[11px] text-slate-500 font-medium">Live terminal sync status &amp; network connectivity</p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleSyncBiometrics}
-              disabled={isSyncingBiometric}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-full text-xs font-bold shadow-2xs cursor-pointer px-4"
-            >
-              <Zap className="mr-1.5 h-3.5 w-3.5" />
-              Sync All
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {biometricTerminals.map((dev) => (
-              <div key={dev.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 shrink-0">
-                      <Fingerprint className="h-4 w-4 text-emerald-700" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-xs text-slate-900">{dev.name}</h4>
-                      <p className="text-[10px] text-slate-400 font-medium">{dev.location} • <span className="font-mono">{dev.ip}</span></p>
-                    </div>
-                  </div>
-
-                  <span className={cn(
-                    "px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border",
-                    dev.status === "Online"
-                      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                      : "bg-rose-100 text-rose-800 border-rose-200"
-                  )}>
-                    {dev.status}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Last Sync</span>
-                    <span className="font-semibold text-slate-800">{dev.lastSync}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Today's Scans</span>
-                    <span className="font-extrabold text-emerald-700">{dev.totalLogsToday} Scans</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] pt-0.5">
-                  <span className="text-slate-400 font-mono text-[10px]">ID: {dev.id}</span>
-                  <button
-                    type="button"
-                    onClick={() => setToastMessage(`Testing connection with ${dev.ip}... Status: 200 OK`)}
-                    className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer"
-                  >
-                    Test Ping
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <>
       {/* Desktop Table View */}
       <div className="hidden sm:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -813,8 +759,6 @@ export function AttendanceView() {
           </div>
         ))}
       </div>
-        </>
-      )}
 
       {/* ─────────────────────────────────────────────────────────────
           MODAL: MANUAL PUNCH-IN / PUNCH-OUT MODAL (Functioning)

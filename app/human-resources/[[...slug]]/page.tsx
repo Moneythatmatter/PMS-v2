@@ -1,9 +1,9 @@
+import { redirect } from "next/navigation";
 import { HRBlankView } from "@/components/hr/HRBlankView";
 import { HRDashboardView } from "@/components/hr/HRDashboardView";
 import { EmployeeListView } from "@/components/hr/EmployeeListView";
 import { AddEmployeeView } from "@/components/hr/AddEmployeeView";
 import { EmployeeProfileView } from "@/components/hr/EmployeeProfileView";
-import { EmployeeDocumentsView } from "@/components/hr/EmployeeDocumentsView";
 import { DocumentMastersView } from "@/components/hr/DocumentMastersView";
 import { ShiftManagementView } from "@/components/hr/ShiftManagementView";
 import { LeaveManagementView } from "@/components/hr/LeaveManagementView";
@@ -59,7 +59,7 @@ export default async function HumanResourcesPage({
   }
 
   if (slugPath === "employees/documents") {
-    return <EmployeeDocumentsView />;
+    redirect("/human-resources/employees/list");
   }
 
   if (slugPath === "attendance-leave/attendance") {

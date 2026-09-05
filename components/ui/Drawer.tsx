@@ -13,7 +13,7 @@ export interface DrawerProps {
   icon?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl";
+  maxWidth?: "sm" | "md" | "lg" | "xl";
   /** Allow drag-resize from the left edge. Default true. */
   resizable?: boolean;
 }
@@ -23,7 +23,6 @@ const widthKeys = {
   md: "md",
   lg: "lg",
   xl: "xl",
-  "2xl": "2xl",
 } as const;
 
 export function Drawer({
@@ -66,7 +65,6 @@ export function Drawer({
           !canResize && maxWidth === "md" && "max-w-md",
           !canResize && maxWidth === "lg" && "max-w-lg",
           !canResize && maxWidth === "xl" && "max-w-xl",
-          !canResize && maxWidth === "2xl" && "max-w-2xl",
           !isResizing && canResize && "transition-[width] duration-200",
         )}
         onClick={(e) => e.stopPropagation()}

@@ -19,7 +19,6 @@ export const frontOfficeNavItems: ModuleNavItem[] = [
   { label: "Guest Feedback", href: "/frontoffice/guest-feedback", icon: "message-square" },
   { label: "Taxi / Cab Booking", href: "/frontoffice/taxi-booking", icon: "car-taxi-front" },
   { label: "Messages", href: "/frontoffice/messages", icon: "mail" },
-  { label: "Invoice History", href: "/frontoffice/invoice-history", icon: "history" },
   {
     label: "Masters",
     href: "/frontoffice/masters",

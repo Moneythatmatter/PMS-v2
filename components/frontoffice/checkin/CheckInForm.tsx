@@ -221,8 +221,9 @@ export function CheckInForm() {
   const [completed, setCompleted] = useState(false);
   const [pmsBookings, setPmsBookings] = useState<any[]>([]);
   const [availableRooms, setAvailableRooms] = useState<
-    { roomNo: string; roomType: string; status: string; housekeeping: string }[]
+    { id?: string; roomNo: string; roomType: string; status: string; housekeeping: string }[]
   >([]);
+  const [roomIdByNo, setRoomIdByNo] = useState<Record<string, string>>({});
   const [roomTypeRates, setRoomTypeRates] = useState<Record<string, number>>({});
   const [arrivalDate, setArrivalDate] = useState(() => todayIso());
 
@@ -249,12 +250,18 @@ export function CheckInForm() {
             );
           })
           .map((r) => ({
+            id: r.id,
             roomNo: r.roomNo,
             roomType: r.type,
             status: r.status,
             housekeeping: r.housekeeping,
           }));
         setAvailableRooms(assignable);
+        const idByNo: Record<string, string> = {};
+        for (const r of assignable) {
+          if (r.id) idByNo[r.roomNo] = r.id;
+        }
+        setRoomIdByNo(idByNo);
 
         const rates: Record<string, number> = {};
         for (const rt of roomTypes) {
@@ -355,7 +362,7 @@ export function CheckInForm() {
     setBookingId(displayBookingNo(bookingRecord));
     setLockedIdentityFields({});
     setIdFile("");
-    const preassigned = String(bookingRecord.roomNo || bookingRecord.roomRefId || "").trim();
+    const preassigned = String(bookingRecord.roomNo || "").trim();
     const isRealRoom =
       preassigned &&
       !/^tba$/i.test(preassigned) &&
@@ -533,8 +540,10 @@ export function CheckInForm() {
       };
 
       if (checkInMode === "reserved" && booking) {
+        const roomRefId =
+          (roomForApi && roomIdByNo[roomForApi]) || roomForApi || undefined;
         await reservationService.checkIn(booking.id, {
-          roomNo: roomForApi,
+          roomRefId,
           ...guestPayload,
         } as Partial<ReservationBooking>);
       } else {
@@ -559,9 +568,11 @@ export function CheckInForm() {
           idNumber: guestDetails.idNumber || undefined,
         });
 
+        const walkInRoomRef =
+          (roomForApi && roomIdByNo[roomForApi]) || roomForApi || undefined;
         const created = await reservationService.create({
           guestId: guest.id,
-          roomRefId: roomForApi,
+          roomRefId: walkInRoomRef,
           checkIn,
           checkOut,
           nights: walkIn.nights,
@@ -575,7 +586,7 @@ export function CheckInForm() {
           companyName: walkIn.companyName || undefined,
         } as Partial<ReservationBooking>);
         await reservationService.checkIn(created.id, {
-          roomRefId: roomForApi,
+          roomRefId: walkInRoomRef,
         } as Partial<ReservationBooking>);
       }
 

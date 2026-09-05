@@ -101,7 +101,7 @@ export function normalizeRfqRequestedItem(
 
 /** Normalize API / legacy JSON shapes into canonical RFQ vendor rows. */
 export function normalizeRfqVendor(
-  raw: Partial<RFQVendorItem> & Record<string, unknown>,
+  raw: RfqVendorInput,
   index: number,
 ): RFQVendorItem {
   const r = raw as Record<string, any>;
