@@ -7,7 +7,10 @@ export {
 export type { ToolbarFilterOption } from "./ToolbarFilterSelect";
 export { getListTableInitials } from "./utils";
 export { ListTablePersonCell } from "./ListTablePersonCell";
-export { ListTableStatusBadge } from "./ListTableStatusBadge";
+export {
+  ListTableStatusBadge,
+  type ListTableStatusBadgeProps,
+} from "./ListTableStatusBadge";
 export { ListTableRowMenu } from "./ListTableRowMenu";
 export type { ListTableRowMenuItem } from "./ListTableRowMenu";
 export {
