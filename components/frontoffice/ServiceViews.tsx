@@ -31,7 +31,6 @@ export {
   MaintenanceRequestsView,
   LostFoundView,
   GuestFeedbackView,
-  InvoiceHistoryView,
 } from "@/components/frontoffice/ExtraServiceViews";
 
 export function LuggageManagementView() {

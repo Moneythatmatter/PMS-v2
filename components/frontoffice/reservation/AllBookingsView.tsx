@@ -32,12 +32,14 @@ import {
   FormField,
   SelectInput,
 } from "@/components/frontoffice/ui";
+import { usePropertyOptional } from "@/components/platform/PropertyProvider";
 import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
 import { formatBookingGuestLine } from "@/lib/reservation-display";
 import { isArrivingToday } from "@/lib/reservation-dates";
 import { checkInHref, checkOutHref } from "@/lib/check-in-navigation";
 import { BookingDetailDrawer } from "./BookingDetailDrawer";
+import { printBookingDetail } from "./bookingPrintUtils";
 import { ReservationStatusBadge } from "./ReservationStatusBadge";
 import { ReservationSummaryCards } from "./ReservationSummaryCards";
 
@@ -131,6 +133,8 @@ function findBookingByKey(bookings: ReservationBooking[], key: string) {
 export function AllBookingsView() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const propertyCtx = usePropertyOptional();
+  const propertyName = propertyCtx?.property?.name ?? "IMPACT PMS";
   const bookingQuery =
     searchParams.get("bookingId") ?? searchParams.get("booking") ?? "";
   const guestIdQuery = searchParams.get("guestId") ?? "";
@@ -147,6 +151,15 @@ export function AllBookingsView() {
   const [cancelBooking, setCancelBooking] = useState<ReservationBooking | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  const handlePrintBooking = (booking: ReservationBooking) => {
+    const printed = printBookingDetail(booking, propertyName);
+    if (!printed) {
+      setToast("Unable to open print dialog. Allow pop-ups and try again.");
+      return;
+    }
+    setToast(`Printing booking details for ${displayBookingNo(booking)}.`);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -691,7 +704,7 @@ export function AllBookingsView() {
                                     {
                                       icon: Printer,
                                       label: "Print",
-                                      onClick: () => window.print(),
+                                      onClick: () => handlePrintBooking(booking),
                                     },
                                     ...(booking.status === "Cancelled" ||
                                       booking.status === "Checked Out"

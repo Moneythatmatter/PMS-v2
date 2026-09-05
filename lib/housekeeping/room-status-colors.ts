@@ -161,9 +161,18 @@ export function getHkLegendConfig(key: HkRoomStatusUi | "Blocked / OOS"): Status
   return hkRoomStatusColors[key];
 }
 
-export function matchesHkStatusFilter(status: string, filter: string): boolean {
+export function matchesHkStatusFilter(
+  room: { status: string; hkStatus?: string },
+  filter: string,
+): boolean {
+  const { status, hkStatus } = room;
   if (filter === "all") return true;
-  if (filter === "dirty") return status.includes("Dirty");
+  if (filter === "dirty") {
+    return status.includes("Dirty") || (status === "Occupied" && hkStatus === "Dirty");
+  }
+  if (filter === "occupied") {
+    return status === "Occupied" || status === "Occupied Dirty";
+  }
   if (filter === "cleaning") return status === "Cleaning";
   if (filter === "inspection") return status === "Inspection Pending";
   if (filter === "ready") return status === "Vacant Ready";
@@ -173,6 +182,9 @@ export function matchesHkStatusFilter(status: string, filter: string): boolean {
   return true;
 }
 
-export function countHkStatusFilter(rooms: { status: string }[], filter: string): number {
-  return rooms.filter((r) => matchesHkStatusFilter(r.status, filter)).length;
+export function countHkStatusFilter(
+  rooms: { status: string; hkStatus?: string }[],
+  filter: string,
+): number {
+  return rooms.filter((r) => matchesHkStatusFilter(r, filter)).length;
 }

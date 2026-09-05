@@ -69,18 +69,23 @@ function HKRoomStatusCardTile({
   const config = getHkRoomStatusConfig(room.status);
   const shortStatus = getHkRoomStatusShortLabel(room.status);
   const showTimer = room.status === "Cleaning" && room.cleaningTimer;
-  const showStaff = !!room.assignedStaff;
+  const showGuest =
+    !!room.guestName &&
+    (room.status === "Occupied" || room.status === "Occupied Dirty");
+  const showStaff = !!room.assignedStaff && !showGuest;
   const footerText = showTimer
     ? formatTime(room.cleaningTimer!.elapsedSeconds)
-    : showStaff
-      ? room.assignedStaff
-      : null;
+    : showGuest
+      ? room.guestName
+      : showStaff
+        ? room.assignedStaff
+        : null;
 
   return (
     <button
       type="button"
       onClick={onClick}
-      title={`Room ${room.roomNo} — ${room.status}${room.assignedStaff ? ` · ${room.assignedStaff}` : ""}`}
+      title={`Room ${room.roomNo} — ${room.status}${room.guestName ? ` · ${room.guestName}` : ""}${room.assignedStaff ? ` · ${room.assignedStaff}` : ""}`}
       className={cn(
         "group flex h-[76px] w-full flex-col rounded-xl border p-3 text-left transition-all",
         "hover:-translate-y-0.5 hover:shadow-lg",
@@ -244,7 +249,7 @@ export default function RoomStatusOperations() {
       const matchFloor = floorFilter === "all" || r.floor === floorFilter;
       const matchRoomType =
         roomTypeFilter === "all" || roomTypeLabel(r) === roomTypeFilter;
-      const matchStatus = matchesHkStatusFilter(r.status, statusFilter);
+      const matchStatus = matchesHkStatusFilter(r, statusFilter);
 
       return matchSearch && matchFloor && matchRoomType && matchStatus;
     });
@@ -269,6 +274,7 @@ export default function RoomStatusOperations() {
     () => ({
       all: pillScopeRooms.length,
       dirty: countHkStatusFilter(pillScopeRooms, "dirty"),
+      occupied: countHkStatusFilter(pillScopeRooms, "occupied"),
       cleaning: countHkStatusFilter(pillScopeRooms, "cleaning"),
       inspection: countHkStatusFilter(pillScopeRooms, "inspection"),
       ready: countHkStatusFilter(pillScopeRooms, "ready"),
@@ -418,6 +424,7 @@ export default function RoomStatusOperations() {
             options: [
               { id: "all", label: `All (${statusCounts.all})` },
               { id: "dirty", label: `Dirty (${statusCounts.dirty})` },
+              { id: "occupied", label: `Occupied (${statusCounts.occupied})` },
               { id: "cleaning", label: `Cleaning (${statusCounts.cleaning})` },
               { id: "inspection", label: `Inspection (${statusCounts.inspection})` },
               { id: "ready", label: `Ready (${statusCounts.ready})` },

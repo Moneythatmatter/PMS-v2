@@ -8,6 +8,10 @@ export interface DropdownSelectOption {
   value: string;
   label: string;
   hint?: string;
+  tag?: {
+    label: string;
+    className: string;
+  };
 }
 
 export interface DropdownSelectProps {
@@ -54,7 +58,8 @@ export function DropdownSelect({
       (option) =>
         option.label.toLowerCase().includes(trimmed) ||
         option.value.toLowerCase().includes(trimmed) ||
-        option.hint?.toLowerCase().includes(trimmed),
+        option.hint?.toLowerCase().includes(trimmed) ||
+        option.tag?.label.toLowerCase().includes(trimmed),
     );
   }, [options, query, searchable]);
 
@@ -156,6 +161,16 @@ export function DropdownSelect({
                   >
                     <span className="min-w-0 truncate font-medium text-slate-900">{option.label}</span>
                     <span className="flex shrink-0 items-center gap-2">
+                      {option.tag ? (
+                        <span
+                          className={cn(
+                            "rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide",
+                            option.tag.className,
+                          )}
+                        >
+                          {option.tag.label}
+                        </span>
+                      ) : null}
                       {option.hint ? (
                         <span className="text-xs text-slate-500">{option.hint}</span>
                       ) : null}

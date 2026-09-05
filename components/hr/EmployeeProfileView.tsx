@@ -322,8 +322,7 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
   return (
     <ModulePageShell
       eyebrow="Human Resource / Employees"
-      title="Employee Profile"
-      description="Enterprise employee management view detailing personal background, employment hierarchy, attendance, leaves, payroll, categorized documents, and activity logs."
+      title=""
       breadcrumbs={[
         { label: "Human Resource", href: "/human-resources/dashboard" },
         { label: "Employees", href: "/human-resources/employees/list" },

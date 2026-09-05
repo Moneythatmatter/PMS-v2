@@ -31,6 +31,8 @@ export const foRoomStatusColors: Record<
     metaText: string;
     statusText: string;
     badge: string;
+    /** Badge classes for white dropdown/list backgrounds */
+    listBadge: string;
   }
 > = {
   Vacant: {
@@ -43,6 +45,7 @@ export const foRoomStatusColors: Record<
     metaText: "text-emerald-800",
     statusText: "text-emerald-900",
     badge: "bg-emerald-600/25 text-emerald-950",
+    listBadge: "bg-emerald-100 text-emerald-800",
   },
   Reserved: {
     label: "Reserved",
@@ -54,6 +57,7 @@ export const foRoomStatusColors: Record<
     metaText: "text-sky-800",
     statusText: "text-sky-900",
     badge: "bg-sky-600/25 text-sky-950",
+    listBadge: "bg-sky-100 text-sky-800",
   },
   Occupied: {
     label: "Occupied",
@@ -65,6 +69,7 @@ export const foRoomStatusColors: Record<
     metaText: "text-violet-100",
     statusText: "text-violet-50",
     badge: "bg-white/20 text-white",
+    listBadge: "bg-violet-100 text-violet-800",
   },
   Dirty: {
     label: "Dirty",
@@ -76,6 +81,7 @@ export const foRoomStatusColors: Record<
     metaText: "text-amber-800",
     statusText: "text-amber-900",
     badge: "bg-amber-600/25 text-amber-950",
+    listBadge: "bg-amber-100 text-amber-800",
   },
   Clean: {
     label: "Clean",
@@ -87,6 +93,7 @@ export const foRoomStatusColors: Record<
     metaText: "text-teal-800",
     statusText: "text-teal-900",
     badge: "bg-teal-600/25 text-teal-950",
+    listBadge: "bg-teal-100 text-teal-800",
   },
   Maintenance: {
     label: "Maintenance",
@@ -98,6 +105,7 @@ export const foRoomStatusColors: Record<
     metaText: "text-orange-800",
     statusText: "text-orange-900",
     badge: "bg-orange-600/25 text-orange-950",
+    listBadge: "bg-orange-100 text-orange-800",
   },
   Blocked: {
     label: "Blocked",
@@ -109,9 +117,14 @@ export const foRoomStatusColors: Record<
     metaText: "text-slate-800",
     statusText: "text-slate-900",
     badge: "bg-slate-700/20 text-slate-900",
+    listBadge: "bg-slate-100 text-slate-700",
   },
 };
 
 export function getFoRoomStatusConfig(status: string) {
   return foRoomStatusColors[status as FoRoomStatus] ?? foRoomStatusColors.Vacant;
+}
+
+export function getFoRoomStatusListBadge(status: string): string {
+  return getFoRoomStatusConfig(status).listBadge;
 }

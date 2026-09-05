@@ -72,13 +72,43 @@ export function uiStatusToHkEnum(status: HKRoom["status"]): HkRoomStatusEnum {
   }
 }
 
-/** Map DB enum (+ timestamps) to legacy UI status fields. */
+/** Map DB enum (+ timestamps + occupancy) to legacy UI status fields. */
 export function hkEnumToUiFields(row: {
   status?: string;
   lastCleanedAt?: string | null;
+  isOccupied?: boolean;
 }): Pick<HKRoom, "status" | "hkStatus" | "foStatus"> {
   const raw = String(row.status ?? "DIRTY").trim().toUpperCase();
   const enumStatus: HkRoomStatusEnum = isHkEnum(raw) ? raw : "DIRTY";
+  const isOccupied = row.isOccupied === true;
+
+  if (isOccupied) {
+    switch (enumStatus) {
+      case "INSPECTING":
+        if (row.lastCleanedAt) {
+          return {
+            status: "Inspection Pending",
+            hkStatus: "Cleaning",
+            foStatus: "Occupied",
+          };
+        }
+        return { status: "Cleaning", hkStatus: "Cleaning", foStatus: "Occupied" };
+      case "OUT_OF_SERVICE":
+        return {
+          status: "Out of Service",
+          hkStatus: "OOS",
+          foStatus: "Blocked",
+        };
+      case "DIRTY":
+        return { status: "Occupied", hkStatus: "Dirty", foStatus: "Occupied" };
+      case "CLEAN":
+        return { status: "Occupied", hkStatus: "Clean", foStatus: "Occupied" };
+      case "INSPECTED":
+        return { status: "Occupied", hkStatus: "Inspected", foStatus: "Occupied" };
+      default:
+        return { status: "Occupied", hkStatus: "Dirty", foStatus: "Occupied" };
+    }
+  }
 
   switch (enumStatus) {
     case "CLEAN":
@@ -151,6 +181,7 @@ type ApiHkRoom = Partial<HKRoom> & {
   lastInspectedAt?: string | null;
   notes?: string | null;
   status?: string;
+  isOccupied?: boolean;
 };
 
 /** Normalize API slim row (or legacy local row) into HK UI shape. */
@@ -165,6 +196,7 @@ export function normalizeHkRoom(row: ApiHkRoom): HKRoom {
       ? hkEnumToUiFields({
           status: rawStatus || "DIRTY",
           lastCleanedAt: row.lastCleanedAt,
+          isOccupied: row.isOccupied,
         })
       : {
           status: row.status as HKRoom["status"],

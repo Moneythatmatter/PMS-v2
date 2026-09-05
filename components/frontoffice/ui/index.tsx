@@ -48,14 +48,16 @@ export function FOPageHeader({
             {eyebrow}
           </p>
         )}
-        <h1
-          className={cn(
-            "font-bold text-slate-900 sm:text-2xl",
-            eyebrow || breadcrumbs ? "mt-1 text-xl" : "text-lg sm:text-xl",
-          )}
-        >
-          {title}
-        </h1>
+        {title ? (
+          <h1
+            className={cn(
+              "font-bold text-slate-900 sm:text-2xl",
+              eyebrow || breadcrumbs ? "mt-1 text-xl" : "text-lg sm:text-xl",
+            )}
+          >
+            {title}
+          </h1>
+        ) : null}
         {description && (
           <p className="mt-1 max-w-2xl text-xs text-slate-500 sm:text-sm">
             {description}

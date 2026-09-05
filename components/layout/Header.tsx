@@ -7,6 +7,7 @@ import type { UserProfile } from "@/app/data/types";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { usePropertyOptional } from "@/components/platform/PropertyProvider";
+import { PropertySwitcher } from "@/components/platform/PropertySwitcher";
 import { cn } from "@/lib/utils";
 import { useMobileNav } from "./MobileNavContext";
 
@@ -59,22 +60,11 @@ export function Header({ user: fallbackUser }: HeaderProps) {
             <p className="truncate text-sm font-semibold tracking-tight text-white uppercase">
               Impact <span className="text-emerald-500">PMS</span>
             </p>
-            {propertyCtx?.property && (
-              <p className="truncate text-[10px] text-neutral-400">
-                {propertyCtx.property.name}
-              </p>
-            )}
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={() => router.push("/properties")}
-              className="hidden rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] font-medium text-neutral-300 transition-colors hover:bg-white/10 hover:text-white sm:inline-flex"
-            >
-              Switch property
-            </button>
+          {propertyCtx && <PropertySwitcher />}
           <button
             type="button"
             onClick={() => setSearchOpen((open) => !open)}
