@@ -8,3 +8,5 @@ export { Modal } from "./Modal";
 export { Drawer } from "./Drawer";
 export { StatusBadge } from "./StatusBadge";
 export { SearchSelect } from "./SearchSelect";
+export { DropdownSelect } from "./DropdownSelect";
+export type { DropdownSelectOption } from "./DropdownSelect";

@@ -1,32 +1,41 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   Users,
-  UserCheck,
   CalendarOff,
   Wallet,
   UserPlus,
   Clock,
   CheckCircle2,
-  XCircle,
-  AlertTriangle,
   Building2,
   Gift,
   Award,
   Calendar,
   MessageSquareWarning,
-  Plus,
   ArrowRight,
   TrendingUp,
-  FileCheck,
   Check,
   X,
-  Sparkles,
 } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Button } from "@/components/ui/Button";
-import { StatMiniCard } from "@/components/frontoffice/ui";
+import { Card, CardHeader } from "@/components/ui/Card";
+import { StatCard } from "@/components/ui/StatCard";
 import { ModulePageShell } from "@/components/pms";
+import type { SummaryStat } from "@/app/data/types";
 import {
   sampleHRKpiSummary,
   sampleAttendanceBreakdown,
@@ -38,18 +47,76 @@ import {
   sampleGrievances,
   sampleDesignationHeadcounts,
   sampleGenderDistribution,
+  sampleWeeklyAttendanceTrend,
+  departmentChartColors,
   PendingLeaveItem,
 } from "@/app/data/hr/hrDashboardData";
 import { cn } from "@/lib/utils";
 
+function PanelCard({
+  title,
+  subtitle,
+  action,
+  children,
+  className,
+}: {
+  title: string;
+  subtitle?: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Card className={cn("flex h-full flex-col", className)}>
+      <CardHeader title={title} subtitle={subtitle} action={action} />
+      {children}
+    </Card>
+  );
+}
+
+function MetricTile({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: number | string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3 text-center">
+      <p className="text-[11px] font-medium text-slate-500">{label}</p>
+      <p className="mt-1 text-xl font-bold tracking-tight text-slate-900">{value}</p>
+      <p className="mt-0.5 text-[10px] text-slate-400">{detail}</p>
+    </div>
+  );
+}
+
+function ListRow({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn("rounded-lg border border-slate-100 bg-white px-3 py-2.5", className)}>
+      {children}
+    </div>
+  );
+}
+
+const activityDotColors: Record<string, string> = {
+  join: "bg-sky-500",
+  leave: "bg-emerald-500",
+  attendance: "bg-amber-500",
+  payroll: "bg-violet-500",
+  grievance: "bg-rose-500",
+};
+
 export function HRDashboardView() {
+  const router = useRouter();
   const [leavesList, setLeavesList] = useState<PendingLeaveItem[]>(samplePendingLeaves);
   const [selectedDesigDept, setSelectedDesigDept] = useState<string>("All");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const handleApproveLeave = (id: string, name: string) => {
     setLeavesList((prev) => prev.filter((item) => item.id !== id));
-    setToastMessage(`✓ Approved leave request for ${name}.`);
+    setToastMessage(`Approved leave request for ${name}.`);
   };
 
   const handleRejectLeave = (id: string, name: string) => {
@@ -57,24 +124,86 @@ export function HRDashboardView() {
     setToastMessage(`Rejected leave request for ${name}.`);
   };
 
+  const kpiStats: SummaryStat[] = useMemo(
+    () => [
+      {
+        title: "Total Employees",
+        value: String(sampleHRKpiSummary.totalEmployees),
+        change: `+${sampleHRKpiSummary.newJoineesThisMonth} this month`,
+        trend: "up",
+      },
+      {
+        title: "Pending Leave",
+        value: String(sampleHRKpiSummary.pendingLeaveRequestsCount),
+        change: "Awaiting approval",
+        trend: "down",
+      },
+      {
+        title: "Open Grievances",
+        value: String(sampleGrievances.open),
+        change: `${sampleGrievances.escalated} escalated`,
+        trend: "down",
+      },
+      {
+        title: "Payroll Processed",
+        value: String(sampleHRKpiSummary.payrollProcessedCount),
+        change: `${sampleHRKpiSummary.payrollPendingCount} pending`,
+        trend: "up",
+      },
+    ],
+    [],
+  );
+
+  const departmentChartData = useMemo(
+    () =>
+      sampleDepartmentHeadcounts.map((dept) => ({
+        name: dept.department,
+        count: dept.count,
+        fill: departmentChartColors[dept.department] ?? "#64748b",
+      })),
+    [],
+  );
+
+  const filteredDesignations = useMemo(
+    () =>
+      sampleDesignationHeadcounts.filter(
+        (desig) => selectedDesigDept === "All" || desig.department === selectedDesigDept,
+      ),
+    [selectedDesigDept],
+  );
+
+  const totalStaff = sampleHRKpiSummary.totalEmployees;
+
   return (
     <ModulePageShell
       eyebrow="Human Resource Module"
       title="Human Resource Dashboard"
-      description="Real-time employee headcount, shift attendance, leave requests, payroll status, and grievance metrics."
       breadcrumbs={[{ label: "Human Resource", href: "/human-resources/dashboard" }, { label: "Dashboard" }]}
       toast={toastMessage}
       onDismissToast={() => setToastMessage(null)}
+      wrapChildren={false}
+      primaryAction={{
+        label: "Add Employee",
+        onClick: () => router.push("/human-resources/employees/add"),
+      }}
       secondaryActions={
         <div className="flex flex-wrap items-center gap-2">
           <a href="/human-resources/attendance-leave/attendance">
-            <Button size="sm" variant="outline" className="bg-white text-slate-700 border-slate-300 font-semibold text-xs rounded-xl shadow-xs">
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-xl border-slate-200 bg-white text-xs font-medium text-slate-700 shadow-sm"
+            >
               <Clock className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
               Mark Attendance
             </Button>
           </a>
           <a href="/human-resources/attendance-leave/leave-management">
-            <Button size="sm" variant="outline" className="bg-white text-slate-700 border-slate-300 font-semibold text-xs rounded-xl shadow-xs">
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-xl border-slate-200 bg-white text-xs font-medium text-slate-700 shadow-sm"
+            >
               <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
               Approve Leaves
             </Button>
@@ -82,228 +211,178 @@ export function HRDashboardView() {
         </div>
       }
     >
-      {/* ─────────────────────────────────────────────────────────────
-          ROW 1: 4 Core Domain KPI Cards (Employees, Leave, Grievances, Payroll)
-      ───────────────────────────────────────────────────────────── */}
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {/* 1. Total Employees */}
-        <StatMiniCard
-          label="Total Employees"
-          value={sampleHRKpiSummary.totalEmployees}
-          sublabel={`+${sampleHRKpiSummary.newJoineesThisMonth} New Joinees`}
-          accent="#0284c7"
-          icon={Users}
-        />
-
-        {/* 2. Pending Leave */}
-        <StatMiniCard
-          label="Pending Leave"
-          value={`${sampleHRKpiSummary.pendingLeaveRequestsCount} Requests`}
-          sublabel="Awaiting Approval"
-          accent="#f59e0b"
-          icon={CalendarOff}
-        />
-
-        {/* 3. Open Grievances */}
-        <StatMiniCard
-          label="Open Grievances"
-          value={`${sampleGrievances.open} Active`}
-          sublabel={`${sampleGrievances.escalated} Escalated`}
-          accent="#e11d48"
-          icon={MessageSquareWarning}
-        />
-
-        {/* 4. Payroll Status */}
-        <StatMiniCard
-          label="Payroll Status"
-          value={`${sampleHRKpiSummary.payrollProcessedCount} Processed`}
-          sublabel={`${sampleHRKpiSummary.payrollPendingCount} Pending`}
-          accent="#8b5cf6"
-          icon={Wallet}
-        />
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          ROW 2: Attendance Overview & Department Headcount
-      ───────────────────────────────────────────────────────────── */}
-      <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* Attendance Overview (7 cols) */}
-        <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                <Clock className="h-4 w-4 text-emerald-600" />
-                Attendance Overview Today
-              </h3>
-              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                Shift headcount summary for active operational departments
-              </p>
-            </div>
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-800 border border-emerald-200">
-              {sampleAttendanceBreakdown.present} / 128 Staff Active
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3 text-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Present</span>
-              <p className="text-xl font-black text-emerald-900 mt-1">{sampleAttendanceBreakdown.present}</p>
-              <span className="text-[10px] text-emerald-700 font-medium">81.2% Shift</span>
-            </div>
-
-            <div className="rounded-xl border border-rose-200/80 bg-rose-50/50 p-3 text-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700">Absent</span>
-              <p className="text-xl font-black text-rose-900 mt-1">{sampleAttendanceBreakdown.absent}</p>
-              <span className="text-[10px] text-rose-700 font-medium">9.3% Unexcused</span>
-            </div>
-
-            <div className="rounded-xl border border-amber-200/80 bg-amber-50/50 p-3 text-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">On Leave</span>
-              <p className="text-xl font-black text-amber-900 mt-1">{sampleAttendanceBreakdown.onLeave}</p>
-              <span className="text-[10px] text-amber-700 font-medium">6.2% Approved</span>
-            </div>
-
-            <div className="rounded-xl border border-sky-200/80 bg-sky-50/50 p-3 text-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700">Late Arrivals</span>
-              <p className="text-xl font-black text-sky-900 mt-1">{sampleAttendanceBreakdown.lateArrivals}</p>
-              <span className="text-[10px] text-sky-700 font-medium">&lt;30m Grace</span>
-            </div>
-          </div>
-
-          {/* Stacked Progress Bar */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-[11px] font-semibold text-slate-600">
-              <span>Overall Shift Attendance Distribution</span>
-              <span>104 On Duty</span>
-            </div>
-            <div className="flex h-3 w-full overflow-hidden rounded-full bg-slate-100 p-0.5 border border-slate-200">
-              <div className="bg-emerald-500 rounded-l-full" style={{ width: "81.2%" }} title="Present: 104" />
-              <div className="bg-rose-500" style={{ width: "9.3%" }} title="Absent: 12" />
-              <div className="bg-amber-500" style={{ width: "6.2%" }} title="On Leave: 8" />
-              <div className="bg-sky-500 rounded-r-full" style={{ width: "3.3%" }} title="Late: 4" />
-            </div>
-          </div>
+      <div className="min-w-0 space-y-4 sm:space-y-6 lg:space-y-8">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6">
+          {kpiStats.map((stat) => (
+            <StatCard key={stat.title} stat={stat} />
+          ))}
         </div>
 
-        {/* Department Headcount Chart (5 cols) */}
-        <div className="lg:col-span-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-purple-600" />
-              Department Headcount
-            </h3>
-            <span className="text-[11px] text-slate-500 font-semibold">6 Departments</span>
-          </div>
-
-          <div className="space-y-2.5">
-            {sampleDepartmentHeadcounts.map((dept) => {
-              const percentage = Math.round((dept.count / 128) * 100);
-              return (
-                <div key={dept.department} className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="font-semibold text-slate-700">{dept.department}</span>
-                    <span className="font-bold text-slate-900">{dept.count} <span className="text-[10px] text-slate-400 font-normal">({percentage}%)</span></span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className={cn("h-full rounded-full transition-all duration-300", dept.color)}
-                      style={{ width: `${(dept.count / 34) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          ROW 2.5: Employee Count by Designation & Gender Distribution
-      ───────────────────────────────────────────────────────────── */}
-      <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* 1. Employee Count by Designation (7 cols) */}
-        <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                  <Users className="h-4 w-4 text-emerald-700" />
-                  Employee Count by Designation
-                </h3>
-                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                  Staff allocation across key hotel job titles and roles
-                </p>
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:gap-8">
+          <div className="min-w-0 lg:col-span-7">
+            <PanelCard
+              title="Attendance overview"
+              subtitle="Today's shift headcount across operational departments"
+              action={
+                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
+                  {sampleAttendanceBreakdown.present} / {totalStaff} active
+                </span>
+              }
+            >
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <MetricTile label="Present" value={sampleAttendanceBreakdown.present} detail="81.2% on shift" />
+                <MetricTile label="Absent" value={sampleAttendanceBreakdown.absent} detail="9.3% unexcused" />
+                <MetricTile label="On leave" value={sampleAttendanceBreakdown.onLeave} detail="6.2% approved" />
+                <MetricTile label="Late arrivals" value={sampleAttendanceBreakdown.lateArrivals} detail="Within grace" />
               </div>
-              <a href="/human-resources/masters/designations" className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
-                View All <ArrowRight className="h-3 w-3" />
-              </a>
-            </div>
 
-            {/* Department Shortcuts / Quick Filters */}
-            <div className="mb-3.5 flex flex-wrap items-center gap-1.5 border-b border-slate-100 pb-2.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Depts:</span>
-              <button
-                onClick={() => setSelectedDesigDept("All")}
-                className={cn(
-                  "px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-all cursor-pointer",
-                  selectedDesigDept === "All"
-                    ? "bg-emerald-700 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                )}
-              >
-                All (128)
-              </button>
-              {Array.from(new Set(sampleDesignationHeadcounts.map((d) => d.department))).map((dept) => {
-                const deptCount = sampleDesignationHeadcounts
-                  .filter((d) => d.department === dept)
-                  .reduce((acc, curr) => acc + curr.count, 0);
-                const isSelected = selectedDesigDept === dept;
-                return (
-                  <button
-                    key={dept}
-                    onClick={() => setSelectedDesigDept(dept)}
-                    className={cn(
-                      "px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1",
-                      isSelected
-                        ? "bg-emerald-700 text-white shadow-xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    )}
-                  >
-                    <span>{dept}</span>
-                    <span className={cn(
-                      "text-[9px] px-1 rounded-full font-bold",
-                      isSelected ? "bg-emerald-800 text-emerald-100" : "bg-slate-200 text-slate-700"
-                    )}>
-                      {deptCount}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+              <div className="mt-4 h-44 sm:h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={sampleWeeklyAttendanceTrend} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="hrAttendanceFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#16a34a" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#16a34a" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} width={28} />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: "8px",
+                        border: "1px solid #e2e8f0",
+                        fontSize: "12px",
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="present"
+                      stroke="#16a34a"
+                      strokeWidth={2}
+                      fill="url(#hrAttendanceFill)"
+                      dot={{ fill: "#16a34a", r: 2.5 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
 
-            <div className="space-y-2.5">
-              {sampleDesignationHeadcounts
-                .filter((desig) => selectedDesigDept === "All" || desig.department === selectedDesigDept)
-                .map((desig) => {
-                  const percentage = Math.round((desig.count / 128) * 100);
+              <div className="mt-4 space-y-1.5">
+                <div className="flex justify-between text-[11px] font-medium text-slate-500">
+                  <span>Shift distribution</span>
+                  <span>{sampleAttendanceBreakdown.present} on duty</span>
+                </div>
+                <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className="bg-emerald-500" style={{ width: "81.2%" }} />
+                  <div className="bg-rose-400" style={{ width: "9.3%" }} />
+                  <div className="bg-amber-400" style={{ width: "6.2%" }} />
+                  <div className="bg-sky-400" style={{ width: "3.3%" }} />
+                </div>
+              </div>
+            </PanelCard>
+          </div>
+
+          <div className="min-w-0 lg:col-span-5">
+            <PanelCard title="Department headcount" subtitle="Staff allocation by department">
+              <div className="h-52 sm:h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={departmentChartData} layout="vertical" margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#64748b", fontSize: 11 }}
+                      width={92}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "#f8fafc" }}
+                      contentStyle={{
+                        borderRadius: "8px",
+                        border: "1px solid #e2e8f0",
+                        fontSize: "12px",
+                      }}
+                    />
+                    <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={14}>
+                      {departmentChartData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </PanelCard>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:gap-8">
+          <div className="min-w-0 lg:col-span-7">
+            <PanelCard
+              title="Employee count by designation"
+              subtitle="Role-wise staffing across hotel operations"
+              action={
+                <a
+                  href="/human-resources/masters/designations"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
+                >
+                  View all
+                  <ArrowRight className="h-3 w-3" />
+                </a>
+              }
+            >
+              <div className="mb-4 flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDesigDept("All")}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                    selectedDesigDept === "All"
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                  )}
+                >
+                  All ({totalStaff})
+                </button>
+                {Array.from(new Set(sampleDesignationHeadcounts.map((d) => d.department))).map((dept) => {
+                  const deptCount = sampleDesignationHeadcounts
+                    .filter((d) => d.department === dept)
+                    .reduce((acc, curr) => acc + curr.count, 0);
                   return (
-                    <div key={desig.designation} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="font-semibold text-slate-800 flex items-center gap-1.5">
-                          <button
-                            onClick={() => setSelectedDesigDept(desig.department)}
-                            className="text-slate-400 hover:text-emerald-700 font-normal text-[10px] cursor-pointer hover:underline"
-                            title={`Filter by ${desig.department}`}
-                          >
-                            [{desig.department}]
-                          </button>
-                          {desig.designation}
-                        </span>
-                        <span className="font-bold text-slate-900">
-                          {desig.count} <span className="text-[10px] text-slate-400 font-normal">({percentage}%)</span>
+                    <button
+                      key={dept}
+                      type="button"
+                      onClick={() => setSelectedDesigDept(dept)}
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                        selectedDesigDept === dept
+                          ? "bg-slate-900 text-white"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                      )}
+                    >
+                      {dept} ({deptCount})
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-3">
+                {filteredDesignations.map((desig) => {
+                  const percentage = Math.round((desig.count / totalStaff) * 100);
+                  return (
+                    <div key={desig.designation} className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-3 text-xs">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-slate-800">{desig.designation}</p>
+                          <p className="text-[10px] text-slate-400">{desig.department}</p>
+                        </div>
+                        <span className="shrink-0 font-semibold text-slate-900">
+                          {desig.count}
+                          <span className="ml-1 font-normal text-slate-400">({percentage}%)</span>
                         </span>
                       </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                         <div
                           className={cn("h-full rounded-full transition-all duration-300", desig.color)}
                           style={{ width: `${(desig.count / 24) * 100}%` }}
@@ -312,322 +391,223 @@ export function HRDashboardView() {
                     </div>
                   );
                 })}
-            </div>
-          </div>
-        </div>
-
-        {/* 2. Gender Distribution Widget (5 cols) */}
-        <div className="lg:col-span-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                <Users className="h-4 w-4 text-indigo-600" />
-                Gender Distribution
-              </h3>
-              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                Workforce diversity breakdown across active staff
-              </p>
-            </div>
-            <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-800 border border-indigo-200">
-              128 Total
-            </span>
+              </div>
+            </PanelCard>
           </div>
 
-          {/* Visual Stacked Bar */}
-          <div className="space-y-4 my-auto">
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-[11px] font-semibold text-slate-600">
-                <span>Gender Ratio</span>
-                <span>64% Male / 33% Female / 3% Other</span>
-              </div>
-              <div className="flex h-3.5 w-full overflow-hidden rounded-full bg-slate-100 p-0.5 border border-slate-200">
-                <div
-                  className="bg-blue-600 rounded-l-full"
-                  style={{ width: `${(sampleGenderDistribution.male / sampleGenderDistribution.total) * 100}%` }}
-                  title={`Male: ${sampleGenderDistribution.male}`}
-                />
-                <div
-                  className="bg-purple-500"
-                  style={{ width: `${(sampleGenderDistribution.female / sampleGenderDistribution.total) * 100}%` }}
-                  title={`Female: ${sampleGenderDistribution.female}`}
-                />
-                <div
-                  className="bg-amber-500 rounded-r-full"
-                  style={{ width: `${(sampleGenderDistribution.other / sampleGenderDistribution.total) * 100}%` }}
-                  title={`Other: ${sampleGenderDistribution.other}`}
-                />
-              </div>
-            </div>
-
-            {/* Stat Cards Grid */}
-            <div className="grid grid-cols-3 gap-2.5">
-              <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-center">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Male</span>
-                <p className="text-xl font-black text-blue-950 mt-1">{sampleGenderDistribution.male}</p>
-                <span className="text-[10px] text-blue-700 font-bold">
-                  {Math.round((sampleGenderDistribution.male / sampleGenderDistribution.total) * 100)}% Staff
+          <div className="min-w-0 lg:col-span-5">
+            <PanelCard
+              title="Gender distribution"
+              subtitle="Active workforce diversity breakdown"
+              action={
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                  {sampleGenderDistribution.total} total
                 </span>
-              </div>
-
-              <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3 text-center">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700">Female</span>
-                <p className="text-xl font-black text-purple-950 mt-1">{sampleGenderDistribution.female}</p>
-                <span className="text-[10px] text-purple-700 font-bold">
-                  {Math.round((sampleGenderDistribution.female / sampleGenderDistribution.total) * 100)}% Staff
-                </span>
-              </div>
-
-              <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-center">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Other</span>
-                <p className="text-xl font-black text-amber-950 mt-1">{sampleGenderDistribution.other}</p>
-                <span className="text-[10px] text-amber-700 font-bold">
-                  {Math.round((sampleGenderDistribution.other / sampleGenderDistribution.total) * 100)}% Staff
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <p className="text-[10px] text-slate-400 font-medium text-center pt-2">
-            Equal opportunity employer • Compliant with statutory diversity standards
-          </p>
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          ROW 3: Pending Leave Requests & Recent HR Activities
-      ───────────────────────────────────────────────────────────── */}
-      <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* Pending Leave Requests (7 cols) */}
-        <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <CalendarOff className="h-4 w-4 text-amber-600" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Pending Leave Requests ({leavesList.length})
-              </h3>
-            </div>
-            <a href="/human-resources/attendance-leave/leave-management" className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
-              View All <ArrowRight className="h-3 w-3" />
-            </a>
-          </div>
-
-          <div className="space-y-2.5">
-            {leavesList.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 font-medium">
-                No pending leave requests requiring approval.
-              </div>
-            ) : (
-              leavesList.map((leave) => (
-                <div
-                  key={leave.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs transition-colors hover:bg-slate-100/60"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-800 font-bold text-xs shrink-0">
-                      {leave.avatar}
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-900">{leave.employeeName}</p>
-                      <p className="text-[10px] font-semibold text-slate-500">{leave.department} • <span className="text-amber-800">{leave.leaveType}</span></p>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-700">
-                      {leave.fromDate} - {leave.toDate} ({leave.days}d)
+              }
+            >
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[11px] font-medium text-slate-500">
+                    <span>Gender ratio</span>
+                    <span>
+                      {Math.round((sampleGenderDistribution.male / sampleGenderDistribution.total) * 100)}% male ·{" "}
+                      {Math.round((sampleGenderDistribution.female / sampleGenderDistribution.total) * 100)}% female
                     </span>
-                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Reason: {leave.reason}</p>
                   </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => handleApproveLeave(leave.id, leave.employeeName)}
-                      className="h-7 px-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] cursor-pointer"
-                    >
-                      <Check className="h-3 w-3 mr-0.5" /> Approve
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRejectLeave(leave.id, leave.employeeName)}
-                      className="h-7 px-2.5 rounded-lg bg-white border-slate-300 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-semibold text-[11px] cursor-pointer"
-                    >
-                      <X className="h-3 w-3 mr-0.5" /> Reject
-                    </Button>
+                  <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="bg-slate-700"
+                      style={{ width: `${(sampleGenderDistribution.male / sampleGenderDistribution.total) * 100}%` }}
+                    />
+                    <div
+                      className="bg-slate-400"
+                      style={{ width: `${(sampleGenderDistribution.female / sampleGenderDistribution.total) * 100}%` }}
+                    />
+                    <div
+                      className="bg-slate-300"
+                      style={{ width: `${(sampleGenderDistribution.other / sampleGenderDistribution.total) * 100}%` }}
+                    />
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
 
-        {/* Recent HR Activities Feed (5 cols) */}
-        <div className="lg:col-span-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-blue-600" />
-              Recent HR Activities
-            </h3>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Live Feed</span>
-          </div>
-
-          <div className="space-y-3">
-            {sampleHRActivities.map((act) => (
-              <div key={act.id} className="flex items-start gap-2.5 text-xs">
-                <div
-                  className={cn(
-                    "flex h-7 w-7 items-center justify-center rounded-lg font-bold shrink-0 mt-0.5",
-                    act.type === "join" && "bg-sky-100 text-sky-800",
-                    act.type === "leave" && "bg-emerald-100 text-emerald-800",
-                    act.type === "attendance" && "bg-amber-100 text-amber-800",
-                    act.type === "payroll" && "bg-purple-100 text-purple-800",
-                    act.type === "grievance" && "bg-rose-100 text-rose-800"
-                  )}
-                >
-                  {act.type === "join" && <UserPlus className="h-3.5 w-3.5" />}
-                  {act.type === "leave" && <CheckCircle2 className="h-3.5 w-3.5" />}
-                  {act.type === "attendance" && <Clock className="h-3.5 w-3.5" />}
-                  {act.type === "payroll" && <Wallet className="h-3.5 w-3.5" />}
-                  {act.type === "grievance" && <MessageSquareWarning className="h-3.5 w-3.5" />}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-slate-900 truncate">{act.title}</p>
-                    <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-1">{act.timeAgo}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-600 truncate mt-0.5">{act.description}</p>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <MetricTile
+                    label="Male"
+                    value={sampleGenderDistribution.male}
+                    detail={`${Math.round((sampleGenderDistribution.male / sampleGenderDistribution.total) * 100)}%`}
+                  />
+                  <MetricTile
+                    label="Female"
+                    value={sampleGenderDistribution.female}
+                    detail={`${Math.round((sampleGenderDistribution.female / sampleGenderDistribution.total) * 100)}%`}
+                  />
+                  <MetricTile
+                    label="Other"
+                    value={sampleGenderDistribution.other}
+                    detail={`${Math.round((sampleGenderDistribution.other / sampleGenderDistribution.total) * 100)}%`}
+                  />
                 </div>
               </div>
-            ))}
+            </PanelCard>
           </div>
         </div>
-      </div>
 
-      {/* ─────────────────────────────────────────────────────────────
-          ROW 4: Birthdays & Anniversaries + Holidays & Shift Exceptions
-      ───────────────────────────────────────────────────────────── */}
-      <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* Birthdays & Anniversaries (6 cols) */}
-        <div className="lg:col-span-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-              <Gift className="h-4 w-4 text-rose-500" />
-              Birthdays &amp; Work Anniversaries
-            </h3>
-            <span className="text-[11px] font-semibold text-slate-500">Upcoming Celebrations</span>
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:gap-8">
+          <div className="min-w-0 lg:col-span-7">
+            <PanelCard
+              title="Pending leave requests"
+              subtitle={`${leavesList.length} awaiting approval`}
+              action={
+                <a
+                  href="/human-resources/attendance-leave/leave-management"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
+                >
+                  View all
+                  <ArrowRight className="h-3 w-3" />
+                </a>
+              }
+            >
+              <div className="space-y-2.5">
+                {leavesList.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-slate-400">No pending leave requests.</p>
+                ) : (
+                  leavesList.map((leave) => (
+                    <ListRow key={leave.id} className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-700">
+                          {leave.avatar}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-900">{leave.employeeName}</p>
+                          <p className="text-xs text-slate-500">
+                            {leave.department} · {leave.leaveType}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-xs font-medium text-slate-700">
+                          {leave.fromDate} – {leave.toDate} ({leave.days}d)
+                        </p>
+                        <p className="text-[11px] text-slate-400">{leave.reason}</p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => handleApproveLeave(leave.id, leave.employeeName)}
+                          className="h-7 rounded-lg bg-emerald-700 px-2.5 text-[11px] font-semibold hover:bg-emerald-800"
+                        >
+                          <Check className="mr-0.5 h-3 w-3" /> Approve
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRejectLeave(leave.id, leave.employeeName)}
+                          className="h-7 rounded-lg border-slate-200 px-2.5 text-[11px] font-medium"
+                        >
+                          <X className="mr-0.5 h-3 w-3" /> Reject
+                        </Button>
+                      </div>
+                    </ListRow>
+                  ))
+                )}
+              </div>
+            </PanelCard>
           </div>
 
-          <div className="space-y-2.5">
-            {sampleEvents.map((ev) => (
-              <div key={ev.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs">
-                <div className="flex items-center gap-2.5">
-                  <div
+          <div className="min-w-0 lg:col-span-5">
+            <PanelCard title="Recent HR activities" subtitle="Live updates from HR operations">
+              <ul className="space-y-4">
+                {sampleHRActivities.map((act) => (
+                  <li key={act.id} className="flex gap-3">
+                    <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", activityDotColors[act.type])} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-900">{act.title}</p>
+                        <span className="shrink-0 text-[11px] text-slate-400">{act.timeAgo}</span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-slate-500">{act.description}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </PanelCard>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
+          <PanelCard title="Birthdays & work anniversaries" subtitle="Upcoming celebrations">
+            <div className="space-y-2.5">
+              {sampleEvents.map((ev) => (
+                <ListRow key={ev.id} className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-700">
+                      {ev.avatar}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900">{ev.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {ev.department}
+                        {ev.years ? ` · ${ev.years} years` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-md bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600">
+                    {ev.date}
+                  </span>
+                </ListRow>
+              ))}
+            </div>
+          </PanelCard>
+
+          <PanelCard title="Holidays & shift exceptions" subtitle="Upcoming schedule changes">
+            <div className="space-y-2.5">
+              {sampleHolidaysAndShifts.map((hs) => (
+                <ListRow key={hs.id} className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">{hs.title}</p>
+                    <p className="text-xs text-slate-500">{hs.date}</p>
+                  </div>
+                  <span
                     className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-xl font-bold text-xs shrink-0",
-                      ev.type === "birthday" ? "bg-rose-100 text-rose-800" : "bg-indigo-100 text-indigo-800"
+                      "shrink-0 rounded-md px-2 py-1 text-[10px] font-medium uppercase tracking-wide",
+                      hs.type === "holiday"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-violet-50 text-violet-700",
                     )}
                   >
-                    {ev.avatar}
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-900 flex items-center gap-1.5">
-                      {ev.name}
-                      {ev.type === "birthday" ? (
-                        <Gift className="h-3 w-3 text-rose-500 inline" />
-                      ) : (
-                        <Award className="h-3 w-3 text-indigo-500 inline" />
-                      )}
-                    </p>
-                    <p className="text-[10px] text-slate-500 font-medium">{ev.department} {ev.years ? `• ${ev.years} Years Completed` : ""}</p>
-                  </div>
-                </div>
-
-                <span className="rounded-lg bg-white border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-700">
-                  {ev.date}
-                </span>
-              </div>
-            ))}
-          </div>
+                    {hs.badgeText}
+                  </span>
+                </ListRow>
+              ))}
+            </div>
+          </PanelCard>
         </div>
 
-        {/* Holidays & Shift Exceptions (6 cols) */}
-        <div className="lg:col-span-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-emerald-600" />
-              Holidays &amp; Shift Exceptions
-            </h3>
-            <span className="text-[11px] font-semibold text-slate-500">Upcoming Schedule</span>
+        <PanelCard
+          title="Grievance summary"
+          subtitle="Complaint status overview"
+          action={
+            <a
+              href="/human-resources/grievances/complaint-list"
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
+            >
+              Grievance portal
+              <ArrowRight className="h-3 w-3" />
+            </a>
+          }
+        >
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <MetricTile label="Open" value={sampleGrievances.open} detail="Needs HR review" />
+            <MetricTile label="In progress" value={sampleGrievances.inProgress} detail="Under investigation" />
+            <MetricTile label="Escalated" value={sampleGrievances.escalated} detail="Management review" />
+            <MetricTile label="Resolved" value={sampleGrievances.resolved} detail="Closed this year" />
           </div>
-
-          <div className="space-y-2.5">
-            {sampleHolidaysAndShifts.map((hs) => (
-              <div key={hs.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs">
-                <div>
-                  <p className="font-bold text-slate-900">{hs.title}</p>
-                  <p className="text-[10px] text-slate-500 font-medium">{hs.date}</p>
-                </div>
-
-                <span
-                  className={cn(
-                    "rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider border",
-                    hs.type === "holiday" ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-purple-50 text-purple-800 border-purple-200"
-                  )}
-                >
-                  {hs.badgeText}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+        </PanelCard>
       </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          ROW 5: Grievance Summary (4 Mini Statistic Cards)
-      ───────────────────────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
-        <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <MessageSquareWarning className="h-4 w-4 text-rose-600" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Grievance &amp; Complaint Summary Overview
-            </h2>
-          </div>
-          <a href="/human-resources/grievances/complaint-list" className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
-            Grievance Portal <ArrowRight className="h-3 w-3" />
-          </a>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3 text-center">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700">Open Complaints</span>
-            <p className="text-2xl font-black text-rose-900 mt-1">{sampleGrievances.open}</p>
-            <span className="text-[10px] text-rose-700 font-semibold">Requires HR Review</span>
-          </div>
-
-          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-center">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">In Progress</span>
-            <p className="text-2xl font-black text-amber-900 mt-1">{sampleGrievances.inProgress}</p>
-            <span className="text-[10px] text-amber-700 font-semibold">Under Investigation</span>
-          </div>
-
-          <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3 text-center">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700">Escalated</span>
-            <p className="text-2xl font-black text-purple-900 mt-1">{sampleGrievances.escalated}</p>
-            <span className="text-[10px] text-purple-700 font-semibold">GM / Legal Escalation</span>
-          </div>
-
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-center">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Resolved (YTD)</span>
-            <p className="text-2xl font-black text-emerald-900 mt-1">{sampleGrievances.resolved}</p>
-            <span className="text-[10px] text-emerald-700 font-semibold">Closed &amp; Archived</span>
-          </div>
-        </div>
-      </section>
     </ModulePageShell>
   );
 }

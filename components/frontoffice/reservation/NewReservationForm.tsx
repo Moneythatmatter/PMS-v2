@@ -155,6 +155,7 @@ export function NewReservationForm() {
 
   const [savedBookingNo, setSavedBookingNo] = useState<string | null>(null);
   const [allRoomNos, setAllRoomNos] = useState<string[]>([]);
+  const [roomIdByNo, setRoomIdByNo] = useState<Record<string, string>>({});
   const [reservations, setReservations] = useState<ReservationBooking[]>([]);
   const [availabilityBlocks, setAvailabilityBlocks] = useState<RoomAvailabilityBlock[]>([]);
   const [tariffByPlanMap, setTariffByPlanMap] = useState<Record<string, number>>({});
@@ -265,9 +266,11 @@ export function NewReservationForm() {
         // Include all sellable rooms; availability for the stay is checked against reservations.
         const byType: Record<string, string[]> = {};
         const nos: string[] = [];
+        const idByNo: Record<string, string> = {};
         for (const r of roomCards) {
           if (!isRoomSellableStatus(r.status)) continue;
           nos.push(r.roomNo);
+          if (r.id) idByNo[r.roomNo] = r.id;
           const key = r.type || "Other";
           if (!byType[key]) byType[key] = [];
           byType[key].push(r.roomNo);
@@ -276,6 +279,7 @@ export function NewReservationForm() {
           byType[key].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
         }
         setAllRoomNos(nos.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
+        setRoomIdByNo(idByNo);
         setAllRoomsByType(byType);
 
         const roomRates: Record<string, number> = {};
@@ -691,7 +695,10 @@ export function NewReservationForm() {
 
       const booking = await reservationService.create({
         guestId: finalGuestId!,
-        roomRefId: form.roomNumber || undefined,
+        roomRefId:
+          (form.roomNumber && roomIdByNo[form.roomNumber]) ||
+          form.roomNumber ||
+          undefined,
         sourceId: form.source || undefined,
         checkIn: form.checkIn,
         checkOut: form.checkOut,

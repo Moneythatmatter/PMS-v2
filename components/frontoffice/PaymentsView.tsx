@@ -10,6 +10,7 @@ import {
   Hash,
   IndianRupee,
   Plus,
+  Printer,
   RefreshCw,
   User,
 } from "lucide-react";
@@ -40,6 +41,7 @@ import {
   type FrontOfficePaymentRow,
   type FrontOfficePaymentType,
   mapFrontOfficeTransactions,
+  printFrontOfficePaymentReceipt,
 } from "@/components/frontoffice/paymentUtils";
 import { cn } from "@/lib/utils";
 
@@ -129,6 +131,9 @@ export function PaymentsView() {
         p.transactionNumber,
         p.externalReference,
         p.room,
+        p.bookingNo,
+        p.bookingId,
+        p.folioNumber,
         p.id,
       ]
         .filter(Boolean)
@@ -179,6 +184,21 @@ export function PaymentsView() {
   const openRecord = () => {
     resetForm();
     setRecordOpen(true);
+  };
+
+  const handlePrintReceipt = (payment: FrontOfficePaymentRow) => {
+    const opened = printFrontOfficePaymentReceipt(payment);
+    if (!opened) {
+      setToast({
+        message: "Unable to open print window. Allow pop-ups and try again.",
+        variant: "error",
+      });
+      return;
+    }
+    setToast({
+      message: `Printing receipt for ${payment.transactionNumber}.`,
+      variant: "success",
+    });
   };
 
   const handleSubmit = async () => {
@@ -388,7 +408,7 @@ export function PaymentsView() {
       <FOSearchToolbar
         search={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search by guest, transaction no, or external ref…"
+        searchPlaceholder="Search by guest, booking no, transaction no, or external ref…"
         filterPills={{
           active: typeFilter,
           onChange: setTypeFilter,
@@ -454,6 +474,11 @@ export function PaymentsView() {
                     <div>
                       <p className="font-semibold text-slate-900">{r.guestName}</p>
                       <p className="font-mono text-xs text-slate-400">{r.transactionNumber}</p>
+                      {(r.bookingNo ?? r.bookingId) && (
+                        <p className="text-xs text-slate-500">
+                          Booking {r.bookingNo ?? r.bookingId}
+                        </p>
+                      )}
                     </div>
                     <span
                       className={cn(
@@ -492,11 +517,12 @@ export function PaymentsView() {
 
             <div className="hidden md:block">
               <div className="max-h-[min(520px,calc(100vh-420px))] overflow-auto rounded-lg border border-slate-100">
-                <table className="w-full min-w-[760px] text-left text-sm">
+                <table className="w-full min-w-[860px] text-left text-sm">
                   <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_rgb(241,245,249)]">
                     <tr className="text-xs font-medium uppercase tracking-wide text-slate-500">
                       <th className="px-4 py-3">Transaction No</th>
                       <th className="px-4 py-3">Guest</th>
+                      <th className="px-4 py-3">Booking ID</th>
                       <th className="px-4 py-3">Type</th>
                       <th className="px-4 py-3">Amount</th>
                       <th className="px-4 py-3">Mode</th>
@@ -524,6 +550,11 @@ export function PaymentsView() {
                               <p className="text-xs text-slate-400">Room {r.room}</p>
                             )}
                           </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className="font-mono text-xs font-medium text-slate-700">
+                            {r.bookingNo ?? r.bookingId ?? "—"}
+                          </span>
                         </td>
                         <td className="px-4 py-3.5">
                           <span
@@ -617,8 +648,11 @@ export function PaymentsView() {
               <Button variant="outline" onClick={() => setPreviewPayment(null)}>
                 Close
               </Button>
-              <Button variant="outline">
-                <CreditCard className="mr-1.5 h-3.5 w-3.5" />
+              <Button
+                variant="outline"
+                onClick={() => handlePrintReceipt(previewPayment)}
+              >
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
                 Print Receipt
               </Button>
             </>
@@ -677,6 +711,16 @@ export function PaymentsView() {
                   icon: User,
                   label: "Room",
                   value: previewPayment.room ? `Room ${previewPayment.room}` : "—",
+                },
+                {
+                  icon: Hash,
+                  label: "Booking ID",
+                  value: previewPayment.bookingNo ?? previewPayment.bookingId ?? "—",
+                },
+                {
+                  icon: Hash,
+                  label: "Folio ID",
+                  value: previewPayment.folioNumber ?? previewPayment.folioId ?? "—",
                 },
                 { icon: CreditCard, label: "Payment Mode", value: previewPayment.mode },
                 {

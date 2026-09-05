@@ -2,17 +2,7 @@ import type { ModuleNavItem } from "../types";
 
 export const humanResourcesNavItems: ModuleNavItem[] = [
   { label: "Dashboard", href: "/human-resources/dashboard", icon: "layout-grid" },
-  {
-    label: "Employees",
-    href: "/human-resources/employees",
-    icon: "users",
-    children: [
-      { label: "Employee List", href: "/human-resources/employees/list", icon: "user-check" },
-      { label: "Add Employee", href: "/human-resources/employees/add", icon: "user-plus" },
-      { label: "Employee Profile", href: "/human-resources/employees/profile", icon: "user" },
-      { label: "Employee Documents", href: "/human-resources/employees/documents", icon: "file-text" },
-    ],
-  },
+  { label: "Employee List", href: "/human-resources/employees/list", icon: "users" },
   {
     label: "Attendance & Leave",
     href: "/human-resources/attendance-leave",
