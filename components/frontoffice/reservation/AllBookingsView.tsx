@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   BedDouble,
@@ -151,6 +151,25 @@ export function AllBookingsView() {
   const [cancelBooking, setCancelBooking] = useState<ReservationBooking | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuContainerRef.current && !menuContainerRef.current.contains(e.target as Node)) {
+        setOpenMenu(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenMenu(null);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openMenu]);
 
   const handlePrintBooking = (booking: ReservationBooking) => {
     const printed = printBookingDetail(booking, propertyName);
@@ -609,7 +628,10 @@ export function AllBookingsView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filtered.map((booking) => (
+                  {filtered.map((booking, idx) => {
+                    const isNearBottom = idx >= Math.max(0, filtered.length - 2);
+                    const isMenuOpen = openMenu === booking.id;
+                    return (
                     <tr
                       key={booking.id}
                       onClick={() => setViewBooking(booking)}
@@ -675,75 +697,76 @@ export function AllBookingsView() {
                               </Link>
                             );
                           })()}
-                          <div className="relative">
+                          <div
+                            className="relative"
+                            ref={isMenuOpen ? menuContainerRef : undefined}
+                          >
                             <button
                               type="button"
                               onClick={() =>
-                                setOpenMenu(openMenu === booking.id ? null : booking.id)
+                                setOpenMenu(isMenuOpen ? null : booking.id)
                               }
                               className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
                               aria-label="More actions"
                             >
                               <MoreHorizontal className="h-4 w-4" />
                             </button>
-                            {openMenu === booking.id && (
-                              <>
-                                <button
-                                  type="button"
-                                  className="fixed inset-0 z-10"
-                                  onClick={() => setOpenMenu(null)}
-                                  aria-label="Close menu"
-                                />
-                                <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
-                                  {[
-                                    {
-                                      icon: Pencil,
-                                      label: "Edit",
-                                      onClick: () => setToast(`Edit ${displayBookingNo(booking)} coming soon.`),
-                                    },
-                                    {
-                                      icon: Printer,
-                                      label: "Print",
-                                      onClick: () => handlePrintBooking(booking),
-                                    },
-                                    ...(booking.status === "Cancelled" ||
-                                      booking.status === "Checked Out"
-                                      ? []
-                                      : [
-                                        {
-                                          icon: XCircle,
-                                          label: "Cancel",
-                                          onClick: () => setCancelBooking(booking),
-                                          danger: true,
-                                        },
-                                      ]),
-                                  ].map(({ icon: Icon, label, onClick, danger }) => (
-                                    <button
-                                      key={label}
-                                      type="button"
-                                      onClick={() => {
-                                        onClick();
-                                        setOpenMenu(null);
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50",
-                                        danger
-                                          ? "text-red-600 hover:bg-red-50"
-                                          : "text-slate-700",
-                                      )}
-                                    >
-                                      <Icon className="h-3.5 w-3.5" />
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </>
+                            {isMenuOpen && (
+                              <div
+                                className={cn(
+                                  "absolute right-0 z-30 w-40 rounded-xl border border-slate-200 bg-white py-1 shadow-lg",
+                                  isNearBottom ? "bottom-full mb-1" : "top-full mt-1",
+                                )}
+                              >
+                                {[
+                                  {
+                                    icon: Pencil,
+                                    label: "Edit",
+                                    onClick: () => setToast(`Edit ${displayBookingNo(booking)} coming soon.`),
+                                  },
+                                  {
+                                    icon: Printer,
+                                    label: "Print",
+                                    onClick: () => handlePrintBooking(booking),
+                                  },
+                                  ...(booking.status === "Cancelled" ||
+                                    booking.status === "Checked Out"
+                                    ? []
+                                    : [
+                                      {
+                                        icon: XCircle,
+                                        label: "Cancel",
+                                        onClick: () => setCancelBooking(booking),
+                                        danger: true,
+                                      },
+                                    ]),
+                                ].map(({ icon: Icon, label, onClick, danger }) => (
+                                  <button
+                                    key={label}
+                                    type="button"
+                                    onClick={() => {
+                                      onClick();
+                                      setOpenMenu(null);
+                                    }}
+                                    className={cn(
+                                      "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50 cursor-pointer",
+                                      danger
+                                        ? "text-red-600 hover:bg-red-50"
+                                        : "text-slate-700",
+                                    )}
+                                  >
+                                    <Icon className="h-3.5 w-3.5" />
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
                             )}
                           </div>
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

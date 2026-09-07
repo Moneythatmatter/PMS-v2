@@ -1,3 +1,4 @@
+import jsPDF from "jspdf";
 import { formatINR } from "@/app/data/foodbeverages/ops";
 
 function escapeHtml(value: string) {
@@ -77,20 +78,6 @@ const THERMAL_CSS = `
   .barcode-wrap { margin-top: 6px; text-align: center; }
   .barcode-no { margin-top: 4px; font-size: 11px; letter-spacing: 0.08em; }
 `;
-
-function downloadSlipHtml(html: string, fileName: string) {
-  const safeName = fileName.replace(/[^A-Za-z0-9-_]+/g, "-") || "slip";
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${safeName}.html`;
-  link.rel = "noopener";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
 
 export type KotPrintLine = {
   name: string;
@@ -200,12 +187,269 @@ export function buildBillSlipHtml(params: BillSlipParams) {
 </body></html>`;
 }
 
+// ─────────────────────────────────────────────────────────────
+// PDF GENERATION (Standard 80mm Thermal Receipt Layout)
+// ─────────────────────────────────────────────────────────────
+
+function formatPdfCurrency(amount: number): string {
+  return `Rs. ${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export function generateBillSlipPdf(params: BillSlipParams): jsPDF {
+  // 80mm thermal paper width, dynamic height
+  const baseHeight = 90;
+  const itemHeight = params.lines.length * 6.5;
+  const totalHeight = Math.max(120, baseHeight + itemHeight);
+
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: [80, totalHeight],
+  });
+
+  const pageWidth = 80;
+  const leftMargin = 5;
+  const rightMargin = 75;
+  const centerX = pageWidth / 2;
+
+  let y = 8;
+
+  // Date & Time
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(50, 50, 50);
+  doc.text(slipDateTimeLabel(), centerX, y, { align: "center" });
+
+  y += 5;
+  // Outlet Name
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0);
+  doc.text((params.outletName || "HOTEL RESTAURANT").toUpperCase(), centerX, y, { align: "center" });
+
+  y += 5;
+  // Bill Label
+  const billLabel = formatSlipNumber(params.billNo, "Bill");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.text(billLabel, centerX, y, { align: "center" });
+
+  y += 4.5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.text(`Order: ${params.orderNo} (${params.orderType})`, centerX, y, { align: "center" });
+
+  y += 4;
+  doc.setFont("helvetica", "bold");
+  doc.text(tableLabel(params.orderType, params.tableRef), centerX, y, { align: "center" });
+
+  y += 4;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text(`Guest: ${params.guest || "Walk-in"} | Server: ${params.server || "Staff"}`, centerX, y, {
+    align: "center",
+  });
+
+  y += 3;
+  // Divider
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8);
+  doc.text("--------------------------------------------------", centerX, y, { align: "center" });
+
+  y += 4;
+  // Table Header
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.text("ITEM", leftMargin, y);
+  doc.text("QTY", 48, y, { align: "center" });
+  doc.text("AMOUNT", rightMargin, y, { align: "right" });
+
+  y += 2.5;
+  doc.setFont("courier", "normal");
+  doc.text("--------------------------------------------------", centerX, y, { align: "center" });
+
+  // Items List
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+
+  params.lines.forEach((line) => {
+    y += 4.5;
+    const itemNameLines = doc.splitTextToSize(line.name, 40);
+    doc.text(itemNameLines, leftMargin, y);
+    doc.text(String(line.qty), 48, y, { align: "center" });
+    doc.text(formatPdfCurrency(line.qty * line.price), rightMargin, y, { align: "right" });
+
+    if (itemNameLines.length > 1) {
+      y += (itemNameLines.length - 1) * 3.5;
+    }
+  });
+
+  y += 4;
+  doc.setFont("courier", "normal");
+  doc.text("--------------------------------------------------", centerX, y, { align: "center" });
+
+  // Total
+  y += 5;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.text("TOTAL AMOUNT:", leftMargin, y);
+  doc.text(formatPdfCurrency(params.total), rightMargin, y, { align: "right" });
+
+  y += 4;
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8);
+  doc.text("--------------------------------------------------", centerX, y, { align: "center" });
+
+  // Footer
+  y += 5;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("*** THANK YOU & VISIT AGAIN ***", centerX, y, { align: "center" });
+
+  y += 4;
+  const barcodeValue = params.billId.replace(/[^A-Za-z0-9]/g, "").slice(-12) || params.billNo;
+  doc.setFont("courier", "normal");
+  doc.setFontSize(7.5);
+  doc.text(`Ref: ${barcodeValue}`, centerX, y, { align: "center" });
+
+  return doc;
+}
+
+export function generateKotSlipPdf(params: KotSlipParams): jsPDF {
+  const baseHeight = 75;
+  const itemHeight = params.lines.length * 7;
+  const totalHeight = Math.max(100, baseHeight + itemHeight);
+
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: [80, totalHeight],
+  });
+
+  const pageWidth = 80;
+  const leftMargin = 5;
+  const rightMargin = 75;
+  const centerX = pageWidth / 2;
+
+  let y = 8;
+
+  // Date & Time
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8.5);
+  doc.text(slipDateTimeLabel(), centerX, y, { align: "center" });
+
+  y += 5;
+  // KOT Label
+  const kotLabel = formatSlipNumber(params.kotNo, "KOT");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text(kotLabel, centerX, y, { align: "center" });
+
+  y += 4.5;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text(params.orderType.toUpperCase(), centerX, y, { align: "center" });
+
+  y += 4;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.text(tableLabel(params.orderType, params.tableRef), centerX, y, { align: "center" });
+
+  y += 3;
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8);
+  doc.text("--------------------------------------------------", centerX, y, { align: "center" });
+
+  y += 4;
+  // Table Header
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("ITEM", leftMargin, y);
+  doc.text("QTY", rightMargin, y, { align: "right" });
+
+  y += 2.5;
+  doc.setFont("courier", "normal");
+  doc.text("--------------------------------------------------", centerX, y, { align: "center" });
+
+  // Items List
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+
+  params.lines.forEach((line) => {
+    y += 5;
+    const itemNameLines = doc.splitTextToSize(line.name, 58);
+    doc.text(itemNameLines, leftMargin, y);
+    doc.text(String(line.qty), rightMargin, y, { align: "right" });
+
+    if (itemNameLines.length > 1) {
+      y += (itemNameLines.length - 1) * 4;
+    }
+
+    if (line.note) {
+      y += 3.5;
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7.5);
+      const noteLines = doc.splitTextToSize(`* ${line.note}`, 65);
+      doc.text(noteLines, leftMargin + 2, y);
+      y += (noteLines.length - 1) * 3;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+    }
+  });
+
+  y += 4;
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8);
+  doc.text("--------------------------------------------------", centerX, y, { align: "center" });
+
+  y += 5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.text("Scan to mark food ready:", centerX, y, { align: "center" });
+
+  y += 4;
+  const barcodeValue = params.kotId.replace(/[^A-Za-z0-9]/g, "").slice(-12) || params.kotNo;
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8);
+  doc.text(`Ref: ${barcodeValue}`, centerX, y, { align: "center" });
+
+  return doc;
+}
+
 export function saveKotSlip(params: KotSlipParams) {
-  downloadSlipHtml(buildKotSlipHtml(params), params.kotNo);
+  try {
+    const doc = generateKotSlipPdf(params);
+    const safeName = params.kotNo.replace(/[^A-Za-z0-9-_]+/g, "-") || "KOT";
+    doc.save(`${safeName}.pdf`);
+  } catch {
+    // Fallback to HTML if PDF generation encounters any environment issue
+    downloadSlipHtml(buildKotSlipHtml(params), params.kotNo);
+  }
 }
 
 export function saveBillSlip(params: BillSlipParams) {
-  downloadSlipHtml(buildBillSlipHtml(params), params.billNo);
+  try {
+    const doc = generateBillSlipPdf(params);
+    const safeName = params.billNo.replace(/[^A-Za-z0-9-_]+/g, "-") || "BILL";
+    doc.save(`${safeName}.pdf`);
+  } catch {
+    // Fallback to HTML if PDF generation encounters any environment issue
+    downloadSlipHtml(buildBillSlipHtml(params), params.billNo);
+  }
+}
+
+function downloadSlipHtml(html: string, fileName: string) {
+  const safeName = fileName.replace(/[^A-Za-z0-9-_]+/g, "-") || "slip";
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${safeName}.html`;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export function formatKotNumber(raw: string) {

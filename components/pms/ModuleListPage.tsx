@@ -437,7 +437,7 @@ export function ModuleListPage({
           setFormError("Please select a valid outlet.");
           return;
         }
-      } else if (isSelect && raw !== "" && col.key === "tableNo") {
+      } else if (isSelect && raw !== "" && col.key === "tableNo" && definition.title !== "Tables") {
         const inventory =
           definition.tableInventory && definition.tableInventory.length > 0
             ? definition.tableInventory
@@ -1073,10 +1073,12 @@ export function ModuleListPage({
                 col.key === "outletId" ||
                 col.key === "bookingStatus" ||
                 (col.key === "tableNo" &&
+                  col.inputType !== "text" &&
+                  definition.title !== "Tables" &&
                   ((definition.tableInventory && definition.tableInventory.length > 0) ||
                     tableOpsRows.length > 0 ||
                     (col.options && col.options.length > 0))) ||
-                (col.options && col.options.length > 0);
+                (col.options !== undefined && col.options.length > 0);
 
               const isNumber =
                 col.inputType === "number" ||
@@ -1098,7 +1100,7 @@ export function ModuleListPage({
               if (isSelect) {
                 if (col.key === "outletId" && outlets.length > 0) {
                   selectOptions = outlets.map((o) => ({ value: o.id, label: o.name }));
-                } else if (col.key === "tableNo") {
+                } else if (col.key === "tableNo" && definition.title !== "Tables") {
                   const inventory =
                     definition.tableInventory && definition.tableInventory.length > 0
                       ? definition.tableInventory

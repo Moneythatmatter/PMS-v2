@@ -15,6 +15,7 @@ function formatInr(amount: number | undefined): string {
     style: "currency",
     currency: "INR",
     minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(amount);
 }
 
@@ -266,23 +267,42 @@ export function buildBookingDetailHtml(
         margin-top: 14px;
         display: flex;
         justify-content: space-between;
-        gap: 12px;
-        padding: 14px 16px;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 18px;
         border-radius: 12px;
         background: #0f766e;
         color: #fff;
       }
+      .amount-strip > div {
+        flex: 1;
+        min-width: 0;
+      }
       .amount-strip .label {
+        display: block;
+        width: auto;
         font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 0.08em;
         opacity: 0.85;
+        color: #fff;
       }
       .amount-strip .value {
         display: block;
+        width: auto;
         margin-top: 4px;
         font-size: 18px;
         font-weight: 700;
+        color: #fff;
+        text-align: left;
+        white-space: nowrap;
+        word-break: normal;
+      }
+      .amount-strip .amount-strip-right {
+        text-align: right;
+      }
+      .amount-strip .amount-strip-right .value {
+        text-align: right;
       }
       .content {
         margin-top: 22px;
@@ -319,13 +339,13 @@ export function buildBookingDetailHtml(
       .row:last-child {
         border-bottom: none;
       }
-      .label {
+      .row .label {
         width: 42%;
         font-size: 12px;
         color: #64748b;
         font-weight: 600;
       }
-      .value {
+      .row .value {
         width: 58%;
         font-size: 12px;
         color: #0f172a;
@@ -396,7 +416,7 @@ export function buildBookingDetailHtml(
             <span class="label">Total amount</span>
             <span class="value">${escapeHtml(formatInr(booking.totalAmount))}</span>
           </div>
-          <div style="text-align:right;">
+          <div class="amount-strip-right">
             <span class="label">Balance due</span>
             <span class="value">${escapeHtml(formatInr(booking.balance))}</span>
           </div>

@@ -10,3 +10,4 @@ export { StatusBadge } from "./StatusBadge";
 export { SearchSelect } from "./SearchSelect";
 export { DropdownSelect } from "./DropdownSelect";
 export type { DropdownSelectOption } from "./DropdownSelect";
+export { ActionMenu, type ActionMenuItem } from "./ActionMenu";

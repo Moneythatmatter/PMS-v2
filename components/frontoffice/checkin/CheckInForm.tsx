@@ -161,15 +161,9 @@ function mergeGuestDetails(
 }
 
 function profileLockedFields(
-  profile: ReturnType<typeof guestProfileToCheckInDetails>,
+  _profile: ReturnType<typeof guestProfileToCheckInDetails>,
 ): Partial<Record<keyof ReturnType<typeof guestProfileToCheckInDetails>, boolean>> {
-  const locked: Partial<
-    Record<keyof ReturnType<typeof guestProfileToCheckInDetails>, boolean>
-  > = {};
-  (Object.keys(profile) as (keyof typeof profile)[]).forEach((key) => {
-    if (String(profile[key] || "").trim()) locked[key] = true;
-  });
-  return locked;
+  return {};
 }
 
 function isEligibleForCheckIn(status: string) {

@@ -73,14 +73,15 @@ export function SearchSelect({
       ? { id: selectedId, label: selectedId, data: { id: selectedId, label: selectedId } }
       : null);
 
+  const isTyping = isControlledQuery ? value.length > 0 : internalQuery.length > 0;
   const displayValue = disabled
     ? (selected?.label || query)
     : isOpen
-      ? query
+      ? (isControlledQuery ? value : internalQuery || selected?.label || "")
       : (selected?.label ?? "");
 
   const matches = uniqueOptions.filter((opt) => {
-    const q = query.toLowerCase().trim();
+    const q = (isTyping ? query : "").toLowerCase().trim();
     if (!q) return !requireQuery;
     return (
       (opt.label ? opt.label.toLowerCase().includes(q) : false) ||
@@ -90,7 +91,7 @@ export function SearchSelect({
     );
   });
 
-  const trimmedQuery = query.trim();
+  const trimmedQuery = (isTyping ? query : "").trim();
   const exactMatch = uniqueOptions.some(
     (o) =>
       (o.id ? o.id.toLowerCase() : "") === trimmedQuery.toLowerCase() ||
@@ -169,14 +170,14 @@ export function SearchSelect({
           value={displayValue}
           readOnly={inputLocked}
           onChange={(e) => handleInputChange(e.target.value)}
-          onFocus={() => {
+          onFocus={(e) => {
             if (inputLocked) return;
-            if (!isControlledQuery && selected) {
-              setInternalQuery(selected.label);
-            }
-            if (!requireQuery || query.trim().length > 0) {
-              setIsOpen(true);
-            }
+            setIsOpen(true);
+            e.target.select?.();
+          }}
+          onClick={() => {
+            if (inputLocked) return;
+            setIsOpen(true);
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && canCommitCustom) {
@@ -227,32 +228,40 @@ export function SearchSelect({
                 : "No options available"}
             </p>
           )}
-          {matches.map((opt, index) => (
-            <button
-              key={`${opt.id}-${index}`}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                onSelect?.(opt);
-                if (!isControlledQuery) {
-                  setInternalQuery("");
-                }
-                setIsOpen(false);
-              }}
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-emerald-50 transition"
-            >
-              {renderOption ? (
-                renderOption(opt)
-              ) : (
-                <>
-                  <span className="font-medium text-slate-900">{opt.label}</span>
-                  {(opt.sublabel || opt.hint) && (
-                    <span className="text-xs text-slate-500">{opt.sublabel || opt.hint}</span>
-                  )}
-                </>
-              )}
-            </button>
-          ))}
+          {matches.map((opt, index) => {
+            const isCurrentSelected = selectedId === opt.id || selectedId === opt.label;
+            return (
+              <button
+                key={`${opt.id}-${index}`}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onSelect?.(opt);
+                  if (!isControlledQuery) {
+                    setInternalQuery("");
+                  }
+                  setIsOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between px-3 py-2 text-left text-sm transition cursor-pointer",
+                  isCurrentSelected
+                    ? "bg-emerald-50 text-emerald-900 font-semibold"
+                    : "hover:bg-slate-50 text-slate-900",
+                )}
+              >
+                {renderOption ? (
+                  renderOption(opt)
+                ) : (
+                  <>
+                    <span className="font-medium">{opt.label}</span>
+                    {(opt.sublabel || opt.hint) && (
+                      <span className="text-xs text-slate-500">{opt.sublabel || opt.hint}</span>
+                    )}
+                  </>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
