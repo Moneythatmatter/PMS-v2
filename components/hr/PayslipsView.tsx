@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   FileText,
   Search,
@@ -27,6 +27,9 @@ import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
+import { hrPayslipService, hrEmployeeService } from "@/services/human-resources";
+import { mapPayslipFromApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
 export type PayslipStatus = "Generated" | "Sent" | "Pending";
 
@@ -67,186 +70,23 @@ export interface PayslipRecord {
   sentDate?: string;
 }
 
-export const INITIAL_PAYSLIPS: PayslipRecord[] = [
-  {
-    id: "PS-701",
-    payslipNo: "PAYSLIP-202608-0101",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    designation: "Front Desk Manager",
-    avatar: "RK",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-    month: "August 2026",
-    payPeriod: "01/08/2026 - 31/08/2026",
-    generatedDate: "01/09/2026",
-    paymentMode: "Direct Bank Transfer",
-    bankName: "HDFC Bank",
-    bankAccountNo: "•••• •••• 4892",
-    panNo: "ABCDE1234F",
-    pfNo: "MH/BAN/0012345/000/0101",
-    workedDays: 26,
-    paidLeaves: 2,
-    unpaidLeaves: 0,
-    basicSalary: 18000,
-    hra: 7200,
-    allowances: 3500,
-    overtimePay: 1500,
-    holidayPay: 2550,
-    grossSalary: 32750,
-    pfDeduction: 1800,
-    esiDeduction: 300,
-    ptDeduction: 200,
-    taxDeduction: 1000,
-    leaveDeduction: 0,
-    totalDeductions: 3300,
-    netSalary: 29450,
-    status: "Sent",
-    sentDate: "02/09/2026",
-  },
-  {
-    id: "PS-702",
-    payslipNo: "PAYSLIP-202608-0102",
-    employeeId: "EMP-0102",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    designation: "Guest Relations Executive",
-    avatar: "PP",
-    month: "August 2026",
-    payPeriod: "01/08/2026 - 31/08/2026",
-    generatedDate: "01/09/2026",
-    paymentMode: "Direct Bank Transfer",
-    bankName: "ICICI Bank",
-    bankAccountNo: "•••• •••• 9812",
-    panNo: "FGHIJ5678K",
-    pfNo: "MH/BAN/0012345/000/0102",
-    workedDays: 25,
-    paidLeaves: 2,
-    unpaidLeaves: 1,
-    basicSalary: 16000,
-    hra: 6400,
-    allowances: 3000,
-    overtimePay: 800,
-    holidayPay: 2550,
-    grossSalary: 28750,
-    pfDeduction: 1600,
-    esiDeduction: 300,
-    ptDeduction: 200,
-    taxDeduction: 600,
-    leaveDeduction: 500,
-    totalDeductions: 3200,
-    netSalary: 25550,
-    status: "Generated",
-  },
-  {
-    id: "PS-703",
-    payslipNo: "PAYSLIP-202608-0103",
-    employeeId: "EMP-0103",
-    employeeName: "Anjali Sharma",
-    department: "Housekeeping",
-    designation: "Executive Housekeeper",
-    avatar: "AS",
-    photoUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150",
-    month: "August 2026",
-    payPeriod: "01/08/2026 - 31/08/2026",
-    generatedDate: "01/09/2026",
-    paymentMode: "Direct Bank Transfer",
-    bankName: "State Bank of India",
-    bankAccountNo: "•••• •••• 2341",
-    panNo: "LMNOP9012Q",
-    pfNo: "MH/BAN/0012345/000/0103",
-    workedDays: 26,
-    paidLeaves: 2,
-    unpaidLeaves: 0,
-    basicSalary: 20000,
-    hra: 8000,
-    allowances: 4000,
-    overtimePay: 1200,
-    holidayPay: 2400,
-    grossSalary: 35600,
-    pfDeduction: 2000,
-    esiDeduction: 350,
-    ptDeduction: 200,
-    taxDeduction: 1300,
-    leaveDeduction: 0,
-    totalDeductions: 3850,
-    netSalary: 31750,
-    status: "Sent",
-    sentDate: "02/09/2026",
-  },
-  {
-    id: "PS-704",
-    payslipNo: "PAYSLIP-202608-0104",
-    employeeId: "EMP-0104",
-    employeeName: "Chef Vikramjit Singh",
-    department: "Food & Beverage",
-    designation: "Executive Head Chef",
-    avatar: "VS",
-    month: "August 2026",
-    payPeriod: "01/08/2026 - 31/08/2026",
-    generatedDate: "01/09/2026",
-    paymentMode: "Direct Bank Transfer",
-    bankName: "Axis Bank",
-    bankAccountNo: "•••• •••• 7765",
-    panNo: "RSTUV3456W",
-    pfNo: "MH/BAN/0012345/000/0104",
-    workedDays: 26,
-    paidLeaves: 2,
-    unpaidLeaves: 0,
-    basicSalary: 35000,
-    hra: 14000,
-    allowances: 9000,
-    overtimePay: 3500,
-    holidayPay: 3450,
-    grossSalary: 64950,
-    pfDeduction: 3500,
-    esiDeduction: 0,
-    ptDeduction: 200,
-    taxDeduction: 4300,
-    leaveDeduction: 0,
-    totalDeductions: 8000,
-    netSalary: 56950,
-    status: "Generated",
-  },
-  {
-    id: "PS-705",
-    payslipNo: "PAYSLIP-202608-0105",
-    employeeId: "EMP-0105",
-    employeeName: "Arjun Verma",
-    department: "Food & Beverage",
-    designation: "Restaurant Captain",
-    avatar: "AV",
-    month: "August 2026",
-    payPeriod: "01/08/2026 - 31/08/2026",
-    generatedDate: "Pending",
-    paymentMode: "Direct Bank Transfer",
-    bankName: "Kotak Mahindra Bank",
-    bankAccountNo: "•••• •••• 1129",
-    panNo: "XYZAB7890C",
-    pfNo: "MH/BAN/0012345/000/0105",
-    workedDays: 24,
-    paidLeaves: 1,
-    unpaidLeaves: 2,
-    basicSalary: 17000,
-    hra: 6800,
-    allowances: 2500,
-    overtimePay: 900,
-    holidayPay: 2400,
-    grossSalary: 29600,
-    pfDeduction: 1700,
-    esiDeduction: 300,
-    ptDeduction: 200,
-    taxDeduction: 400,
-    leaveDeduction: 1000,
-    totalDeductions: 3600,
-    netSalary: 26000,
-    status: "Pending",
-  },
-];
-
 export function PayslipsView() {
-  const [payslips, setPayslips] = useState<PayslipRecord[]>(INITIAL_PAYSLIPS);
+  const [payslips, setPayslips] = useState<PayslipRecord[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadPayslips = async () => {
+    try {
+      const [rows, empRows] = await Promise.all([hrPayslipService.list(), hrEmployeeService.list()]);
+      const lookup = new Map(empRows.map(mapEmployeeFromApi).map((e) => [e.id, e]));
+      setPayslips(rows.map((row) => mapPayslipFromApi(row, lookup.get(String(row.employeeId)))));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load payslips");
+      setPayslips([]);
+    }
+  };
+
+  useEffect(() => { void loadPayslips(); }, []);
+
+
 
   // Filters State
   const [selectedMonth, setSelectedMonth] = useState("August 2026");

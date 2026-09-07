@@ -26,9 +26,11 @@ import { DesignationMasterView } from "@/components/hr/DesignationMasterView";
 import { EmploymentTypesMasterView } from "@/components/hr/EmploymentTypesMasterView";
 import { ShiftTypesMasterView } from "@/components/hr/ShiftTypesMasterView";
 import { LeaveTypesMasterView } from "@/components/hr/LeaveTypesMasterView";
+import { LeavePolicyMasterView } from "@/components/hr/LeavePolicyMasterView";
 import { HolidayCalendarMasterView } from "@/components/hr/HolidayCalendarMasterView";
 import { SalaryComponentsMasterView } from "@/components/hr/SalaryComponentsMasterView";
 import { HRReportsView } from "@/components/hr/HRReportsView";
+import { HRMastersHubView } from "@/components/hr/HRMastersHubView";
 
 export default async function HumanResourcesPage({
   params,
@@ -144,6 +146,10 @@ export default async function HumanResourcesPage({
     return <ComplaintStatusView />;
   }
 
+  if (slugPath === "masters") {
+    return <HRMastersHubView />;
+  }
+
   if (
     slugPath === "masters/departments" ||
     slugPath === "masters/department" ||
@@ -182,6 +188,14 @@ export default async function HumanResourcesPage({
     slugPath === "leave-types"
   ) {
     return <LeaveTypesMasterView />;
+  }
+
+  if (
+    slugPath === "masters/leave-policies" ||
+    slugPath === "masters/leave-policy" ||
+    slugPath === "leave-policies"
+  ) {
+    return <LeavePolicyMasterView />;
   }
 
   if (

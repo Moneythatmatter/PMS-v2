@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Sun,
   Moon,
@@ -25,6 +25,8 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { hrShiftTypeService } from "@/services/human-resources";
+import { mapShiftTypeFromApi, mapShiftTypeToApi } from "@/lib/hr/api-mappers";
 
 export type ShiftStatus = "Active" | "Inactive";
 export type ShiftCategory = "Morning" | "Afternoon" | "Night" | "General" | "Split";
@@ -46,92 +48,23 @@ export interface ShiftTypeMaster {
   employeeCount: number;
 }
 
-export const INITIAL_SHIFT_TYPES: ShiftTypeMaster[] = [
-  {
-    id: "ST-001",
-    shiftCode: "SHF-MORN",
-    shiftName: "Morning Shift (Shift A)",
-    category: "Morning",
-    startTime: "07:00 AM",
-    endTime: "03:30 PM",
-    breakDurationMinutes: 30,
-    totalWorkingHours: 8,
-    isNightShift: false,
-    nightAllowanceEligible: false,
-    description: "Standard morning operational shift for front desk, housekeeping floor runners, and breakfast kitchen.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 45,
-  },
-  {
-    id: "ST-002",
-    shiftCode: "SHF-EVE",
-    shiftName: "Evening / Afternoon Shift (Shift B)",
-    category: "Afternoon",
-    startTime: "03:00 PM",
-    endTime: "11:30 PM",
-    breakDurationMinutes: 30,
-    totalWorkingHours: 8,
-    isNightShift: false,
-    nightAllowanceEligible: false,
-    description: "Afternoon & dinner service shift for banquet staff, dining restaurant captains, and late check-in desk.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 38,
-  },
-  {
-    id: "ST-003",
-    shiftCode: "SHF-NIGHT",
-    shiftName: "Night Audit Shift (Shift C)",
-    category: "Night",
-    startTime: "11:00 PM",
-    endTime: "07:30 AM",
-    breakDurationMinutes: 30,
-    totalWorkingHours: 8,
-    isNightShift: true,
-    nightAllowanceEligible: true,
-    description: "Overnight shift covering night audit financial posting, overnight security patrols, and emergency room service.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 16,
-  },
-  {
-    id: "ST-004",
-    shiftCode: "SHF-GEN",
-    shiftName: "General Administrative Duty",
-    category: "General",
-    startTime: "09:00 AM",
-    endTime: "06:00 PM",
-    breakDurationMinutes: 60,
-    totalWorkingHours: 8,
-    isNightShift: false,
-    nightAllowanceEligible: false,
-    description: "Regular corporate general office hours for HR, Finance, Executive Management, and Sales teams.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 22,
-  },
-  {
-    id: "ST-005",
-    shiftCode: "SHF-SPLIT",
-    shiftName: "Split Kitchen Shift",
-    category: "Split",
-    startTime: "11:00 AM",
-    endTime: "10:30 PM",
-    breakDurationMinutes: 210,
-    totalWorkingHours: 8,
-    isNightShift: false,
-    nightAllowanceEligible: false,
-    description: "Specialized culinary split duty covering peak lunch (11 AM - 3 PM) and peak dinner (6:30 PM - 10:30 PM).",
-    status: "Active",
-    createdDate: "15/01/2025",
-    employeeCount: 9,
-  },
-];
-
 export function ShiftTypesMasterView() {
-  const [shifts, setShifts] = useState<ShiftTypeMaster[]>(INITIAL_SHIFT_TYPES);
+  const [shifts, setShifts] = useState<ShiftTypeMaster[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const loadShifts = async () => {
+    try {
+      const rows = await hrShiftTypeService.list();
+      setShifts(rows.map(mapShiftTypeFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load shift types");
+      setShifts([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadShifts();
+  }, []);
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -222,7 +155,7 @@ export function ShiftTypesMasterView() {
   };
 
   // Save Shift Type (Duplicate check)
-  const handleSaveShift = (e: React.FormEvent) => {
+  const handleSaveShift = async (e: React.FormEvent) => {
     e.preventDefault();
     setNameError("");
     setCodeError("");
@@ -240,7 +173,6 @@ export function ShiftTypesMasterView() {
       return;
     }
 
-    // Duplicate check for name
     const isDuplicate = shifts.some(
       (s) =>
         s.shiftName.toLowerCase() === trimmedName.toLowerCase() &&
@@ -252,63 +184,47 @@ export function ShiftTypesMasterView() {
       return;
     }
 
-    if (editingShift) {
-      setShifts((prev) =>
-        prev.map((s) =>
-          s.id === editingShift.id
-            ? {
-                ...s,
-                shiftCode: trimmedCode,
-                shiftName: trimmedName,
-                category: formCategory,
-                startTime: formStartTime,
-                endTime: formEndTime,
-                breakDurationMinutes: Number(formBreak),
-                totalWorkingHours: Number(formWorkingHours),
-                isNightShift: formIsNightShift,
-                nightAllowanceEligible: formNightAllowance,
-                description: formDescription.trim(),
-                status: formStatus,
-              }
-            : s
-        )
-      );
-      setToastMessage(`Updated shift "${trimmedName}".`);
-    } else {
-      const newShift: ShiftTypeMaster = {
-        id: `ST-${Math.floor(100 + Math.random() * 900)}`,
-        shiftCode: trimmedCode,
-        shiftName: trimmedName,
-        category: formCategory,
-        startTime: formStartTime,
-        endTime: formEndTime,
-        breakDurationMinutes: Number(formBreak),
-        totalWorkingHours: Number(formWorkingHours),
-        isNightShift: formIsNightShift,
-        nightAllowanceEligible: formNightAllowance,
-        description: formDescription.trim(),
-        status: formStatus,
-        createdDate: new Date().toLocaleDateString("en-GB"),
-        employeeCount: 0,
-      };
-      setShifts((prev) => [newShift, ...prev]);
-      setToastMessage(`Created shift "${trimmedName}".`);
+    const payload = mapShiftTypeToApi({
+      shiftCode: trimmedCode,
+      shiftName: trimmedName,
+      category: formCategory,
+      startTime: formStartTime,
+      endTime: formEndTime,
+      breakDurationMinutes: Number(formBreak),
+      totalWorkingHours: Number(formWorkingHours),
+      isNightShift: formIsNightShift,
+      nightAllowanceEligible: formNightAllowance,
+      description: formDescription.trim(),
+      status: formStatus,
+    });
+
+    try {
+      if (editingShift) {
+        await hrShiftTypeService.update(editingShift.id, payload);
+        setToastMessage(`Updated shift "${trimmedName}".`);
+      } else {
+        await hrShiftTypeService.create(payload);
+        setToastMessage(`Created shift "${trimmedName}".`);
+      }
+      await loadShifts();
+      setIsModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save shift type");
     }
-
-    setIsModalOpen(false);
   };
 
-  // Toggle Activate / Deactivate
-  const handleToggleStatus = (s: ShiftTypeMaster) => {
+  const handleToggleStatus = async (s: ShiftTypeMaster) => {
     const nextStatus: ShiftStatus = s.status === "Active" ? "Inactive" : "Active";
-    setShifts((prev) =>
-      prev.map((item) => (item.id === s.id ? { ...item, status: nextStatus } : item))
-    );
-    setToastMessage(`Shift "${s.shiftName}" is now ${nextStatus}.`);
+    try {
+      await hrShiftTypeService.update(s.id, { status: nextStatus });
+      await loadShifts();
+      setToastMessage(`Shift "${s.shiftName}" is now ${nextStatus}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update status");
+    }
   };
 
-  // Delete Shift Type with Usage Guard
-  const handleDeleteShift = (s: ShiftTypeMaster) => {
+  const handleDeleteShift = async (s: ShiftTypeMaster) => {
     if (s.employeeCount > 0) {
       alert(
         `Cannot delete "${s.shiftName}" because it has ${s.employeeCount} employee(s) assigned to this shift roster. Reassign employees before deleting, or deactivate this shift instead.`
@@ -317,9 +233,14 @@ export function ShiftTypesMasterView() {
     }
 
     if (confirm(`Are you sure you want to delete shift "${s.shiftName}"?`)) {
-      setShifts((prev) => prev.filter((item) => item.id !== s.id));
-      if (viewingShift?.id === s.id) setViewingShift(null);
-      setToastMessage(`Deleted shift "${s.shiftName}".`);
+      try {
+        await hrShiftTypeService.remove(s.id);
+        if (viewingShift?.id === s.id) setViewingShift(null);
+        await loadShifts();
+        setToastMessage(`Deleted shift "${s.shiftName}".`);
+      } catch (err) {
+        setToastMessage(err instanceof Error ? err.message : "Failed to delete shift type");
+      }
     }
   };
 

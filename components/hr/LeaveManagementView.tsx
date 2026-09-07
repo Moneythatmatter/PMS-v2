@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Calendar,
   Search,
@@ -31,6 +31,9 @@ import { Button, Drawer, Modal, StatusBadge, SearchSelect } from "@/components/u
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
 import { cn } from "@/lib/utils";
+import { hrLeaveApplicationService, hrEmployeeService } from "@/services/human-resources";
+import { mapLeaveApplicationFromApi, mapLeaveApplicationToApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
 export interface LeaveTypeMaster {
   id: string;
@@ -91,139 +94,34 @@ export const MASTER_LEAVE_TYPES: LeaveTypeMaster[] = [
   { id: "lt-ml", code: "ML", name: "Maternity / Paternity Leave", annualQuota: 90, isPaid: true, colorClass: "bg-pink-100 text-pink-800 border-pink-200" },
 ];
 
-export const INITIAL_LEAVE_APPLICATIONS: LeaveApplication[] = [
-  {
-    id: "LA-201",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    designation: "Front Desk Manager",
-    avatar: "RK",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-    leaveTypeId: "lt-cl",
-    leaveTypeCode: "CL",
-    leaveTypeName: "Casual Leave",
-    isPaid: true,
-    durationOption: "Full Day",
-    priority: "Normal",
-    fromDate: "10/08/2026",
-    toDate: "12/08/2026",
-    totalDays: 3.0,
-    reason: "Personal family event in hometown.",
-    status: "Pending",
-    appliedOn: "05/08/2026",
-    approvalChain: [
-      { role: "Dept Manager", approverName: "Ananya Sharma", status: "Approved", date: "05/08/2026" },
-      { role: "HR Manager", approverName: "Neha Mehta", status: "Pending" },
-      { role: "General Manager", approverName: "Vikram Malhotra", status: "Pending" },
-    ],
-    balances: {
-      casualLeave: { total: 10, used: 2, remaining: 8, pending: 1, expires: "31 Dec 2026" },
-      sickLeave: { total: 12, used: 3, remaining: 9, pending: 0, expires: "31 Dec 2026" },
-      earnedLeave: { total: 15, used: 5, remaining: 10, pending: 0, expires: "31 Dec 2026" },
-      compOff: { remaining: 2, used: 1, pending: 0, expires: "30 Sep 2026" },
-    },
-  },
-  {
-    id: "LA-202",
-    employeeId: "EMP-0102",
-    employeeName: "Anjali Sharma",
-    department: "Housekeeping",
-    designation: "Executive Housekeeper",
-    avatar: "AS",
-    photoUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150",
-    leaveTypeId: "lt-sl",
-    leaveTypeCode: "SL",
-    leaveTypeName: "Sick Leave",
-    isPaid: true,
-    durationOption: "Full Day",
-    priority: "Urgent",
-    fromDate: "15/08/2026",
-    toDate: "15/08/2026",
-    totalDays: 1.0,
-    reason: "Doctor consultation and fever recovery.",
-    attachmentName: "Medical_Certificate_15Aug.pdf",
-    status: "Approved",
-    appliedOn: "06/08/2026",
-    approvedBy: "Neha Mehta (HR)",
-    approvalChain: [
-      { role: "Dept Manager", approverName: "Housekeeping Head", status: "Approved", date: "06/08/2026" },
-      { role: "HR Manager", approverName: "Neha Mehta", status: "Approved", date: "06/08/2026" },
-    ],
-    balances: {
-      casualLeave: { total: 10, used: 1, remaining: 9, pending: 0, expires: "31 Dec 2026" },
-      sickLeave: { total: 12, used: 3, remaining: 9, pending: 0, expires: "31 Dec 2026" },
-      earnedLeave: { total: 15, used: 2, remaining: 13, pending: 0, expires: "31 Dec 2026" },
-      compOff: { remaining: 1, used: 0, pending: 0, expires: "30 Sep 2026" },
-    },
-  },
-  {
-    id: "LA-203",
-    employeeId: "EMP-0104",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    designation: "Guest Relations Executive",
-    avatar: "PP",
-    leaveTypeId: "lt-el",
-    leaveTypeCode: "EL",
-    leaveTypeName: "Earned Leave",
-    isPaid: true,
-    durationOption: "Full Day",
-    priority: "Normal",
-    fromDate: "18/08/2026",
-    toDate: "22/08/2026",
-    totalDays: 5.0,
-    reason: "Annual vacation with family.",
-    status: "Pending",
-    appliedOn: "04/08/2026",
-    approvalChain: [
-      { role: "Dept Manager", approverName: "Rajesh Kumar", status: "Approved", date: "04/08/2026" },
-      { role: "HR Manager", approverName: "Neha Mehta", status: "Pending" },
-    ],
-    balances: {
-      casualLeave: { total: 10, used: 4, remaining: 6, pending: 0, expires: "31 Dec 2026" },
-      sickLeave: { total: 12, used: 1, remaining: 11, pending: 0, expires: "31 Dec 2026" },
-      earnedLeave: { total: 15, used: 4, remaining: 11, pending: 1, expires: "31 Dec 2026" },
-      compOff: { remaining: 3, used: 0, pending: 0, expires: "30 Sep 2026" },
-    },
-  },
-  {
-    id: "LA-204",
-    employeeId: "EMP-0103",
-    employeeName: "Chef Vikramjit Singh",
-    department: "Food & Beverage",
-    designation: "Executive Head Chef",
-    avatar: "VS",
-    leaveTypeId: "lt-co",
-    leaveTypeCode: "COMP",
-    leaveTypeName: "Compensatory Off",
-    isPaid: true,
-    durationOption: "First Half",
-    priority: "Normal",
-    fromDate: "07/08/2026",
-    toDate: "07/08/2026",
-    totalDays: 0.5,
-    reason: "Comp-Off for Sunday banquet catering shift.",
-    status: "Approved",
-    appliedOn: "03/08/2026",
-    approvedBy: "F&B Director",
-    approvalChain: [
-      { role: "F&B Director", approverName: "Chef Vikram", status: "Approved", date: "03/08/2026" },
-      { role: "HR Manager", approverName: "Neha Mehta", status: "Approved", date: "03/08/2026" },
-    ],
-    balances: {
-      casualLeave: { total: 10, used: 0, remaining: 10, pending: 0, expires: "31 Dec 2026" },
-      sickLeave: { total: 12, used: 2, remaining: 10, pending: 0, expires: "31 Dec 2026" },
-      earnedLeave: { total: 15, used: 3, remaining: 12, pending: 0, expires: "31 Dec 2026" },
-      compOff: { remaining: 2, used: 1, pending: 0, expires: "30 Sep 2026" },
-    },
-  },
-];
-
 export function LeaveManagementView() {
-  const [applications, setApplications] = useState<LeaveApplication[]>(INITIAL_LEAVE_APPLICATIONS);
+  const [applications, setApplications] = useState<LeaveApplication[]>([])
+  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
   const [viewMode, setViewMode] = useState<"table" | "calendar">("table");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadApplications = async () => {
+    try {
+      const [rows, empRows] = await Promise.all([
+        hrLeaveApplicationService.list(),
+        hrEmployeeService.list(),
+      ]);
+      const emps = empRows.map(mapEmployeeFromApi);
+      setEmployees(emps);
+      const lookup = new Map(emps.map((e) => [e.id, e]));
+      setApplications(
+        rows.map((row) => mapLeaveApplicationFromApi(row, lookup.get(String(row.employeeId)))),
+      );
+      if (emps[0]) setApplyEmpId(emps[0].id);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load leave applications");
+      setApplications([]);
+      setEmployees([]);
+    }
+  };
+
+  useEffect(() => { void loadApplications(); }, []);
+
+
 
   // Context Employee Selection via SearchSelect Combobox (Improvement #2)
   const [selectedEmpId, setSelectedEmpId] = useState<string>("EMP-0101");
@@ -261,7 +159,7 @@ export function LeaveManagementView() {
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [employees]);
 
   // Context Employee Object (Improvement #2)
   const selectedEmpObject = useMemo(() => {
@@ -270,12 +168,12 @@ export function LeaveManagementView() {
 
   // Options for SearchSelect Employee Combobox
   const employeeComboboxOptions = useMemo(() => {
-    return INITIAL_LEAVE_APPLICATIONS.map((staff) => ({
-      id: staff.employeeId,
-      label: staff.employeeName,
-      sublabel: `${staff.employeeId} • ${staff.department}`,
+    return employees.map((staff) => ({
+      id: staff.id,
+      label: staff.name,
+      sublabel: `${staff.empCode} • ${staff.department}`,
     }));
-  }, []);
+  }, [employees]);
 
   // Filtered Applications
   const filteredApplications = useMemo(() => {
@@ -310,7 +208,7 @@ export function LeaveManagementView() {
       { dept: "Kitchen & F&B", onLeave: 2, riskLevel: "Moderate 🟡", bg: "bg-amber-50 border-amber-200 text-amber-900" },
       { dept: "Accounts & HR", onLeave: 1, riskLevel: "Normal 🟢", bg: "bg-emerald-50 border-emerald-200 text-emerald-900" },
     ];
-  }, []);
+  }, [employees]);
 
   // Handlers
   const handleApprove = (id: string, empName: string) => {
@@ -363,12 +261,12 @@ export function LeaveManagementView() {
   const handleSaveApplyLeave = (e: React.FormEvent) => {
     e.preventDefault();
     const ltObj = MASTER_LEAVE_TYPES.find((x) => x.id === applyLeaveTypeId);
-    const empObj = INITIAL_LEAVE_APPLICATIONS.find((x) => x.employeeId === applyEmpId);
+    const empObj = employees.find((x) => x.id === applyEmpId);
 
     const newApp: LeaveApplication = {
       id: `LA-${Math.floor(200 + Math.random() * 800)}`,
       employeeId: applyEmpId,
-      employeeName: empObj?.employeeName || "Rajesh Kumar",
+      employeeName: empObj?.name || "Rajesh Kumar",
       department: empObj?.department || "Front Office",
       designation: empObj?.designation || "Staff",
       avatar: empObj?.avatar || "RK",
@@ -388,11 +286,29 @@ export function LeaveManagementView() {
         { role: "Dept Manager", approverName: "Dept Head", status: "Approved", date: new Date().toLocaleDateString("en-GB") },
         { role: "HR Manager", approverName: "Neha Mehta", status: "Pending" },
       ],
-      balances: empObj?.balances || {
-        casualLeave: { total: 10, used: 2, remaining: 8, pending: 1, expires: "31 Dec 2026" },
-        sickLeave: { total: 12, used: 3, remaining: 9, pending: 0, expires: "31 Dec 2026" },
-        earnedLeave: { total: 15, used: 5, remaining: 10, pending: 0, expires: "31 Dec 2026" },
-        compOff: { remaining: 2, used: 1, pending: 0, expires: "30 Sep 2026" },
+      balances: {
+        casualLeave: {
+          total: empObj?.leaveBalance?.casual ?? 0,
+          used: 0,
+          remaining: empObj?.leaveBalance?.casual ?? 0,
+          pending: 0,
+          expires: "—",
+        },
+        sickLeave: {
+          total: empObj?.leaveBalance?.sick ?? 0,
+          used: 0,
+          remaining: empObj?.leaveBalance?.sick ?? 0,
+          pending: 0,
+          expires: "—",
+        },
+        earnedLeave: {
+          total: empObj?.leaveBalance?.earned ?? 0,
+          used: 0,
+          remaining: empObj?.leaveBalance?.earned ?? 0,
+          pending: 0,
+          expires: "—",
+        },
+        compOff: { remaining: 0, used: 0, pending: 0, expires: "—" },
       },
     };
 
@@ -1130,12 +1046,12 @@ export function LeaveManagementView() {
                 {/* Combobox Dropdown Results List */}
                 {isApplyEmpComboboxOpen && (
                   <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl space-y-1 max-h-52 overflow-y-auto animate-in fade-in-50">
-                    {INITIAL_LEAVE_APPLICATIONS.filter((staff) => {
+                    {employees.filter((staff) => {
                       if (!applyEmpQuery.trim()) return true;
                       const q = applyEmpQuery.toLowerCase().trim();
                       return (
-                        staff.employeeName.toLowerCase().includes(q) ||
-                        staff.employeeId.toLowerCase().includes(q) ||
+                        staff.name.toLowerCase().includes(q) ||
+                        staff.id.toLowerCase().includes(q) ||
                         staff.department.toLowerCase().includes(q) ||
                         staff.designation.toLowerCase().includes(q)
                       );
@@ -1144,26 +1060,26 @@ export function LeaveManagementView() {
                         No matching employee found.
                       </div>
                     ) : (
-                      INITIAL_LEAVE_APPLICATIONS.filter((staff) => {
+                      employees.filter((staff) => {
                         if (!applyEmpQuery.trim()) return true;
                         const q = applyEmpQuery.toLowerCase().trim();
                         return (
-                          staff.employeeName.toLowerCase().includes(q) ||
-                          staff.employeeId.toLowerCase().includes(q) ||
+                          staff.name.toLowerCase().includes(q) ||
+                          staff.id.toLowerCase().includes(q) ||
                           staff.department.toLowerCase().includes(q) ||
                           staff.designation.toLowerCase().includes(q)
                         );
                       }).map((staff) => (
                         <div
-                          key={staff.employeeId}
+                          key={staff.id}
                           onClick={() => {
-                            setApplyEmpId(staff.employeeId);
-                            setApplyEmpQuery(`${staff.employeeName} (${staff.employeeId})`);
+                            setApplyEmpId(staff.id);
+                            setApplyEmpQuery(`${staff.name} (${staff.id})`);
                             setIsApplyEmpComboboxOpen(false);
                           }}
                           className={cn(
                             "flex items-center justify-between p-2 rounded-xl cursor-pointer transition-colors hover:bg-slate-100/80 border border-transparent",
-                            applyEmpId === staff.employeeId && "bg-emerald-50 text-emerald-900 border-emerald-200"
+                            applyEmpId === staff.id && "bg-emerald-50 text-emerald-900 border-emerald-200"
                           )}
                         >
                           <div className="flex items-center gap-2 min-w-0">
@@ -1172,12 +1088,12 @@ export function LeaveManagementView() {
                             </div>
                             <div className="truncate">
                               <p className="font-bold text-xs text-slate-900 truncate">
-                                {staff.employeeName} <span className="text-[10px] text-emerald-700">({staff.employeeId})</span>
+                                {staff.name} <span className="text-[10px] text-emerald-700">({staff.id})</span>
                               </p>
                               <p className="text-[10px] text-slate-500 truncate">{staff.department}</p>
                             </div>
                           </div>
-                          {applyEmpId === staff.employeeId && <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0 ml-1" />}
+                          {applyEmpId === staff.id && <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0 ml-1" />}
                         </div>
                       ))
                     )}

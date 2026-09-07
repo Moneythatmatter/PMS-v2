@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Percent,
   Search,
@@ -38,6 +38,8 @@ import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
 import { cn } from "@/lib/utils";
+import { hrTaxRuleService } from "@/services/human-resources";
+import { mapTaxRuleFromApi, mapTaxRuleToApi } from "@/lib/hr/api-mappers";
 
 // ─────────────────────────────────────────────────────────────
 // DATA TYPES & INTERFACES
@@ -172,222 +174,26 @@ export interface TaxAuditLogEntry {
   details: string;
 }
 
-// ─────────────────────────────────────────────────────────────
-// INITIAL MOCK DATA
-// ─────────────────────────────────────────────────────────────
-
-export const INITIAL_TAX_RULES: ConfigurableTaxRule[] = [
-  {
-    id: "TR-101",
-    ruleName: "Maharashtra Professional Tax (PT)",
-    taxCode: "PT-MH",
-    taxType: "Professional Tax",
-    description: "State statutory professional tax deduction slab for Maharashtra region.",
-    calcMethod: "Fixed Amount",
-    fixedAmount: 200,
-    applicableFrequency: "Monthly",
-    applicableOn: "Gross Salary",
-    financialYear: "FY 2026-27",
-    effectiveFrom: "01/04/2026",
-    status: "Active",
-    version: 1,
-    createdBy: "Vikram Malhotra (Finance Head)",
-    createdDate: "01/04/2026",
-    history: [],
-  },
-  {
-    id: "TR-102",
-    ruleName: "Standard TDS Deduction Rate",
-    taxCode: "TDS-STD",
-    taxType: "Income Tax / TDS",
-    description: "Flat withholding tax percentage on net taxable income.",
-    calcMethod: "Percentage",
-    ratePercentage: 10,
-    taxableBase: "Net Taxable Salary",
-    applicableOn: "Taxable Income",
-    financialYear: "FY 2026-27",
-    effectiveFrom: "01/04/2026",
-    status: "Active",
-    version: 1,
-    createdBy: "Neha Mehta (HR Admin)",
-    createdDate: "01/04/2026",
-    history: [],
-  },
-  {
-    id: "TR-103",
-    ruleName: "New Tax Regime FY 2026-27 Slabs",
-    taxCode: "NTR-2026",
-    taxType: "Income Tax / TDS",
-    description: "Default progressive income tax slabs under the New Tax Regime.",
-    calcMethod: "Slab Based",
-    slabs: [
-      { fromAmount: 0, toAmount: 300000, ratePercentage: 0 },
-      { fromAmount: 300001, toAmount: 700000, ratePercentage: 5 },
-      { fromAmount: 700001, toAmount: 1000000, ratePercentage: 10 },
-      { fromAmount: 1000001, toAmount: 1200000, ratePercentage: 15 },
-      { fromAmount: 1200001, toAmount: 0, ratePercentage: 20 },
-    ],
-    applicableOn: "Taxable Income",
-    taxRegime: "New Tax Regime",
-    financialYear: "FY 2026-27",
-    effectiveFrom: "01/04/2026",
-    status: "Active",
-    version: 2,
-    createdBy: "Neha Mehta (HR Admin)",
-    createdDate: "01/04/2026",
-    history: [
-      {
-        version: 1,
-        oldRateOrSlab: "5% (3-6L), 10% (6-9L)",
-        newRateOrSlab: "5% (3-7L), 10% (7-10L)",
-        effectiveFrom: "01/04/2026",
-        changedBy: "Vikram Malhotra (Finance Head)",
-        changedOn: "01/04/2026",
-      },
-    ],
-  },
-];
-
-export const INITIAL_DECLARATIONS: EmployeeTaxDeclaration[] = [
-  {
-    id: "DEC-201",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    designation: "Front Desk Manager",
-    avatar: "RK",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-    panNo: "ABCDE1234F",
-    regime: "Old Tax Regime",
-    declaredAmount: 150000,
-    verifiedAmount: 150000,
-    status: "Verified",
-    proofDocuments: ["PAN_Card_Rajesh.pdf", "80C_LIC_Receipt.pdf", "HRA_Rent_Receipt.pdf"],
-    lastUpdatedBy: "Neha Mehta (HR Admin)",
-    lastUpdatedOn: "09/08/2026",
-  },
-  {
-    id: "DEC-202",
-    employeeId: "EMP-0102",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    designation: "Guest Relations Executive",
-    avatar: "PP",
-    panNo: "FGHIJ5678K",
-    regime: "New Tax Regime",
-    declaredAmount: 75000,
-    verifiedAmount: 50000,
-    status: "Pending Verification",
-    proofDocuments: ["PAN_Card_Priya.pdf", "Medical_80D_Insurance.pdf"],
-  },
-];
-
-export const INITIAL_EXEMPTIONS: TaxExemptionRecord[] = [
-  {
-    id: "EX-401",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    avatar: "RK",
-    exemptionCategory: "HRA",
-    declaredAmount: 86400,
-    approvedAmount: 86400,
-    status: "Approved",
-    supportingDocument: "HRA_Rent_Receipt_2026.pdf",
-    notes: "Verified landlord PAN and rent agreement.",
-  },
-  {
-    id: "EX-402",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    avatar: "RK",
-    exemptionCategory: "80C",
-    declaredAmount: 150000,
-    approvedAmount: 150000,
-    status: "Approved",
-    supportingDocument: "LIC_PPF_80C_Passbook.pdf",
-  },
-  {
-    id: "EX-403",
-    employeeId: "EMP-0102",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    avatar: "PP",
-    exemptionCategory: "Medical Insurance (80D)",
-    declaredAmount: 25000,
-    approvedAmount: 20000,
-    status: "Pending",
-    supportingDocument: "Health_Policy_80D.pdf",
-  },
-];
-
-export const INITIAL_CALCULATIONS: TaxCalculationPreview[] = [
-  {
-    id: "TC-301",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    avatar: "RK",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-    taxRegime: "Old Tax Regime",
-    grossIncome: 411000,
-    eligibleDeductions: 150000,
-    approvedExemptions: 86400,
-    taxableIncome: 174600,
-    applicableRuleId: "TR-102",
-    applicableRuleName: "Standard TDS Deduction Rate",
-    calculatedTax: 12000,
-    finalTaxPayable: 12000,
-    effectivePeriod: "August 2026",
-    status: "Calculated",
-  },
-  {
-    id: "TC-302",
-    employeeId: "EMP-0102",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    avatar: "PP",
-    taxRegime: "New Tax Regime",
-    grossIncome: 351000,
-    eligibleDeductions: 50000,
-    approvedExemptions: 20000,
-    taxableIncome: 281000,
-    applicableRuleId: "TR-103",
-    applicableRuleName: "New Tax Regime FY 2026-27 Slabs",
-    calculatedTax: 7200,
-    finalTaxPayable: 7200,
-    effectivePeriod: "August 2026",
-    status: "Calculated",
-  },
-];
-
-export const INITIAL_AUDIT_LOGS: TaxAuditLogEntry[] = [
-  {
-    id: "TL-01",
-    user: "Neha Mehta (HR Admin)",
-    dateTime: "09 Aug 2026, 05:10 PM",
-    action: "Declaration Verified",
-    previousValue: "Pending Verification (₹0)",
-    newValue: "Verified (₹1,50,000)",
-    details: "Verified 80C proof documents for Rajesh Kumar (EMP-0101).",
-  },
-  {
-    id: "TL-02",
-    user: "Vikram Malhotra (Finance Head)",
-    dateTime: "01 Aug 2026, 11:30 AM",
-    action: "Rule Created",
-    newValue: "New Tax Regime FY 2026-27 Slabs",
-    details: "Configured standard progressive tax slabs for FY 2026-27.",
-  },
-];
-
-// ─────────────────────────────────────────────────────────────
-// COMPONENT MAIN VIEW
-// ─────────────────────────────────────────────────────────────
-
 export function TaxManagementView() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadTaxRules = async () => {
+    try {
+      const rows = await hrTaxRuleService.list();
+      setTaxRules(rows.map(mapTaxRuleFromApi));
+      setDeclarations([]);
+      setExemptions([]);
+      setAuditLogs([]);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load tax rules");
+      setTaxRules([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadTaxRules();
+  }, []);
+
+
   const [activeTab, setActiveTab] = useState<"rules" | "declarations" | "exemptions" | "calculations" | "audit">("rules");
 
   // Filters State
@@ -401,11 +207,11 @@ export function TaxManagementView() {
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   // Data State
-  const [taxRules, setTaxRules] = useState<ConfigurableTaxRule[]>(INITIAL_TAX_RULES);
-  const [declarations, setDeclarations] = useState<EmployeeTaxDeclaration[]>(INITIAL_DECLARATIONS);
-  const [exemptions, setExemptions] = useState<TaxExemptionRecord[]>(INITIAL_EXEMPTIONS);
-  const [calculations] = useState<TaxCalculationPreview[]>(INITIAL_CALCULATIONS);
-  const [auditLogs, setAuditLogs] = useState<TaxAuditLogEntry[]>(INITIAL_AUDIT_LOGS);
+  const [taxRules, setTaxRules] = useState<ConfigurableTaxRule[]>([]);
+  const [declarations, setDeclarations] = useState<EmployeeTaxDeclaration[]>([]);
+  const [exemptions, setExemptions] = useState<TaxExemptionRecord[]>([]);
+  const [calculations] = useState<TaxCalculationPreview[]>([]);
+  const [auditLogs, setAuditLogs] = useState<TaxAuditLogEntry[]>([]);
 
   // Modals & Drawers State
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
@@ -541,125 +347,57 @@ export function TaxManagementView() {
   };
 
   // Save Rule (Creates version if editing)
-  const handleSaveRule = (e: React.FormEvent) => {
+  const handleSaveRule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formRuleName.trim()) return;
 
-    const today = new Date().toLocaleDateString("en-GB");
+    const payload = mapTaxRuleToApi({
+      ruleName: formRuleName,
+      taxCode: formTaxCode,
+      taxType: formTaxType,
+      description: formDesc,
+      calcMethod: formCalcMethod,
+      ratePercentage: formRatePct,
+      taxableBase: formTaxableBase,
+      fixedAmount: formFixedAmt,
+      applicableFrequency: formAppFreq,
+      slabs: formSlabs,
+      applicableOn: formApplicableOn,
+      department: formDept === "ALL" ? undefined : formDept,
+      employmentType: formEmpType === "ALL" ? undefined : formEmpType,
+      taxRegime: formRegime,
+      financialYear: formFinYear,
+      effectiveFrom: formEffectiveFrom,
+      effectiveTo: formEffectiveTo || undefined,
+      status: formStatus,
+      version: editingRule ? editingRule.version + 1 : 1,
+      createdBy: editingRule?.createdBy ?? "HR Admin",
+    });
 
-    if (editingRule) {
-      const oldRateDesc =
-        editingRule.calcMethod === "Percentage"
-          ? `${editingRule.ratePercentage}%`
-          : editingRule.calcMethod === "Fixed Amount"
-          ? `₹${editingRule.fixedAmount}`
-          : "Slab Based";
-
-      const newRateDesc =
-        formCalcMethod === "Percentage"
-          ? `${formRatePct}%`
-          : formCalcMethod === "Fixed Amount"
-          ? `₹${formFixedAmt}`
-          : "Slab Based";
-
-      const newVersionNum = editingRule.version + 1;
-      const historyEntry: TaxRuleVersion = {
-        version: editingRule.version,
-        oldRateOrSlab: oldRateDesc,
-        newRateOrSlab: newRateDesc,
-        effectiveFrom: formEffectiveFrom,
-        changedBy: "Neha Mehta (HR Admin)",
-        changedOn: today,
-      };
-
-      setTaxRules((prev) =>
-        prev.map((r) =>
-          r.id === editingRule.id
-            ? {
-                ...r,
-                ruleName: formRuleName,
-                taxCode: formTaxCode,
-                taxType: formTaxType,
-                description: formDesc,
-                calcMethod: formCalcMethod,
-                ratePercentage: formRatePct,
-                taxableBase: formTaxableBase,
-                fixedAmount: formFixedAmt,
-                applicableFrequency: formAppFreq,
-                slabs: formSlabs,
-                applicableOn: formApplicableOn,
-                department: formDept === "ALL" ? undefined : formDept,
-                employmentType: formEmpType === "ALL" ? undefined : formEmpType,
-                taxRegime: formRegime,
-                financialYear: formFinYear,
-                effectiveFrom: formEffectiveFrom,
-                effectiveTo: formEffectiveTo || undefined,
-                status: formStatus,
-                version: newVersionNum,
-                history: [historyEntry, ...(r.history || [])],
-              }
-            : r
-        )
-      );
-
-      addAuditEntry(
-        "Tax Rule Version Changed",
-        `Updated tax rule "${formRuleName}" to Version ${newVersionNum}.`,
-        `v${editingRule.version} (${oldRateDesc})`,
-        `v${newVersionNum} (${newRateDesc})`
-      );
-
-      setToastMessage(`Tax Rule "${formRuleName}" updated to Version ${newVersionNum}.`);
-    } else {
-      const newRule: ConfigurableTaxRule = {
-        id: `TR-${Math.floor(100 + Math.random() * 900)}`,
-        ruleName: formRuleName,
-        taxCode: formTaxCode,
-        taxType: formTaxType,
-        description: formDesc,
-        calcMethod: formCalcMethod,
-        ratePercentage: formRatePct,
-        taxableBase: formTaxableBase,
-        fixedAmount: formFixedAmt,
-        applicableFrequency: formAppFreq,
-        slabs: formSlabs,
-        applicableOn: formApplicableOn,
-        department: formDept === "ALL" ? undefined : formDept,
-        employmentType: formEmpType === "ALL" ? undefined : formEmpType,
-        taxRegime: formRegime,
-        financialYear: formFinYear,
-        effectiveFrom: formEffectiveFrom,
-        effectiveTo: formEffectiveTo || undefined,
-        status: formStatus,
-        version: 1,
-        createdBy: "Neha Mehta (HR Admin)",
-        createdDate: today,
-        history: [],
-      };
-
-      setTaxRules((prev) => [newRule, ...prev]);
-      addAuditEntry("Rule Created", `Configured new tax rule "${formRuleName}" (${formTaxType}).`, undefined, formRuleName);
-      setToastMessage(`Tax Rule "${formRuleName}" created successfully.`);
+    try {
+      if (editingRule) {
+        await hrTaxRuleService.update(editingRule.id, payload);
+        setToastMessage(`Tax Rule "${formRuleName}" updated successfully.`);
+      } else {
+        await hrTaxRuleService.create(payload);
+        setToastMessage(`Tax Rule "${formRuleName}" created successfully.`);
+      }
+      await loadTaxRules();
+      setIsRuleModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save tax rule");
     }
-
-    setIsRuleModalOpen(false);
   };
 
-  // Toggle Rule Status (Activate/Deactivate)
-  const handleToggleRuleStatus = (rule: ConfigurableTaxRule) => {
+  const handleToggleRuleStatus = async (rule: ConfigurableTaxRule) => {
     const newStatus = rule.status === "Active" ? "Inactive" : "Active";
-    setTaxRules((prev) =>
-      prev.map((r) => (r.id === rule.id ? { ...r, status: newStatus } : r))
-    );
-
-    addAuditEntry(
-      newStatus === "Active" ? "Rule Activated" : "Rule Deactivated",
-      `Changed status of rule "${rule.ruleName}" to ${newStatus}.`,
-      rule.status,
-      newStatus
-    );
-
-    setToastMessage(`Tax Rule "${rule.ruleName}" is now ${newStatus}.`);
+    try {
+      await hrTaxRuleService.update(rule.id, { status: newStatus });
+      await loadTaxRules();
+      setToastMessage(`Tax Rule "${rule.ruleName}" is now ${newStatus}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update tax rule status");
+    }
   };
 
   // Verify / Reject Declaration

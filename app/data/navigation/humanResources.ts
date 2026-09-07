@@ -58,6 +58,7 @@ export const humanResourcesNavItems: ModuleNavItem[] = [
       { label: "Employment Types", href: "/human-resources/masters/employment-types", icon: "briefcase" },
       { label: "Shift Types", href: "/human-resources/masters/shift-types", icon: "sun" },
       { label: "Leave Types", href: "/human-resources/masters/leave-types", icon: "calendar-heart" },
+      { label: "Leave Policies", href: "/human-resources/masters/leave-policies", icon: "clipboard-list" },
       { label: "Holiday Calendar", href: "/human-resources/masters/holiday-calendar", icon: "calendar-range" },
       { label: "Salary Components", href: "/human-resources/masters/salary-components", icon: "coins" },
       { label: "Document Masters", href: "/human-resources/masters/document-masters", icon: "file-cog" },

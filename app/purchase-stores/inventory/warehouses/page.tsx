@@ -118,7 +118,7 @@ export default function WarehousesPage() {
       if (editing) {
         await psWarehouseService.update(editing.id, payload);
         showToast(`Warehouse "${formName}" updated.`);
-      } else {
+    } else {
         await psWarehouseService.create(payload);
         showToast(`Warehouse "${formName}" created.`);
       }
@@ -143,11 +143,11 @@ export default function WarehousesPage() {
   };
 
   if (loading) {
-    return (
+        return (
       <div className="min-h-screen p-8 text-sm text-slate-600">
         Loading...
-      </div>
-    );
+          </div>
+        );
   }
 
   return (
@@ -155,7 +155,7 @@ export default function WarehousesPage() {
       {toastMessage && (
         <div className="fixed top-5 right-5 z-50 max-w-md animate-in fade-in slide-in-from-top-3">
           <AlertBanner variant={toastMessage.variant} message={toastMessage.text} onDismiss={() => setToastMessage(null)} />
-        </div>
+          </div>
       )}
 
       <FOPageHeader
@@ -165,7 +165,7 @@ export default function WarehousesPage() {
         action={
           <Button type="button" size="sm" onClick={openAdd} className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white">
             <Plus className="h-4 w-4" /> Add Warehouse
-          </Button>
+            </Button>
         }
       />
 
@@ -192,7 +192,7 @@ export default function WarehousesPage() {
             {WAREHOUSE_TYPE_OPTIONS.map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
-          </SelectInput>
+            </SelectInput>
           <div className="flex gap-2">
             <SelectInput value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9.5 flex-1 text-xs sm:text-sm">
               <option value="all">All Statuses</option>
@@ -202,11 +202,11 @@ export default function WarehousesPage() {
             {(searchQuery || typeFilter !== "all" || statusFilter !== "all") && (
               <Button type="button" variant="outline" size="sm" onClick={() => { setSearchQuery(""); setTypeFilter("all"); setStatusFilter("all"); }} className="h-9.5 px-2.5">
                 <RotateCcw className="h-3.5 w-3.5" />
-              </Button>
+                    </Button>
             )}
-          </div>
-        </div>
-      </div>
+                  </div>
+                  </div>
+                </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
         <table className="w-full text-left text-sm">
@@ -218,8 +218,8 @@ export default function WarehousesPage() {
               <th className="py-3.5 px-4">Location</th>
               <th className="py-3.5 px-4 text-center">Status</th>
               <th className="py-3.5 px-4 text-right">Actions</th>
-            </tr>
-          </thead>
+                      </tr>
+                    </thead>
           <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
             {filtered.map((w) => (
               <tr key={w.id} className="hover:bg-slate-50/60">
@@ -231,14 +231,14 @@ export default function WarehousesPage() {
                 <td className="py-3.5 px-4 text-right">
                   <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] mr-1" onClick={() => openEdit(w)}>Edit</Button>
                   <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] text-red-600" onClick={() => setDeleting(w)}>Delete</Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                </div>
 
-      <Drawer
+        <Drawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         title={editing ? "Edit Warehouse" : "Add Warehouse"}
@@ -253,17 +253,17 @@ export default function WarehousesPage() {
         <FormSection title="Warehouse Details" columns={1}>
           <FormField label="Code" required>
             <TextInput value={formCode} onChange={(e) => setFormCode(e.target.value)} placeholder="CST-001" className="text-xs font-mono" />
-          </FormField>
+                </FormField>
           <FormField label="Name" required>
             <TextInput value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Central Store" className="text-xs" />
-          </FormField>
+                </FormField>
           <FormField label="Type" required>
             <SelectInput value={formType} onChange={(e) => setFormType(e.target.value as WarehouseMasterType)} className="text-xs">
               {WAREHOUSE_TYPE_OPTIONS.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
-            </SelectInput>
-          </FormField>
+                  </SelectInput>
+                </FormField>
           <FormField label="Location">
             <TextInput value={formLocation} onChange={(e) => setFormLocation(e.target.value)} placeholder="Main Building" className="text-xs" />
           </FormField>
@@ -271,8 +271,8 @@ export default function WarehousesPage() {
             <SelectInput value={formStatus} onChange={(e) => setFormStatus(e.target.value as WarehouseMasterStatus)} className="text-xs">
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
-            </SelectInput>
-          </FormField>
+                  </SelectInput>
+                </FormField>
         </FormSection>
       </Drawer>
 

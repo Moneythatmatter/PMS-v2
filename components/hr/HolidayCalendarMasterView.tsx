@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   CalendarRange,
   Search,
@@ -23,6 +23,8 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { hrHolidayService } from "@/services/human-resources";
+import { mapHolidayFromApi, mapHolidayToApi } from "@/lib/hr/api-mappers";
 
 export type HolidayStatus = "Active" | "Inactive";
 export type HolidayCategory = "National" | "Festival" | "Regional" | "Company Optional";
@@ -42,110 +44,23 @@ export interface HolidayMaster {
   year: string;
 }
 
-export const INITIAL_HOLIDAYS: HolidayMaster[] = [
-  {
-    id: "HOL-001",
-    holidayCode: "HOL-2026-01",
-    holidayName: "Republic Day",
-    holidayDate: "26/01/2026",
-    dayOfWeek: "Monday",
-    category: "National",
-    isMandatory: true,
-    extraPayMultiplier: 2.0,
-    applicableDepartments: "All Departments",
-    description: "National public holiday commemorating the Constitution of India. Mandatory double pay (2.0x) for working roster staff.",
-    status: "Active",
-    year: "2026",
-  },
-  {
-    id: "HOL-002",
-    holidayCode: "HOL-2026-02",
-    holidayName: "Holi (Festival of Colors)",
-    holidayDate: "04/03/2026",
-    dayOfWeek: "Wednesday",
-    category: "Festival",
-    isMandatory: true,
-    extraPayMultiplier: 2.0,
-    applicableDepartments: "All Departments",
-    description: "Major spring festival holiday. 2.0x extra pay multiplier applied to hotel operational staff on duty.",
-    status: "Active",
-    year: "2026",
-  },
-  {
-    id: "HOL-003",
-    holidayCode: "HOL-2026-03",
-    holidayName: "Good Friday",
-    holidayDate: "03/04/2026",
-    dayOfWeek: "Friday",
-    category: "Festival",
-    isMandatory: false,
-    extraPayMultiplier: 1.5,
-    applicableDepartments: "All Departments",
-    description: "Restricted holiday. 1.5x holiday pay multiplier for staff assigned to banquet & guest operations.",
-    status: "Active",
-    year: "2026",
-  },
-  {
-    id: "HOL-004",
-    holidayCode: "HOL-2026-04",
-    holidayName: "Independence Day",
-    holidayDate: "15/08/2026",
-    dayOfWeek: "Saturday",
-    category: "National",
-    isMandatory: true,
-    extraPayMultiplier: 2.0,
-    applicableDepartments: "All Departments",
-    description: "National public holiday celebrating Indian Independence. Flag hoisting in main lobby and 2.0x duty credit.",
-    status: "Active",
-    year: "2026",
-  },
-  {
-    id: "HOL-005",
-    holidayCode: "HOL-2026-05",
-    holidayName: "Gandhi Jayanti",
-    holidayDate: "02/10/2026",
-    dayOfWeek: "Friday",
-    category: "National",
-    isMandatory: true,
-    extraPayMultiplier: 2.0,
-    applicableDepartments: "All Departments",
-    description: "National public holiday honoring Mahatma Gandhi's birth anniversary.",
-    status: "Active",
-    year: "2026",
-  },
-  {
-    id: "HOL-006",
-    holidayCode: "HOL-2026-06",
-    holidayName: "Diwali (Festival of Lights)",
-    holidayDate: "08/11/2026",
-    dayOfWeek: "Sunday",
-    category: "Festival",
-    isMandatory: true,
-    extraPayMultiplier: 2.0,
-    applicableDepartments: "All Departments",
-    description: "Grand festival holiday with mandatory double pay for all working operational staff.",
-    status: "Active",
-    year: "2026",
-  },
-  {
-    id: "HOL-007",
-    holidayCode: "HOL-2026-07",
-    holidayName: "Christmas Day",
-    holidayDate: "25/12/2026",
-    dayOfWeek: "Friday",
-    category: "Festival",
-    isMandatory: true,
-    extraPayMultiplier: 2.0,
-    applicableDepartments: "All Departments",
-    description: "Global festive holiday covering banquets, grand buffet service, and front-of-house staff.",
-    status: "Active",
-    year: "2026",
-  },
-];
-
 export function HolidayCalendarMasterView() {
-  const [holidays, setHolidays] = useState<HolidayMaster[]>(INITIAL_HOLIDAYS);
+  const [holidays, setHolidays] = useState<HolidayMaster[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const loadHolidays = async () => {
+    try {
+      const rows = await hrHolidayService.list();
+      setHolidays(rows.map(mapHolidayFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load holidays");
+      setHolidays([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadHolidays();
+  }, []);
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -238,7 +153,7 @@ export function HolidayCalendarMasterView() {
   };
 
   // Save Holiday (Duplicate check)
-  const handleSaveHoliday = (e: React.FormEvent) => {
+  const handleSaveHoliday = async (e: React.FormEvent) => {
     e.preventDefault();
     setNameError("");
     setCodeError("");
@@ -269,65 +184,56 @@ export function HolidayCalendarMasterView() {
       return;
     }
 
-    if (editingHoliday) {
-      setHolidays((prev) =>
-        prev.map((h) =>
-          h.id === editingHoliday.id
-            ? {
-                ...h,
-                holidayCode: trimmedCode,
-                holidayName: trimmedName,
-                holidayDate: formDate,
-                dayOfWeek: formDay,
-                category: formCategory,
-                isMandatory: formIsMandatory,
-                extraPayMultiplier: Number(formMultiplier),
-                applicableDepartments: formDepts,
-                description: formDescription.trim(),
-                status: formStatus,
-                year: formYear,
-              }
-            : h
-        )
-      );
-      setToastMessage(`Updated holiday "${trimmedName}".`);
-    } else {
-      const newHoliday: HolidayMaster = {
-        id: `HOL-${Math.floor(100 + Math.random() * 900)}`,
-        holidayCode: trimmedCode,
-        holidayName: trimmedName,
-        holidayDate: formDate,
-        dayOfWeek: formDay,
-        category: formCategory,
-        isMandatory: formIsMandatory,
-        extraPayMultiplier: Number(formMultiplier),
-        applicableDepartments: formDepts,
-        description: formDescription.trim(),
-        status: formStatus,
-        year: formYear,
-      };
-      setHolidays((prev) => [newHoliday, ...prev]);
-      setToastMessage(`Created holiday "${trimmedName}".`);
+    const payload = mapHolidayToApi({
+      holidayCode: trimmedCode,
+      holidayName: trimmedName,
+      holidayDate: formDate,
+      dayOfWeek: formDay,
+      category: formCategory,
+      isMandatory: formIsMandatory,
+      extraPayMultiplier: Number(formMultiplier),
+      applicableDepartments: formDepts,
+      description: formDescription.trim(),
+      status: formStatus,
+      year: formYear,
+    });
+
+    try {
+      if (editingHoliday) {
+        await hrHolidayService.update(editingHoliday.id, payload);
+        setToastMessage(`Updated holiday "${trimmedName}".`);
+      } else {
+        await hrHolidayService.create(payload);
+        setToastMessage(`Created holiday "${trimmedName}".`);
+      }
+      await loadHolidays();
+      setIsModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save holiday");
     }
-
-    setIsModalOpen(false);
   };
 
-  // Toggle Activate / Deactivate
-  const handleToggleStatus = (h: HolidayMaster) => {
+  const handleToggleStatus = async (h: HolidayMaster) => {
     const nextStatus: HolidayStatus = h.status === "Active" ? "Inactive" : "Active";
-    setHolidays((prev) =>
-      prev.map((item) => (item.id === h.id ? { ...item, status: nextStatus } : item))
-    );
-    setToastMessage(`Holiday "${h.holidayName}" is now ${nextStatus}.`);
+    try {
+      await hrHolidayService.update(h.id, { status: nextStatus });
+      await loadHolidays();
+      setToastMessage(`Holiday "${h.holidayName}" is now ${nextStatus}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update status");
+    }
   };
 
-  // Delete Holiday
-  const handleDeleteHoliday = (h: HolidayMaster) => {
+  const handleDeleteHoliday = async (h: HolidayMaster) => {
     if (confirm(`Are you sure you want to delete holiday "${h.holidayName}"?`)) {
-      setHolidays((prev) => prev.filter((item) => item.id !== h.id));
-      if (viewingHoliday?.id === h.id) setViewingHoliday(null);
-      setToastMessage(`Deleted holiday "${h.holidayName}".`);
+      try {
+        await hrHolidayService.remove(h.id);
+        if (viewingHoliday?.id === h.id) setViewingHoliday(null);
+        await loadHolidays();
+        setToastMessage(`Deleted holiday "${h.holidayName}".`);
+      } catch (err) {
+        setToastMessage(err instanceof Error ? err.message : "Failed to delete holiday");
+      }
     }
   };
 

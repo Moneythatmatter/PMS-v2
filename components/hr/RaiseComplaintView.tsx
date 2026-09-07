@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   AlertCircle,
   Plus,
@@ -26,6 +26,8 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { hrComplaintService } from "@/services/human-resources";
+import { mapComplaintToGrievance, mapComplaintToApi } from "@/lib/hr/api-mappers";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
 
 export type GrievanceStatus = "Open" | "In Review" | "Resolved" | "Escalated" | "Closed";
@@ -73,87 +75,22 @@ const ACTIVE_CATEGORIES = [
   "Other",
 ];
 
-export const INITIAL_COMPLAINTS: GrievanceComplaint[] = [
-  {
-    id: "GRV-101",
-    ticketNo: "TCK-2026-081",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    designation: "Front Desk Manager",
-    avatar: "RK",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-    category: "Payroll & Salary Issues",
-    subject: "July Overtime Pay missing from payslip",
-    description: "Calculated 8.5 hours of OT during weekend shift on July 18th, but net payout didn't reflect OT credit.",
-    incidentDate: "18/07/2026",
-    priority: "High",
-    status: "In Review",
-    submittedDate: "02/08/2026",
-    isAnonymous: false,
-    assignedTo: "Neha Mehta (HR Manager)",
-    attachmentName: "OT_Timesheet_July.pdf",
-  },
-  {
-    id: "GRV-102",
-    ticketNo: "TCK-2026-082",
-    employeeId: "EMP-0102",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    designation: "Guest Relations Executive",
-    avatar: "PP",
-    category: "Shift Scheduling Issues",
-    subject: "Three consecutive night shifts assigned without rest day",
-    description: "Assigned Night Shift C from Aug 5 to Aug 8 without 24-hour mandatory rest break post night duty.",
-    incidentDate: "05/08/2026",
-    priority: "Medium",
-    status: "Open",
-    submittedDate: "06/08/2026",
-    isAnonymous: false,
-    assignedTo: "Sanjay Sharma (Roster Supervisor)",
-  },
-  {
-    id: "GRV-103",
-    ticketNo: "TCK-2026-083",
-    employeeId: "ANON-99",
-    employeeName: "Anonymous Employee",
-    department: "Housekeeping",
-    designation: "Housekeeping Associate",
-    avatar: "AE",
-    category: "Facilities & Infrastructure",
-    subject: "Locker room AC non-functional and lack of hot water",
-    description: "B-level basement locker room ventilation and cooling fan failed since last week causing health concerns.",
-    incidentDate: "01/08/2026",
-    priority: "Low",
-    status: "Resolved",
-    submittedDate: "03/08/2026",
-    isAnonymous: true,
-    assignedTo: "Engineering Dept",
-    resolutionNotes: "AC compressor repaired and hot water boiler valves replaced on 05/08/2026.",
-  },
-  {
-    id: "GRV-104",
-    ticketNo: "TCK-2026-084",
-    employeeId: "EMP-0104",
-    employeeName: "Chef Vikramjit Singh",
-    department: "Food & Beverage",
-    designation: "Executive Head Chef",
-    avatar: "VS",
-    category: "Workplace Safety",
-    subject: "Faulty exhaust hood in main banqueting kitchen",
-    description: "Smoke accumulation in kitchen area during high-capacity banquets due to motor pressure loss.",
-    incidentDate: "04/08/2026",
-    priority: "Critical",
-    status: "Escalated",
-    submittedDate: "05/08/2026",
-    isAnonymous: false,
-    assignedTo: "GM Office & Safety Committee",
-  },
-];
-
 export function RaiseComplaintView() {
-  const [complaints, setComplaints] = useState<GrievanceComplaint[]>(INITIAL_COMPLAINTS);
+  const [complaints, setComplaints] = useState<GrievanceComplaint[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadComplaints = async () => {
+    try {
+      const rows = await hrComplaintService.list();
+      setComplaints(rows.map((row) => mapComplaintToGrievance(row)));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load complaints");
+      setComplaints([]);
+    }
+  };
+
+  useEffect(() => { void loadComplaints(); }, []);
+
+
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -201,7 +138,7 @@ export function RaiseComplaintView() {
   }, [complaints, searchTerm, categoryFilter, statusFilter]);
 
   // Submit Complaint Handler
-  const handleRaiseSubmit = (e: React.FormEvent) => {
+  const handleRaiseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formSubject.trim() || !formDescription.trim()) {
@@ -209,37 +146,31 @@ export function RaiseComplaintView() {
       return;
     }
 
-    const ticketNumber = `TCK-2026-${Math.floor(100 + Math.random() * 900)}`;
-    const newGrievance: GrievanceComplaint = {
-      id: `GRV-${Math.floor(200 + Math.random() * 800)}`,
-      ticketNo: ticketNumber,
-      employeeId: formIsAnonymous ? "ANON-EMP" : "EMP-0101",
-      employeeName: formIsAnonymous ? "Anonymous Employee" : "Rajesh Kumar",
-      department: formIsAnonymous ? "Confidential" : "Front Office",
-      designation: formIsAnonymous ? "Staff Member" : "Front Desk Manager",
-      avatar: formIsAnonymous ? "AE" : "RK",
-      category: formCategory,
-      subject: formSubject.trim(),
-      description: formDescription.trim(),
-      incidentDate: formIncidentDate.split("-").reverse().join("/"),
-      priority: formPriority,
-      status: "Open",
-      submittedDate: new Date().toLocaleDateString("en-GB"),
-      isAnonymous: formIsAnonymous,
-      assignedTo: "HR Grievance Officer",
-      attachmentName: formAttachment ? formAttachment.name : undefined,
-    };
-
-    setComplaints((prev) => [newGrievance, ...prev]);
-    setIsRaiseModalOpen(false);
-
-    // Reset Form
-    setFormSubject("");
-    setFormDescription("");
-    setFormIsAnonymous(false);
-    setFormAttachment(null);
-
-    setToastMessage(`Grievance submitted successfully! Ticket #${ticketNumber} created.`);
+    try {
+      const created = await hrComplaintService.create(
+        mapComplaintToApi({
+          category: formCategory,
+          subject: formSubject.trim(),
+          description: formDescription.trim(),
+          incidentDate: formIncidentDate.split("-").reverse().join("/"),
+          priority: formPriority,
+          status: "Open",
+          isAnonymous: formIsAnonymous,
+          attachmentName: formAttachment ? formAttachment.name : undefined,
+        }),
+      );
+      await loadComplaints();
+      setIsRaiseModalOpen(false);
+      setFormSubject("");
+      setFormDescription("");
+      setFormIsAnonymous(false);
+      setFormAttachment(null);
+      setToastMessage(
+        `Grievance submitted successfully! Ticket #${String((created as Record<string, unknown>).ticketNo ?? "")} created.`,
+      );
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to submit complaint");
+    }
   };
 
   return (

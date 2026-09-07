@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   CalendarOff,
   Search,
@@ -31,6 +31,9 @@ import { ModulePageShell } from "@/components/pms";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import { hrWeeklyOffService, hrEmployeeService } from "@/services/human-resources";
+import { mapWeeklyOffFromApi, mapWeeklyOffToApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
 export interface WeeklyOffAssignment {
   id: string;
@@ -50,134 +53,30 @@ export interface WeeklyOffAssignment {
   remarks?: string;
 }
 
-export const INITIAL_WEEKLY_OFFS: WeeklyOffAssignment[] = [
-  {
-    id: "WO-401",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    designation: "Front Desk Manager",
-    avatar: "RK",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-    type: "Fixed",
-    days: ["Sunday"],
-    effectiveFrom: "01/01/2026",
-    effectiveTo: "31/12/2026",
-    status: "Active",
-    assignedBy: "Neha Mehta (HR Admin)",
-    remarks: "Standard Sunday weekly off.",
-  },
-  {
-    id: "WO-402",
-    employeeId: "EMP-0102",
-    employeeName: "Anjali Sharma",
-    department: "Housekeeping",
-    designation: "Executive Housekeeper",
-    avatar: "AS",
-    photoUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150",
-    type: "Fixed",
-    days: ["Saturday", "Sunday"],
-    effectiveFrom: "01/01/2026",
-    effectiveTo: "31/12/2026",
-    status: "Active",
-    assignedBy: "Neha Mehta (HR Admin)",
-    remarks: "Weekend 2-day weekly off for management.",
-  },
-  {
-    id: "WO-403",
-    employeeId: "EMP-0103",
-    employeeName: "Chef Vikramjit Singh",
-    department: "Food & Beverage",
-    designation: "Executive Head Chef",
-    avatar: "VS",
-    type: "Rotational",
-    days: ["Monday"],
-    rotationPattern: "Rotational (W1: Mon, W2: Tue, W3: Wed, W4: Thu)",
-    effectiveFrom: "01/08/2026",
-    effectiveTo: "31/08/2026",
-    status: "Active",
-    assignedBy: "HR Admin",
-    remarks: "Kitchen weekly off rotation schedule.",
-  },
-  {
-    id: "WO-404",
-    employeeId: "EMP-0104",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    designation: "Guest Relations Executive",
-    avatar: "PP",
-    type: "Rotational",
-    days: ["Tuesday"],
-    rotationPattern: "Rotational Shift Weekly Off",
-    effectiveFrom: "01/08/2026",
-    effectiveTo: "31/08/2026",
-    status: "Active",
-    assignedBy: "HR Admin",
-  },
-  {
-    id: "WO-405",
-    employeeId: "EMP-0105",
-    employeeName: "Arjun Verma",
-    department: "Food & Beverage",
-    designation: "Restaurant Captain",
-    avatar: "AV",
-    type: "Rotational",
-    days: ["Wednesday"],
-    rotationPattern: "Rotational (Mid-week Off)",
-    effectiveFrom: "01/08/2026",
-    effectiveTo: "31/08/2026",
-    status: "Active",
-    assignedBy: "F&B Manager",
-  },
-  {
-    id: "WO-406",
-    employeeId: "EMP-0106",
-    employeeName: "Meera Nair",
-    department: "Front Office",
-    designation: "Concierge Lead",
-    avatar: "MN",
-    type: "Fixed",
-    days: ["Sunday"],
-    effectiveFrom: "01/09/2026",
-    effectiveTo: "30/09/2026",
-    status: "Upcoming",
-    assignedBy: "Neha Mehta (HR Admin)",
-  },
-  {
-    id: "WO-407",
-    employeeId: "EMP-0107",
-    employeeName: "Sanjay Dutt",
-    department: "Accounts",
-    designation: "Senior Accountant",
-    avatar: "SD",
-    type: "Fixed",
-    days: ["Saturday", "Sunday"],
-    effectiveFrom: "01/01/2026",
-    effectiveTo: "31/12/2026",
-    status: "Active",
-    assignedBy: "Finance Director",
-  },
-  {
-    id: "WO-408",
-    employeeId: "EMP-0108",
-    employeeName: "Kavita Reddy",
-    department: "Housekeeping",
-    designation: "Room Attendant",
-    avatar: "KR",
-    type: "Fixed",
-    days: ["Sunday"],
-    effectiveFrom: "01/07/2026",
-    effectiveTo: "31/07/2026",
-    status: "Expired",
-    assignedBy: "Housekeeping Admin",
-  },
-];
-
 const DAYS_OF_WEEK = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export function WeeklyOffView() {
-  const [assignments, setAssignments] = useState<WeeklyOffAssignment[]>(INITIAL_WEEKLY_OFFS);
+  const [assignments, setAssignments] = useState<WeeklyOffAssignment[]>([])
+  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadWeeklyOffs = async () => {
+    try {
+      const [rows, empRows] = await Promise.all([hrWeeklyOffService.list(), hrEmployeeService.list()]);
+      const emps = empRows.map(mapEmployeeFromApi);
+      setEmployees(emps);
+      const lookup = new Map(emps.map((e) => [e.id, e]));
+      setAssignments(rows.map((row) => mapWeeklyOffFromApi(row, lookup.get(String(row.employeeId)))));
+      if (emps[0]) setAssignEmpId(emps[0].id);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load weekly offs");
+      setAssignments([]);
+      setEmployees([]);
+    }
+  };
+
+  useEffect(() => { void loadWeeklyOffs(); }, []);
+
+
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState("");
@@ -256,8 +155,8 @@ export function WeeklyOffView() {
   // Bulk preview list
   const bulkPreviewStaff = useMemo(() => {
     if (!bulkDepartment) return [];
-    if (bulkDepartment === "ALL") return INITIAL_WEEKLY_OFFS;
-    return INITIAL_WEEKLY_OFFS.filter((a) => a.department === bulkDepartment);
+    if (bulkDepartment === "ALL") return employees;
+    return employees.filter((a) => a.department === bulkDepartment);
   }, [bulkDepartment]);
 
   // Handlers
@@ -299,8 +198,8 @@ export function WeeklyOffView() {
 
   const handleSaveSingleAssign = (e: React.FormEvent) => {
     e.preventDefault();
-    const empObj = INITIAL_WEEKLY_OFFS.find((x) => x.employeeId === assignEmpId);
-    const empName = empObj?.employeeName || "Rajesh Kumar";
+    const empObj = employees.find((x) => x.id === assignEmpId);
+    const empName = empObj?.name || "Rajesh Kumar";
     const empDept = empObj?.department || "Front Office";
     const empDesig = empObj?.designation || "Staff";
     const empAvatar = empObj?.avatar || "RK";
@@ -795,12 +694,12 @@ export function WeeklyOffView() {
               {/* Combobox Dropdown Results List */}
               {isAssignEmpComboboxOpen && (
                 <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl space-y-1 max-h-56 overflow-y-auto animate-in fade-in-50">
-                  {INITIAL_WEEKLY_OFFS.filter((staff) => {
+                  {employees.filter((staff) => {
                     if (!assignEmpQuery.trim()) return true;
                     const q = assignEmpQuery.toLowerCase().trim();
                     return (
-                      staff.employeeName.toLowerCase().includes(q) ||
-                      staff.employeeId.toLowerCase().includes(q) ||
+                      staff.name.toLowerCase().includes(q) ||
+                      staff.id.toLowerCase().includes(q) ||
                       staff.department.toLowerCase().includes(q) ||
                       staff.designation.toLowerCase().includes(q)
                     );
@@ -809,26 +708,26 @@ export function WeeklyOffView() {
                       No matching employee found.
                     </div>
                   ) : (
-                    INITIAL_WEEKLY_OFFS.filter((staff) => {
+                    employees.filter((staff) => {
                       if (!assignEmpQuery.trim()) return true;
                       const q = assignEmpQuery.toLowerCase().trim();
                       return (
-                        staff.employeeName.toLowerCase().includes(q) ||
-                        staff.employeeId.toLowerCase().includes(q) ||
+                        staff.name.toLowerCase().includes(q) ||
+                        staff.id.toLowerCase().includes(q) ||
                         staff.department.toLowerCase().includes(q) ||
                         staff.designation.toLowerCase().includes(q)
                       );
                     }).map((staff) => (
                       <div
-                        key={staff.employeeId}
+                        key={staff.id}
                         onClick={() => {
-                          setAssignEmpId(staff.employeeId);
-                          setAssignEmpQuery(`${staff.employeeName} (${staff.employeeId}) - ${staff.department}`);
+                          setAssignEmpId(staff.id);
+                          setAssignEmpQuery(`${staff.name} (${staff.id}) - ${staff.department}`);
                           setIsAssignEmpComboboxOpen(false);
                         }}
                         className={cn(
                           "flex items-center justify-between p-2 rounded-xl cursor-pointer transition-colors hover:bg-slate-100/80 border border-transparent",
-                          assignEmpId === staff.employeeId && "bg-emerald-50 text-emerald-900 border-emerald-200"
+                          assignEmpId === staff.id && "bg-emerald-50 text-emerald-900 border-emerald-200"
                         )}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -837,12 +736,12 @@ export function WeeklyOffView() {
                           </div>
                           <div className="truncate">
                             <p className="font-bold text-xs text-slate-900 truncate">
-                              {staff.employeeName} <span className="text-[10px] font-semibold text-emerald-700">({staff.employeeId})</span>
+                              {staff.name} <span className="text-[10px] font-semibold text-emerald-700">({staff.id})</span>
                             </p>
                             <p className="text-[10px] text-slate-500 truncate">{staff.designation} • {staff.department}</p>
                           </div>
                         </div>
-                        {assignEmpId === staff.employeeId && <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-2" />}
+                        {assignEmpId === staff.id && <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-2" />}
                       </div>
                     ))
                   )}
@@ -1078,11 +977,11 @@ export function WeeklyOffView() {
             <div className="max-h-36 overflow-y-auto space-y-1.5">
               {bulkPreviewStaff.map((emp) => (
                 <div
-                  key={emp.employeeId}
+                  key={emp.id}
                   className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 text-xs"
                 >
                   <span className="font-bold text-slate-900">
-                    {emp.employeeName} ({emp.employeeId})
+                    {emp.name} ({emp.empCode})
                   </span>
                   <span className="text-slate-500 text-[11px] font-semibold">{emp.department}</span>
                 </div>

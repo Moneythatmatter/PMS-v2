@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Calendar,
   Search,
@@ -22,6 +22,9 @@ import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
 import { cn } from "@/lib/utils";
+import { hrHolidayAttendanceService, hrEmployeeService } from "@/services/human-resources";
+import { mapHolidayAttendanceFromApi, mapHolidayAttendanceToApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
 export type PayrollStatus = "Pending Payroll Processing" | "Processed in Payroll" | "N/A";
 
@@ -48,112 +51,28 @@ export interface HolidayAttendanceRecord {
   remarks?: string;
 }
 
-export const INITIAL_HOLIDAY_RECORDS: HolidayAttendanceRecord[] = [
-  {
-    id: "HA-501",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    designation: "Front Desk Manager",
-    avatar: "RK",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-    holidayName: "Independence Day",
-    holidayDate: "15/08/2026",
-    attendanceStatus: "Present",
-    checkIn: "08:00 AM",
-    checkOut: "05:00 PM",
-    workedHours: 8.5,
-    benefitType: "Additional Pay",
-    holidayPayAmount: 2550,
-    payrollStatus: "Processed in Payroll",
-    approvalStatus: "Approved",
-    reviewedBy: "Neha Mehta (HR Admin)",
-    reviewedDate: "16/08/2026",
-    remarks: "Full shift worked on Independence Day. Forwarded to Payroll for holiday pay.",
-  },
-  {
-    id: "HA-502",
-    employeeId: "EMP-0102",
-    employeeName: "Anjali Sharma",
-    department: "Housekeeping",
-    designation: "Executive Housekeeper",
-    avatar: "AS",
-    photoUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150",
-    holidayName: "Independence Day",
-    holidayDate: "15/08/2026",
-    attendanceStatus: "Present",
-    checkIn: "07:30 AM",
-    checkOut: "04:30 PM",
-    workedHours: 8.0,
-    benefitType: "Additional Pay",
-    holidayPayAmount: 2400,
-    payrollStatus: "Pending Payroll Processing",
-    approvalStatus: "Approved",
-    reviewedBy: "Neha Mehta (HR Admin)",
-    reviewedDate: "16/08/2026",
-    remarks: "Worked full holiday shift. Forwarded to Payroll as 2.0x Holiday Pay.",
-  },
-  {
-    id: "HA-503",
-    employeeId: "EMP-0103",
-    employeeName: "Chef Vikramjit Singh",
-    department: "Food & Beverage",
-    designation: "Executive Head Chef",
-    avatar: "VS",
-    holidayName: "Independence Day",
-    holidayDate: "15/08/2026",
-    attendanceStatus: "Present",
-    checkIn: "10:00 AM",
-    checkOut: "10:30 PM",
-    workedHours: 11.5,
-    benefitType: "Additional Pay",
-    holidayPayAmount: 3450,
-    payrollStatus: "Pending Payroll Processing",
-    approvalStatus: "Pending",
-  },
-  {
-    id: "HA-504",
-    employeeId: "EMP-0104",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    designation: "Guest Relations Executive",
-    avatar: "PP",
-    holidayName: "Independence Day",
-    holidayDate: "15/08/2026",
-    attendanceStatus: "Present",
-    checkIn: "03:00 PM",
-    checkOut: "11:30 PM",
-    workedHours: 8.5,
-    benefitType: "Additional Pay",
-    holidayPayAmount: 2550,
-    payrollStatus: "Processed in Payroll",
-    approvalStatus: "Approved",
-    reviewedBy: "Neha Mehta (HR Admin)",
-    reviewedDate: "16/08/2026",
-  },
-  {
-    id: "HA-505",
-    employeeId: "EMP-0105",
-    employeeName: "Arjun Verma",
-    department: "Food & Beverage",
-    designation: "Restaurant Captain",
-    avatar: "AV",
-    holidayName: "Independence Day",
-    holidayDate: "15/08/2026",
-    attendanceStatus: "Present",
-    checkIn: "11:00 AM",
-    checkOut: "08:00 PM",
-    workedHours: 8.0,
-    benefitType: "Additional Pay",
-    holidayPayAmount: 2400,
-    payrollStatus: "Pending Payroll Processing",
-    approvalStatus: "Pending",
-  },
-];
-
 export function HolidayAttendanceView() {
-  const [records, setRecords] = useState<HolidayAttendanceRecord[]>(INITIAL_HOLIDAY_RECORDS);
+  const [records, setRecords] = useState<HolidayAttendanceRecord[]>([])
+  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadHolidayAttendance = async () => {
+    try {
+      const [rows, empRows] = await Promise.all([hrHolidayAttendanceService.list(), hrEmployeeService.list()]);
+      const emps = empRows.map(mapEmployeeFromApi);
+      setEmployees(emps);
+      const lookup = new Map(emps.map((e) => [e.id, e]));
+      setRecords(rows.map((row) => mapHolidayAttendanceFromApi(row, lookup.get(String(row.employeeId)))));
+      if (emps[0]) setAddEmpId(emps[0].id);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load holiday attendance");
+      setRecords([]);
+      setEmployees([]);
+    }
+  };
+
+  useEffect(() => { void loadHolidayAttendance(); }, []);
+
+
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState("");
@@ -274,7 +193,7 @@ export function HolidayAttendanceView() {
 
   const handleSaveAddHolidayWork = (e: React.FormEvent) => {
     e.preventDefault();
-    const empObj = INITIAL_HOLIDAY_RECORDS.find((x) => x.employeeId === addEmpId);
+    const empObj = employees.find((x) => x.id === addEmpId);
     const parsedHours = parseFloat(addWorkedHours) || 8.0;
     const monthlySalary = 30000;
     const perDaySalary = Math.round(monthlySalary / 30); // ₹1,000/day
@@ -284,7 +203,7 @@ export function HolidayAttendanceView() {
     const newRecord: HolidayAttendanceRecord = {
       id: `HA-${Math.floor(500 + Math.random() * 500)}`,
       employeeId: addEmpId || "EMP-0101",
-      employeeName: empObj?.employeeName || "Rajesh Kumar",
+      employeeName: empObj?.name || "Rajesh Kumar",
       department: empObj?.department || "Front Office",
       designation: empObj?.designation || "Staff",
       avatar: empObj?.avatar || "RK",
@@ -849,12 +768,12 @@ export function HolidayAttendanceView() {
                 {/* Combobox Dropdown Results List */}
                 {isAddEmpComboboxOpen && (
                   <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl space-y-1 max-h-56 overflow-y-auto animate-in fade-in-50">
-                    {INITIAL_HOLIDAY_RECORDS.filter((staff) => {
+                    {employees.filter((staff) => {
                       if (!addEmpQuery.trim()) return true;
                       const q = addEmpQuery.toLowerCase().trim();
                       return (
-                        staff.employeeName.toLowerCase().includes(q) ||
-                        staff.employeeId.toLowerCase().includes(q) ||
+                        staff.name.toLowerCase().includes(q) ||
+                        staff.id.toLowerCase().includes(q) ||
                         staff.department.toLowerCase().includes(q) ||
                         staff.designation.toLowerCase().includes(q)
                       );
@@ -863,26 +782,26 @@ export function HolidayAttendanceView() {
                         No matching employee found.
                       </div>
                     ) : (
-                      INITIAL_HOLIDAY_RECORDS.filter((staff) => {
+                      employees.filter((staff) => {
                         if (!addEmpQuery.trim()) return true;
                         const q = addEmpQuery.toLowerCase().trim();
                         return (
-                          staff.employeeName.toLowerCase().includes(q) ||
-                          staff.employeeId.toLowerCase().includes(q) ||
+                          staff.name.toLowerCase().includes(q) ||
+                          staff.id.toLowerCase().includes(q) ||
                           staff.department.toLowerCase().includes(q) ||
                           staff.designation.toLowerCase().includes(q)
                         );
                       }).map((staff) => (
                         <div
-                          key={staff.employeeId}
+                          key={staff.id}
                           onClick={() => {
-                            setAddEmpId(staff.employeeId);
-                            setAddEmpQuery(`${staff.employeeName} (${staff.employeeId}) - ${staff.department}`);
+                            setAddEmpId(staff.id);
+                            setAddEmpQuery(`${staff.name} (${staff.id}) - ${staff.department}`);
                             setIsAddEmpComboboxOpen(false);
                           }}
                           className={cn(
                             "flex items-center justify-between p-2 rounded-xl cursor-pointer transition-colors hover:bg-slate-100/80 border border-transparent",
-                            addEmpId === staff.employeeId && "bg-emerald-50 text-emerald-900 border-emerald-200"
+                            addEmpId === staff.id && "bg-emerald-50 text-emerald-900 border-emerald-200"
                           )}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
@@ -891,12 +810,12 @@ export function HolidayAttendanceView() {
                             </div>
                             <div className="truncate">
                               <p className="font-bold text-xs text-slate-900 truncate">
-                                {staff.employeeName} <span className="text-[10px] font-semibold text-emerald-700">({staff.employeeId})</span>
+                                {staff.name} <span className="text-[10px] font-semibold text-emerald-700">({staff.id})</span>
                               </p>
                               <p className="text-[10px] text-slate-500 truncate">{staff.designation} • {staff.department}</p>
                             </div>
                           </div>
-                          {addEmpId === staff.employeeId && <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-2" />}
+                          {addEmpId === staff.id && <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-2" />}
                         </div>
                       ))
                     )}

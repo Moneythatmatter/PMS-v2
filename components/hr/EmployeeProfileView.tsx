@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   User,
   Building2,
@@ -39,12 +39,33 @@ import {
   XCircle,
   Eye,
   Upload,
-  PieChart,
   Filter,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
-import { sampleEmployees, EmployeeItem } from "@/app/data/hr/employeeListData";
+import type { EmployeeItem } from "@/app/data/hr/employeeListData";
+import { hrEmployeeService } from "@/services/human-resources";
+import { mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import { EmployeeAttendanceGrid } from "@/components/hr/shared/EmployeeAttendanceGrid";
+import {
+  ProfileCard,
+  ProfileField,
+  PersonalContactPanel,
+  EmploymentPanel,
+  CurrentShiftPanel,
+  LeaveBalancePanel,
+  LeaveHistoryPanel,
+  PayrollSalaryPanel,
+  PayrollBankPanel,
+  PayrollStatutoryPanel,
+  DocumentCategoryPanel,
+  GrievancesPanel,
+  ActivityLogPanel,
+  ProfileIconField,
+  ProfileSection,
+  type LeaveBalanceItem,
+  type LeaveHistoryRow,
+} from "@/components/hr/shared/profileHelpers";
 import { cn } from "@/lib/utils";
 
 type ProfileTab =
@@ -57,31 +78,321 @@ type ProfileTab =
   | "grievances"
   | "activity";
 
-// Helper to calculate years & months of service
-function calculateYearsOfService(joinDateStr: string): string {
-  if (!joinDateStr) return "0 Years";
-  try {
-    const parts = joinDateStr.split("/");
-    let joinDate: Date;
-    if (parts.length === 3) {
-      // Format: DD/MM/YYYY
-      joinDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-    } else {
-      joinDate = new Date(joinDateStr);
-    }
-    const now = new Date();
-    let years = now.getFullYear() - joinDate.getFullYear();
-    let months = now.getMonth() - joinDate.getMonth();
-    if (months < 0) {
-      years--;
-      months += 12;
-    }
-    if (years <= 0) return `${months} Month${months === 1 ? "" : "s"}`;
-    return `${years} Year${years === 1 ? "" : "s"} ${months} Month${months === 1 ? "" : "s"}`;
-  } catch {
-    return "3 Years 2 Months";
-  }
+const PROFILE_TABS: { id: ProfileTab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "employment", label: "Employment" },
+  { id: "attendance", label: "Attendance" },
+  { id: "leave", label: "Leave" },
+  { id: "payroll", label: "Payroll" },
+  { id: "documents", label: "Documents" },
+  { id: "grievances", label: "Grievances" },
+  { id: "activity", label: "Activity" },
+];
+
+function ProfileHighlightBadge({
+  icon: Icon,
+  children,
+  tone = "emerald",
+  mono = false,
+  variant = "soft",
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+  tone?: "emerald" | "indigo";
+  mono?: boolean;
+  variant?: "soft" | "solid";
+}) {
+  const softTones = {
+    emerald: "bg-emerald-50 text-emerald-800 border-emerald-200/80 ring-emerald-100",
+    indigo: "bg-indigo-50 text-indigo-800 border-indigo-200/80 ring-indigo-100",
+  };
+  const solidTones = {
+    emerald: "bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-600/20",
+    indigo: "bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/20",
+  };
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
+        variant === "solid" ? solidTones[tone] : cn("ring-1 ring-inset", softTones[tone]),
+        mono && "font-mono tracking-wide",
+      )}
+    >
+      <Icon className={cn("h-3.5 w-3.5 shrink-0", variant === "solid" ? "opacity-95" : "opacity-80")} />
+      {children}
+    </span>
+  );
 }
+
+function EmployeeProfileSummaryCard({ employee }: { employee: EmployeeItem }) {
+  const isActive = employee.status === "Active";
+
+  const stats = [
+    { label: "Manager", value: employee.reportingManager || "—", icon: User, tone: "slate" as const },
+    { label: "Joined", value: employee.joinDate, icon: Calendar, tone: "slate" as const },
+    { label: "Employment", value: employee.employmentType, icon: Briefcase, tone: "emerald" as const },
+    {
+      label: "Status",
+      value: employee.status,
+      icon: CheckCircle2,
+      tone: isActive ? ("emerald" as const) : ("amber" as const),
+    },
+    {
+      label: "Leave balance",
+      value: employee.leaveBalance
+        ? `CL ${employee.leaveBalance.casual} · SL ${employee.leaveBalance.sick}`
+        : "—",
+      icon: Clock,
+      tone: "amber" as const,
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="relative shrink-0">
+              {employee.photoUrl ? (
+                <img
+                  src={employee.photoUrl}
+                  alt={employee.name}
+                  className="h-16 w-16 sm:h-[72px] sm:w-[72px] rounded-2xl object-cover ring-2 ring-slate-100 shadow-sm"
+                />
+              ) : (
+                <div className="flex h-16 w-16 sm:h-[72px] sm:w-[72px] items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-lg font-bold text-white shadow-sm ring-2 ring-slate-100">
+                  {employee.avatar}
+                </div>
+              )}
+              <span
+                className={cn(
+                  "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white shadow-sm",
+                  isActive ? "bg-emerald-500" : "bg-amber-400",
+                )}
+                aria-hidden
+              />
+            </div>
+
+            <div className="min-w-0 space-y-2 pt-0.5">
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 leading-tight">
+                {employee.name}
+              </h1>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <ProfileHighlightBadge icon={Briefcase} tone="emerald">
+                  {employee.designation}
+                </ProfileHighlightBadge>
+                <ProfileHighlightBadge icon={IdCard} tone="indigo" mono>
+                  {employee.empCode}
+                </ProfileHighlightBadge>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end sm:pt-1">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 sm:justify-end">
+              <Building2 className="h-3.5 w-3.5 text-slate-400" />
+              {employee.department}
+            </span>
+
+            <div className="flex gap-2">
+            <a
+              href={`tel:${employee.phone.replace(/\s/g, "")}`}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+            >
+              <Phone className="h-4 w-4 shrink-0" />
+              Call
+            </a>
+            <a
+              href={`mailto:${employee.email}`}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <Mail className="h-4 w-4 shrink-0 text-slate-500" />
+              Email
+            </a>
+            </div>
+          </div>
+        </div>
+
+        <dl className="mt-4 grid grid-cols-1 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-x-5 gap-y-4">
+          {stats.map((item) => (
+            <ProfileIconField
+              key={item.label}
+              icon={item.icon}
+              tone={item.tone}
+              label={item.label}
+              value={item.value}
+            />
+          ))}
+        </dl>
+      </div>
+    </div>
+  );
+}
+
+function AttendanceScoreRing({ value, size = 56 }: { value: number; size?: number }) {
+  const stroke = 5;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (Math.min(value, 100) / 100) * circumference;
+
+  return (
+    <div
+      className="relative shrink-0 rounded-full bg-white/70 p-0.5 shadow-sm ring-1 ring-emerald-100/80"
+      style={{ width: size + 4, height: size + 4 }}
+    >
+      <svg width={size} height={size} className="-rotate-90" aria-hidden>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={stroke}
+          className="text-emerald-100"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={stroke}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className="text-emerald-500"
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums text-emerald-800">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function EmployeeProfileQuickMetrics({ employee }: { employee: EmployeeItem }) {
+  const score = employee.attendanceRate ?? 96;
+  const scoreLabel =
+    score >= 95 ? "Excellent" : score >= 85 ? "Good" : score >= 75 ? "Fair" : "Low";
+  const scoreBadgeClass =
+    score >= 95
+      ? "bg-emerald-100 text-emerald-700 ring-emerald-200/60"
+      : score >= 85
+        ? "bg-emerald-50 text-emerald-700 ring-emerald-200/50"
+        : score >= 75
+          ? "bg-amber-50 text-amber-700 ring-amber-200/60"
+          : "bg-rose-50 text-rose-700 ring-rose-200/60";
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2.5">
+      <div className="group relative flex flex-1 items-center gap-3.5 overflow-hidden rounded-2xl border border-emerald-100/90 bg-gradient-to-r from-emerald-50/90 via-white to-white p-3.5 shadow-sm ring-1 ring-inset ring-white/80">
+        <AttendanceScoreRing value={score} />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-slate-500">Attendance score</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <p className="text-2xl font-bold tabular-nums tracking-tight text-emerald-950">
+              {score}
+              <span className="text-lg font-semibold text-emerald-700/80">%</span>
+            </p>
+            <span
+              className={cn(
+                "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
+                scoreBadgeClass,
+              )}
+            >
+              {scoreLabel}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[10px] text-slate-400">Last 30 days</p>
+        </div>
+      </div>
+
+      <div className="group relative flex flex-1 items-center gap-3.5 overflow-hidden rounded-2xl border border-indigo-100/90 bg-gradient-to-r from-indigo-50/90 via-white to-white p-3.5 shadow-sm ring-1 ring-inset ring-white/80">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-100 to-violet-100 text-indigo-600 shadow-sm ring-1 ring-indigo-100/80">
+          <Wallet className="h-6 w-6" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-slate-500">Monthly gross</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-indigo-950">
+            ₹{employee.salary.toLocaleString("en-IN")}
+          </p>
+          <p className="mt-0.5 text-[10px] text-slate-400">Before deductions · per month</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeProfileHeader({ employee }: { employee: EmployeeItem }) {
+  return (
+    <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(240px,280px)]">
+      <EmployeeProfileSummaryCard employee={employee} />
+      <EmployeeProfileQuickMetrics employee={employee} />
+    </div>
+  );
+}
+
+const LEAVE_BALANCES: LeaveBalanceItem[] = [
+  { label: "Casual leave (CL)", remaining: 8, allocated: 10, used: 2, icon: Calendar, tone: "blue" },
+  { label: "Sick leave (SL)", remaining: 9, allocated: 12, used: 3, icon: Heart, tone: "rose" },
+  { label: "Earned leave (EL)", remaining: 10, allocated: 15, used: 5, icon: Gift, tone: "violet" },
+  { label: "Compensatory off", remaining: 2, allocated: 2, used: 0, icon: Clock, tone: "emerald" },
+];
+
+const LEAVE_HISTORY: LeaveHistoryRow[] = [
+  {
+    type: "Casual Leave (CL)",
+    dates: "10 Aug – 12 Aug 2026",
+    days: "3 days",
+    reason: "Family commitment",
+    status: "Pending",
+    approvedBy: "Pending HR review",
+  },
+  {
+    type: "Sick Leave (SL)",
+    dates: "15 Jul 2026",
+    days: "1 day",
+    reason: "Viral fever recovery",
+    status: "Approved",
+    approvedBy: "Neha Mehta (HR)",
+  },
+  {
+    type: "Earned Leave (EL)",
+    dates: "10 Jun – 14 Jun 2026",
+    days: "5 days",
+    reason: "Annual family vacation",
+    status: "Approved",
+    approvedBy: "Neha Mehta (HR)",
+  },
+  {
+    type: "Comp off (COMP)",
+    dates: "02 May 2026",
+    days: "1 day",
+    reason: "Worked Sunday banquet shift",
+    status: "Approved",
+    approvedBy: "F&B Manager",
+  },
+];
+
+const DOCUMENT_CATEGORIES = [
+  "Identity Proof",
+  "Education",
+  "Employment",
+  "Financial",
+  "Medical",
+  "Compliance",
+] as const;
+
+const DOCUMENT_CATEGORY_LABELS: Record<(typeof DOCUMENT_CATEGORIES)[number], string> = {
+  "Identity Proof": "Identity proof",
+  Education: "Education & qualifications",
+  Employment: "Employment & contracts",
+  Financial: "Financial & tax",
+  Medical: "Medical fitness",
+  Compliance: "Compliance & declarations",
+};
 
 // Categorized Document Model for Section 8
 interface CategorizedDoc {
@@ -211,11 +522,11 @@ const SAMPLE_ACTIVITIES: ActivityLogItem[] = [
 ];
 
 export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string }) {
-  const [selectedEmpId, setSelectedEmpId] = useState<string | null>(initialEmpId || "emp-101");
+  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
+  const [selectedEmpId, setSelectedEmpId] = useState<string | null>(initialEmpId ?? null);
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
-  const [isAttendanceExpanded, setIsAttendanceExpanded] = useState<boolean>(false);
-  const [attendanceDateQuery, setAttendanceDateQuery] = useState<string>("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const tabPanelRef = useRef<HTMLDivElement>(null);
 
   // Activity Log Filter States
   const [activityCategoryFilter, setActivityCategoryFilter] = useState<string>("ALL");
@@ -226,14 +537,33 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
   const [isComboboxOpen, setIsComboboxOpen] = useState(false);
   const comboboxRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const loadEmployees = async () => {
+      try {
+        const rows = await hrEmployeeService.list();
+        const mapped = rows.map(mapEmployeeFromApi);
+        setEmployees(mapped);
+        if (initialEmpId) {
+          setSelectedEmpId(initialEmpId);
+        } else if (mapped[0]) {
+          setSelectedEmpId(mapped[0].id);
+        }
+      } catch (e) {
+        setToastMessage(e instanceof Error ? e.message : "Failed to load employees");
+        setEmployees([]);
+      }
+    };
+    void loadEmployees();
+  }, [initialEmpId]);
+
   // Active Selected Employee
-  const employee = selectedEmpId ? sampleEmployees.find((e) => e.id === selectedEmpId) || null : null;
+  const employee = selectedEmpId ? employees.find((e) => e.id === selectedEmpId) || null : null;
 
   // Search results
   const searchResults = useMemo(() => {
-    if (!comboboxQuery.trim()) return sampleEmployees;
+    if (!comboboxQuery.trim()) return employees;
     const q = comboboxQuery.toLowerCase();
-    return sampleEmployees.filter((emp) => {
+    return employees.filter((emp) => {
       return (
         emp.empCode.toLowerCase().includes(q) ||
         emp.name.toLowerCase().includes(q) ||
@@ -243,7 +573,7 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
         emp.designation.toLowerCase().includes(q)
       );
     });
-  }, [comboboxQuery]);
+  }, [comboboxQuery, employees]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -259,8 +589,16 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
     setSelectedEmpId(emp.id);
     setIsComboboxOpen(false);
     setComboboxQuery("");
-    setToastMessage(`Loaded employee profile: ${emp.name} (${emp.empCode})`);
+    setActiveTab("overview");
+    setToastMessage(`Loaded profile: ${emp.name}`);
   };
+
+  const handleTabChange = useCallback((tab: ProfileTab) => {
+    setActiveTab(tab);
+    requestAnimationFrame(() => {
+      tabPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
 
   // Filtered Activity Logs
   const filteredActivities = useMemo(() => {
@@ -322,11 +660,12 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
   return (
     <ModulePageShell
       eyebrow="Human Resource / Employees"
-      title=""
+      title={employee ? "" : "Employee profile"}
+      aboveTable={employee ? <EmployeeProfileHeader employee={employee} /> : undefined}
       breadcrumbs={[
         { label: "Human Resource", href: "/human-resources/dashboard" },
         { label: "Employees", href: "/human-resources/employees/list" },
-        { label: "Employee Profile" },
+        { label: employee?.name ?? "Profile" },
       ]}
       toast={toastMessage}
       onDismissToast={() => setToastMessage(null)}
@@ -412,23 +751,12 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
             <>
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => window.print()}
-                className="rounded-xl text-xs font-medium bg-white shadow-xs"
-              >
-                <Printer className="h-3.5 w-3.5 mr-1 text-slate-500" />
-                Print Profile
-              </Button>
-
-              <Button
-                type="button"
                 size="sm"
                 onClick={() => setToastMessage(`Editing profile for ${employee.name}...`)}
-                className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs cursor-pointer"
+                className="rounded-xl text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs cursor-pointer"
               >
                 <Edit2 className="h-3.5 w-3.5 mr-1.5" />
-                Edit Profile
+                Edit
               </Button>
             </>
           )}
@@ -444,21 +772,18 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
             <Users className="h-7 w-7 text-emerald-700" />
           </div>
 
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200 mb-3">
-            <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
-            Direct Profile Navigation
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 mb-3">
+            Employee search
           </span>
 
-          <h3 className="text-base font-bold text-slate-900">
-            Search Employee Profile
-          </h3>
-          <p className="mt-1 max-w-md text-xs text-slate-500 leading-relaxed mb-6">
-            Search by Employee ID, Name, Mobile or Email to open and manage their profile.
+          <h3 className="text-base font-semibold text-slate-900">Find an employee</h3>
+          <p className="mt-1 max-w-md text-sm text-slate-500 leading-relaxed mb-6">
+            Search by ID, name, phone, or email to open their profile.
           </p>
 
           <div className="w-full max-w-lg text-left relative" ref={comboboxRef}>
-            <label className="mb-1.5 block text-xs font-bold text-slate-700">
-              🔍 Search Employee
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Search employee
             </label>
 
             <div className="relative">
@@ -533,144 +858,25 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
             FULL ENTERPRISE EMPLOYEE PROFILE VIEW
         ───────────────────────────────────────────────────────────── */
         <>
-          {/* SECTION 1: HERO ENHANCED PROFILE HEADER */}
-          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-xs">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              {/* Left Column: Photo, Name, Designation, Badges */}
-              <div className="flex items-start gap-4">
-                {employee.photoUrl ? (
-                  <img
-                    src={employee.photoUrl}
-                    alt={employee.name}
-                    className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl object-cover border-2 border-slate-200 shadow-xs shrink-0"
-                  />
-                ) : (
-                  <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-2xl bg-emerald-700 text-white font-bold text-xl sm:text-2xl shrink-0 shadow-xs">
-                    {employee.avatar}
-                  </div>
-                )}
-
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-lg sm:text-xl font-bold text-slate-900">{employee.name}</h1>
-                    <span className="rounded-xl bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
-                      {employee.empCode}
-                    </span>
-                    <span
-                      className={cn(
-                        "rounded-xl px-2.5 py-0.5 text-[10px] font-bold uppercase border",
-                        employee.status === "Active"
-                          ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                          : "bg-amber-100 text-amber-800 border-amber-300"
-                      )}
-                    >
-                      {employee.status}
-                    </span>
-                  </div>
-
-                  <p className="text-xs sm:text-sm font-semibold text-slate-600 mt-1">
-                    {employee.designation} • <span className="text-emerald-700">{employee.department}</span>
-                  </p>
-
-                  {/* Header Context Metrics (Reporting Manager, Property, Service Duration) */}
-                  <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs text-slate-500 border-t border-slate-100 pt-2">
-                    <span className="flex items-center gap-1 font-medium">
-                      <User className="h-3.5 w-3.5 text-slate-400" />
-                      <span className="text-slate-400">Reporting To:</span>{" "}
-                      <strong className="text-slate-800">{employee.reportingManager || "Ananya Sharma (GM)"}</strong>
-                    </span>
-                    <span className="flex items-center gap-1 font-medium">
-                      <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                      <span className="text-slate-400">Property:</span>{" "}
-                      <strong className="text-slate-800">Grand Hotel &amp; Suites</strong>
-                    </span>
-                    <span className="flex items-center gap-1 font-medium">
-                      <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                      <span className="text-slate-400">Tenure:</span>{" "}
-                      <strong className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200">
-                        {calculateYearsOfService(employee.joinDate)}
-                      </strong>
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Shift & Employment Type Badges */}
-              <div className="flex flex-wrap sm:flex-col gap-2 justify-start lg:justify-end border-t border-slate-100 pt-3 lg:border-t-0 lg:pt-0 shrink-0">
-                <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200">
-                  <Clock className="h-3.5 w-3.5 text-slate-500" />
-                  {employee.shiftType}
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 border border-blue-200">
-                  <Briefcase className="h-3.5 w-3.5 text-blue-600" />
-                  {employee.employmentType}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 14: PROFILE COMPLETION WIDGET */}
-          <div className="mb-5 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 p-4 sm:p-5 text-white shadow-xs">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="relative h-14 w-14 flex items-center justify-center rounded-2xl bg-white/10 backdrop-blur-xs border border-white/20 shrink-0 font-black text-lg text-emerald-300">
-                  92%
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-sm sm:text-base text-white">Profile Completion Status</h3>
-                    <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 rounded-full">
-                      High Compliance
-                    </span>
-                  </div>
-                  <p className="text-xs text-emerald-100/80 mt-0.5">
-                    9 of 10 profile sections complete. Only medical fitness renewal is pending.
-                  </p>
-                </div>
-              </div>
-
-              {/* Completion Checklist Pills */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/10 border border-white/20 text-emerald-200 font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Personal
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/10 border border-white/20 text-emerald-200 font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Employment
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/10 border border-white/20 text-emerald-200 font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Documents
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/10 border border-white/20 text-emerald-200 font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Payroll
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-200 font-semibold">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-300" /> Medical (Pending)
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 2 & 13: STICKY PROFILE TABS NAVIGATION */}
-          <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-xs py-2 mb-5 border-b border-slate-200">
-            <div className="flex overflow-x-auto gap-1.5 scrollbar-none">
-              {[
-                { id: "overview", label: "Overview & Personal" },
-                { id: "employment", label: "Employment Details" },
-                { id: "attendance", label: "Attendance & Shifts" },
-                { id: "leave", label: "Leave Management" },
-                { id: "payroll", label: "Payroll & Bank Info" },
-                { id: "documents", label: "Documents" },
-                { id: "grievances", label: "Grievances & Tickets" },
-                { id: "activity", label: "Activity Log" },
-              ].map((tab) => (
+          {/* Tabs */}
+          <div className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-xs py-2 mb-4 border-b border-slate-200">
+            <div
+              className="flex overflow-x-auto gap-1 scrollbar-none"
+              role="tablist"
+              aria-label="Employee profile sections"
+            >
+              {PROFILE_TABS.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id as ProfileTab)}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  onClick={() => handleTabChange(tab.id)}
                   className={cn(
-                    "whitespace-nowrap px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer",
+                    "whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
                     activeTab === tab.id
-                      ? "bg-emerald-700 text-white shadow-2xs"
-                      : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                      ? "bg-emerald-700 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-white hover:text-slate-900",
                   )}
                 >
                   {tab.label}
@@ -680,131 +886,29 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
           </div>
 
           {/* TAB PANELS CONTAINER */}
-          <div className="space-y-5">
+          <div ref={tabPanelRef} className="space-y-5 scroll-mt-24">
             {/* ─────────────────────────────────────────────────────────────
                 SECTION 3: TAB 1 - OVERVIEW & PERSONAL (Expanded)
             ───────────────────────────────────────────────────────────── */}
             {activeTab === "overview" && (
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-                <div className="lg:col-span-8 space-y-5">
-                  {/* Personal Information Card */}
-                  <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
-                      <User className="h-4 w-4 text-emerald-600" />
-                      Personal Profile Details
-                    </h3>
+              <div
+                className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(260px,300px)] animate-in fade-in duration-200"
+                role="tabpanel"
+              >
+                <ProfileCard title="Personal & contact" className="h-full">
+                  <PersonalContactPanel employee={employee} />
+                </ProfileCard>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
-                      <div className="flex justify-between py-1.5 border-b border-slate-100">
-                        <span className="text-slate-500 font-medium">Full Name:</span>
-                        <span className="font-bold text-slate-900">{employee.name}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-slate-100">
-                        <span className="text-slate-500 font-medium">Gender:</span>
-                        <span className="font-bold text-slate-900">{employee.gender}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-slate-100">
-                        <span className="text-slate-500 font-medium">Date of Birth (DOB):</span>
-                        <span className="font-bold text-slate-900">{employee.dob || "14/05/1990"}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-slate-100">
-                        <span className="text-slate-500 font-medium">Blood Group:</span>
-                        <span className="font-bold text-slate-900">{employee.bloodGroup || "O+"}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-slate-100">
-                        <span className="text-slate-500 font-medium">Marital Status:</span>
-                        <span className="font-bold text-slate-900">Married</span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-slate-100">
-                        <span className="text-slate-500 font-medium">Nationality:</span>
-                        <span className="font-bold text-slate-900">Indian</span>
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Contact Information Card */}
-                  <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
-                      <Phone className="h-4 w-4 text-blue-600" />
-                      Contact &amp; Emergency Details
-                    </h3>
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
-                      <div className="flex justify-between py-1.5 border-b border-slate-100">
-                        <span className="text-slate-500 font-medium">Mobile Phone:</span>
-                        <span className="font-bold text-slate-900">{employee.phone}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-slate-100">
-                        <span className="text-slate-500 font-medium">Official Email:</span>
-                        <span className="font-bold text-emerald-800">{employee.email}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-slate-100">
-                        <span className="text-slate-500 font-medium">Emergency Contact Name:</span>
-                        <span className="font-bold text-slate-900">Sunita Sharma</span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-slate-100">
-                        <span className="text-slate-500 font-medium">Relationship:</span>
-                        <span className="font-bold text-slate-900">Spouse</span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-slate-100 sm:col-span-2">
-                        <span className="text-slate-500 font-medium">Emergency Phone:</span>
-                        <span className="font-bold text-rose-700">{employee.emergencyContact}</span>
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Address Card */}
-                  <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
-                      <MapPin className="h-4 w-4 text-rose-600" />
-                      Address Details
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                        <span className="font-bold text-slate-700 block mb-1">Current Residential Address</span>
-                        <p className="text-slate-600 leading-relaxed">
-                          {employee.address || "Suite 402, Park View Residency, MG Road, Mumbai - 400001"}
-                        </p>
-                      </div>
-                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                        <span className="font-bold text-slate-700 block mb-1">Permanent Hometown Address</span>
-                        <p className="text-slate-600 leading-relaxed">
-                          H.No 124, Civil Lines, Sector 14, Jaipur, Rajasthan - 302006
-                        </p>
-                      </div>
-                    </div>
-                  </section>
-                </div>
-
-                {/* Right Column: Highlights Sidebar */}
-                <div className="lg:col-span-4 space-y-4">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3 text-xs">
-                    <h3 className="font-bold uppercase tracking-wider text-[11px] text-slate-400">Quick Metrics</h3>
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-center">
-                      <span className="text-[10px] font-bold text-emerald-800 uppercase">Attendance Score</span>
-                      <p className="text-2xl font-black text-emerald-900 mt-0.5">{employee.attendanceRate || 96}%</p>
-                      <span className="text-[10px] text-emerald-700 font-medium">Top Performer</span>
-                    </div>
-                    <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-center">
-                      <span className="text-[10px] font-bold text-blue-800 uppercase">Monthly Gross Salary</span>
-                      <p className="text-xl font-black text-blue-900 mt-0.5">₹{employee.salary.toLocaleString("en-IN")}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Key Tags</span>
-                      <div className="flex flex-wrap gap-1">
-                        <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-semibold text-slate-700">
-                          Full-Time
-                        </span>
-                        <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-semibold text-slate-700">
-                          Front Desk Lead
-                        </span>
-                        <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-semibold text-slate-700">
-                          POS Certified
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                <div className="h-full min-h-0">
+                  <EmployeeAttendanceGrid
+                    employeeId={employee.id}
+                    joinDate={employee.joinDate}
+                    shiftType={employee.shiftType}
+                    showLog={false}
+                    showSummary={false}
+                    compact
+                    onViewFullAttendance={() => handleTabChange("attendance")}
+                  />
                 </div>
               </div>
             )}
@@ -813,409 +917,47 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                 SECTION 4: TAB 2 - EMPLOYMENT DETAILS (Expanded)
             ───────────────────────────────────────────────────────────── */}
             {activeTab === "employment" && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4 text-xs">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
-                  <Briefcase className="h-4 w-4 text-purple-600" />
-                  Work &amp; Department Hierarchy Assignment
-                </h3>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/70">
-                    <span className="text-slate-500 font-medium block mb-1">Employee Code:</span>
-                    <span className="font-bold text-sm text-slate-900">{employee.empCode}</span>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/70">
-                    <span className="text-slate-500 font-medium block mb-1">Reporting Manager:</span>
-                    <span className="font-bold text-sm text-emerald-800">{employee.reportingManager || "Ananya Sharma (GM)"}</span>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/70">
-                    <span className="text-slate-500 font-medium block mb-1">Department:</span>
-                    <span className="font-bold text-sm text-slate-900">{employee.department}</span>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/70">
-                    <span className="text-slate-500 font-medium block mb-1">Designation:</span>
-                    <span className="font-bold text-sm text-slate-900">{employee.designation}</span>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/70">
-                    <span className="text-slate-500 font-medium block mb-1">Employment Type:</span>
-                    <span className="font-bold text-sm text-slate-900">{employee.employmentType}</span>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/70">
-                    <span className="text-slate-500 font-medium block mb-1">Confirmation Date:</span>
-                    <span className="font-bold text-sm text-slate-900">15/07/2022</span>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/70">
-                    <span className="text-slate-500 font-medium block mb-1">Notice Period:</span>
-                    <span className="font-bold text-sm text-slate-900">30 Days</span>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/70">
-                    <span className="text-slate-500 font-medium block mb-1">Cost Center:</span>
-                    <span className="font-bold text-sm text-slate-900">CC-FRONT-OFFICE-01</span>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/70">
-                    <span className="text-slate-500 font-medium block mb-1">Work Location / Branch:</span>
-                    <span className="font-bold text-sm text-slate-900">Grand Hotel &amp; Suites - Main Branch</span>
-                  </div>
-                </div>
-              </section>
+              <ProfileCard title="Employment">
+                <EmploymentPanel employee={employee} />
+              </ProfileCard>
             )}
 
             {/* ─────────────────────────────────────────────────────────────
                 SECTION 5: TAB 3 - ATTENDANCE & SHIFTS (Summary Cards + Shift Roster + 7-Day Table)
             ───────────────────────────────────────────────────────────── */}
             {activeTab === "attendance" && (
-              <div className="space-y-5">
-                {/* Current Shift Assignment Summary Widget (Improvement #10) */}
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3 text-xs">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
-                    <Clock className="h-4 w-4 text-emerald-600" />
-                    Current Active Shift &amp; Assignment History
-                  </h3>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Current Assigned Shift</span>
-                      <h4 className="font-extrabold text-slate-900 text-sm">{employee.shiftType || "Morning Shift (MS-01)"}</h4>
-                      <p className="text-[11px] font-semibold text-emerald-700">⏰ 07:00 AM - 03:30 PM (8.5 Hrs)</p>
-                    </div>
-
-                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Assigned Since</span>
-                      <h4 className="font-extrabold text-slate-900 text-sm">01 Jan 2026</h4>
-                      <p className="text-[11px] font-medium text-slate-500">Effective: Until Further Notice</p>
-                    </div>
-
-                    <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 space-y-1">
-                      <span className="text-[10px] text-emerald-800 font-bold uppercase block">Shift History Log</span>
-                      <h4 className="font-extrabold text-emerald-950 text-sm">3 Changes Recorded</h4>
-                      <p className="text-[11px] font-semibold text-emerald-700">Audit Verified by HR</p>
-                    </div>
-                  </div>
-
-                  {/* Shift History Log Table */}
-                  <div className="pt-2 border-t border-slate-100 space-y-1.5">
-                    <span className="text-[11px] font-bold text-slate-700 uppercase block">Shift Audit History:</span>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase border-b border-slate-200">
-                          <tr>
-                            <th className="py-2 px-3">Date</th>
-                            <th className="py-2 px-3">Previous Shift</th>
-                            <th className="py-2 px-3">Assigned Shift</th>
-                            <th className="py-2 px-3">Changed By</th>
-                            <th className="py-2 px-3">Reason</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          <tr className="hover:bg-slate-50">
-                            <td className="py-2 px-3 font-semibold text-slate-800">01/01/2026</td>
-                            <td className="py-2 px-3 text-slate-500">Evening Shift (ES-02)</td>
-                            <td className="py-2 px-3 font-bold text-emerald-800">Morning Shift (MS-01)</td>
-                            <td className="py-2 px-3 text-slate-600 font-medium">Neha Mehta (HR)</td>
-                            <td className="py-2 px-3 text-slate-500 italic">Annual Roster Swap</td>
-                          </tr>
-                          <tr className="hover:bg-slate-50">
-                            <td className="py-2 px-3 font-semibold text-slate-800">01/06/2025</td>
-                            <td className="py-2 px-3 text-slate-500">General Shift (GS-04)</td>
-                            <td className="py-2 px-3 font-bold text-emerald-800">Evening Shift (ES-02)</td>
-                            <td className="py-2 px-3 text-slate-600 font-medium">HR Recruiter</td>
-                            <td className="py-2 px-3 text-slate-500 italic">Promotion Shift Change</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </section>
-
-                {/* 5 Status Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-center">
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
-                    <span className="text-[10px] font-bold uppercase text-emerald-800">Present</span>
-                    <p className="text-2xl font-black text-emerald-900 mt-1">24 Days</p>
-                  </div>
-                  <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3">
-                    <span className="text-[10px] font-bold uppercase text-rose-800">Absent</span>
-                    <p className="text-2xl font-black text-rose-900 mt-1">1 Day</p>
-                  </div>
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
-                    <span className="text-[10px] font-bold uppercase text-amber-800">Late</span>
-                    <p className="text-2xl font-black text-amber-900 mt-1">2 Days</p>
-                  </div>
-                  <div className="rounded-xl border border-purple-200 bg-purple-50/70 p-3">
-                    <span className="text-[10px] font-bold uppercase text-purple-800">Half Day</span>
-                    <p className="text-2xl font-black text-purple-900 mt-1">0 Days</p>
-                  </div>
-                  <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3">
-                    <span className="text-[10px] font-bold uppercase text-blue-800">Overtime</span>
-                    <p className="text-2xl font-black text-blue-900 mt-1">12.5 Hrs</p>
-                  </div>
-                </div>
-
-                {/* 30 Days Attendance Log (Expandable Format) */}
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3 text-xs">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-emerald-600" />
-                      <div>
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                          Attendance Log
-                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
-                            {attendanceDateQuery.trim()
-                              ? "Filtered Log"
-                              : isAttendanceExpanded
-                              ? "30 Days Log"
-                              : "Last 7 Days"}
-                          </span>
-                        </h3>
-                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                          {attendanceDateQuery.trim()
-                            ? `Showing search results for date matching "${attendanceDateQuery}"`
-                            : isAttendanceExpanded
-                            ? "Showing complete 30-day attendance record for current month"
-                            : "Showing recent 7 days attendance summary. Expand to view full 30 days."}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* Date Search Input */}
-                      <div className="relative">
-                        <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                        <input
-                          type="text"
-                          value={attendanceDateQuery}
-                          onChange={(e) => setAttendanceDateQuery(e.target.value)}
-                          placeholder="Search date (e.g. 05 Aug or Jul 2026)..."
-                          className="h-8 w-52 rounded-xl border border-slate-300 bg-white pl-8 pr-7 text-xs font-medium text-slate-800 shadow-2xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        />
-                        {attendanceDateQuery && (
-                          <button
-                            type="button"
-                            onClick={() => setAttendanceDateQuery("")}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setIsAttendanceExpanded(!isAttendanceExpanded)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 shadow-2xs transition-all cursor-pointer"
-                      >
-                        <span>{isAttendanceExpanded ? "Collapse to 7 Days" : "Expand 30 Days Attendance"}</span>
-                        <ChevronDown className={cn("h-4 w-4 text-slate-500 transition-transform duration-200", isAttendanceExpanded && "rotate-180")} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase border-b border-slate-200">
-                        <tr>
-                          <th className="py-2.5 px-3">Date</th>
-                          <th className="py-2.5 px-3">Shift</th>
-                          <th className="py-2.5 px-3">In Time</th>
-                          <th className="py-2.5 px-3">Out Time</th>
-                          <th className="py-2.5 px-3">Total Hours</th>
-                          <th className="py-2.5 px-3">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {[
-                          { date: "07 Aug 2026", shift: "Morning Shift", in: "08:58 AM", out: "05:02 PM", hrs: "8.0 Hrs", status: "Present" },
-                          { date: "06 Aug 2026", shift: "Morning Shift", in: "09:12 AM", out: "05:15 PM", hrs: "8.0 Hrs", status: "Late" },
-                          { date: "05 Aug 2026", shift: "Morning Shift", in: "08:55 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
-                          { date: "04 Aug 2026", shift: "Morning Shift", in: "08:52 AM", out: "05:10 PM", hrs: "8.2 Hrs", status: "Present" },
-                          { date: "03 Aug 2026", shift: "Weekly Off", in: "-", out: "-", hrs: "0.0 Hrs", status: "Weekly Off" },
-                          { date: "02 Aug 2026", shift: "Morning Shift", in: "09:00 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
-                          { date: "01 Aug 2026", shift: "Morning Shift", in: "08:59 AM", out: "05:05 PM", hrs: "8.1 Hrs", status: "Present" },
-                          { date: "31 Jul 2026", shift: "Morning Shift", in: "08:56 AM", out: "05:01 PM", hrs: "8.0 Hrs", status: "Present" },
-                          { date: "30 Jul 2026", shift: "Morning Shift", in: "09:20 AM", out: "05:30 PM", hrs: "8.1 Hrs", status: "Late" },
-                          { date: "29 Jul 2026", shift: "Morning Shift", in: "08:50 AM", out: "05:00 PM", hrs: "8.1 Hrs", status: "Present" },
-                          { date: "28 Jul 2026", shift: "Morning Shift", in: "08:54 AM", out: "05:05 PM", hrs: "8.1 Hrs", status: "Present" },
-                          { date: "27 Jul 2026", shift: "Weekly Off", in: "-", out: "-", hrs: "0.0 Hrs", status: "Weekly Off" },
-                          { date: "26 Jul 2026", shift: "Morning Shift", in: "08:58 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
-                          { date: "25 Jul 2026", shift: "Morning Shift", in: "09:02 AM", out: "05:10 PM", hrs: "8.1 Hrs", status: "Present" },
-                          { date: "24 Jul 2026", shift: "Morning Shift", in: "08:50 AM", out: "05:00 PM", hrs: "8.1 Hrs", status: "Present" },
-                          { date: "23 Jul 2026", shift: "Morning Shift", in: "08:55 AM", out: "05:05 PM", hrs: "8.1 Hrs", status: "Present" },
-                          { date: "22 Jul 2026", shift: "Casual Leave", in: "-", out: "-", hrs: "0.0 Hrs", status: "Leave" },
-                          { date: "21 Jul 2026", shift: "Morning Shift", in: "08:57 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
-                          { date: "20 Jul 2026", shift: "Weekly Off", in: "-", out: "-", hrs: "0.0 Hrs", status: "Weekly Off" },
-                          { date: "19 Jul 2026", shift: "Morning Shift", in: "08:52 AM", out: "05:05 PM", hrs: "8.2 Hrs", status: "Present" },
-                          { date: "18 Jul 2026", shift: "Morning Shift", in: "08:58 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
-                          { date: "17 Jul 2026", shift: "Morning Shift", in: "08:55 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
-                          { date: "16 Jul 2026", shift: "Morning Shift", in: "09:00 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
-                          { date: "15 Jul 2026", shift: "Morning Shift", in: "08:48 AM", out: "05:00 PM", hrs: "8.2 Hrs", status: "Present" },
-                          { date: "14 Jul 2026", shift: "Morning Shift", in: "-", out: "-", hrs: "0.0 Hrs", status: "Absent" },
-                          { date: "13 Jul 2026", shift: "Weekly Off", in: "-", out: "-", hrs: "0.0 Hrs", status: "Weekly Off" },
-                          { date: "12 Jul 2026", shift: "Morning Shift", in: "08:56 AM", out: "05:02 PM", hrs: "8.1 Hrs", status: "Present" },
-                          { date: "11 Jul 2026", shift: "Morning Shift", in: "08:54 AM", out: "05:05 PM", hrs: "8.1 Hrs", status: "Present" },
-                          { date: "10 Jul 2026", shift: "Morning Shift", in: "08:58 AM", out: "05:00 PM", hrs: "8.0 Hrs", status: "Present" },
-                          { date: "09 Jul 2026", shift: "Morning Shift", in: "08:50 AM", out: "05:00 PM", hrs: "8.1 Hrs", status: "Present" },
-                        ]
-                          .filter((row) => {
-                            if (!attendanceDateQuery.trim()) return true;
-                            const q = attendanceDateQuery.toLowerCase().trim();
-                            return (
-                              row.date.toLowerCase().includes(q) ||
-                              row.shift.toLowerCase().includes(q) ||
-                              row.status.toLowerCase().includes(q)
-                            );
-                          })
-                          .slice(0, attendanceDateQuery.trim() ? 30 : isAttendanceExpanded ? 30 : 7)
-                          .map((row, i) => (
-                            <tr key={i} className="hover:bg-slate-50 transition-colors">
-                              <td className="py-2.5 px-3 font-semibold text-slate-800">{row.date}</td>
-                              <td className="py-2.5 px-3 text-slate-600">{row.shift}</td>
-                              <td className="py-2.5 px-3 text-slate-700 font-mono">{row.in}</td>
-                              <td className="py-2.5 px-3 text-slate-700 font-mono">{row.out}</td>
-                              <td className="py-2.5 px-3 text-slate-700 font-medium">{row.hrs}</td>
-                              <td className="py-2.5 px-3">
-                                <span
-                                  className={cn(
-                                    "px-2 py-0.5 rounded-full text-[10px] font-bold border",
-                                    row.status === "Present"
-                                      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                      : row.status === "Late"
-                                      ? "bg-amber-100 text-amber-800 border-amber-200"
-                                      : row.status === "Absent"
-                                      ? "bg-rose-100 text-rose-800 border-rose-200"
-                                      : row.status === "Leave"
-                                      ? "bg-purple-100 text-purple-800 border-purple-200"
-                                      : "bg-slate-100 text-slate-700 border-slate-200"
-                                  )}
-                                >
-                                  {row.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Expand / Collapse Footer Banner */}
-                  <div className="pt-2 text-center border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setIsAttendanceExpanded(!isAttendanceExpanded)}
-                      className="text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:underline inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      {isAttendanceExpanded ? (
-                        <>Show Fewer Days (Collapse to 7)</>
-                      ) : (
-                        <>View Full 30 Days Attendance Log ({30 - 7} More Days available) &rarr;</>
-                      )}
-                    </button>
-                  </div>
-                </section>
-              </div>
+              <EmployeeAttendanceGrid
+                employeeId={employee.id}
+                joinDate={employee.joinDate}
+                shiftType={employee.shiftType}
+                sideCalendar
+                leadingContent={
+                  <ProfileCard title="Current shift">
+                    <CurrentShiftPanel shiftType={employee.shiftType} />
+                  </ProfileCard>
+                }
+              />
             )}
 
             {/* ─────────────────────────────────────────────────────────────
                 SECTION 6: TAB 4 - LEAVE MANAGEMENT (Categorized Balances & 2026 History Log)
             ───────────────────────────────────────────────────────────── */}
             {activeTab === "leave" && (
-              <div className="space-y-5">
-                {/* Categorized Leave Quota Balances (Improvement #8) */}
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div className="rounded-2xl border border-blue-200 bg-white p-4 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-blue-900">Casual Leave (CL)</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
-                        10 Allocated
+              <div className="space-y-4 animate-in fade-in duration-200" role="tabpanel">
+                <ProfileCard title="Leave balance">
+                  <LeaveBalancePanel balances={LEAVE_BALANCES} />
+                  <p className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {LEAVE_BALANCES.map((item) => (
+                      <span key={item.label}>
+                        {item.label.split(" (")[0]}: {item.used} used of {item.allocated}
                       </span>
-                    </div>
-                    <p className="text-2xl font-black text-blue-900 mt-2">8 Days Left</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">2 days used this year</p>
-                  </div>
+                    ))}
+                  </p>
+                </ProfileCard>
 
-                  <div className="rounded-2xl border border-rose-200 bg-white p-4 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-rose-900">Sick Leave (SL)</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
-                        12 Allocated
-                      </span>
-                    </div>
-                    <p className="text-2xl font-black text-rose-900 mt-2">9 Days Left</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">3 days used this year</p>
-                  </div>
-
-                  <div className="rounded-2xl border border-purple-200 bg-white p-4 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-purple-900">Earned Leave (EL)</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">
-                        15 Allocated
-                      </span>
-                    </div>
-                    <p className="text-2xl font-black text-purple-900 mt-2">10 Days Left</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">5 days used this year</p>
-                  </div>
-
-                  <div className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-emerald-900">Compensatory Off</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                        Earned Rest
-                      </span>
-                    </div>
-                    <p className="text-2xl font-black text-emerald-900 mt-2">2 Days Left</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Available for use</p>
-                  </div>
-                </div>
-
-                {/* 2026 Comprehensive Leave History Table (Improvement #8) */}
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3 text-xs">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
-                    <Calendar className="h-4 w-4 text-emerald-600" />
-                    Year 2026 Complete Leave Application History
-                  </h3>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase border-b border-slate-200">
-                        <tr>
-                          <th className="py-2.5 px-3">Leave Type</th>
-                          <th className="py-2.5 px-3">Date Range</th>
-                          <th className="py-2.5 px-3">Days</th>
-                          <th className="py-2.5 px-3">Reason</th>
-                          <th className="py-2.5 px-3">Status</th>
-                          <th className="py-2.5 px-3">Approved By</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {[
-                          { type: "Casual Leave (CL)", dates: "10 Aug - 12 Aug 2026", days: "3 Days", reason: "Family commitment", status: "Pending", approvedBy: "Pending HR Review" },
-                          { type: "Sick Leave (SL)", dates: "15 Jul 2026", days: "1 Day", reason: "Viral fever recovery", status: "Approved", approvedBy: "Neha Mehta (HR)" },
-                          { type: "Earned Leave (EL)", dates: "10 Jun - 14 Jun 2026", days: "5 Days", reason: "Annual family vacation", status: "Approved", approvedBy: "Neha Mehta (HR)" },
-                          { type: "Comp Off (COMP)", dates: "02 May 2026", days: "1 Day", reason: "Worked Sunday banquet shift", status: "Approved", approvedBy: "F&B Manager" },
-                        ].map((req, i) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="py-2.5 px-3 font-semibold text-slate-800">{req.type}</td>
-                            <td className="py-2.5 px-3 text-slate-700">{req.dates}</td>
-                            <td className="py-2.5 px-3 text-slate-900 font-bold">{req.days}</td>
-                            <td className="py-2.5 px-3 text-slate-600 italic">"{req.reason}"</td>
-                            <td className="py-2.5 px-3">
-                              <span
-                                className={cn(
-                                  "px-2 py-0.5 rounded-full text-[10px] font-bold border",
-                                  req.status === "Approved"
-                                    ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                    : "bg-amber-100 text-amber-800 border-amber-200"
-                                )}
-                              >
-                                {req.status}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-500 font-medium">{req.approvedBy}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                <ProfileCard title="Leave history — 2026">
+                  <LeaveHistoryPanel rows={LEAVE_HISTORY} />
+                </ProfileCard>
               </div>
             )}
 
@@ -1223,156 +965,61 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                 SECTION 7: TAB 5 - PAYROLL (Bank, UAN, PF, ESIC)
             ───────────────────────────────────────────────────────────── */}
             {activeTab === "payroll" && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4 text-xs">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
-                  <CreditCard className="h-4 w-4 text-purple-600" />
-                  Compensation Breakdown &amp; Statutory Details
-                </h3>
+              <div className="space-y-4 animate-in fade-in duration-200" role="tabpanel">
+                <ProfileCard title="Salary structure">
+                  <PayrollSalaryPanel employee={employee} />
+                </ProfileCard>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Salary Structure Box */}
-                  <div className="space-y-2 rounded-xl border border-slate-200 p-4 bg-slate-50/70">
-                    <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-2 flex items-center justify-between">
-                      <span>Salary Structure</span>
-                      <span className="text-emerald-700">Monthly CTC</span>
-                    </p>
-                    <div className="flex justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-600">Monthly Gross Salary:</span>
-                      <span className="font-bold text-emerald-700 text-sm">₹{employee.salary.toLocaleString("en-IN")}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-600">Basic Pay (50%):</span>
-                      <span className="font-bold text-slate-800">₹{(employee.salary * 0.5).toLocaleString("en-IN")}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-600">HRA Component (30%):</span>
-                      <span className="font-bold text-slate-800">₹{(employee.salary * 0.3).toLocaleString("en-IN")}</span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span className="text-slate-600">Special Allowance (20%):</span>
-                      <span className="font-bold text-slate-800">₹{(employee.salary * 0.2).toLocaleString("en-IN")}</span>
-                    </div>
-                  </div>
+                <ProfileCard title="Bank details">
+                  <PayrollBankPanel employee={employee} />
+                </ProfileCard>
 
-                  {/* Bank & Statutory Details Box (Bank, UAN, PF, ESIC) */}
-                  <div className="space-y-2 rounded-xl border border-slate-200 p-4 bg-slate-50/70">
-                    <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-2 flex items-center justify-between">
-                      <span>Bank &amp; Statutory Registrations</span>
-                      <span className="text-[10px] text-slate-400 font-normal italic">PAN &amp; Bank Required</span>
-                    </p>
-                    <div className="flex justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-600">Bank Name:</span>
-                      <span className="font-bold text-slate-900">{employee.bankName || "HDFC Bank Ltd"}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-600">Account Number (Masked):</span>
-                      <span className="font-mono font-bold text-slate-900">{employee.bankAccount ? `•••• ${employee.bankAccount.slice(-4)}` : "•••• •••• 4821"}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-600">IFSC Code:</span>
-                      <span className="font-mono font-bold text-slate-900">{employee.ifscCode || "HDFC0001234"}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-600">PAN Number:</span>
-                      <span className="font-mono font-bold text-slate-900">{employee.panNumber || "ABCDE1234F"}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-600 flex items-center gap-1">
-                        UAN (PF) Number:
-                        <span className="text-[9px] font-normal text-slate-400 italic">(Optional)</span>
-                      </span>
-                      <span className="font-mono font-bold text-slate-900">{employee.uanNumber || "101293847501"}</span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span className="text-slate-600 flex items-center gap-1">
-                        ESIC Registration No:
-                        <span className="text-[9px] font-normal text-slate-400 italic">(Optional)</span>
-                      </span>
-                      <span className="font-mono font-bold text-slate-900">{employee.esicNumber || "31000482910001"}</span>
-                    </div>
-                  </div>
-                </div>
-              </section>
+                <ProfileCard title="Statutory">
+                  <PayrollStatutoryPanel employee={employee} />
+                </ProfileCard>
+              </div>
             )}
 
             {/* ─────────────────────────────────────────────────────────────
                 SECTION 8: TAB 6 - CATEGORIZED DOCUMENTS ⭐⭐⭐
             ───────────────────────────────────────────────────────────── */}
             {activeTab === "documents" && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200">
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-900">Employee Document Vault</h3>
-                    <p className="text-xs text-slate-500">Categorized compliance, credentials, and employment agreements.</p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setToastMessage("Opening document upload dialog...")}
-                    className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold"
-                  >
-                    <Upload className="mr-1.5 h-3.5 w-3.5" />
-                    Upload Document
-                  </Button>
-                </div>
+              <div className="space-y-4 animate-in fade-in duration-200" role="tabpanel">
+                <ProfileCard
+                  title="Document vault"
+                  action={
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setToastMessage("Opening document upload dialog...")}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold h-8"
+                    >
+                      <Upload className="mr-1.5 h-3.5 w-3.5" />
+                      Upload
+                    </Button>
+                  }
+                >
+                  <p className="text-xs text-slate-500 -mt-1">
+                    Compliance, credentials, and employment agreements for {employee.name}.
+                  </p>
+                </ProfileCard>
 
-                {/* Categorized Document Groups */}
-                {[
-                  { title: "Identity Proof", docs: CATEGORIZED_DOCUMENTS.filter((d) => d.category === "Identity Proof") },
-                  { title: "Education & Qualifications", docs: CATEGORIZED_DOCUMENTS.filter((d) => d.category === "Education") },
-                  { title: "Employment & Contracts", docs: CATEGORIZED_DOCUMENTS.filter((d) => d.category === "Employment") },
-                  { title: "Financial & Tax", docs: CATEGORIZED_DOCUMENTS.filter((d) => d.category === "Financial") },
-                  { title: "Medical Fitness", docs: CATEGORIZED_DOCUMENTS.filter((d) => d.category === "Medical") },
-                  { title: "Compliance & Declarations", docs: CATEGORIZED_DOCUMENTS.filter((d) => d.category === "Compliance") },
-                ].map((group) => (
-                  <section key={group.title} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3 text-xs">
-                    <h4 className="font-bold text-xs uppercase tracking-wider text-slate-800 flex items-center justify-between border-b border-slate-100 pb-2">
-                      <span>{group.title}</span>
-                      <span className="text-[10px] font-semibold text-slate-400">({group.docs.length} items)</span>
-                    </h4>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {group.docs.map((doc) => (
-                        <div
-                          key={doc.id}
-                          className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100/80 transition"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="p-2 rounded-lg bg-white border border-slate-200 shrink-0">
-                              <FileText className="h-4 w-4 text-emerald-700" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-bold text-slate-900 truncate">{doc.name}</p>
-                              <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                                <span>{doc.uploadDate || "Pending"}</span>
-                                {doc.fileSize && <span>• {doc.fileSize}</span>}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            {renderDocStatusBadge(doc.status)}
-                            <button
-                              type="button"
-                              onClick={() => setToastMessage(`Opening preview for ${doc.name}...`)}
-                              className="p-1 text-slate-500 hover:text-emerald-700 rounded-md"
-                              title="View Document"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setToastMessage(`Downloading ${doc.name}...`)}
-                              className="p-1 text-slate-500 hover:text-emerald-700 rounded-md"
-                              title="Download"
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
+                {DOCUMENT_CATEGORIES.map((category) => (
+                  <DocumentCategoryPanel
+                    key={category}
+                    title={DOCUMENT_CATEGORY_LABELS[category]}
+                    documents={CATEGORIZED_DOCUMENTS.filter((d) => d.category === category).map(
+                      (doc) => ({
+                        id: doc.id,
+                        name: doc.name,
+                        status: renderDocStatusBadge(doc.status),
+                        uploadDate: doc.uploadDate,
+                        fileSize: doc.fileSize,
+                        onView: () => setToastMessage(`Opening preview for ${doc.name}...`),
+                        onDownload: () => setToastMessage(`Downloading ${doc.name}...`),
+                      }),
+                    )}
+                  />
                 ))}
               </div>
             )}
@@ -1381,76 +1028,32 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                 SECTION 9 & 11: TAB 7 - GRIEVANCES (Status Badges + Empty State)
             ───────────────────────────────────────────────────────────── */}
             {activeTab === "grievances" && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4 text-xs">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
-                  <MessageSquareWarning className="h-4 w-4 text-rose-600" />
-                  Grievances &amp; Complaint History
-                </h3>
-
-                {SAMPLE_GRIEVANCES[employee.id]?.length > 0 ? (
-                  <div className="space-y-3">
-                    {SAMPLE_GRIEVANCES[employee.id].map((ticket) => (
-                      <div key={ticket.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-900">{ticket.ticketNo}</span>
-                            <span className="text-slate-500">• {ticket.category}</span>
-                          </div>
-                          <span
-                            className={cn(
-                              "px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
-                              ticket.status === "Open" && "bg-amber-100 text-amber-800 border-amber-300",
-                              ticket.status === "Resolved" && "bg-emerald-100 text-emerald-800 border-emerald-300",
-                              ticket.status === "Escalated" && "bg-purple-100 text-purple-800 border-purple-300",
-                              ticket.status === "Closed" && "bg-slate-100 text-slate-800 border-slate-300"
-                            )}
-                          >
-                            {ticket.status}
-                          </span>
-                        </div>
-                        <p className="font-semibold text-slate-800">{ticket.subject}</p>
-                        {ticket.resolutionNote && (
-                          <p className="text-[11px] text-slate-500 bg-white p-2 rounded-lg border border-slate-200">
-                            <strong>Note:</strong> {ticket.resolutionNote}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  /* Proper Empty State */
-                  <div className="py-12 text-center">
-                    <ShieldCheck className="h-10 w-10 text-emerald-500 mx-auto mb-2" />
-                    <h4 className="font-bold text-sm text-slate-800">No Grievances Found</h4>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {employee.name} has a clean record with no open or past complaint tickets.
-                    </p>
-                  </div>
-                )}
-              </section>
+              <ProfileCard title="Grievances" className="animate-in fade-in duration-200" role="tabpanel">
+                <GrievancesPanel
+                  grievances={SAMPLE_GRIEVANCES[employee.id] ?? []}
+                  employeeName={employee.name}
+                />
+              </ProfileCard>
             )}
 
             {/* ─────────────────────────────────────────────────────────────
                 SECTION 10: TAB 8 - ACTIVITY LOG (With Filters)
             ───────────────────────────────────────────────────────────── */}
             {activeTab === "activity" && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4 text-xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                    <History className="h-4 w-4 text-slate-600" />
-                    Recent Activity &amp; Audit Trail
-                  </h3>
-
-                  {/* Filters Toolbar */}
+              <ProfileCard
+                title="Activity log"
+                className="animate-in fade-in duration-200"
+                role="tabpanel"
+                action={
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-1">
                       <Filter className="h-3 w-3 text-slate-400" />
                       <select
                         value={activityCategoryFilter}
                         onChange={(e) => setActivityCategoryFilter(e.target.value)}
-                        className="text-xs rounded-lg border border-slate-200 py-1 px-2 bg-slate-50 font-medium"
+                        className="text-xs rounded-lg border border-slate-200 py-1 px-2 bg-white font-medium text-slate-700"
                       >
-                        <option value="ALL">All Categories</option>
+                        <option value="ALL">All categories</option>
                         <option value="Attendance">Attendance</option>
                         <option value="Leave">Leave</option>
                         <option value="Payroll">Payroll</option>
@@ -1458,48 +1061,21 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                         <option value="Profile">Profile</option>
                       </select>
                     </div>
-
                     <select
                       value={activityTimeframeFilter}
                       onChange={(e) => setActivityTimeframeFilter(e.target.value)}
-                      className="text-xs rounded-lg border border-slate-200 py-1 px-2 bg-slate-50 font-medium"
+                      className="text-xs rounded-lg border border-slate-200 py-1 px-2 bg-white font-medium text-slate-700"
                     >
-                      <option value="ALL">All Time</option>
+                      <option value="ALL">All time</option>
                       <option value="Today">Today</option>
                       <option value="Yesterday">Yesterday</option>
-                      <option value="Last Week">Last Week</option>
+                      <option value="Last Week">Last week</option>
                     </select>
                   </div>
-                </div>
-
-                {filteredActivities.length === 0 ? (
-                  <div className="py-10 text-center text-slate-400">
-                    No activity logs match your filter criteria.
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {filteredActivities.map((act) => (
-                      <div key={act.id} className="p-3 rounded-xl bg-slate-50/80 border border-slate-200 flex items-start gap-3">
-                        <div className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-500 shrink-0 mt-0.5">
-                          <History className="h-3.5 w-3.5 text-emerald-700" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-bold text-slate-900">{act.description}</span>
-                            <span className="text-[10px] text-slate-400 font-mono shrink-0">{act.timestamp}</span>
-                          </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-200 text-slate-700">
-                              {act.category}
-                            </span>
-                            <span className="text-[11px] text-slate-500">By {act.actor}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+                }
+              >
+                <ActivityLogPanel items={filteredActivities} />
+              </ProfileCard>
             )}
           </div>
         </>

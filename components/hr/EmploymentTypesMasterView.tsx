@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Briefcase,
   Search,
@@ -24,6 +24,8 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { hrEmploymentTypeService } from "@/services/human-resources";
+import { mapEmploymentTypeFromApi, mapEmploymentTypeToApi } from "@/lib/hr/api-mappers";
 
 export type EmploymentTypeStatus = "Active" | "Inactive";
 export type WorkingTerm = "Full-Time" | "Part-Time" | "Shift-Based" | "Contractual" | "Temporary";
@@ -44,87 +46,23 @@ export interface EmploymentTypeMaster {
   employeeCount: number;
 }
 
-export const INITIAL_EMPLOYMENT_TYPES: EmploymentTypeMaster[] = [
-  {
-    id: "ET-001",
-    typeCode: "EMP-PERM",
-    typeName: "Permanent / Full-Time",
-    workingTerm: "Full-Time",
-    probationDays: 90,
-    noticePeriodDays: 30,
-    pfEligible: true,
-    esiEligible: true,
-    leaveEligible: true,
-    description: "Regular full-time salaried hotel staff entitled to PF, ESI, gratuity, paid leave, and annual bonus.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 88,
-  },
-  {
-    id: "ET-002",
-    typeCode: "EMP-PROB",
-    typeName: "Probationer Staff",
-    workingTerm: "Full-Time",
-    probationDays: 180,
-    noticePeriodDays: 15,
-    pfEligible: true,
-    esiEligible: true,
-    leaveEligible: true,
-    description: "New hires undergoing mandatory 3-to-6 month evaluation prior to permanent absorption.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 14,
-  },
-  {
-    id: "ET-003",
-    typeCode: "EMP-CONT",
-    typeName: "Fixed-Term Contract",
-    workingTerm: "Contractual",
-    probationDays: 30,
-    noticePeriodDays: 15,
-    pfEligible: true,
-    esiEligible: true,
-    leaveEligible: false,
-    description: "Contractual personnel hired for specific seasonal peak periods or fixed project durations.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 18,
-  },
-  {
-    id: "ET-004",
-    typeCode: "EMP-TRAIN",
-    typeName: "Trainee / Apprentice",
-    workingTerm: "Part-Time",
-    probationDays: 90,
-    noticePeriodDays: 7,
-    pfEligible: false,
-    esiEligible: true,
-    leaveEligible: false,
-    description: "Hotel management trainees receiving stipend and hands-on operational rotation across departments.",
-    status: "Active",
-    createdDate: "15/01/2025",
-    employeeCount: 6,
-  },
-  {
-    id: "ET-005",
-    typeCode: "EMP-CASUAL",
-    typeName: "Casual / Banquet On-Call",
-    workingTerm: "Temporary",
-    probationDays: 0,
-    noticePeriodDays: 0,
-    pfEligible: false,
-    esiEligible: false,
-    leaveEligible: false,
-    description: "Daily wage staff deployed during mega banquet events, wedding functions, and convention rushes.",
-    status: "Active",
-    createdDate: "01/02/2025",
-    employeeCount: 12,
-  },
-];
-
 export function EmploymentTypesMasterView() {
-  const [types, setTypes] = useState<EmploymentTypeMaster[]>(INITIAL_EMPLOYMENT_TYPES);
+  const [types, setTypes] = useState<EmploymentTypeMaster[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const loadTypes = async () => {
+    try {
+      const rows = await hrEmploymentTypeService.list();
+      setTypes(rows.map(mapEmploymentTypeFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load employment types");
+      setTypes([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadTypes();
+  }, []);
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -212,7 +150,7 @@ export function EmploymentTypesMasterView() {
   };
 
   // Save Employment Type (Duplicate check)
-  const handleSaveType = (e: React.FormEvent) => {
+  const handleSaveType = async (e: React.FormEvent) => {
     e.preventDefault();
     setNameError("");
     setCodeError("");
@@ -230,7 +168,6 @@ export function EmploymentTypesMasterView() {
       return;
     }
 
-    // Duplicate check for name
     const isDuplicate = types.some(
       (t) =>
         t.typeName.toLowerCase() === trimmedName.toLowerCase() &&
@@ -242,61 +179,46 @@ export function EmploymentTypesMasterView() {
       return;
     }
 
-    if (editingType) {
-      setTypes((prev) =>
-        prev.map((t) =>
-          t.id === editingType.id
-            ? {
-                ...t,
-                typeCode: trimmedCode,
-                typeName: trimmedName,
-                workingTerm: formWorkingTerm,
-                probationDays: Number(formProbation),
-                noticePeriodDays: Number(formNotice),
-                pfEligible: formPfEligible,
-                esiEligible: formEsiEligible,
-                leaveEligible: formLeaveEligible,
-                description: formDescription.trim(),
-                status: formStatus,
-              }
-            : t
-        )
-      );
-      setToastMessage(`Updated employment type "${trimmedName}".`);
-    } else {
-      const newType: EmploymentTypeMaster = {
-        id: `ET-${Math.floor(100 + Math.random() * 900)}`,
-        typeCode: trimmedCode,
-        typeName: trimmedName,
-        workingTerm: formWorkingTerm,
-        probationDays: Number(formProbation),
-        noticePeriodDays: Number(formNotice),
-        pfEligible: formPfEligible,
-        esiEligible: formEsiEligible,
-        leaveEligible: formLeaveEligible,
-        description: formDescription.trim(),
-        status: formStatus,
-        createdDate: new Date().toLocaleDateString("en-GB"),
-        employeeCount: 0,
-      };
-      setTypes((prev) => [newType, ...prev]);
-      setToastMessage(`Created employment type "${trimmedName}".`);
+    const payload = mapEmploymentTypeToApi({
+      typeCode: trimmedCode,
+      typeName: trimmedName,
+      workingTerm: formWorkingTerm,
+      probationDays: Number(formProbation),
+      noticePeriodDays: Number(formNotice),
+      pfEligible: formPfEligible,
+      esiEligible: formEsiEligible,
+      leaveEligible: formLeaveEligible,
+      description: formDescription.trim(),
+      status: formStatus,
+    });
+
+    try {
+      if (editingType) {
+        await hrEmploymentTypeService.update(editingType.id, payload);
+        setToastMessage(`Updated employment type "${trimmedName}".`);
+      } else {
+        await hrEmploymentTypeService.create(payload);
+        setToastMessage(`Created employment type "${trimmedName}".`);
+      }
+      await loadTypes();
+      setIsModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save employment type");
     }
-
-    setIsModalOpen(false);
   };
 
-  // Toggle Activate / Deactivate
-  const handleToggleStatus = (t: EmploymentTypeMaster) => {
+  const handleToggleStatus = async (t: EmploymentTypeMaster) => {
     const nextStatus: EmploymentTypeStatus = t.status === "Active" ? "Inactive" : "Active";
-    setTypes((prev) =>
-      prev.map((item) => (item.id === t.id ? { ...item, status: nextStatus } : item))
-    );
-    setToastMessage(`Employment type "${t.typeName}" is now ${nextStatus}.`);
+    try {
+      await hrEmploymentTypeService.update(t.id, { status: nextStatus });
+      await loadTypes();
+      setToastMessage(`Employment type "${t.typeName}" is now ${nextStatus}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update status");
+    }
   };
 
-  // Delete Employment Type with Usage Guard
-  const handleDeleteType = (t: EmploymentTypeMaster) => {
+  const handleDeleteType = async (t: EmploymentTypeMaster) => {
     if (t.employeeCount > 0) {
       alert(
         `Cannot delete "${t.typeName}" because it has ${t.employeeCount} active employee(s) assigned to this category. Reassign employees before deleting, or deactivate this type instead.`
@@ -305,9 +227,14 @@ export function EmploymentTypesMasterView() {
     }
 
     if (confirm(`Are you sure you want to delete employment type "${t.typeName}"?`)) {
-      setTypes((prev) => prev.filter((item) => item.id !== t.id));
-      if (viewingType?.id === t.id) setViewingType(null);
-      setToastMessage(`Deleted employment type "${t.typeName}".`);
+      try {
+        await hrEmploymentTypeService.remove(t.id);
+        if (viewingType?.id === t.id) setViewingType(null);
+        await loadTypes();
+        setToastMessage(`Deleted employment type "${t.typeName}".`);
+      } catch (err) {
+        setToastMessage(err instanceof Error ? err.message : "Failed to delete employment type");
+      }
     }
   };
 

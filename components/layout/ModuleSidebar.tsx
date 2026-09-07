@@ -80,6 +80,23 @@ import {
   Settings,
   Globe,
   CarTaxiFront,
+  Briefcase,
+  Sun,
+  CalendarHeart,
+  CalendarRange,
+  FileCog,
+  Repeat,
+  Calendar,
+  Timer,
+  CalendarOff,
+  Plane,
+  GitBranch,
+  MessageSquareWarning,
+  ListTodo,
+  Tags,
+  Activity,
+  List,
+  LogIn,
 } from "lucide-react";
 import type { ModuleNavItem } from "@/app/data/types";
 import { cn } from "@/lib/utils";
@@ -158,6 +175,23 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   scale: Scale,
   "folder-kanban": FolderKanban,
   settings: Settings,
+  briefcase: Briefcase,
+  sun: Sun,
+  "calendar-heart": CalendarHeart,
+  "calendar-range": CalendarRange,
+  "file-cog": FileCog,
+  repeat: Repeat,
+  calendar: Calendar,
+  timer: Timer,
+  "calendar-off": CalendarOff,
+  plane: Plane,
+  "git-branch": GitBranch,
+  "message-square-warning": MessageSquareWarning,
+  "list-todo": ListTodo,
+  tags: Tags,
+  activity: Activity,
+  list: List,
+  "log-in": LogIn,
 };
 
 interface ModuleSidebarProps {
@@ -583,7 +617,7 @@ export function ModuleSidebar({ title, subtitle = "Module menu", items }: Module
 
       {/* Desktop — always collapsed; hover expands as overlapping panel */}
       <aside
-        className="relative z-30 hidden h-screen w-16 shrink-0 overflow-visible lg:block"
+        className="relative z-50 hidden h-screen w-16 shrink-0 overflow-visible lg:block"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
@@ -597,7 +631,7 @@ export function ModuleSidebar({ title, subtitle = "Module menu", items }: Module
 
         <div
           className={cn(
-            "sidebar-scroll absolute left-0 top-0 z-40 flex h-full w-72 flex-col overflow-x-hidden border-r border-slate-800 bg-black shadow-2xl transition-[opacity,transform] duration-200 ease-out",
+            "sidebar-scroll absolute left-0 top-0 z-50 flex h-full w-72 flex-col overflow-x-hidden border-r border-slate-800 bg-black shadow-2xl transition-[opacity,transform] duration-200 ease-out",
             hovered
               ? "pointer-events-auto translate-x-0 opacity-100"
               : "pointer-events-none -translate-x-1 opacity-0",

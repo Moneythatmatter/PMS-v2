@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   FolderKanban,
   Search,
@@ -19,6 +19,8 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { hrComplaintCategoryService } from "@/services/human-resources";
+import { mapComplaintCategoryFromApi, mapComplaintCategoryToApi } from "@/lib/hr/api-mappers";
 
 export type ComplaintCategoryStatus = "Active" | "Inactive";
 
@@ -35,156 +37,22 @@ export interface ComplaintCategory {
 }
 
 // 16 Default Categories with Configurable Review Levels
-export const INITIAL_COMPLAINT_CATEGORIES: ComplaintCategory[] = [
-  {
-    id: "CAT-001",
-    categoryName: "Payroll & Salary Issues",
-    description: "Discrepancies in monthly pay, allowances, OT pay, or statutory deductions.",
-    reviewLevel: "Standard",
-    status: "Active",
-    createdDate: "01/01/2026",
-    complaintsCount: 14,
-  },
-  {
-    id: "CAT-002",
-    categoryName: "Attendance Issues",
-    description: "Biometric punch errors, missing attendance marks, or late arrival disputes.",
-    reviewLevel: "Standard",
-    status: "Active",
-    createdDate: "01/01/2026",
-    complaintsCount: 8,
-  },
-  {
-    id: "CAT-003",
-    categoryName: "Leave Related Issues",
-    description: "Delayed leave approval, balance mismatch, or unapproved leave deductions.",
-    reviewLevel: "Standard",
-    status: "Active",
-    createdDate: "05/01/2026",
-    complaintsCount: 5,
-  },
-  {
-    id: "CAT-004",
-    categoryName: "Shift Scheduling Issues",
-    description: "Unfair roster distribution, consecutive night shifts, or short notice changes.",
-    reviewLevel: "Standard",
-    status: "Active",
-    createdDate: "10/01/2026",
-    complaintsCount: 12,
-  },
-  {
-    id: "CAT-005",
-    categoryName: "Overtime Issues",
-    description: "Unrecorded overtime hours or delayed OT calculation and payout.",
-    reviewLevel: "Standard",
-    status: "Active",
-    createdDate: "15/01/2026",
-    complaintsCount: 6,
-  },
-  {
-    id: "CAT-006",
-    categoryName: "Manager Complaint",
-    description: "Unprofessional conduct, unfair treatment, or communication issues with direct supervisors.",
-    reviewLevel: "Manager Review",
-    status: "Active",
-    createdDate: "20/01/2026",
-    complaintsCount: 3,
-  },
-  {
-    id: "CAT-007",
-    categoryName: "Team Conflict",
-    description: "Interpersonal disputes or uncooperative behavior between colleagues.",
-    reviewLevel: "Standard",
-    status: "Active",
-    createdDate: "25/01/2026",
-    complaintsCount: 4,
-  },
-  {
-    id: "CAT-008",
-    categoryName: "Workplace Harassment",
-    description: "Verbal abuse, intimidation, bullying, or hostile work environments.",
-    reviewLevel: "Senior Management Review",
-    status: "Active",
-    createdDate: "01/02/2026",
-    complaintsCount: 2,
-  },
-  {
-    id: "CAT-009",
-    categoryName: "Sexual Harassment (POSH)",
-    description: "Grievances reported under Prevention of Sexual Harassment (POSH) framework.",
-    reviewLevel: "Special Committee Review",
-    status: "Active",
-    createdDate: "01/02/2026",
-    complaintsCount: 1,
-  },
-  {
-    id: "CAT-010",
-    categoryName: "Discrimination",
-    description: "Biased treatment based on gender, race, religion, age, or background.",
-    reviewLevel: "Senior Management Review",
-    status: "Active",
-    createdDate: "05/02/2026",
-    complaintsCount: 0,
-  },
-  {
-    id: "CAT-011",
-    categoryName: "Workplace Safety",
-    description: "Hazards in kitchen, housekeeping, or engineering operations.",
-    reviewLevel: "Senior Management Review",
-    status: "Active",
-    createdDate: "10/02/2026",
-    complaintsCount: 7,
-  },
-  {
-    id: "CAT-012",
-    categoryName: "Policy Violation",
-    description: "Breaches of standard hotel operating procedures or company guidelines.",
-    reviewLevel: "Manager Review",
-    status: "Active",
-    createdDate: "15/02/2026",
-    complaintsCount: 3,
-  },
-  {
-    id: "CAT-013",
-    categoryName: "Facilities & Infrastructure",
-    description: "Staff cafeteria, locker room cleanliness, uniform size allocation, or rest areas.",
-    reviewLevel: "Standard",
-    status: "Active",
-    createdDate: "20/02/2026",
-    complaintsCount: 9,
-  },
-  {
-    id: "CAT-014",
-    categoryName: "IT/System Issues",
-    description: "PMS system access issues, email account errors, or hardware glitches.",
-    reviewLevel: "Standard",
-    status: "Active",
-    createdDate: "25/02/2026",
-    complaintsCount: 11,
-  },
-  {
-    id: "CAT-015",
-    categoryName: "Workload Concerns",
-    description: "Excessive operational pressure or inadequate staffing ratios.",
-    reviewLevel: "Manager Review",
-    status: "Active",
-    createdDate: "01/03/2026",
-    complaintsCount: 4,
-  },
-  {
-    id: "CAT-016",
-    categoryName: "Other",
-    description: "General complaints not explicitly covered under other categories.",
-    reviewLevel: "Standard",
-    status: "Active",
-    createdDate: "01/03/2026",
-    complaintsCount: 2,
-  },
-];
-
 export function ComplaintCategoriesView() {
-  const [categories, setCategories] = useState<ComplaintCategory[]>(INITIAL_COMPLAINT_CATEGORIES);
+  const [categories, setCategories] = useState<ComplaintCategory[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadCategories = async () => {
+    try {
+      const rows = await hrComplaintCategoryService.list();
+      setCategories(rows.map(mapComplaintCategoryFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load categories");
+      setCategories([]);
+    }
+  };
+
+  useEffect(() => { void loadCategories(); }, []);
+
+
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState("");
@@ -247,7 +115,7 @@ export function ComplaintCategoriesView() {
   };
 
   // Save Form Handler (Duplicate check)
-  const handleSaveCategory = (e: React.FormEvent) => {
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     setNameError("");
 
@@ -268,49 +136,40 @@ export function ComplaintCategoriesView() {
       return;
     }
 
-    if (editingCategory) {
-      setCategories((prev) =>
-        prev.map((c) =>
-          c.id === editingCategory.id
-            ? {
-                ...c,
-                categoryName: formName.trim(),
-                description: formDescription.trim(),
-                reviewLevel: formReviewLevel,
-                status: formStatus,
-              }
-            : c
-        )
-      );
-      setToastMessage(`Category "${formName.trim()}" updated successfully.`);
-    } else {
-      const newCategory: ComplaintCategory = {
-        id: `CAT-${Math.floor(100 + Math.random() * 900)}`,
-        categoryName: formName.trim(),
-        description: formDescription.trim(),
-        reviewLevel: formReviewLevel,
-        status: formStatus,
-        createdDate: new Date().toLocaleDateString("en-GB"),
-        complaintsCount: 0,
-      };
-      setCategories((prev) => [newCategory, ...prev]);
-      setToastMessage(`Category "${formName.trim()}" created successfully.`);
+    const payload = mapComplaintCategoryToApi({
+      categoryName: formName.trim(),
+      description: formDescription.trim(),
+      reviewLevel: formReviewLevel,
+      status: formStatus,
+    });
+
+    try {
+      if (editingCategory) {
+        await hrComplaintCategoryService.update(editingCategory.id, payload);
+        setToastMessage(`Category "${formName.trim()}" updated successfully.`);
+      } else {
+        await hrComplaintCategoryService.create(payload);
+        setToastMessage(`Category "${formName.trim()}" created successfully.`);
+      }
+      await loadCategories();
+      setIsModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save category");
     }
-
-    setIsModalOpen(false);
   };
 
-  // Toggle Activate / Deactivate
-  const handleToggleStatus = (category: ComplaintCategory) => {
+  const handleToggleStatus = async (category: ComplaintCategory) => {
     const nextStatus: ComplaintCategoryStatus = category.status === "Active" ? "Inactive" : "Active";
-    setCategories((prev) =>
-      prev.map((c) => (c.id === category.id ? { ...c, status: nextStatus } : c))
-    );
-    setToastMessage(`Category "${category.categoryName}" is now ${nextStatus}.`);
+    try {
+      await hrComplaintCategoryService.update(category.id, { status: nextStatus });
+      await loadCategories();
+      setToastMessage(`Category "${category.categoryName}" is now ${nextStatus}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update status");
+    }
   };
 
-  // Delete Handler with Usage Check
-  const handleDeleteCategory = (category: ComplaintCategory) => {
+  const handleDeleteCategory = async (category: ComplaintCategory) => {
     if (category.complaintsCount > 0) {
       alert(
         `Cannot delete "${category.categoryName}" because it has ${category.complaintsCount} recorded employee complaint(s). You may deactivate this category instead so it no longer appears when raising complaints.`
@@ -319,9 +178,14 @@ export function ComplaintCategoriesView() {
     }
 
     if (confirm(`Are you sure you want to delete category "${category.categoryName}"?`)) {
-      setCategories((prev) => prev.filter((c) => c.id !== category.id));
-      if (viewingCategory?.id === category.id) setViewingCategory(null);
-      setToastMessage(`Deleted category "${category.categoryName}".`);
+      try {
+        await hrComplaintCategoryService.remove(category.id);
+        if (viewingCategory?.id === category.id) setViewingCategory(null);
+        await loadCategories();
+        setToastMessage(`Deleted category "${category.categoryName}".`);
+      } catch (err) {
+        setToastMessage(err instanceof Error ? err.message : "Failed to delete category");
+      }
     }
   };
 

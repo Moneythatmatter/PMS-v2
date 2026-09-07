@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   CalendarHeart,
   Search,
@@ -24,6 +24,8 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { hrLeaveTypeService } from "@/services/human-resources";
+import { mapLeaveTypeFromApi, mapLeaveTypeToApi } from "@/lib/hr/api-mappers";
 
 export type LeaveStatus = "Active" | "Inactive";
 export type LeavePayType = "Paid" | "Unpaid" | "Half-Pay";
@@ -44,102 +46,23 @@ export interface LeaveTypeMaster {
   activeRequestsCount: number;
 }
 
-export const INITIAL_LEAVE_TYPES: LeaveTypeMaster[] = [
-  {
-    id: "LT-001",
-    leaveCode: "LV-CL",
-    leaveName: "Casual Leave (CL)",
-    annualQuotaDays: 12,
-    payType: "Paid",
-    carryForwardAllowed: false,
-    maxCarryForwardDays: 0,
-    encashable: false,
-    requiresMedicalProof: false,
-    description: "Paid casual leave for personal work, urgent errands, and short unscheduled absences.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    activeRequestsCount: 14,
-  },
-  {
-    id: "LT-002",
-    leaveCode: "LV-EL",
-    leaveName: "Earned / Privilege Leave (EL/PL)",
-    annualQuotaDays: 18,
-    payType: "Paid",
-    carryForwardAllowed: true,
-    maxCarryForwardDays: 30,
-    encashable: true,
-    requiresMedicalProof: false,
-    description: "Earned annual vacation leave accumulated per month of service. Encashable upon retirement or resignation.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    activeRequestsCount: 22,
-  },
-  {
-    id: "LT-003",
-    leaveCode: "LV-SL",
-    leaveName: "Sick Leave (SL)",
-    annualQuotaDays: 10,
-    payType: "Paid",
-    carryForwardAllowed: true,
-    maxCarryForwardDays: 10,
-    encashable: false,
-    requiresMedicalProof: true,
-    description: "Paid medical leave granted for employee illness. Medical doctor certificate mandatory if exceeding 2 consecutive days.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    activeRequestsCount: 8,
-  },
-  {
-    id: "LT-004",
-    leaveCode: "LV-MAT",
-    leaveName: "Maternity Leave (ML)",
-    annualQuotaDays: 182,
-    payType: "Paid",
-    carryForwardAllowed: false,
-    maxCarryForwardDays: 0,
-    encashable: false,
-    requiresMedicalProof: true,
-    description: "Statutory 26-week paid maternity leave for eligible female employees as per Maternity Benefit Act.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    activeRequestsCount: 2,
-  },
-  {
-    id: "LT-005",
-    leaveCode: "LV-PAT",
-    leaveName: "Paternity Leave (PL)",
-    annualQuotaDays: 15,
-    payType: "Paid",
-    carryForwardAllowed: false,
-    maxCarryForwardDays: 0,
-    encashable: false,
-    requiresMedicalProof: false,
-    description: "Paid paternity leave for male employees upon child birth.",
-    status: "Active",
-    createdDate: "15/01/2025",
-    activeRequestsCount: 1,
-  },
-  {
-    id: "LT-006",
-    leaveCode: "LV-LWP",
-    leaveName: "Leave Without Pay (LWP)",
-    annualQuotaDays: 0,
-    payType: "Unpaid",
-    carryForwardAllowed: false,
-    maxCarryForwardDays: 0,
-    encashable: false,
-    requiresMedicalProof: false,
-    description: "Unpaid leave balance applied when paid quotas are exhausted or for extended unapproved absence.",
-    status: "Active",
-    createdDate: "01/02/2025",
-    activeRequestsCount: 5,
-  },
-];
-
 export function LeaveTypesMasterView() {
-  const [leaves, setLeaves] = useState<LeaveTypeMaster[]>(INITIAL_LEAVE_TYPES);
+  const [leaves, setLeaves] = useState<LeaveTypeMaster[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const loadLeaves = async () => {
+    try {
+      const rows = await hrLeaveTypeService.list();
+      setLeaves(rows.map(mapLeaveTypeFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load leave types");
+      setLeaves([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadLeaves();
+  }, []);
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -225,8 +148,7 @@ export function LeaveTypesMasterView() {
     setIsModalOpen(true);
   };
 
-  // Save Leave Type (Duplicate check)
-  const handleSaveLeave = (e: React.FormEvent) => {
+  const handleSaveLeave = async (e: React.FormEvent) => {
     e.preventDefault();
     setNameError("");
     setCodeError("");
@@ -244,7 +166,6 @@ export function LeaveTypesMasterView() {
       return;
     }
 
-    // Duplicate check for name
     const isDuplicate = leaves.some(
       (l) =>
         l.leaveName.toLowerCase() === trimmedName.toLowerCase() &&
@@ -256,61 +177,46 @@ export function LeaveTypesMasterView() {
       return;
     }
 
-    if (editingLeave) {
-      setLeaves((prev) =>
-        prev.map((l) =>
-          l.id === editingLeave.id
-            ? {
-                ...l,
-                leaveCode: trimmedCode,
-                leaveName: trimmedName,
-                annualQuotaDays: Number(formQuota),
-                payType: formPayType,
-                carryForwardAllowed: formCarryForward,
-                maxCarryForwardDays: formCarryForward ? Number(formMaxCarry) : 0,
-                encashable: formEncashable,
-                requiresMedicalProof: formMedicalProof,
-                description: formDescription.trim(),
-                status: formStatus,
-              }
-            : l
-        )
-      );
-      setToastMessage(`Updated leave type "${trimmedName}".`);
-    } else {
-      const newLeave: LeaveTypeMaster = {
-        id: `LT-${Math.floor(100 + Math.random() * 900)}`,
-        leaveCode: trimmedCode,
-        leaveName: trimmedName,
-        annualQuotaDays: Number(formQuota),
-        payType: formPayType,
-        carryForwardAllowed: formCarryForward,
-        maxCarryForwardDays: formCarryForward ? Number(formMaxCarry) : 0,
-        encashable: formEncashable,
-        requiresMedicalProof: formMedicalProof,
-        description: formDescription.trim(),
-        status: formStatus,
-        createdDate: new Date().toLocaleDateString("en-GB"),
-        activeRequestsCount: 0,
-      };
-      setLeaves((prev) => [newLeave, ...prev]);
-      setToastMessage(`Created leave type "${trimmedName}".`);
+    const payload = mapLeaveTypeToApi({
+      leaveCode: trimmedCode,
+      leaveName: trimmedName,
+      annualQuotaDays: Number(formQuota),
+      payType: formPayType,
+      carryForwardAllowed: formCarryForward,
+      maxCarryForwardDays: formCarryForward ? Number(formMaxCarry) : 0,
+      encashable: formEncashable,
+      requiresMedicalProof: formMedicalProof,
+      description: formDescription.trim(),
+      status: formStatus,
+    });
+
+    try {
+      if (editingLeave) {
+        await hrLeaveTypeService.update(editingLeave.id, payload);
+        setToastMessage(`Updated leave type "${trimmedName}".`);
+      } else {
+        await hrLeaveTypeService.create(payload);
+        setToastMessage(`Created leave type "${trimmedName}".`);
+      }
+      await loadLeaves();
+      setIsModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save leave type");
     }
-
-    setIsModalOpen(false);
   };
 
-  // Toggle Activate / Deactivate
-  const handleToggleStatus = (l: LeaveTypeMaster) => {
+  const handleToggleStatus = async (l: LeaveTypeMaster) => {
     const nextStatus: LeaveStatus = l.status === "Active" ? "Inactive" : "Active";
-    setLeaves((prev) =>
-      prev.map((item) => (item.id === l.id ? { ...item, status: nextStatus } : item))
-    );
-    setToastMessage(`Leave type "${l.leaveName}" is now ${nextStatus}.`);
+    try {
+      await hrLeaveTypeService.update(l.id, { status: nextStatus });
+      await loadLeaves();
+      setToastMessage(`Leave type "${l.leaveName}" is now ${nextStatus}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update status");
+    }
   };
 
-  // Delete Leave Type with Usage Guard
-  const handleDeleteLeave = (l: LeaveTypeMaster) => {
+  const handleDeleteLeave = async (l: LeaveTypeMaster) => {
     if (l.activeRequestsCount > 0) {
       alert(
         `Cannot delete "${l.leaveName}" because it has ${l.activeRequestsCount} active employee leave application(s) linked to it. Clear applications before deleting, or deactivate this type instead.`
@@ -319,9 +225,14 @@ export function LeaveTypesMasterView() {
     }
 
     if (confirm(`Are you sure you want to delete leave type "${l.leaveName}"?`)) {
-      setLeaves((prev) => prev.filter((item) => item.id !== l.id));
-      if (viewingLeave?.id === l.id) setViewingLeave(null);
-      setToastMessage(`Deleted leave type "${l.leaveName}".`);
+      try {
+        await hrLeaveTypeService.remove(l.id);
+        if (viewingLeave?.id === l.id) setViewingLeave(null);
+        await loadLeaves();
+        setToastMessage(`Deleted leave type "${l.leaveName}".`);
+      } catch (err) {
+        setToastMessage(err instanceof Error ? err.message : "Failed to delete leave type");
+      }
     }
   };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Clock,
   Search,
@@ -24,6 +24,9 @@ import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
 import { cn } from "@/lib/utils";
+import { hrAttendanceService, hrEmployeeService } from "@/services/human-resources";
+import { mapAttendanceFromApi, mapAttendanceToApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
 export interface AttendanceRecord {
   id: string;
@@ -50,208 +53,37 @@ export interface AttendanceRecord {
   editedOn?: string;
 }
 
-export const INITIAL_ATTENDANCE_RECORDS: AttendanceRecord[] = [
-  {
-    id: "ATT-101",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    designation: "Front Desk Manager",
-    avatar: "RK",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-    shiftCode: "MS-01",
-    shiftName: "Morning Shift (07:00 AM - 03:30 PM)",
-    date: "08/08/2026",
-    checkIn: "08:58 AM",
-    checkOut: "05:30 PM",
-    workedHours: 8.5,
-    expectedHours: 8.0,
-    status: "Present",
-    inLocation: "Main Lobby Terminal #01",
-    outLocation: "Main Lobby Terminal #01",
-    deviceType: "Biometric Reader",
-  },
-  {
-    id: "ATT-102",
-    employeeId: "EMP-0102",
-    employeeName: "Anjali Sharma",
-    department: "Housekeeping",
-    designation: "Executive Housekeeper",
-    avatar: "AS",
-    photoUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150",
-    shiftCode: "GS-04",
-    shiftName: "General Shift (09:00 AM - 05:30 PM)",
-    date: "08/08/2026",
-    checkIn: "09:25 AM",
-    checkOut: "05:30 PM",
-    workedHours: 8.0,
-    expectedHours: 8.0,
-    status: "Late",
-    inLocation: "Housekeeping Office Terminal",
-    outLocation: "Housekeeping Office Terminal",
-    deviceType: "Biometric Reader",
-    manualReason: "Delayed due to monsoon traffic congestion.",
-  },
-  {
-    id: "ATT-103",
-    employeeId: "EMP-0103",
-    employeeName: "Chef Vikramjit Singh",
-    department: "Kitchen / Culinary",
-    designation: "Executive Head Chef",
-    avatar: "VS",
-    shiftCode: "SS-05",
-    shiftName: "Split Shift (F&B Kitchen)",
-    date: "08/08/2026",
-    checkIn: "10:55 AM",
-    checkOut: "11:00 PM",
-    workedHours: 11.0,
-    expectedHours: 8.0,
-    status: "Present",
-    inLocation: "Kitchen Terminal #02",
-    outLocation: "Kitchen Terminal #02",
-    deviceType: "Biometric Reader",
-  },
-  {
-    id: "ATT-104",
-    employeeId: "EMP-0104",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    designation: "Guest Relations Executive",
-    avatar: "PP",
-    photoUrl: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=150",
-    shiftCode: "ES-02",
-    shiftName: "Evening Shift (03:00 PM - 11:30 PM)",
-    date: "08/08/2026",
-    checkIn: "—",
-    checkOut: "—",
-    workedHours: 0.0,
-    expectedHours: 8.0,
-    status: "On Leave",
-    deviceType: "Manual Entry",
-    manualReason: "Approved Casual Leave application (LA-203).",
-  },
-  {
-    id: "ATT-105",
-    employeeId: "EMP-0105",
-    employeeName: "Suresh Babu",
-    department: "Maintenance & Eng.",
-    designation: "Chief Engineer",
-    avatar: "SB",
-    photoUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150",
-    shiftCode: "GS-04",
-    shiftName: "General Shift (09:00 AM - 05:30 PM)",
-    date: "08/08/2026",
-    checkIn: "08:50 AM",
-    checkOut: "05:40 PM",
-    workedHours: 8.8,
-    expectedHours: 8.0,
-    status: "Present",
-    inLocation: "Engineering Workshop Terminal",
-    outLocation: "Engineering Workshop Terminal",
-    deviceType: "Biometric Reader",
-  },
-  {
-    id: "ATT-106",
-    employeeId: "EMP-0106",
-    employeeName: "Sunita Patel",
-    department: "Housekeeping",
-    designation: "Floor Supervisor",
-    avatar: "SP",
-    shiftCode: "MS-01",
-    shiftName: "Morning Shift (07:00 AM - 03:30 PM)",
-    date: "08/08/2026",
-    checkIn: "06:55 AM",
-    checkOut: "03:35 PM",
-    workedHours: 8.6,
-    expectedHours: 8.0,
-    status: "Present",
-    inLocation: "3rd Floor Linen Room Terminal",
-    outLocation: "3rd Floor Linen Room Terminal",
-    deviceType: "Biometric Reader",
-  },
-  {
-    id: "ATT-107",
-    employeeId: "EMP-0107",
-    employeeName: "Ramesh Verma",
-    department: "Front Office",
-    designation: "Night Auditor",
-    avatar: "RV",
-    photoUrl: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150",
-    shiftCode: "NS-03",
-    shiftName: "Night Shift (11:00 PM - 07:30 AM)",
-    date: "08/08/2026",
-    checkIn: "10:52 PM",
-    checkOut: "07:35 AM",
-    workedHours: 8.7,
-    expectedHours: 8.0,
-    status: "Present",
-    inLocation: "Front Desk Terminal #01",
-    outLocation: "Front Desk Terminal #01",
-    deviceType: "Biometric Reader",
-  },
-  {
-    id: "ATT-108",
-    employeeId: "EMP-0108",
-    employeeName: "Deepak Chawla",
-    department: "Kitchen / Culinary",
-    designation: "Commi 1 (Pastry)",
-    avatar: "DC",
-    photoUrl: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&q=80&w=150",
-    shiftCode: "MS-01",
-    shiftName: "Morning Shift (07:00 AM - 03:30 PM)",
-    date: "08/08/2026",
-    checkIn: "—",
-    checkOut: "—",
-    workedHours: 0.0,
-    expectedHours: 8.0,
-    status: "On Leave",
-    deviceType: "Manual Entry",
-    manualReason: "Approved Sick Leave (SL-109).",
-  },
-  {
-    id: "ATT-109",
-    employeeId: "EMP-0109",
-    employeeName: "Meenakshi Sundaram",
-    department: "HR & Admin",
-    designation: "HR Executive",
-    avatar: "MS",
-    photoUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150",
-    shiftCode: "GS-04",
-    shiftName: "General Shift (09:00 AM - 05:30 PM)",
-    date: "08/08/2026",
-    checkIn: "08:59 AM",
-    checkOut: "05:30 PM",
-    workedHours: 8.5,
-    expectedHours: 8.0,
-    status: "Present",
-    inLocation: "HR Admin Office Biometric",
-    outLocation: "HR Admin Office Biometric",
-    deviceType: "Biometric Reader",
-  },
-  {
-    id: "ATT-110",
-    employeeId: "EMP-0110",
-    employeeName: "Arun Joshi",
-    department: "F&B Service",
-    designation: "Captain / Waiter",
-    avatar: "AJ",
-    photoUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=150",
-    shiftCode: "ES-02",
-    shiftName: "Evening Shift (03:00 PM - 11:30 PM)",
-    date: "08/08/2026",
-    checkIn: "—",
-    checkOut: "—",
-    workedHours: 0.0,
-    expectedHours: 0.0,
-    status: "Weekly Off",
-    deviceType: "Manual Entry",
-    manualReason: "Scheduled Weekly Off.",
-  },
-];
-
 export function AttendanceView() {
-  const [records, setRecords] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE_RECORDS);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadAttendance = async () => {
+    try {
+      const [recordRows, empRows] = await Promise.all([
+        hrAttendanceService.list(),
+        hrEmployeeService.list(),
+      ]);
+      const emps = empRows.map(mapEmployeeFromApi);
+      setEmployees(emps);
+      const lookup = new Map(emps.map((e) => [e.id, e]));
+      setRecords(
+        recordRows.map((row) =>
+          mapAttendanceFromApi(row, lookup.get(String(row.employeeId))),
+        ),
+      );
+      if (emps[0]) setPunchEmpId(emps[0].id);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load attendance");
+      setRecords([]);
+      setEmployees([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadAttendance();
+  }, []);
+
+
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState("");
@@ -309,65 +141,38 @@ export function AttendanceView() {
   }, [records]);
 
   // Handle Manual Punch-In / Punch-Out Submit
-  const handleSaveManualPunch = (e: React.FormEvent) => {
+  const handleSaveManualPunch = async (e: React.FormEvent) => {
     e.preventDefault();
-    const empObj = INITIAL_ATTENDANCE_RECORDS.find((x) => x.employeeId === punchEmpId);
-    const empName = empObj?.employeeName || "Rajesh Kumar";
-    const empDept = empObj?.department || "Front Office";
-    const empDesig = empObj?.designation || "Staff";
-    const empAvatar = empObj?.avatar || "RK";
+    const empObj = employees.find((x) => x.id === punchEmpId);
+    const empName = empObj?.name || "Employee";
+    const existing = records.find((r) => r.employeeId === punchEmpId);
+    const payload = mapAttendanceToApi({
+      employeeId: punchEmpId,
+      shiftCode: existing?.shiftCode ?? "MS-01",
+      shiftName: existing?.shiftName ?? "Morning Shift",
+      recordDate: punchDate,
+      checkIn: punchInTime,
+      checkOut: punchOutTime,
+      workedHours: 8.5,
+      expectedHours: 8.0,
+      status: punchStatus,
+      deviceType: "Manual Entry",
+      isManualEntry: true,
+      manualReason: punchReason || "Manual Punch recorded by HR Manager.",
+    });
 
-    const today = new Date().toLocaleDateString("en-GB");
-
-    // Check if record exists for this employee
-    const existingIndex = records.findIndex((r) => r.employeeId === punchEmpId);
-
-    if (existingIndex >= 0) {
-      setRecords((prev) =>
-        prev.map((r) =>
-          r.employeeId === punchEmpId
-            ? {
-                ...r,
-                checkIn: punchInTime,
-                checkOut: punchOutTime,
-                workedHours: 8.5,
-                status: punchStatus,
-                isManualEntry: true,
-                deviceType: "Manual Entry",
-                manualReason: punchReason || "Manual Punch recorded by HR Manager.",
-                editedBy: "Neha Mehta (HR Manager)",
-                editedOn: today,
-              }
-            : r
-        )
-      );
-    } else {
-      const newRecord: AttendanceRecord = {
-        id: `ATT-${Math.floor(100 + Math.random() * 900)}`,
-        employeeId: punchEmpId,
-        employeeName: empName,
-        department: empDept,
-        designation: empDesig,
-        avatar: empAvatar,
-        shiftCode: "MS-01",
-        shiftName: "Morning Shift (A)",
-        date: punchDate,
-        checkIn: punchInTime,
-        checkOut: punchOutTime,
-        workedHours: 8.5,
-        expectedHours: 8.0,
-        status: punchStatus,
-        deviceType: "Manual Entry",
-        isManualEntry: true,
-        manualReason: punchReason || "Manual Punch recorded by HR Manager.",
-        editedBy: "Neha Mehta (HR Manager)",
-        editedOn: today,
-      };
-      setRecords((prev) => [newRecord, ...prev]);
+    try {
+      if (existing) {
+        await hrAttendanceService.update(existing.id, payload);
+      } else {
+        await hrAttendanceService.create(payload);
+      }
+      await loadAttendance();
+      setIsManualPunchModalOpen(false);
+      setToastMessage(`Recorded manual punch-in (${punchInTime}) and punch-out (${punchOutTime}) for ${empName}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save attendance");
     }
-
-    setIsManualPunchModalOpen(false);
-    setToastMessage(`Recorded manual punch-in (${punchInTime}) and punch-out (${punchOutTime}) for ${empName}.`);
   };
 
   return (
@@ -770,9 +575,9 @@ export function AttendanceView() {
               required
               className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
             >
-              {INITIAL_ATTENDANCE_RECORDS.map((staff) => (
-                <option key={staff.employeeId} value={staff.employeeId}>
-                  👤 {staff.employeeName} ({staff.employeeId}) - {staff.department}
+              {employees.map((staff) => (
+                <option key={staff.id} value={staff.id}>
+                  👤 {staff.name} ({staff.id}) - {staff.department}
                 </option>
               ))}
             </select>

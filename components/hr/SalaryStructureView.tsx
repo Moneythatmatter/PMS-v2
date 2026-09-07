@@ -26,6 +26,9 @@ import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
 import { cn } from "@/lib/utils";
+import { hrSalaryStructureService, hrEmployeeService } from "@/services/human-resources";
+import { mapSalaryStructureFromApi, mapSalaryStructureToApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
 // Types & Master Interfaces
 export type ComponentType = "Earnings" | "Deductions";
@@ -105,122 +108,25 @@ export const MASTER_SALARY_COMPONENTS: MasterSalaryComponent[] = [
   { id: "SC-09", name: "TDS / Income Tax", type: "Deductions", defaultCalcType: "Fixed Amount", defaultVal: 1000 },
 ];
 
-export const INITIAL_EMPLOYEES: AssignedEmployee[] = [
-  { id: "EMP-0101", name: "Rajesh Kumar", department: "Front Office", designation: "Front Desk Manager", avatar: "RK" },
-  { id: "EMP-0102", name: "Priya Patel", department: "Front Office", designation: "Guest Relations Executive", avatar: "PP" },
-  { id: "EMP-0103", name: "Anjali Sharma", department: "Housekeeping", designation: "Executive Housekeeper", avatar: "AS" },
-  { id: "EMP-0104", name: "Chef Vikramjit Singh", department: "Food & Beverage", designation: "Executive Head Chef", avatar: "VS" },
-  { id: "EMP-0105", name: "Arjun Verma", department: "Food & Beverage", designation: "Restaurant Captain", avatar: "AV" },
-  { id: "EMP-0106", name: "Suresh Prabhu", department: "Front Office", designation: "Concierge Associate", avatar: "SP" },
-];
-
-export const INITIAL_STRUCTURES: SalaryStructure[] = [
-  {
-    id: "SS-101",
-    name: "Front Office Executive",
-    department: "Front Office",
-    employmentType: "Permanent",
-    structureType: "Grade-Based",
-    version: 2,
-    isCurrentVersion: true,
-    effectiveFrom: "01/04/2026",
-    effectiveTo: "31/03/2027",
-    description: "Standard grade salary structure template for Front Office & Reception staff.",
-    effectiveDate: "01/04/2026",
-    status: "Active",
-    overtimeEligible: true,
-    incentives: 1000,
-    earnings: [
-      { componentId: "SC-01", componentName: "Basic Salary", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 18000, computedAmount: 18000 },
-      { componentId: "SC-02", componentName: "HRA", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 7200, computedAmount: 7200 },
-      { componentId: "SC-03", componentName: "Food Allowance", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 2000, computedAmount: 2000 },
-      { componentId: "SC-04", componentName: "Travel Allowance", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 1500, computedAmount: 1500 },
-    ],
-    deductions: [
-      { componentId: "SC-06", componentName: "PF", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 1800, computedAmount: 1800 },
-      { componentId: "SC-07", componentName: "ESI", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 300, computedAmount: 300 },
-      { componentId: "SC-08", componentName: "Professional Tax", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 200, computedAmount: 200 },
-    ],
-    grossSalary: 29700,
-    totalDeductions: 2300,
-    netSalary: 27400,
-    assignedEmployees: [INITIAL_EMPLOYEES[0], INITIAL_EMPLOYEES[1], INITIAL_EMPLOYEES[5]],
-    createdBy: "Neha Mehta (HR Manager)",
-    createdDate: "15/01/2025",
-    lastUpdated: "01/04/2026",
-    history: [
-      { id: "HIS-01", changeDate: "01/04/2026", changedBy: "Neha Mehta (HR Manager)", description: "Annual revision: Incremented Basic Salary by ₹2,000.", oldNetSalary: 24600, newNetSalary: 27400 }
-    ],
-  },
-  {
-    id: "SS-102",
-    name: "Housekeeping Senior Staff",
-    department: "Housekeeping",
-    employmentType: "Permanent",
-    structureType: "Role-Based",
-    version: 1,
-    isCurrentVersion: true,
-    effectiveFrom: "01/01/2026",
-    effectiveTo: "31/12/2026",
-    description: "Salary package for Housekeeping Supervisors and Executive Staff.",
-    effectiveDate: "01/01/2026",
-    status: "Active",
-    overtimeEligible: true,
-    incentives: 500,
-    earnings: [
-      { componentId: "SC-01", componentName: "Basic Salary", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 16000, computedAmount: 16000 },
-      { componentId: "SC-02", componentName: "HRA", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 6400, computedAmount: 6400 },
-      { componentId: "SC-03", componentName: "Food Allowance", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 2500, computedAmount: 2500 },
-    ],
-    deductions: [
-      { componentId: "SC-06", componentName: "PF", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 1600, computedAmount: 1600 },
-      { componentId: "SC-08", componentName: "Professional Tax", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 200, computedAmount: 200 },
-    ],
-    grossSalary: 25400,
-    totalDeductions: 1800,
-    netSalary: 23600,
-    assignedEmployees: [INITIAL_EMPLOYEES[2]],
-    createdBy: "Neha Mehta (HR Manager)",
-    createdDate: "01/01/2026",
-    lastUpdated: "01/01/2026",
-  },
-  {
-    id: "SS-103",
-    name: "Kitchen Head & Chef Package",
-    department: "Food & Beverage",
-    employmentType: "Permanent",
-    structureType: "Custom",
-    version: 1,
-    isCurrentVersion: true,
-    effectiveFrom: "01/01/2026",
-    description: "Senior culinary staff salary structure including special chef allowance.",
-    status: "Active",
-    overtimeEligible: false,
-    incentives: 2500,
-    earnings: [
-      { componentId: "SC-01", componentName: "Basic Salary", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 35000, computedAmount: 35000 },
-      { componentId: "SC-02", componentName: "HRA", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 14000, computedAmount: 14000 },
-      { componentId: "SC-03", componentName: "Food Allowance", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 4000, computedAmount: 4000 },
-      { componentId: "SC-05", componentName: "Special / Executive Bonus", type: "Earnings", calcType: "Fixed Amount", amountOrPercentage: 5000, computedAmount: 5000 },
-    ],
-    deductions: [
-      { componentId: "SC-06", componentName: "PF", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 3500, computedAmount: 3500 },
-      { componentId: "SC-08", componentName: "Professional Tax", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 200, computedAmount: 200 },
-      { componentId: "SC-09", componentName: "TDS / Income Tax", type: "Deductions", calcType: "Fixed Amount", amountOrPercentage: 2500, computedAmount: 2500 },
-    ],
-    grossSalary: 60500,
-    totalDeductions: 6200,
-    netSalary: 54300,
-    assignedEmployees: [INITIAL_EMPLOYEES[3]],
-    createdBy: "Rajesh Sharma (HR Director)",
-    createdDate: "01/01/2026",
-    lastUpdated: "01/01/2026",
-  },
-];
-
 export function SalaryStructureView() {
-  const [structures, setStructures] = useState<SalaryStructure[]>(INITIAL_STRUCTURES);
+  const [structures, setStructures] = useState<SalaryStructure[]>([])
+  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadStructures = async () => {
+    try {
+      const [rows, empRows] = await Promise.all([hrSalaryStructureService.list(), hrEmployeeService.list()]);
+      setEmployees(empRows.map(mapEmployeeFromApi));
+      setStructures(rows.map(mapSalaryStructureFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load salary structures");
+      setStructures([]);
+      setEmployees([]);
+    }
+  };
+
+  useEffect(() => { void loadStructures(); }, []);
+
+
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -471,12 +377,12 @@ export function SalaryStructureView() {
     let newAssigned: AssignedEmployee[] = [...assigningStructure.assignedEmployees];
 
     if (assignMode === "Individual") {
-      const emp = INITIAL_EMPLOYEES.find((e) => e.id === selectedEmpId);
+      const emp = employees.find((e) => e.id === selectedEmpId);
       if (emp && !newAssigned.some((a) => a.id === emp.id)) {
         newAssigned.push(emp);
       }
     } else if (assignMode === "Department") {
-      const deptEmps = INITIAL_EMPLOYEES.filter((e) => e.department === selectedAssignDept);
+      const deptEmps = employees.filter((e) => e.department === selectedAssignDept);
       deptEmps.forEach((emp) => {
         if (!newAssigned.some((a) => a.id === emp.id)) {
           newAssigned.push(emp);
@@ -484,7 +390,7 @@ export function SalaryStructureView() {
       });
     } else if (assignMode === "Multiple") {
       selectedMultiEmpIds.forEach((empId) => {
-        const emp = INITIAL_EMPLOYEES.find((e) => e.id === empId);
+        const emp = employees.find((e) => e.id === empId);
         if (emp && !newAssigned.some((a) => a.id === emp.id)) {
           newAssigned.push(emp);
         }
@@ -1355,7 +1261,7 @@ export function SalaryStructureView() {
                   >
                     {selectedEmpId ? (
                       (() => {
-                        const emp = INITIAL_EMPLOYEES.find((e) => e.id === selectedEmpId);
+                        const emp = employees.find((e) => e.id === selectedEmpId);
                         return emp ? (
                           <span className="font-extrabold text-slate-900">
                             {emp.name} <span className="text-slate-400 font-normal">({emp.id} • {emp.department})</span>
@@ -1385,7 +1291,7 @@ export function SalaryStructureView() {
                       </div>
 
                       <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
-                        {INITIAL_EMPLOYEES.filter((emp) =>
+                        {employees.filter((emp) =>
                           assignSearchTerm
                             ? emp.name.toLowerCase().includes(assignSearchTerm.toLowerCase()) ||
                               emp.id.toLowerCase().includes(assignSearchTerm.toLowerCase()) ||
@@ -1474,7 +1380,7 @@ export function SalaryStructureView() {
                 </div>
 
                 <div className="max-h-48 overflow-y-auto space-y-1.5 p-2 rounded-xl border border-slate-200 bg-white">
-                  {INITIAL_EMPLOYEES.filter((emp) =>
+                  {employees.filter((emp) =>
                     assignSearchTerm
                       ? emp.name.toLowerCase().includes(assignSearchTerm.toLowerCase()) ||
                         emp.id.toLowerCase().includes(assignSearchTerm.toLowerCase()) ||
