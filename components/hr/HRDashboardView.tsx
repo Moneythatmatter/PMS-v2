@@ -130,15 +130,15 @@ export function HRDashboardView() {
     resolved: 0,
   });
   const [departmentHeadcounts, setDepartmentHeadcounts] = useState<DepartmentHeadcount[]>([]);
-  const [attendanceBreakdown] = useState<AttendanceBreakdown>({
+  const [attendanceBreakdown, setAttendanceBreakdown] = useState<AttendanceBreakdown>({
     present: 0,
     absent: 0,
     onLeave: 0,
     lateArrivals: 0,
   });
-  const [weeklyTrend] = useState<HRWeeklyAttendancePoint[]>([]);
-  const [designationHeadcounts] = useState<DesignationHeadcount[]>([]);
-  const [genderDistribution] = useState<GenderDistribution>({
+  const [weeklyTrend, setWeeklyTrend] = useState<HRWeeklyAttendancePoint[]>([]);
+  const [designationHeadcounts, setDesignationHeadcounts] = useState<DesignationHeadcount[]>([]);
+  const [genderDistribution, setGenderDistribution] = useState<GenderDistribution>({
     male: 0,
     female: 0,
     other: 0,
@@ -160,8 +160,17 @@ export function HRDashboardView() {
         ]);
         const mapped = mapDashboardFromApi(dashData);
         setKpiSummary(mapped.kpiSummary);
-        setDepartmentHeadcounts(mapped.deptHeadcounts);
+        setDepartmentHeadcounts(
+          mapped.deptHeadcounts.map((d) => ({
+            ...d,
+            color: departmentChartColors[d.department] ?? "#64748b",
+          })),
+        );
         setGrievanceSummary(mapped.grievanceSummary);
+        setAttendanceBreakdown(mapped.attendanceBreakdown);
+        setWeeklyTrend(mapped.weeklyTrend);
+        setDesignationHeadcounts(mapped.designationHeadcounts);
+        setGenderDistribution(mapped.genderDistribution);
         const pendingLeaves = leaveRows
           .filter((row) => String(row.status) === "Pending")
           .map((row) => {
@@ -223,7 +232,7 @@ export function HRDashboardView() {
         trend: "up",
       },
     ],
-    [],
+    [kpiSummary, grievanceSummary],
   );
 
   const departmentChartData = useMemo(
@@ -231,9 +240,9 @@ export function HRDashboardView() {
       departmentHeadcounts.map((dept) => ({
         name: dept.department,
         count: dept.count,
-        fill: departmentChartColors[dept.department] ?? "#64748b",
+        fill: dept.color || (departmentChartColors[dept.department] ?? "#64748b"),
       })),
-    [],
+    [departmentHeadcounts],
   );
 
   const filteredDesignations = useMemo(
@@ -241,10 +250,19 @@ export function HRDashboardView() {
       designationHeadcounts.filter(
         (desig) => selectedDesigDept === "All" || desig.department === selectedDesigDept,
       ),
-    [selectedDesigDept],
+    [designationHeadcounts, selectedDesigDept],
   );
 
   const totalStaff = kpiSummary.totalEmployees;
+  const onShiftTotal = Math.max(
+    attendanceBreakdown.present +
+      attendanceBreakdown.absent +
+      attendanceBreakdown.onLeave +
+      attendanceBreakdown.lateArrivals,
+    totalStaff,
+  );
+  const pct = (n: number) =>
+    onShiftTotal > 0 ? `${Math.round((n / onShiftTotal) * 1000) / 10}%` : "0%";
 
   return (
     <ModulePageShell
@@ -297,14 +315,14 @@ export function HRDashboardView() {
               subtitle="Today's shift headcount across operational departments"
               action={
                 <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-                  {attendanceBreakdown.present} / {totalStaff} active
+                  {kpiSummary.presentCount} / {totalStaff} active
                 </span>
               }
             >
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <MetricTile label="Present" value={attendanceBreakdown.present} detail="81.2% on shift" />
-                <MetricTile label="Absent" value={attendanceBreakdown.absent} detail="9.3% unexcused" />
-                <MetricTile label="On leave" value={attendanceBreakdown.onLeave} detail="6.2% approved" />
+                <MetricTile label="Present" value={attendanceBreakdown.present} detail={`${pct(attendanceBreakdown.present)} on shift`} />
+                <MetricTile label="Absent" value={attendanceBreakdown.absent} detail={`${pct(attendanceBreakdown.absent)} unexcused`} />
+                <MetricTile label="On leave" value={attendanceBreakdown.onLeave} detail={`${pct(attendanceBreakdown.onLeave)} approved`} />
                 <MetricTile label="Late arrivals" value={attendanceBreakdown.lateArrivals} detail="Within grace" />
               </div>
 
@@ -342,13 +360,29 @@ export function HRDashboardView() {
               <div className="mt-4 space-y-1.5">
                 <div className="flex justify-between text-[11px] font-medium text-slate-500">
                   <span>Shift distribution</span>
-                  <span>{attendanceBreakdown.present} on duty</span>
+                  <span>{kpiSummary.presentCount} on duty</span>
                 </div>
                 <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                  <div className="bg-emerald-500" style={{ width: "81.2%" }} />
-                  <div className="bg-rose-400" style={{ width: "9.3%" }} />
-                  <div className="bg-amber-400" style={{ width: "6.2%" }} />
-                  <div className="bg-sky-400" style={{ width: "3.3%" }} />
+                  {onShiftTotal > 0 ? (
+                    <>
+                      <div
+                        className="bg-emerald-500"
+                        style={{ width: `${(attendanceBreakdown.present / onShiftTotal) * 100}%` }}
+                      />
+                      <div
+                        className="bg-rose-400"
+                        style={{ width: `${(attendanceBreakdown.absent / onShiftTotal) * 100}%` }}
+                      />
+                      <div
+                        className="bg-amber-400"
+                        style={{ width: `${(attendanceBreakdown.onLeave / onShiftTotal) * 100}%` }}
+                      />
+                      <div
+                        className="bg-sky-400"
+                        style={{ width: `${(attendanceBreakdown.lateArrivals / onShiftTotal) * 100}%` }}
+                      />
+                    </>
+                  ) : null}
                 </div>
               </div>
             </PanelCard>
@@ -440,8 +474,11 @@ export function HRDashboardView() {
               </div>
 
               <div className="space-y-3">
-                {filteredDesignations.map((desig) => {
-                  const percentage = Math.round((desig.count / totalStaff) * 100);
+                {filteredDesignations.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-400">No designation data yet.</p>
+                ) : (
+                  filteredDesignations.map((desig) => {
+                  const percentage = totalStaff > 0 ? Math.round((desig.count / totalStaff) * 100) : 0;
                   return (
                     <div key={desig.designation} className="space-y-1.5">
                       <div className="flex items-center justify-between gap-3 text-xs">
@@ -457,12 +494,13 @@ export function HRDashboardView() {
                       <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                         <div
                           className={cn("h-full rounded-full transition-all duration-300", desig.color)}
-                          style={{ width: `${(desig.count / 24) * 100}%` }}
+                          style={{ width: `${totalStaff > 0 ? (desig.count / totalStaff) * 100 : 0}%` }}
                         />
                       </div>
                     </div>
                   );
-                })}
+                  })
+                )}
               </div>
             </PanelCard>
           </div>

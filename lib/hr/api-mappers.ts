@@ -1092,12 +1092,16 @@ export function mapDashboardFromApi(data: Record<string, unknown>) {
   const kpi = (data.kpi as Record<string, unknown>) ?? {};
   const grievances = (data.grievances as Record<string, unknown>) ?? {};
   const departmentHeadcounts = (data.departmentHeadcounts as Record<string, unknown>[]) ?? [];
+  const attendanceBreakdownRaw = (data.attendanceBreakdown as Record<string, unknown>) ?? {};
+  const weeklyTrend = (data.weeklyTrend as { day: string; present: number }[]) ?? [];
+  const designationHeadcountsRaw = (data.designationHeadcounts as Record<string, unknown>[]) ?? [];
+  const genderRaw = (data.genderDistribution as Record<string, unknown>) ?? {};
 
   const kpiSummary: HRKpiSummary = {
     totalEmployees: Number(kpi.totalEmployees ?? 0),
     newJoineesThisMonth: Number(kpi.newJoineesThisMonth ?? 0),
     presentCount: Number(kpi.presentCount ?? 0),
-    totalShiftStaff: Number(kpi.totalEmployees ?? 0),
+    totalShiftStaff: Number(kpi.activeEmployees ?? kpi.totalEmployees ?? 0),
     attendanceRate: Number(kpi.attendanceRate ?? 0),
     onLeaveCount: Number(kpi.onLeaveCount ?? 0),
     pendingLeaveRequestsCount: Number(kpi.pendingLeaveRequestsCount ?? 0),
@@ -1119,5 +1123,34 @@ export function mapDashboardFromApi(data: Record<string, unknown>) {
     resolved: Number(grievances.resolved ?? 0),
   };
 
-  return { kpiSummary, deptHeadcounts, grievanceSummary };
+  const attendanceBreakdown = {
+    present: Number(attendanceBreakdownRaw.present ?? 0),
+    absent: Number(attendanceBreakdownRaw.absent ?? 0),
+    onLeave: Number(attendanceBreakdownRaw.onLeave ?? 0),
+    lateArrivals: Number(attendanceBreakdownRaw.lateArrivals ?? 0),
+  };
+
+  const designationHeadcounts = designationHeadcountsRaw.map((d) => ({
+    designation: String(d.designation ?? ""),
+    department: String(d.department ?? ""),
+    count: Number(d.count ?? 0),
+    color: "bg-emerald-500",
+  }));
+
+  const genderDistribution = {
+    male: Number(genderRaw.male ?? 0),
+    female: Number(genderRaw.female ?? 0),
+    other: Number(genderRaw.other ?? 0),
+    total: Number(genderRaw.total ?? 0),
+  };
+
+  return {
+    kpiSummary,
+    deptHeadcounts,
+    grievanceSummary,
+    attendanceBreakdown,
+    weeklyTrend,
+    designationHeadcounts,
+    genderDistribution,
+  };
 }

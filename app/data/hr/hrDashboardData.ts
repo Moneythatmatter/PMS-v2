@@ -98,9 +98,12 @@ export const sampleWeeklyAttendanceTrend: HRWeeklyAttendancePoint[] = [];
 
 export const departmentChartColors: Record<string, string> = {
   Housekeeping: "#16a34a",
+  "Food & Beverage": "#f59e0b",
   "F&B Service": "#2563eb",
   "Kitchen / Culinary": "#f59e0b",
   "Front Office": "#9333ea",
+  "Human Resources": "#6366f1",
+  Engineering: "#e11d48",
   "Maintenance & Eng.": "#e11d48",
   "HR & Admin": "#6366f1",
 };
