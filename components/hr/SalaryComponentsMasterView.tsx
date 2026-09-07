@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Coins,
   Search,
@@ -23,6 +23,8 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { hrSalaryComponentService } from "@/services/human-resources";
+import { mapSalaryComponentFromApi, mapSalaryComponentToApi } from "@/lib/hr/api-mappers";
 
 export type ComponentStatus = "Active" | "Inactive";
 export type ComponentType = "Earning" | "Deduction";
@@ -43,138 +45,23 @@ export interface SalaryComponentMaster {
   templateUsageCount: number;
 }
 
-export const INITIAL_SALARY_COMPONENTS: SalaryComponentMaster[] = [
-  {
-    id: "SC-001",
-    code: "BASIC",
-    name: "Basic Pay",
-    type: "Earning",
-    calculationType: "Flat Amount",
-    defaultValue: 25000,
-    isTaxable: true,
-    isPfApplicable: true,
-    isEsiApplicable: true,
-    description: "Core basic salary component serving as benchmark base for PF, ESI, and Gratuity calculations.",
-    status: "Active",
-    templateUsageCount: 12,
-  },
-  {
-    id: "SC-002",
-    code: "HRA",
-    name: "House Rent Allowance (HRA)",
-    type: "Earning",
-    calculationType: "% of Basic Salary",
-    defaultValue: 40,
-    isTaxable: true,
-    isPfApplicable: false,
-    isEsiApplicable: true,
-    description: "Housing allowance tax-exempt under Income Tax Section 10(13A) as per rent receipts.",
-    status: "Active",
-    templateUsageCount: 12,
-  },
-  {
-    id: "SC-003",
-    code: "CONVEYANCE",
-    name: "Conveyance / Transport Allowance",
-    type: "Earning",
-    calculationType: "Flat Amount",
-    defaultValue: 1600,
-    isTaxable: true,
-    isPfApplicable: false,
-    isEsiApplicable: true,
-    description: "Travel allowance for commuting between residence and hotel premises.",
-    status: "Active",
-    templateUsageCount: 10,
-  },
-  {
-    id: "SC-004",
-    code: "SPECIAL",
-    name: "Special Allowance",
-    type: "Earning",
-    calculationType: "Flat Amount",
-    defaultValue: 4500,
-    isTaxable: true,
-    isPfApplicable: false,
-    isEsiApplicable: true,
-    description: "Balancing component used to adjust total gross CTC salary packages.",
-    status: "Active",
-    templateUsageCount: 12,
-  },
-  {
-    id: "SC-005",
-    code: "PF_EMP",
-    name: "Provident Fund (PF - Employee)",
-    type: "Deduction",
-    calculationType: "% of Basic Salary",
-    defaultValue: 12,
-    isTaxable: false,
-    isPfApplicable: true,
-    isEsiApplicable: false,
-    description: "Statutory employee PF contribution deducted at 12% of Basic Pay (capped at wage ceiling).",
-    status: "Active",
-    templateUsageCount: 12,
-  },
-  {
-    id: "SC-006",
-    code: "ESI_EMP",
-    name: "ESI (Employee Contribution)",
-    type: "Deduction",
-    calculationType: "% of Gross Salary",
-    defaultValue: 0.75,
-    isTaxable: false,
-    isPfApplicable: false,
-    isEsiApplicable: true,
-    description: "Statutory ESIC medical insurance deduction at 0.75% of Gross Pay for employees earning under ₹21,000.",
-    status: "Active",
-    templateUsageCount: 8,
-  },
-  {
-    id: "SC-007",
-    code: "PROF_TAX",
-    name: "Professional Tax (PT)",
-    type: "Deduction",
-    calculationType: "Flat Amount",
-    defaultValue: 200,
-    isTaxable: false,
-    isPfApplicable: false,
-    isEsiApplicable: false,
-    description: "State government statutory professional tax slab deduction.",
-    status: "Active",
-    templateUsageCount: 12,
-  },
-  {
-    id: "SC-008",
-    code: "OT_PAY",
-    name: "Overtime Allowance (OT Pay)",
-    type: "Earning",
-    calculationType: "Flat Amount",
-    defaultValue: 1.0,
-    isTaxable: true,
-    isPfApplicable: false,
-    isEsiApplicable: true,
-    description: "Salary-proportioned extra overtime pay calculated per hour/minute based on monthly salary (Default 1.0x Rate).",
-    status: "Active",
-    templateUsageCount: 12,
-  },
-  {
-    id: "SC-009",
-    code: "HOLIDAY_PAY",
-    name: "Holiday Work Compensation Pay",
-    type: "Earning",
-    calculationType: "Flat Amount",
-    defaultValue: 1.0,
-    isTaxable: true,
-    isPfApplicable: false,
-    isEsiApplicable: true,
-    description: "Additional daily salary pay (1.0x = 1 Day Pay = Monthly Salary / 30) for employees working on official declared holidays.",
-    status: "Active",
-    templateUsageCount: 12,
-  },
-];
-
 export function SalaryComponentsMasterView() {
-  const [components, setComponents] = useState<SalaryComponentMaster[]>(INITIAL_SALARY_COMPONENTS);
+  const [components, setComponents] = useState<SalaryComponentMaster[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const loadComponents = async () => {
+    try {
+      const rows = await hrSalaryComponentService.list();
+      setComponents(rows.map(mapSalaryComponentFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load salary components");
+      setComponents([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadComponents();
+  }, []);
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -262,7 +149,7 @@ export function SalaryComponentsMasterView() {
   };
 
   // Save Salary Component (Duplicate check)
-  const handleSaveComponent = (e: React.FormEvent) => {
+  const handleSaveComponent = async (e: React.FormEvent) => {
     e.preventDefault();
     setNameError("");
     setCodeError("");
@@ -292,60 +179,46 @@ export function SalaryComponentsMasterView() {
       return;
     }
 
-    if (editingComponent) {
-      setComponents((prev) =>
-        prev.map((c) =>
-          c.id === editingComponent.id
-            ? {
-                ...c,
-                code: trimmedCode,
-                name: trimmedName,
-                type: formType,
-                calculationType: formCalcType,
-                defaultValue: Number(formDefaultVal),
-                isTaxable: formIsTaxable,
-                isPfApplicable: formIsPf,
-                isEsiApplicable: formIsEsi,
-                description: formDescription.trim(),
-                status: formStatus,
-              }
-            : c
-        )
-      );
-      setToastMessage(`Updated salary component "${trimmedName}".`);
-    } else {
-      const newComp: SalaryComponentMaster = {
-        id: `SC-${Math.floor(100 + Math.random() * 900)}`,
-        code: trimmedCode,
-        name: trimmedName,
-        type: formType,
-        calculationType: formCalcType,
-        defaultValue: Number(formDefaultVal),
-        isTaxable: formIsTaxable,
-        isPfApplicable: formIsPf,
-        isEsiApplicable: formIsEsi,
-        description: formDescription.trim(),
-        status: formStatus,
-        templateUsageCount: 0,
-      };
-      setComponents((prev) => [newComp, ...prev]);
-      setToastMessage(`Created salary component "${trimmedName}".`);
+    const payload = mapSalaryComponentToApi({
+      code: trimmedCode,
+      name: trimmedName,
+      type: formType,
+      calculationType: formCalcType,
+      defaultValue: Number(formDefaultVal),
+      isTaxable: formIsTaxable,
+      isPfApplicable: formIsPf,
+      isEsiApplicable: formIsEsi,
+      description: formDescription.trim(),
+      status: formStatus,
+    });
+
+    try {
+      if (editingComponent) {
+        await hrSalaryComponentService.update(editingComponent.id, payload);
+        setToastMessage(`Updated salary component "${trimmedName}".`);
+      } else {
+        await hrSalaryComponentService.create(payload);
+        setToastMessage(`Created salary component "${trimmedName}".`);
+      }
+      await loadComponents();
+      setIsModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save salary component");
     }
-
-    setIsModalOpen(false);
   };
 
-  // Toggle Activate / Deactivate
-  const handleToggleStatus = (c: SalaryComponentMaster) => {
+  const handleToggleStatus = async (c: SalaryComponentMaster) => {
     const nextStatus: ComponentStatus = c.status === "Active" ? "Inactive" : "Active";
-    setComponents((prev) =>
-      prev.map((item) => (item.id === c.id ? { ...item, status: nextStatus } : item))
-    );
-    setToastMessage(`Salary component "${c.name}" is now ${nextStatus}.`);
+    try {
+      await hrSalaryComponentService.update(c.id, { status: nextStatus });
+      await loadComponents();
+      setToastMessage(`Salary component "${c.name}" is now ${nextStatus}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update status");
+    }
   };
 
-  // Delete Salary Component with Usage Guard
-  const handleDeleteComponent = (c: SalaryComponentMaster) => {
+  const handleDeleteComponent = async (c: SalaryComponentMaster) => {
     if (c.templateUsageCount > 0) {
       alert(
         `Cannot delete "${c.name}" because it is currently used in ${c.templateUsageCount} salary structure template(s). Remove it from templates before deleting, or deactivate it instead.`
@@ -354,9 +227,14 @@ export function SalaryComponentsMasterView() {
     }
 
     if (confirm(`Are you sure you want to delete component "${c.name}"?`)) {
-      setComponents((prev) => prev.filter((item) => item.id !== c.id));
-      if (viewingComponent?.id === c.id) setViewingComponent(null);
-      setToastMessage(`Deleted component "${c.name}".`);
+      try {
+        await hrSalaryComponentService.remove(c.id);
+        if (viewingComponent?.id === c.id) setViewingComponent(null);
+        await loadComponents();
+        setToastMessage(`Deleted component "${c.name}".`);
+      } catch (err) {
+        setToastMessage(err instanceof Error ? err.message : "Failed to delete component");
+      }
     }
   };
 

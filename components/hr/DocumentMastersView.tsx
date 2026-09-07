@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   FileCog,
   Plus,
@@ -24,6 +24,17 @@ import { ModulePageShell } from "@/components/pms";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import {
+  hrDocumentCategoryService,
+  hrDocumentTypeService,
+} from "@/services/human-resources";
+import {
+  buildIdNameMap,
+  mapDocumentCategoryFromApi,
+  mapDocumentCategoryToApi,
+  mapDocumentTypeFromApi,
+  mapDocumentTypeToApi,
+} from "@/lib/hr/api-mappers";
 
 export interface MasterCategory {
   id: string;
@@ -42,74 +53,36 @@ export interface MasterDocumentType {
   description?: string;
 }
 
-const INITIAL_CATEGORIES: MasterCategory[] = [
-  { id: "cat-1", name: "Identity Proof", description: "Government identity verification credentials", isMandatory: true },
-  { id: "cat-2", name: "Address Proof", description: "Residential and hometown address verification", isMandatory: true },
-  { id: "cat-3", name: "Employment Documents", description: "Offer letters, agreements, resumes, and service history", isMandatory: true },
-  { id: "cat-4", name: "Educational Documents", description: "School, graduation, and professional certifications", isMandatory: true },
-  { id: "cat-5", name: "Financial Documents", description: "Banking, UAN, PF, and tax registration records", isMandatory: true },
-  { id: "cat-6", name: "Statutory & Compliance", description: "EPF/Gratuity nominations, NDA, POSH policy sign-offs", isMandatory: true },
-  { id: "cat-7", name: "Medical & Verification", description: "Health fitness certificates and police character verifications", isMandatory: true },
-  { id: "cat-8", name: "Other Documents", description: "Passport photo, uniform records, ID card issues", isMandatory: false },
-];
-
-const INITIAL_DOCUMENT_TYPES: MasterDocumentType[] = [
-  // Identity Proof
-  { id: "dt-1", name: "Aadhaar Card", categoryId: "cat-1", categoryName: "Identity Proof", requiresExpiry: false, isMandatory: true },
-  { id: "dt-2", name: "PAN Card", categoryId: "cat-1", categoryName: "Identity Proof", requiresExpiry: false, isMandatory: true },
-  { id: "dt-3", name: "Passport", categoryId: "cat-1", categoryName: "Identity Proof", requiresExpiry: true, isMandatory: false },
-  { id: "dt-4", name: "Driving Licence", categoryId: "cat-1", categoryName: "Identity Proof", requiresExpiry: true, isMandatory: false },
-
-  // Address Proof
-  { id: "dt-5", name: "Aadhaar (Address Copy)", categoryId: "cat-2", categoryName: "Address Proof", requiresExpiry: false, isMandatory: true },
-  { id: "dt-6", name: "Voter ID", categoryId: "cat-2", categoryName: "Address Proof", requiresExpiry: false, isMandatory: false },
-  { id: "dt-7", name: "Passport (Address Copy)", categoryId: "cat-2", categoryName: "Address Proof", requiresExpiry: true, isMandatory: false },
-  { id: "dt-8", name: "Utility Bill", categoryId: "cat-2", categoryName: "Address Proof", requiresExpiry: true, isMandatory: false },
-
-  // Employment Documents
-  { id: "dt-9", name: "Resume", categoryId: "cat-3", categoryName: "Employment Documents", requiresExpiry: false, isMandatory: true },
-  { id: "dt-10", name: "Offer Letter", categoryId: "cat-3", categoryName: "Employment Documents", requiresExpiry: false, isMandatory: true },
-  { id: "dt-11", name: "Appointment Letter", categoryId: "cat-3", categoryName: "Employment Documents", requiresExpiry: false, isMandatory: true },
-  { id: "dt-12", name: "Joining Form", categoryId: "cat-3", categoryName: "Employment Documents", requiresExpiry: false, isMandatory: true },
-  { id: "dt-13", name: "Employment Agreement", categoryId: "cat-3", categoryName: "Employment Documents", requiresExpiry: false, isMandatory: true },
-  { id: "dt-14", name: "Previous Experience Certificate", categoryId: "cat-3", categoryName: "Employment Documents", requiresExpiry: false, isMandatory: false },
-  { id: "dt-15", name: "Relieving Letter", categoryId: "cat-3", categoryName: "Employment Documents", requiresExpiry: false, isMandatory: false },
-
-  // Educational Documents
-  { id: "dt-16", name: "10th Certificate", categoryId: "cat-4", categoryName: "Educational Documents", requiresExpiry: false, isMandatory: true },
-  { id: "dt-17", name: "12th Certificate", categoryId: "cat-4", categoryName: "Educational Documents", requiresExpiry: false, isMandatory: true },
-  { id: "dt-18", name: "Degree Certificate (BHM / Graduate)", categoryId: "cat-4", categoryName: "Educational Documents", requiresExpiry: false, isMandatory: true },
-  { id: "dt-19", name: "Diploma", categoryId: "cat-4", categoryName: "Educational Documents", requiresExpiry: false, isMandatory: false },
-  { id: "dt-20", name: "Professional Certification", categoryId: "cat-4", categoryName: "Educational Documents", requiresExpiry: true, isMandatory: false },
-
-  // Financial Documents
-  { id: "dt-21", name: "Bank Passbook / Cancelled Cheque", categoryId: "cat-5", categoryName: "Financial Documents", requiresExpiry: false, isMandatory: true },
-  { id: "dt-22", name: "UAN (EPF) Registration", categoryId: "cat-5", categoryName: "Financial Documents", requiresExpiry: false, isMandatory: true },
-  { id: "dt-23", name: "ESIC Number Allotment", categoryId: "cat-5", categoryName: "Financial Documents", requiresExpiry: false, isMandatory: true },
-
-  // Statutory & Compliance
-  { id: "dt-24", name: "EPF Nomination Form", categoryId: "cat-6", categoryName: "Statutory & Compliance", requiresExpiry: false, isMandatory: true },
-  { id: "dt-25", name: "Gratuity Nomination Form", categoryId: "cat-6", categoryName: "Statutory & Compliance", requiresExpiry: false, isMandatory: true },
-  { id: "dt-26", name: "Employee Declaration Form", categoryId: "cat-6", categoryName: "Statutory & Compliance", requiresExpiry: false, isMandatory: true },
-  { id: "dt-27", name: "Confidentiality / NDA Agreement", categoryId: "cat-6", categoryName: "Statutory & Compliance", requiresExpiry: false, isMandatory: true },
-  { id: "dt-28", name: "Code of Conduct Acknowledgement", categoryId: "cat-6", categoryName: "Statutory & Compliance", requiresExpiry: false, isMandatory: true },
-  { id: "dt-29", name: "POSH Policy Acknowledgement", categoryId: "cat-6", categoryName: "Statutory & Compliance", requiresExpiry: false, isMandatory: true },
-
-  // Medical & Verification
-  { id: "dt-30", name: "Medical Fitness Certificate", categoryId: "cat-7", categoryName: "Medical & Verification", requiresExpiry: true, isMandatory: true },
-  { id: "dt-31", name: "Police Verification Certificate", categoryId: "cat-7", categoryName: "Medical & Verification", requiresExpiry: true, isMandatory: true },
-
-  // Other Documents
-  { id: "dt-32", name: "Passport-size Photograph", categoryId: "cat-8", categoryName: "Other Documents", requiresExpiry: false, isMandatory: true },
-  { id: "dt-33", name: "Uniform Issue Record", categoryId: "cat-8", categoryName: "Other Documents", requiresExpiry: false, isMandatory: false },
-  { id: "dt-34", name: "ID Card Issue Record", categoryId: "cat-8", categoryName: "Other Documents", requiresExpiry: false, isMandatory: false },
-];
-
 export function DocumentMastersView() {
-  const [categories, setCategories] = useState<MasterCategory[]>(INITIAL_CATEGORIES);
-  const [documentTypes, setDocumentTypes] = useState<MasterDocumentType[]>(INITIAL_DOCUMENT_TYPES);
+  const [categories, setCategories] = useState<MasterCategory[]>([]);
+  const [documentTypes, setDocumentTypes] = useState<MasterDocumentType[]>([]);
   const [activeTab, setActiveTab] = useState<"categories" | "types">("categories");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const loadDocumentMasters = async () => {
+    try {
+      const [catRows, typeRows] = await Promise.all([
+        hrDocumentCategoryService.list(),
+        hrDocumentTypeService.list(),
+      ]);
+      const mappedCategories = catRows.map(mapDocumentCategoryFromApi);
+      const categoryNameById = buildIdNameMap(catRows, "name");
+      setCategories(mappedCategories);
+      setDocumentTypes(
+        typeRows.map((row) =>
+          mapDocumentTypeFromApi(row, categoryNameById.get(String(row.categoryId)) ?? ""),
+        ),
+      );
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load document masters");
+      setCategories([]);
+      setDocumentTypes([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadDocumentMasters();
+  }, []);
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState("");
@@ -160,7 +133,7 @@ export function DocumentMastersView() {
     setIsAddCatModalOpen(true);
   };
 
-  const handleSaveCategory = (e: React.FormEvent) => {
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!catNameInput.trim()) return;
 
@@ -173,38 +146,37 @@ export function DocumentMastersView() {
       return;
     }
 
-    if (editingCategory) {
-      setCategories((prev) =>
-        prev.map((c) =>
-          c.id === editingCategory.id
-            ? { ...c, name: catNameInput.trim(), description: catDescInput.trim(), isMandatory: catMandatoryInput }
-            : c
-        )
-      );
-      // Update categoryName in document types
-      setDocumentTypes((prev) =>
-        prev.map((dt) =>
-          dt.categoryId === editingCategory.id ? { ...dt, categoryName: catNameInput.trim() } : dt
-        )
-      );
-      setToastMessage(`Updated document category "${catNameInput.trim()}".`);
-    } else {
-      const newCat: MasterCategory = {
-        id: `cat-${Date.now()}`,
-        name: catNameInput.trim(),
-        description: catDescInput.trim() || "Master document compliance category",
-        isMandatory: catMandatoryInput,
-      };
-      setCategories((prev) => [...prev, newCat]);
-      setToastMessage(`Created new category "${catNameInput.trim()}". Automatically available for all employees!`);
+    const payload = mapDocumentCategoryToApi({
+      name: catNameInput.trim(),
+      description: catDescInput.trim() || "Master document compliance category",
+      isMandatory: catMandatoryInput,
+    });
+
+    try {
+      if (editingCategory) {
+        await hrDocumentCategoryService.update(editingCategory.id, payload);
+        setToastMessage(`Updated document category "${catNameInput.trim()}".`);
+      } else {
+        await hrDocumentCategoryService.create(payload);
+        setToastMessage(
+          `Created new category "${catNameInput.trim()}". Automatically available for all employees!`,
+        );
+      }
+      await loadDocumentMasters();
+      setIsAddCatModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save category");
     }
-    setIsAddCatModalOpen(false);
   };
 
-  const handleDeleteCategory = (catId: string, catName: string) => {
-    setCategories((prev) => prev.filter((c) => c.id !== catId));
-    setDocumentTypes((prev) => prev.filter((dt) => dt.categoryId !== catId));
-    setToastMessage(`Deleted category "${catName}" and associated document types.`);
+  const handleDeleteCategory = async (catId: string, catName: string) => {
+    try {
+      await hrDocumentCategoryService.remove(catId);
+      await loadDocumentMasters();
+      setToastMessage(`Deleted category "${catName}" and associated document types.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to delete category");
+    }
   };
 
   // Document Type Handlers
@@ -226,7 +198,7 @@ export function DocumentMastersView() {
     setIsAddTypeModalOpen(true);
   };
 
-  const handleSaveDocumentType = (e: React.FormEvent) => {
+  const handleSaveDocumentType = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!typeNameInput.trim() || !typeCatIdInput) return;
 
@@ -246,40 +218,36 @@ export function DocumentMastersView() {
       return;
     }
 
-    if (editingType) {
-      setDocumentTypes((prev) =>
-        prev.map((dt) =>
-          dt.id === editingType.id
-            ? {
-                ...dt,
-                name: typeNameInput.trim(),
-                categoryId: catObj.id,
-                categoryName: catObj.name,
-                requiresExpiry: typeExpiryInput,
-                isMandatory: typeMandatoryInput,
-              }
-            : dt
-        )
-      );
-      setToastMessage(`Updated document type "${typeNameInput.trim()}".`);
-    } else {
-      const newType: MasterDocumentType = {
-        id: `dt-${Date.now()}`,
-        name: typeNameInput.trim(),
-        categoryId: catObj.id,
-        categoryName: catObj.name,
-        requiresExpiry: typeExpiryInput,
-        isMandatory: typeMandatoryInput,
-      };
-      setDocumentTypes((prev) => [...prev, newType]);
-      setToastMessage(`Added "${typeNameInput.trim()}" to ${catObj.name}.`);
+    const payload = mapDocumentTypeToApi({
+      categoryId: catObj.id,
+      name: typeNameInput.trim(),
+      requiresExpiry: typeExpiryInput,
+      isMandatory: typeMandatoryInput,
+    });
+
+    try {
+      if (editingType) {
+        await hrDocumentTypeService.update(editingType.id, payload);
+        setToastMessage(`Updated document type "${typeNameInput.trim()}".`);
+      } else {
+        await hrDocumentTypeService.create(payload);
+        setToastMessage(`Added "${typeNameInput.trim()}" to ${catObj.name}.`);
+      }
+      await loadDocumentMasters();
+      setIsAddTypeModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save document type");
     }
-    setIsAddTypeModalOpen(false);
   };
 
-  const handleDeleteType = (typeId: string, typeName: string) => {
-    setDocumentTypes((prev) => prev.filter((dt) => dt.id !== typeId));
-    setToastMessage(`Deleted document type "${typeName}".`);
+  const handleDeleteType = async (typeId: string, typeName: string) => {
+    try {
+      await hrDocumentTypeService.remove(typeId);
+      await loadDocumentMasters();
+      setToastMessage(`Deleted document type "${typeName}".`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to delete document type");
+    }
   };
 
   return (

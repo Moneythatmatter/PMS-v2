@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   FileText,
   Search,
@@ -38,6 +38,9 @@ import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
 import { cn } from "@/lib/utils";
+import { hrComplaintService, hrEmployeeService } from "@/services/human-resources";
+import { mapComplaintFromApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES & WORKFLOW INTERFACES
@@ -139,191 +142,23 @@ const OFFICERS_LIST = [
   { name: "Vikram Malhotra", role: "Senior Management / GM" },
 ];
 
-export const INITIAL_COMPLAINT_RECORDS: ComplaintRecord[] = [
-  {
-    id: "CMP-501",
-    ticketNo: "TCK-2026-081",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    designation: "Front Desk Manager",
-    avatar: "RK",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-    category: "Payroll & Salary Issues",
-    subject: "July Overtime Pay missing from payslip",
-    description: "Calculated 8.5 hours of OT during weekend shift on July 18th, but net payout didn't reflect OT credit.",
-    incidentDate: "18/07/2026",
-    priority: "High",
-    status: "Pending Level 1 Review",
-    reviewLevel: "Standard",
-    submittedDate: "02/08/2026",
-    dueDate: "09/08/2026",
-    isAnonymous: false,
-    isPoshOrConfidential: false,
-    assignedOfficer: "Anil Deshmukh",
-    assignedRole: "Finance Lead",
-    assignedDate: "03/08/2026",
-    assignedBy: "Neha Mehta (HR Manager)",
-    investigationNotes: [
-      {
-        id: "INV-1",
-        author: "Anil Deshmukh",
-        authorRole: "Finance Lead",
-        timestamp: "04/08/2026 02:30 PM",
-        noteText: "Cross-checked biometric log with July roster. Verified 8.5 hours uncredited OT.",
-        evidenceFiles: ["OT_Timesheet_July.pdf"],
-      },
-    ],
-    evidenceDocuments: ["OT_Timesheet_July.pdf"],
-    reviewChain: [
-      { levelName: "Level 1 — HR Manager Review", reviewer: "Neha Mehta", status: "Pending" },
-    ],
-    proposedResolution: "Credit ₹1,850 OT arrears in August payroll cycle.",
-    timeline: [
-      { id: "TL-1", timestamp: "02/08/2026 09:30 AM", user: "Rajesh Kumar", role: "Employee", action: "Complaint Raised", newStatus: "Open" },
-      { id: "TL-2", timestamp: "03/08/2026 11:00 AM", user: "Neha Mehta", role: "HR Manager", action: "Assigned Officer", prevStatus: "Open", newStatus: "Assigned", comment: "Assigned to Anil Deshmukh" },
-      { id: "TL-3", timestamp: "04/08/2026 02:30 PM", user: "Anil Deshmukh", role: "Finance Lead", action: "Submitted for Review", prevStatus: "Under Investigation", newStatus: "Pending Level 1 Review", comment: "OT verified" },
-    ],
-  },
-  {
-    id: "CMP-502",
-    ticketNo: "TCK-2026-082",
-    employeeId: "EMP-0102",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    designation: "Guest Relations Executive",
-    avatar: "PP",
-    category: "Shift Scheduling Issues",
-    subject: "Three consecutive night shifts assigned without rest day",
-    description: "Assigned Night Shift C from Aug 5 to Aug 8 without 24-hour mandatory rest break post night duty.",
-    incidentDate: "05/08/2026",
-    priority: "Medium",
-    status: "Under Initial Review",
-    reviewLevel: "Standard",
-    submittedDate: "06/08/2026",
-    dueDate: "13/08/2026",
-    isAnonymous: false,
-    isPoshOrConfidential: false,
-    investigationNotes: [],
-    evidenceDocuments: [],
-    reviewChain: [],
-    timeline: [
-      { id: "TL-1", timestamp: "06/08/2026 02:15 PM", user: "Priya Patel", role: "Employee", action: "Complaint Raised", newStatus: "Open" },
-    ],
-  },
-  {
-    id: "CMP-503",
-    ticketNo: "TCK-2026-083",
-    employeeId: "ANON-99",
-    employeeName: "Anonymous Employee",
-    department: "Housekeeping",
-    designation: "Housekeeping Associate",
-    avatar: "AE",
-    category: "Facilities & Infrastructure",
-    subject: "Locker room AC non-functional and lack of hot water",
-    description: "B-level basement locker room ventilation and cooling fan failed since last week causing health concerns.",
-    incidentDate: "01/08/2026",
-    priority: "Low",
-    status: "Closed",
-    reviewLevel: "Standard",
-    submittedDate: "03/08/2026",
-    dueDate: "10/08/2026",
-    isAnonymous: true,
-    isPoshOrConfidential: false,
-    assignedOfficer: "Engineering Maintenance Lead",
-    assignedRole: "Safety Lead",
-    assignedDate: "03/08/2026",
-    assignedBy: "Neha Mehta (HR Manager)",
-    investigationNotes: [
-      { id: "INV-1", author: "Engineering Lead", authorRole: "Safety Lead", timestamp: "04/08/2026 04:00 PM", noteText: "Replaced AC compressor motor and hot water boiler valves." }
-    ],
-    evidenceDocuments: ["Work_Completion_Report.pdf"],
-    reviewChain: [
-      { levelName: "Level 1 — HR Manager Review", reviewer: "Neha Mehta", status: "Approved", comment: "Infrastructure repaired", timestamp: "05/08/2026" }
-    ],
-    proposedResolution: "AC compressor repaired and hot water boiler valves replaced.",
-    resolutionNotes: "AC compressor repaired and hot water boiler valves replaced on 05/08/2026.",
-    timeline: [
-      { id: "TL-1", timestamp: "03/08/2026 08:00 AM", user: "Anonymous", role: "Employee", action: "Complaint Raised", newStatus: "Open" },
-      { id: "TL-2", timestamp: "05/08/2026 04:30 PM", user: "Neha Mehta", role: "HR Manager", action: "Resolved & Closed", prevStatus: "Resolution Proposed", newStatus: "Closed", comment: "Issue resolved" },
-    ],
-  },
-  {
-    id: "CMP-504",
-    ticketNo: "TCK-2026-084",
-    employeeId: "EMP-0104",
-    employeeName: "Chef Vikramjit Singh",
-    department: "Food & Beverage",
-    designation: "Executive Head Chef",
-    avatar: "VS",
-    category: "Workplace Safety",
-    subject: "Faulty exhaust hood in main banqueting kitchen",
-    description: "Smoke accumulation in kitchen area during high-capacity banquets due to motor pressure loss.",
-    incidentDate: "04/08/2026",
-    priority: "Critical",
-    status: "Pending Level 2 Review",
-    reviewLevel: "Senior Management Review",
-    submittedDate: "05/08/2026",
-    dueDate: "07/08/2026", // Overdue
-    isAnonymous: false,
-    isPoshOrConfidential: false,
-    assignedOfficer: "Rajiv Kapoor",
-    assignedRole: "Head of Security / Safety Lead",
-    assignedDate: "05/08/2026",
-    assignedBy: "Neha Mehta (HR Manager)",
-    investigationNotes: [
-      { id: "INV-1", author: "Rajiv Kapoor", authorRole: "Safety Lead", timestamp: "05/08/2026 03:00 PM", noteText: "Exhaust duct blower fan burnt out. Immediate replacement required for kitchen safety." }
-    ],
-    evidenceDocuments: ["Safety_Inspection_Photo.jpg"],
-    reviewChain: [
-      { levelName: "Level 1 — HR Manager Review", reviewer: "Neha Mehta", status: "Approved", comment: "High priority safety hazard", timestamp: "06/08/2026" },
-      { levelName: "Level 2 — General Manager Review", reviewer: "Vikram Malhotra", status: "Pending" },
-    ],
-    proposedResolution: "Emergency replacement of industrial kitchen exhaust blower motor (Capex ₹85,000).",
-    timeline: [
-      { id: "TL-1", timestamp: "05/08/2026 10:00 AM", user: "Chef Vikramjit Singh", role: "Employee", action: "Complaint Raised", newStatus: "Open" },
-      { id: "TL-2", timestamp: "06/08/2026 11:30 AM", user: "Neha Mehta", role: "HR Manager", action: "Level 1 Approved & Escalated to Level 2", prevStatus: "Pending Level 1 Review", newStatus: "Pending Level 2 Review" },
-    ],
-  },
-  {
-    id: "CMP-505",
-    ticketNo: "TCK-2026-085",
-    employeeId: "EMP-0105",
-    employeeName: "Anonymous Employee",
-    department: "Front Office",
-    designation: "Staff Member",
-    avatar: "POSH",
-    category: "Sexual Harassment (POSH)",
-    subject: "Confidential POSH Complaint",
-    description: "Sensitive complaint submitted under POSH framework regarding inappropriate verbal advances.",
-    incidentDate: "07/08/2026",
-    priority: "Critical",
-    status: "Under Investigation",
-    reviewLevel: "Special Committee Review",
-    submittedDate: "08/08/2026",
-    dueDate: "20/08/2026",
-    isAnonymous: true,
-    isPoshOrConfidential: true,
-    assignedOfficer: "POSH Internal Committee",
-    assignedRole: "POSH Committee",
-    assignedDate: "08/08/2026",
-    assignedBy: "System (POSH Policy)",
-    investigationNotes: [
-      { id: "INV-1", author: "POSH Committee Chair", authorRole: "POSH Committee", timestamp: "09/08/2026 10:00 AM", noteText: "Confidential inquiry started. Internal interviews scheduled." }
-    ],
-    evidenceDocuments: [],
-    reviewChain: [
-      { levelName: "Special Committee — POSH Review", reviewer: "POSH Committee Chair", status: "Pending" }
-    ],
-    timeline: [
-      { id: "TL-1", timestamp: "08/08/2026 09:00 AM", user: "System", role: "POSH Desk", action: "POSH Grievance Confidential Logged", newStatus: "Under Investigation" }
-    ],
-  },
-];
-
 export function ComplaintListView() {
-  const [complaints, setComplaints] = useState<ComplaintRecord[]>(INITIAL_COMPLAINT_RECORDS);
+  const [complaints, setComplaints] = useState<ComplaintRecord[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadComplaints = async () => {
+    try {
+      const [rows, empRows] = await Promise.all([hrComplaintService.list(), hrEmployeeService.list()]);
+      const lookup = new Map(empRows.map(mapEmployeeFromApi).map((e) => [e.id, e]));
+      setComplaints(rows.map((row) => mapComplaintFromApi(row, lookup.get(String(row.employeeId)))));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load complaints");
+      setComplaints([]);
+    }
+  };
+
+  useEffect(() => { void loadComplaints(); }, []);
+
+
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState("");

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Layers,
   Search,
@@ -33,6 +33,8 @@ import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { cn } from "@/lib/utils";
+import { hrApprovalWorkflowService } from "@/services/human-resources";
+import { mapApprovalWorkflowFromApi, mapApprovalWorkflowToApi } from "@/lib/hr/api-mappers";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES & SCHEMAS
@@ -128,141 +130,22 @@ export const APPROVER_TYPES_LIST: ApproverType[] = [
 // MOCK WORKFLOW RECORDS
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_APPROVAL_WORKFLOWS: ApprovalWorkflow[] = [
-  {
-    id: "WF-101",
-    code: "WF-LVM-01",
-    module: "Leave Management",
-    requestType: "Leave Request",
-    version: 2,
-    approvalLevelsCount: 2,
-    levels: [
-      { sequence: 1, levelName: "Level 1 — Dept Approval", approverType: "Department Manager", approverRoleOrUser: "Department Manager", isRequired: true },
-      { sequence: 2, levelName: "Level 2 — HR Approval", approverType: "HR Manager", approverRoleOrUser: "HR Manager", isRequired: true },
-    ],
-    conditions: { priority: "Normal / Urgent", employeeType: "Permanent Staff" },
-    effectiveFrom: "01/04/2026",
-    status: "Active",
-    createdBy: "Neha Mehta (HR Manager)",
-    createdDate: "01/04/2026",
-    lastModifiedBy: "Neha Mehta (HR Manager)",
-    lastModifiedDate: "15/04/2026",
-    history: [
-      { version: 1, updatedBy: "Neha Mehta", updatedDate: "01/04/2026", changeSummary: "Initial workflow release for Leave Requests." },
-      { version: 2, updatedBy: "Neha Mehta", updatedDate: "15/04/2026", changeSummary: "Added mandatory Level 2 HR Approval requirement." },
-    ],
-  },
-  {
-    id: "WF-102",
-    code: "WF-OT-01",
-    module: "Overtime",
-    requestType: "Overtime Approval",
-    version: 1,
-    approvalLevelsCount: 1,
-    levels: [
-      { sequence: 1, levelName: "Level 1 — Department Lead", approverType: "Department Manager", approverRoleOrUser: "Department Manager", isRequired: true },
-    ],
-    conditions: { amountThreshold: 5000 },
-    effectiveFrom: "01/04/2026",
-    status: "Active",
-    createdBy: "Anil Deshmukh (Finance)",
-    createdDate: "01/04/2026",
-    lastModifiedBy: "Anil Deshmukh (Finance)",
-    lastModifiedDate: "01/04/2026",
-    history: [
-      { version: 1, updatedBy: "Anil Deshmukh", updatedDate: "01/04/2026", changeSummary: "Standard Overtime Single Level Approval." },
-    ],
-  },
-  {
-    id: "WF-103",
-    code: "WF-PAY-01",
-    module: "Payroll",
-    requestType: "Payroll Approval",
-    version: 1,
-    approvalLevelsCount: 3,
-    levels: [
-      { sequence: 1, levelName: "Level 1 — HR Review", approverType: "HR Manager", approverRoleOrUser: "HR Manager", isRequired: true },
-      { sequence: 2, levelName: "Level 2 — Finance Audit", approverType: "Finance Manager", approverRoleOrUser: "Finance Manager", isRequired: true },
-      { sequence: 3, levelName: "Level 3 — GM Authorization", approverType: "General Manager", approverRoleOrUser: "General Manager", isRequired: true },
-    ],
-    effectiveFrom: "01/01/2026",
-    status: "Active",
-    createdBy: "Vikram Malhotra (GM)",
-    createdDate: "01/01/2026",
-    lastModifiedBy: "Vikram Malhotra (GM)",
-    lastModifiedDate: "01/01/2026",
-    history: [
-      { version: 1, updatedBy: "Vikram Malhotra", updatedDate: "01/01/2026", changeSummary: "3-Tier Executive Payroll Clearance." },
-    ],
-  },
-  {
-    id: "WF-104",
-    code: "WF-GRV-01",
-    module: "Grievances",
-    requestType: "Complaint Review",
-    version: 1,
-    approvalLevelsCount: 2,
-    levels: [
-      { sequence: 1, levelName: "Level 1 — HR Manager Inquiry", approverType: "HR Manager", approverRoleOrUser: "Neha Mehta (HR Manager)", isRequired: true },
-      { sequence: 2, levelName: "Level 2 — GM Executive Escalation", approverType: "General Manager", approverRoleOrUser: "Vikram Malhotra (General Manager)", isRequired: false },
-    ],
-    conditions: { priority: "High / Critical" },
-    effectiveFrom: "01/02/2026",
-    status: "Active",
-    createdBy: "Neha Mehta (HR)",
-    createdDate: "01/02/2026",
-    lastModifiedBy: "Neha Mehta (HR)",
-    lastModifiedDate: "01/02/2026",
-    history: [
-      { version: 1, updatedBy: "Neha Mehta", updatedDate: "01/02/2026", changeSummary: "Grievance Multi-Tier Clearance Matrix." },
-    ],
-  },
-  {
-    id: "WF-105",
-    code: "WF-HOL-01",
-    module: "Holiday Attendance",
-    requestType: "Holiday Pay Approval",
-    version: 1,
-    approvalLevelsCount: 1,
-    levels: [
-      { sequence: 1, levelName: "Level 1 — HR Manager Verification", approverType: "HR Manager", approverRoleOrUser: "HR Manager", isRequired: true },
-    ],
-    effectiveFrom: "01/04/2026",
-    status: "Active",
-    createdBy: "Neha Mehta (HR)",
-    createdDate: "01/04/2026",
-    lastModifiedBy: "Neha Mehta (HR)",
-    lastModifiedDate: "01/04/2026",
-    history: [
-      { version: 1, updatedBy: "Neha Mehta", updatedDate: "01/04/2026", changeSummary: "Standard 1x Holiday Attendance Pay Approval." },
-    ],
-  },
-  {
-    id: "WF-106",
-    code: "WF-FNF-01",
-    module: "Full & Final Settlement",
-    requestType: "Settlement Approval",
-    version: 1,
-    approvalLevelsCount: 2,
-    levels: [
-      { sequence: 1, levelName: "Level 1 — Finance Clearance", approverType: "Finance Manager", approverRoleOrUser: "Finance Manager", isRequired: true },
-      { sequence: 2, levelName: "Level 2 — HR Final Signoff", approverType: "HR Manager", approverRoleOrUser: "HR Manager", isRequired: true },
-    ],
-    effectiveFrom: "01/01/2026",
-    status: "Active",
-    createdBy: "Anil Deshmukh (Finance)",
-    createdDate: "01/01/2026",
-    lastModifiedBy: "Anil Deshmukh (Finance)",
-    lastModifiedDate: "01/01/2026",
-    history: [
-      { version: 1, updatedBy: "Anil Deshmukh", updatedDate: "01/01/2026", changeSummary: "F&F Final Exit Approval Chain." },
-    ],
-  },
-];
-
 export function ApprovalMatrixView() {
-  const [workflows, setWorkflows] = useState<ApprovalWorkflow[]>(INITIAL_APPROVAL_WORKFLOWS);
+  const [workflows, setWorkflows] = useState<ApprovalWorkflow[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadWorkflows = async () => {
+    try {
+      const rows = await hrApprovalWorkflowService.list();
+      setWorkflows(rows.map(mapApprovalWorkflowFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load approval workflows");
+      setWorkflows([]);
+    }
+  };
+
+  useEffect(() => { void loadWorkflows(); }, []);
+
+
 
   // Single-Line Filters
   const [searchTerm, setSearchTerm] = useState("");

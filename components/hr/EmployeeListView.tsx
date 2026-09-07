@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Download,
@@ -23,9 +23,11 @@ import {
 } from "@/components/frontoffice/ui";
 import { DropdownSelect } from "@/components/ui/DropdownSelect";
 import { ModulePageShell } from "@/components/pms";
-import { sampleEmployees, EmployeeItem } from "@/app/data/hr/employeeListData";
-import { employeeDepartmentFilterOptions } from "@/app/data/hr/employeeDepartmentOptions";
 import { EmployeeStatusBadge } from "@/components/hr/shared/EmployeeStatusBadge";
+import { hrEmployeeService } from "@/services/human-resources";
+import { mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import type { EmployeeItem } from "@/app/data/hr/employeeListData";
+import { employeeDepartmentFilterOptions } from "@/app/data/hr/employeeDepartmentOptions";
 import { ExportMenu } from "@/components/shared/ExportMenu";
 import {
   exportTableAsCsv,
@@ -172,7 +174,8 @@ function matchesEmployeeQuickFilter(
 
 export function EmployeeListView() {
   const router = useRouter();
-  const [employees, setEmployees] = useState<EmployeeItem[]>(sampleEmployees);
+  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeQuickFilter, setActiveQuickFilter] = useState<EmployeeQuickFilter>("all");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("ALL");
@@ -182,6 +185,25 @@ export function EmployeeListView() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const rows = await hrEmployeeService.list();
+        if (!cancelled) setEmployees(rows.map(mapEmployeeFromApi));
+      } catch (e) {
+        if (!cancelled) {
+          setToastMessage(e instanceof Error ? e.message : "Failed to load employees");
+          setEmployees([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Filtered dataset
   const filteredEmployees = useMemo(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Timer,
   Search,
@@ -26,6 +26,9 @@ import { Button, Drawer, Modal, StatusBadge, SearchSelect } from "@/components/u
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
 import { cn } from "@/lib/utils";
+import { hrOvertimeService, hrEmployeeService } from "@/services/human-resources";
+import { mapOvertimeFromApi, mapOvertimeToApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
 export type OvertimeType =
   | "Regular OT"
@@ -62,134 +65,28 @@ export interface OvertimeRecord {
   approvalRemarks?: string;
 }
 
-export const INITIAL_OVERTIME_RECORDS: OvertimeRecord[] = [
-  {
-    id: "OT-301",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    designation: "Front Desk Manager",
-    avatar: "RK",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-    shiftCode: "MS-01",
-    shiftName: "Morning Shift (A)",
-    otType: "Regular OT",
-    date: "06/08/2026",
-    checkIn: "07:00 AM",
-    checkOut: "07:30 PM",
-    scheduledHours: 8.0,
-    breakHours: 0.75,
-    workedHours: 11.75,
-    overtimeHours: 3.75,
-    hourlyRate: 300,
-    otRateMultiplier: 1.5,
-    payableAmount: 1688,
-    reason: "Extended coverage for VIP delegation check-in peak.",
-    status: "Pending",
-  },
-  {
-    id: "OT-302",
-    employeeId: "EMP-0102",
-    employeeName: "Anjali Sharma",
-    department: "Housekeeping",
-    designation: "Executive Housekeeper",
-    avatar: "AS",
-    photoUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150",
-    shiftCode: "GS-04",
-    shiftName: "General Office Shift",
-    otType: "Weekly Off OT",
-    date: "05/08/2026",
-    checkIn: "09:00 AM",
-    checkOut: "08:30 PM",
-    scheduledHours: 8.0,
-    breakHours: 1.0,
-    workedHours: 10.5,
-    overtimeHours: 2.5,
-    hourlyRate: 280,
-    otRateMultiplier: 2.0,
-    payableAmount: 1400,
-    reason: "Supervised floor deep cleaning inspection post banquet.",
-    status: "Approved",
-    approvedBy: "Neha Mehta (HR Admin)",
-    approvedOn: "05/08/2026",
-    approvalRemarks: "Approved for deep cleaning post-event inspection.",
-  },
-  {
-    id: "OT-303",
-    employeeId: "EMP-0103",
-    employeeName: "Chef Vikramjit Singh",
-    department: "Food & Beverage",
-    designation: "Executive Head Chef",
-    avatar: "VS",
-    shiftCode: "SS-05",
-    shiftName: "Split Shift (F&B)",
-    otType: "Emergency Call-In OT",
-    date: "06/08/2026",
-    checkIn: "11:00 AM",
-    checkOut: "01:00 AM",
-    scheduledHours: 8.0,
-    breakHours: 1.0,
-    workedHours: 13.0,
-    overtimeHours: 5.0,
-    hourlyRate: 400,
-    otRateMultiplier: 2.0,
-    payableAmount: 4000,
-    reason: "Late night wedding dinner buffet catering.",
-    status: "Pending",
-  },
-  {
-    id: "OT-304",
-    employeeId: "EMP-0104",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    designation: "Guest Relations Executive",
-    avatar: "PP",
-    shiftCode: "ES-02",
-    shiftName: "Evening Shift (B)",
-    otType: "Night Differential OT",
-    date: "04/08/2026",
-    checkIn: "03:00 PM",
-    checkOut: "02:00 AM",
-    scheduledHours: 8.0,
-    breakHours: 0.75,
-    workedHours: 10.25,
-    overtimeHours: 2.25,
-    hourlyRate: 250,
-    otRateMultiplier: 1.75,
-    payableAmount: 984,
-    reason: "Late night delayed flight group arrival.",
-    status: "Processed",
-    approvedBy: "Neha Mehta (HR Admin)",
-    approvedOn: "05/08/2026",
-  },
-  {
-    id: "OT-305",
-    employeeId: "EMP-0105",
-    employeeName: "Arjun Verma",
-    department: "Food & Beverage",
-    designation: "Restaurant Captain",
-    avatar: "AV",
-    shiftCode: "ES-02",
-    shiftName: "Evening Shift (B)",
-    otType: "Regular OT",
-    date: "06/08/2026",
-    checkIn: "03:00 PM",
-    checkOut: "01:30 AM",
-    scheduledHours: 8.0,
-    breakHours: 0.75,
-    workedHours: 9.75,
-    overtimeHours: 1.75,
-    hourlyRate: 220,
-    otRateMultiplier: 1.5,
-    payableAmount: 578,
-    reason: "Restaurant closing and inventory audit.",
-    status: "Pending",
-  },
-];
-
 export function OvertimeManagementView() {
-  const [records, setRecords] = useState<OvertimeRecord[]>(INITIAL_OVERTIME_RECORDS);
+  const [records, setRecords] = useState<OvertimeRecord[]>([])
+  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadOvertime = async () => {
+    try {
+      const [rows, empRows] = await Promise.all([hrOvertimeService.list(), hrEmployeeService.list()]);
+      const emps = empRows.map(mapEmployeeFromApi);
+      setEmployees(emps);
+      const lookup = new Map(emps.map((e) => [e.id, e]));
+      setRecords(rows.map((row) => mapOvertimeFromApi(row, lookup.get(String(row.employeeId)))));
+      if (emps[0]) setReqEmpId(emps[0].id);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load overtime records");
+      setRecords([]);
+      setEmployees([]);
+    }
+  };
+
+  useEffect(() => { void loadOvertime(); }, []);
+
+
 
   // Single-Line Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -334,7 +231,7 @@ export function OvertimeManagementView() {
 
   const handleSaveRequest = (e: React.FormEvent) => {
     e.preventDefault();
-    const empObj = INITIAL_OVERTIME_RECORDS.find((x) => x.employeeId === reqEmpId);
+    const empObj = employees.find((x) => x.id === reqEmpId);
     const parsedHours = parseFloat(reqHours) || 2.0;
     const actualOtType = reqOtType || "Regular OT";
     const multiplier = actualOtType === "Regular OT" ? 1.5 : 2.0;
@@ -344,7 +241,7 @@ export function OvertimeManagementView() {
     const newRecord: OvertimeRecord = {
       id: `OT-${Math.floor(300 + Math.random() * 700)}`,
       employeeId: reqEmpId || "EMP-0101",
-      employeeName: empObj?.employeeName || "Rajesh Kumar",
+      employeeName: empObj?.name || "Rajesh Kumar",
       department: empObj?.department || "Front Office",
       designation: empObj?.designation || "Staff",
       avatar: empObj?.avatar || "RK",
@@ -851,12 +748,12 @@ export function OvertimeManagementView() {
               {/* Combobox Dropdown Results List */}
               {isReqEmpComboboxOpen && (
                 <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl space-y-1 max-h-56 overflow-y-auto animate-in fade-in-50">
-                  {INITIAL_OVERTIME_RECORDS.filter((staff) => {
+                  {employees.filter((staff) => {
                     if (!reqEmpQuery.trim()) return true;
                     const q = reqEmpQuery.toLowerCase().trim();
                     return (
-                      staff.employeeName.toLowerCase().includes(q) ||
-                      staff.employeeId.toLowerCase().includes(q) ||
+                      staff.name.toLowerCase().includes(q) ||
+                      staff.id.toLowerCase().includes(q) ||
                       staff.department.toLowerCase().includes(q) ||
                       staff.designation.toLowerCase().includes(q)
                     );
@@ -865,26 +762,26 @@ export function OvertimeManagementView() {
                       No matching employee found.
                     </div>
                   ) : (
-                    INITIAL_OVERTIME_RECORDS.filter((staff) => {
+                    employees.filter((staff) => {
                       if (!reqEmpQuery.trim()) return true;
                       const q = reqEmpQuery.toLowerCase().trim();
                       return (
-                        staff.employeeName.toLowerCase().includes(q) ||
-                        staff.employeeId.toLowerCase().includes(q) ||
+                        staff.name.toLowerCase().includes(q) ||
+                        staff.id.toLowerCase().includes(q) ||
                         staff.department.toLowerCase().includes(q) ||
                         staff.designation.toLowerCase().includes(q)
                       );
                     }).map((staff) => (
                       <div
-                        key={staff.employeeId}
+                        key={staff.id}
                         onClick={() => {
-                          setReqEmpId(staff.employeeId);
-                          setReqEmpQuery(`${staff.employeeName} (${staff.employeeId}) - ${staff.department}`);
+                          setReqEmpId(staff.id);
+                          setReqEmpQuery(`${staff.name} (${staff.id}) - ${staff.department}`);
                           setIsReqEmpComboboxOpen(false);
                         }}
                         className={cn(
                           "flex items-center justify-between p-2 rounded-xl cursor-pointer transition-colors hover:bg-slate-100/80 border border-transparent",
-                          reqEmpId === staff.employeeId && "bg-emerald-50 text-emerald-900 border-emerald-200"
+                          reqEmpId === staff.id && "bg-emerald-50 text-emerald-900 border-emerald-200"
                         )}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -893,12 +790,12 @@ export function OvertimeManagementView() {
                           </div>
                           <div className="truncate">
                             <p className="font-bold text-xs text-slate-900 truncate">
-                              {staff.employeeName} <span className="text-[10px] font-semibold text-emerald-700">({staff.employeeId})</span>
+                              {staff.name} <span className="text-[10px] font-semibold text-emerald-700">({staff.id})</span>
                             </p>
                             <p className="text-[10px] text-slate-500 truncate">{staff.designation} • {staff.department}</p>
                           </div>
                         </div>
-                        {reqEmpId === staff.employeeId && <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-2" />}
+                        {reqEmpId === staff.id && <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-2" />}
                       </div>
                     ))
                   )}

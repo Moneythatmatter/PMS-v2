@@ -70,23 +70,23 @@ export interface GrievanceSummary {
 }
 
 export const sampleHRKpiSummary: HRKpiSummary = {
-  totalEmployees: 128,
-  newJoineesThisMonth: 6,
-  presentCount: 104,
-  totalShiftStaff: 128,
-  attendanceRate: 92,
-  onLeaveCount: 8,
-  pendingLeaveRequestsCount: 6,
-  payrollProcessedCount: 120,
-  payrollPendingCount: 8,
-  payCycleDate: "24 Aug 2026",
+  totalEmployees: 0,
+  newJoineesThisMonth: 0,
+  presentCount: 0,
+  totalShiftStaff: 0,
+  attendanceRate: 0,
+  onLeaveCount: 0,
+  pendingLeaveRequestsCount: 0,
+  payrollProcessedCount: 0,
+  payrollPendingCount: 0,
+  payCycleDate: "—",
 };
 
 export const sampleAttendanceBreakdown: AttendanceBreakdown = {
-  present: 104,
-  absent: 12,
-  onLeave: 8,
-  lateArrivals: 4,
+  present: 0,
+  absent: 0,
+  onLeave: 0,
+  lateArrivals: 0,
 };
 
 export interface HRWeeklyAttendancePoint {
@@ -94,165 +94,35 @@ export interface HRWeeklyAttendancePoint {
   present: number;
 }
 
-export const sampleWeeklyAttendanceTrend: HRWeeklyAttendancePoint[] = [
-  { day: "Mon", present: 118 },
-  { day: "Tue", present: 122 },
-  { day: "Wed", present: 120 },
-  { day: "Thu", present: 104 },
-  { day: "Fri", present: 126 },
-  { day: "Sat", present: 98 },
-  { day: "Sun", present: 92 },
-];
+export const sampleWeeklyAttendanceTrend: HRWeeklyAttendancePoint[] = [];
 
 export const departmentChartColors: Record<string, string> = {
   Housekeeping: "#16a34a",
+  "Food & Beverage": "#f59e0b",
   "F&B Service": "#2563eb",
   "Kitchen / Culinary": "#f59e0b",
   "Front Office": "#9333ea",
+  "Human Resources": "#6366f1",
+  Engineering: "#e11d48",
   "Maintenance & Eng.": "#e11d48",
   "HR & Admin": "#6366f1",
 };
 
-export const sampleDepartmentHeadcounts: DepartmentHeadcount[] = [
-  { department: "Housekeeping", count: 34, color: "bg-emerald-500" },
-  { department: "F&B Service", count: 27, color: "bg-blue-500" },
-  { department: "Kitchen / Culinary", count: 22, color: "bg-amber-500" },
-  { department: "Front Office", count: 18, color: "bg-purple-500" },
-  { department: "Maintenance & Eng.", count: 11, color: "bg-rose-500" },
-  { department: "HR & Admin", count: 6, color: "bg-indigo-500" },
-];
+export const sampleDepartmentHeadcounts: DepartmentHeadcount[] = [];
 
-export const samplePendingLeaves: PendingLeaveItem[] = [
-  {
-    id: "l-101",
-    employeeName: "Ramesh Sharma",
-    avatar: "RS",
-    department: "Front Office",
-    leaveType: "Casual Leave",
-    fromDate: "10 Aug",
-    toDate: "12 Aug",
-    days: 3,
-    reason: "Family Event",
-  },
-  {
-    id: "l-102",
-    employeeName: "Priya Nair",
-    avatar: "PN",
-    department: "Housekeeping",
-    leaveType: "Sick Leave",
-    fromDate: "08 Aug",
-    toDate: "09 Aug",
-    days: 2,
-    reason: "Doctor Appointment",
-  },
-  {
-    id: "l-103",
-    employeeName: "Chef Anil Varma",
-    avatar: "AV",
-    department: "Kitchen",
-    leaveType: "Privilege Leave",
-    fromDate: "15 Aug",
-    toDate: "18 Aug",
-    days: 4,
-    reason: "Annual Trip",
-  },
-];
+export const samplePendingLeaves: PendingLeaveItem[] = [];
 
-export const sampleHRActivities: HRActivityItem[] = [
-  {
-    id: "act-1",
-    type: "join",
-    title: "New Employee Joined",
-    description: "Suresh Menon joined as Front Desk Executive",
-    timeAgo: "25 mins ago",
-  },
-  {
-    id: "act-2",
-    type: "leave",
-    title: "Leave Request Approved",
-    description: "Approved 2 days Earned Leave for Vikram Singh (HK)",
-    timeAgo: "1 hour ago",
-  },
-  {
-    id: "act-3",
-    type: "attendance",
-    title: "Attendance Regularized",
-    description: "Late check-in regularized for Sunita Patel (F&B)",
-    timeAgo: "3 hours ago",
-  },
-  {
-    id: "act-4",
-    type: "payroll",
-    title: "July Payroll Processed",
-    description: "Salary slips generated for 120 Staff members",
-    timeAgo: "Yesterday",
-  },
-  {
-    id: "act-5",
-    type: "grievance",
-    title: "Complaint Resolved",
-    description: "Resolved shift timing complaint #GR-402",
-    timeAgo: " Yesterday",
-  },
-];
+export const sampleHRActivities: HRActivityItem[] = [];
 
-export const sampleEvents: EmployeeEventItem[] = [
-  {
-    id: "ev-1",
-    name: "Anjali Gupta",
-    avatar: "AG",
-    department: "Front Office",
-    type: "birthday",
-    date: "Today (06 Aug)",
-  },
-  {
-    id: "ev-2",
-    name: "Chef Rajesh Kumar",
-    avatar: "RK",
-    department: "Kitchen",
-    type: "anniversary",
-    date: "08 Aug",
-    years: 5,
-  },
-  {
-    id: "ev-3",
-    name: "Sunil Verma",
-    avatar: "SV",
-    department: "Housekeeping",
-    type: "birthday",
-    date: "11 Aug",
-  },
-];
+export const sampleEvents: EmployeeEventItem[] = [];
 
-export const sampleHolidaysAndShifts: HolidayShiftItem[] = [
-  {
-    id: "hs-1",
-    title: "Independence Day",
-    date: "15 Aug 2026",
-    type: "holiday",
-    badgeText: "National Holiday",
-  },
-  {
-    id: "hs-2",
-    title: "Night Shift Rotation Swap",
-    date: "12 Aug 2026",
-    type: "shift_exception",
-    badgeText: "Night Shift",
-  },
-  {
-    id: "hs-3",
-    title: "Janmashtami",
-    date: "28 Aug 2026",
-    type: "holiday",
-    badgeText: "Restricted Holiday",
-  },
-];
+export const sampleHolidaysAndShifts: HolidayShiftItem[] = [];
 
 export const sampleGrievances: GrievanceSummary = {
-  open: 3,
-  inProgress: 4,
-  escalated: 1,
-  resolved: 19,
+  open: 0,
+  inProgress: 0,
+  escalated: 0,
+  resolved: 0,
 };
 
 export interface DesignationHeadcount {
@@ -269,20 +139,11 @@ export interface GenderDistribution {
   total: number;
 }
 
-export const sampleDesignationHeadcounts: DesignationHeadcount[] = [
-  { designation: "Housekeeping Attendant", department: "Housekeeping", count: 24, color: "bg-emerald-500" },
-  { designation: "F&B Steward / Waiter", department: "F&B Service", count: 19, color: "bg-blue-500" },
-  { designation: "Chef de Partie / Cook", department: "Kitchen", count: 15, color: "bg-amber-500" },
-  { designation: "Front Desk Executive", department: "Front Office", count: 12, color: "bg-purple-500" },
-  { designation: "Maintenance Technician", department: "Maintenance", count: 8, color: "bg-rose-500" },
-  { designation: "Banquet Captain", department: "F&B Service", count: 8, color: "bg-sky-500" },
-  { designation: "Housekeeping Supervisor", department: "Housekeeping", count: 6, color: "bg-teal-500" },
-  { designation: "Duty Manager", department: "Front Office", count: 4, color: "bg-indigo-500" },
-];
+export const sampleDesignationHeadcounts: DesignationHeadcount[] = [];
 
 export const sampleGenderDistribution: GenderDistribution = {
-  male: 82,
-  female: 42,
-  other: 4,
-  total: 128,
+  male: 0,
+  female: 0,
+  other: 0,
+  total: 0,
 };

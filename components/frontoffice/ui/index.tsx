@@ -9,8 +9,8 @@ export { FODatePicker } from "./FODatePicker";
 
 interface FOPageHeaderProps {
   eyebrow?: string;
-  title: string;
-  description?: string;
+  title: React.ReactNode;
+  description?: React.ReactNode;
   badge?: React.ReactNode;
   action?: React.ReactNode;
   breadcrumbs?: { label: string; href?: string }[];
@@ -49,20 +49,26 @@ export function FOPageHeader({
           </p>
         )}
         {title ? (
-          <h1
-            className={cn(
-              "font-bold text-slate-900 sm:text-2xl",
-              eyebrow || breadcrumbs ? "mt-1 text-xl" : "text-lg sm:text-xl",
-            )}
-          >
-            {title}
-          </h1>
+          typeof title === "string" ? (
+            <h1
+              className={cn(
+                "font-bold text-slate-900 sm:text-2xl",
+                eyebrow || breadcrumbs ? "mt-1 text-xl" : "text-lg sm:text-xl",
+              )}
+            >
+              {title}
+            </h1>
+          ) : (
+            <div className={cn(eyebrow || breadcrumbs ? "mt-1" : "")}>{title}</div>
+          )
         ) : null}
-        {description && (
-          <p className="mt-1 max-w-2xl text-xs text-slate-500 sm:text-sm">
-            {description}
-          </p>
-        )}
+        {description ? (
+          typeof description === "string" ? (
+            <p className="mt-1 max-w-2xl text-xs text-slate-500 sm:text-sm">{description}</p>
+          ) : (
+            <div className="mt-1 max-w-2xl">{description}</div>
+          )
+        ) : null}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         {badge}

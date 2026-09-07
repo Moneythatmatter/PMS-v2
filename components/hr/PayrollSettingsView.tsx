@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Calendar,
   Clock,
@@ -26,6 +26,7 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Modal } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { hrPayrollSettingsService } from "@/services/human-resources";
 
 export interface AuditLogEntry {
   id: string;
@@ -37,37 +38,8 @@ export interface AuditLogEntry {
   newValue: string;
 }
 
-export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
-  {
-    id: "LOG-901",
-    settingGroup: "Holiday Work Rules",
-    action: "Updated Holiday Pay Multiplier",
-    updatedBy: "Neha Mehta (HR Admin)",
-    timestamp: "09 Aug 2026, 04:30 PM",
-    oldValue: "1.5x",
-    newValue: "2.0x",
-  },
-  {
-    id: "LOG-902",
-    settingGroup: "Attendance Rules",
-    action: "Updated Allowed Late Marks",
-    updatedBy: "Neha Mehta (HR Admin)",
-    timestamp: "05 Aug 2026, 11:15 AM",
-    oldValue: "2 Marks",
-    newValue: "3 Marks",
-  },
-  {
-    id: "LOG-903",
-    settingGroup: "General Settings",
-    action: "Updated Salary Payment Day",
-    updatedBy: "Vikram Malhotra (Finance Head)",
-    timestamp: "01 Aug 2026, 10:00 AM",
-    oldValue: "7th",
-    newValue: "5th",
-  },
-];
-
 export function PayrollSettingsView() {
+  const [settingsId, setSettingsId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
     "general" | "attendance" | "overtime" | "holiday" | "deductions" | "payment" | "workflow"
@@ -78,7 +50,7 @@ export function PayrollSettingsView() {
 
   // Audit Log Modal State
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
-  const [auditLogs] = useState<AuditLogEntry[]>(INITIAL_AUDIT_LOGS);
+  const [auditLogs] = useState<AuditLogEntry[]>([]);
 
   // Tab 1: General Settings Form State
   const [frequency, setFrequency] = useState("Monthly");
@@ -126,10 +98,76 @@ export function PayrollSettingsView() {
   const [approvalRole, setApprovalRole] = useState("HR Manager");
   const [lockPayrollAfterApproval, setLockPayrollAfterApproval] = useState(true);
 
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const rows = await hrPayrollSettingsService.list();
+        const row = rows[0];
+        if (!row) return;
+        setSettingsId(String(row.id));
+        const settings = (row.settings as Record<string, unknown>) ?? {};
+        if (settings.frequency) setFrequency(String(settings.frequency));
+        if (settings.startDay != null) setStartDay(Number(settings.startDay));
+        if (settings.endDay != null) setEndDay(Number(settings.endDay));
+        if (settings.paymentDay != null) setPaymentDay(Number(settings.paymentDay));
+        if (settings.enablePf != null) setEnablePF(Boolean(settings.enablePf));
+        if (settings.enableEsi != null) setEnableESI(Boolean(settings.enableEsi));
+        if (settings.enablePt != null) setEnablePT(Boolean(settings.enablePt));
+        if (settings.pfEmployeePct != null) setPfEmployeePct(Number(settings.pfEmployeePct));
+        if (settings.approvalRole) setApprovalRole(String(settings.approvalRole));
+      } catch (e) {
+        setToastMessage(e instanceof Error ? e.message : "Failed to load payroll settings");
+      }
+    };
+    void loadSettings();
+  }, []);
+
   // Handlers
-  const handleSaveAllSettings = (e: React.FormEvent) => {
+  const handleSaveAllSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    setToastMessage("Payroll settings saved successfully. Global calculation rules updated.");
+    if (!settingsId) {
+      setToastMessage("Payroll settings record not found.");
+      return;
+    }
+    try {
+      await hrPayrollSettingsService.update(settingsId, {
+        settings: {
+          frequency,
+          startDay,
+          endDay,
+          paymentDay,
+          enableLatePenalty,
+          allowedLateMarks,
+          latePenaltyAction,
+          absentDeductionRule,
+          enableOvertime,
+          minOtHours,
+          otCalcMethod,
+          otMultiplier,
+          weeklyOffOtMultiplier,
+          emergencyCallInMultiplier,
+          nightDifferentialMultiplier,
+          holidayBenefitType,
+          holidayPayMultiplier,
+          enablePf: enablePF,
+          pfEmployeePct,
+          pfEmployerPct,
+          enableEsi: enableESI,
+          esiEmployeePct,
+          esiEmployerPct,
+          enablePt: enablePT,
+          ptState,
+          salaryPaymentMode,
+          enableBankExport,
+          bankExportFormat,
+          approvalRole,
+          lockPayrollAfterApproval,
+        },
+      });
+      setToastMessage("Payroll settings saved successfully. Global calculation rules updated.");
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save payroll settings");
+    }
   };
 
   const handleResetDefaults = () => {

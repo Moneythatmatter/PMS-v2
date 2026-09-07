@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Search,
   SlidersHorizontal,
@@ -26,6 +26,9 @@ import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
+import { hrComplaintService, hrEmployeeService } from "@/services/human-resources";
+import { mapComplaintToStatusTicket, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
 export type TicketStatus = "Open" | "In Review" | "Resolved" | "Escalated" | "Closed";
 
@@ -58,102 +61,23 @@ export interface ComplaintStatusTicket {
   steps: StatusTimelineStep[];
 }
 
-export const INITIAL_MY_TICKETS: ComplaintStatusTicket[] = [
-  {
-    id: "ST-01",
-    ticketNo: "TCK-2026-081",
-    category: "Payroll & Salary Issues",
-    subject: "July Overtime Pay missing from payslip",
-    description: "Calculated 8.5 hours of OT during weekend shift on July 18th, but net payout didn't reflect OT credit.",
-    incidentDate: "18/07/2026",
-    submittedDate: "02/08/2026",
-    priority: "High",
-    status: "In Review",
-    isAnonymous: false,
-    employeeName: "Rajesh Kumar",
-    assignedOfficer: "Anil Deshmukh (Finance Lead)",
-    assignedDepartment: "Finance & Payroll",
-    lastUpdated: "03/08/2026, 11:00 AM",
-    attachmentName: "OT_Timesheet_July.pdf",
-    steps: [
-      { title: "Complaint Submitted", timestamp: "02/08/2026, 09:30 AM", by: "Rajesh Kumar", notes: "Ticket created and forwarded to HR desk.", completed: true },
-      { title: "HR Review & Assignment", timestamp: "03/08/2026, 11:00 AM", by: "Neha Mehta (HR)", notes: "Assigned to Anil Deshmukh (Finance Lead) for timesheet audit.", completed: true, active: true },
-      { title: "Investigation & Action", notes: "Awaiting Finance confirmation of July OT hours.", completed: false },
-      { title: "Grievance Resolved", notes: "Final resolution statement and credit adjustment.", completed: false },
-    ],
-  },
-  {
-    id: "ST-02",
-    ticketNo: "TCK-2026-082",
-    category: "Shift Scheduling Issues",
-    subject: "Three consecutive night shifts assigned without rest day",
-    description: "Assigned Night Shift C from Aug 5 to Aug 8 without 24-hour mandatory rest break post night duty.",
-    incidentDate: "05/08/2026",
-    submittedDate: "06/08/2026",
-    priority: "Medium",
-    status: "Open",
-    isAnonymous: false,
-    employeeName: "Priya Patel",
-    assignedOfficer: "Sanjay Sharma (Roster Supervisor)",
-    assignedDepartment: "Operations & Shift Rostering",
-    lastUpdated: "06/08/2026, 02:15 PM",
-    steps: [
-      { title: "Complaint Submitted", timestamp: "06/08/2026, 02:15 PM", by: "Priya Patel", notes: "Ticket submitted to Roster Supervisor.", completed: true, active: true },
-      { title: "HR Review & Assignment", notes: "Pending assignment review.", completed: false },
-      { title: "Investigation & Action", notes: "Roster adjustment under evaluation.", completed: false },
-      { title: "Grievance Resolved", notes: "Final resolution statement.", completed: false },
-    ],
-  },
-  {
-    id: "ST-03",
-    ticketNo: "TCK-2026-083",
-    category: "Facilities & Infrastructure",
-    subject: "Locker room AC non-functional and lack of hot water",
-    description: "B-level basement locker room ventilation and cooling fan failed since last week causing health concerns.",
-    incidentDate: "01/08/2026",
-    submittedDate: "03/08/2026",
-    priority: "Low",
-    status: "Resolved",
-    isAnonymous: true,
-    employeeName: "Anonymous Employee",
-    assignedOfficer: "Engineering Maintenance Lead",
-    assignedDepartment: "Property Engineering",
-    lastUpdated: "05/08/2026, 04:30 PM",
-    resolutionNotes: "AC compressor repaired and hot water boiler valves replaced on 05/08/2026.",
-    steps: [
-      { title: "Complaint Submitted", timestamp: "03/08/2026, 08:00 AM", by: "Anonymous", notes: "Confidential ticket logged.", completed: true },
-      { title: "HR Review & Assignment", timestamp: "03/08/2026, 10:15 AM", by: "HR Officer", notes: "Dispatched to Property Engineering.", completed: true },
-      { title: "Investigation & Action", timestamp: "04/08/2026, 02:00 PM", by: "Engineering Lead", notes: "Parts ordered and replaced.", completed: true },
-      { title: "Grievance Resolved", timestamp: "05/08/2026, 04:30 PM", by: "Engineering Lead", notes: "AC compressor repaired & hot water restored.", completed: true, active: true },
-    ],
-  },
-  {
-    id: "ST-04",
-    ticketNo: "TCK-2026-084",
-    category: "Workplace Safety",
-    subject: "Faulty exhaust hood in main banqueting kitchen",
-    description: "Smoke accumulation in kitchen area during high-capacity banquets due to motor pressure loss.",
-    incidentDate: "04/08/2026",
-    submittedDate: "05/08/2026",
-    priority: "Critical",
-    status: "Escalated",
-    isAnonymous: false,
-    employeeName: "Chef Vikramjit Singh",
-    assignedOfficer: "GM Office & Safety Committee",
-    assignedDepartment: "General Management",
-    lastUpdated: "05/08/2026, 11:30 AM",
-    steps: [
-      { title: "Complaint Submitted", timestamp: "05/08/2026, 10:00 AM", by: "Chef Vikramjit Singh", notes: "Ticket submitted.", completed: true },
-      { title: "HR Review & Assignment", timestamp: "05/08/2026, 11:30 AM", by: "Safety Lead", notes: "Escalated immediately to GM Office.", completed: true, active: true },
-      { title: "Investigation & Action", notes: "Safety audit in progress.", completed: false },
-      { title: "Grievance Resolved", notes: "Final safety signoff.", completed: false },
-    ],
-  },
-];
-
 export function ComplaintStatusView() {
-  const [tickets, setTickets] = useState<ComplaintStatusTicket[]>(INITIAL_MY_TICKETS);
+  const [tickets, setTickets] = useState<ComplaintStatusTicket[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const loadTickets = async () => {
+    try {
+      const [rows, empRows] = await Promise.all([hrComplaintService.list(), hrEmployeeService.list()]);
+      const lookup = new Map(empRows.map(mapEmployeeFromApi).map((e) => [e.id, e]));
+      setTickets(rows.map((row) => mapComplaintToStatusTicket(row, lookup.get(String(row.employeeId)))));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load tickets");
+      setTickets([]);
+    }
+  };
+
+  useEffect(() => { void loadTickets(); }, []);
+
+
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState("");

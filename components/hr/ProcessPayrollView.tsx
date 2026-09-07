@@ -46,6 +46,9 @@ import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
+import { hrPayrollService } from "@/services/human-resources";
+import { mapAuditFromApi, mapPayrollFromApi } from "@/lib/hr/api-mappers";
+import { MONTH_NAME_TO_NUMBER } from "@/lib/hr/useHrList";
 import { cn } from "@/lib/utils";
 
 export type PayrollStatus =
@@ -59,15 +62,29 @@ export type PayrollStatus =
 
 export interface EmployeePayrollRecord {
   id: string;
-  payrollId: string;
   employeeId: string;
+  payrollMonth: number;
+  payrollYear: number;
+
+  grossSalary: number;
+  earningsTotal: number;
+  deductionsTotal: number;
+  netSalary: number;
+
+  status: PayrollStatus;
+  calculatedAt?: string;
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+
+  payrollId: string;
   employeeName: string;
   department: string;
   designation: string;
   avatar: string;
   photoUrl?: string;
-  
-  // Step 2: Earnings
+
+  // Earnings breakdown
   basicSalary: number;
   hra: number;
   allowances: number;
@@ -76,25 +93,21 @@ export interface EmployeePayrollRecord {
   incentives: number;
   bonus: number;
   otherEarnings: number;
-  grossSalary: number;
-  
-  // Step 2: Deductions
+
+  // Deductions breakdown
   leaveDeduction: number;
   pfDeduction: number;
   esiDeduction: number;
   ptDeduction: number;
   tdsDeduction: number;
   otherDeductions: number;
-  totalDeductions: number;
 
-  netSalary: number;
-  status: PayrollStatus;
   isOnHold?: boolean;
   paymentDate?: string;
   paymentRefNo?: string;
   bankRefNo?: string;
   payslipGenerated?: boolean;
-  
+
   // Validation flags
   hasAttendanceIssue?: boolean;
   missingBankDetails?: boolean;
@@ -102,6 +115,37 @@ export interface EmployeePayrollRecord {
   missingPan?: boolean;
   pendingLeaveApproval?: boolean;
   pendingOtApproval?: boolean;
+}
+
+const MONTH_NAMES = [
+  "",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+function formatPayrollPeriod(month: number, year: number) {
+  return `${MONTH_NAMES[month] ?? month} ${year}`;
+}
+
+function formatTimestamp(value?: string) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export interface PayrollAuditEntry {
@@ -113,162 +157,31 @@ export interface PayrollAuditEntry {
   auditNotes?: string;
 }
 
-export const INITIAL_PAYROLL_RECORDS: EmployeePayrollRecord[] = [
-  {
-    id: "PR-801",
-    payrollId: "PAY-2026-08",
-    employeeId: "EMP-0101",
-    employeeName: "Rajesh Kumar",
-    department: "Front Office",
-    designation: "Front Desk Manager",
-    avatar: "RK",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-    basicSalary: 18000,
-    hra: 7200,
-    allowances: 3500,
-    overtimePay: 1500,
-    holidayPay: 2550,
-    incentives: 1000,
-    bonus: 0,
-    otherEarnings: 500,
-    grossSalary: 34250,
-    leaveDeduction: 0,
-    pfDeduction: 1800,
-    esiDeduction: 300,
-    ptDeduction: 200,
-    tdsDeduction: 1000,
-    otherDeductions: 0,
-    totalDeductions: 3300,
-    netSalary: 30950,
-    status: "Calculated",
-  },
-  {
-    id: "PR-802",
-    payrollId: "PAY-2026-08",
-    employeeId: "EMP-0102",
-    employeeName: "Priya Patel",
-    department: "Front Office",
-    designation: "Guest Relations Executive",
-    avatar: "PP",
-    basicSalary: 16000,
-    hra: 6400,
-    allowances: 3000,
-    overtimePay: 800,
-    holidayPay: 2550,
-    incentives: 500,
-    bonus: 0,
-    otherEarnings: 0,
-    grossSalary: 29250,
-    leaveDeduction: 500,
-    pfDeduction: 1600,
-    esiDeduction: 300,
-    ptDeduction: 200,
-    tdsDeduction: 600,
-    otherDeductions: 0,
-    totalDeductions: 3200,
-    netSalary: 26050,
-    status: "Calculated",
-    hasAttendanceIssue: true,
-  },
-  {
-    id: "PR-803",
-    payrollId: "PAY-2026-08",
-    employeeId: "EMP-0103",
-    employeeName: "Anjali Sharma",
-    department: "Housekeeping",
-    designation: "Executive Housekeeper",
-    avatar: "AS",
-    photoUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150",
-    basicSalary: 20000,
-    hra: 8000,
-    allowances: 4000,
-    overtimePay: 1200,
-    holidayPay: 2400,
-    incentives: 1200,
-    bonus: 0,
-    otherEarnings: 0,
-    grossSalary: 36800,
-    leaveDeduction: 0,
-    pfDeduction: 2000,
-    esiDeduction: 350,
-    ptDeduction: 200,
-    tdsDeduction: 1300,
-    otherDeductions: 0,
-    totalDeductions: 3850,
-    netSalary: 32950,
-    status: "Calculated",
-    pendingLeaveApproval: true,
-  },
-  {
-    id: "PR-804",
-    payrollId: "PAY-2026-08",
-    employeeId: "EMP-0104",
-    employeeName: "Chef Vikramjit Singh",
-    department: "Food & Beverage",
-    designation: "Executive Head Chef",
-    avatar: "VS",
-    basicSalary: 35000,
-    hra: 14000,
-    allowances: 9000,
-    overtimePay: 3500,
-    holidayPay: 3450,
-    incentives: 2500,
-    bonus: 5000,
-    otherEarnings: 0,
-    grossSalary: 72450,
-    leaveDeduction: 0,
-    pfDeduction: 3500,
-    esiDeduction: 0,
-    ptDeduction: 200,
-    tdsDeduction: 4300,
-    otherDeductions: 0,
-    totalDeductions: 8000,
-    netSalary: 64450,
-    status: "Calculated",
-  },
-  {
-    id: "PR-805",
-    payrollId: "PAY-2026-08",
-    employeeId: "EMP-0105",
-    employeeName: "Arjun Verma",
-    department: "Food & Beverage",
-    designation: "Restaurant Captain",
-    avatar: "AV",
-    basicSalary: 17000,
-    hra: 6800,
-    allowances: 2500,
-    overtimePay: 900,
-    holidayPay: 2400,
-    incentives: 800,
-    bonus: 0,
-    otherEarnings: 0,
-    grossSalary: 30400,
-    leaveDeduction: 1000,
-    pfDeduction: 1700,
-    esiDeduction: 300,
-    ptDeduction: 200,
-    tdsDeduction: 400,
-    otherDeductions: 0,
-    totalDeductions: 3600,
-    netSalary: 26800,
-    status: "Draft",
-    missingBankDetails: true,
-  },
-];
+export type SalaryPaymentMode = "Bank Transfer" | "NEFT" | "RTGS" | "UPI" | "Cheque" | "Cash";
+export type SalaryPaymentStatus = "Completed" | "Pending" | "Failed";
 
-export const INITIAL_AUDIT_LOGS: PayrollAuditEntry[] = [
-  {
-    id: "AUD-01",
-    action: "Collected & Calculated Payroll Batch",
-    changedBy: "Neha Mehta (HR Manager)",
-    changedOn: "10 Aug 2026, 10:30 AM",
-    auditNotes: "Automated fetch from Attendance, Leave, Overtime, Holiday, and Tax modules for August 2026.",
-  },
-];
+export interface SalaryPayment {
+  id: string;
+  payrollId: string;
+  employeeId: string;
+  amount: number;
+  paymentDate: string;
+  paymentMode: SalaryPaymentMode;
+  transactionReference: string;
+  status: SalaryPaymentStatus;
+  remarks: string;
+  recordedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const PAYROLL_RECORDED_BY = "Neha Mehta (HR Manager)";
 
 export function ProcessPayrollView() {
-  const [records, setRecords] = useState<EmployeePayrollRecord[]>(INITIAL_PAYROLL_RECORDS);
-  const [auditLogs, setAuditLogs] = useState<PayrollAuditEntry[]>(INITIAL_AUDIT_LOGS);
+  const [records, setRecords] = useState<EmployeePayrollRecord[]>([]);
+  const [salaryPayments, setSalaryPayments] = useState<SalaryPayment[]>([]);
+  const [auditLogs, setAuditLogs] = useState<PayrollAuditEntry[]>([]);
+  const [loadingPayroll, setLoadingPayroll] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Step 1: Period Selection Controls
@@ -292,6 +205,8 @@ export function ProcessPayrollView() {
 
   // Drawers & Modals & Export Popover
   const [viewingRecord, setViewingRecord] = useState<EmployeePayrollRecord | null>(null);
+  const [viewingPayslipRecord, setViewingPayslipRecord] = useState<EmployeePayrollRecord | null>(null);
+  const [recordingPaymentRecord, setRecordingPaymentRecord] = useState<EmployeePayrollRecord | null>(null);
   const [editingRecord, setEditingRecord] = useState<EmployeePayrollRecord | null>(null);
   const [activeActionDropdownId, setActiveActionDropdownId] = useState<string | null>(null);
   const [isValidationCenterOpen, setIsValidationCenterOpen] = useState(false);
@@ -300,16 +215,44 @@ export function ProcessPayrollView() {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close Export popover when clicking outside
+  // Close popovers when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(target)) {
         setIsExportOpen(false);
+      }
+      if (target instanceof Element && !target.closest("[data-payroll-action-menu]")) {
+        setActiveActionDropdownId(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const loadPayrollData = async () => {
+    setLoadingPayroll(true);
+    try {
+      const month = MONTH_NAME_TO_NUMBER[selectedMonth];
+      const year = Number(selectedYear);
+      const [payrollRows, auditRows] = await Promise.all([
+        hrPayrollService.listRecords(month, year),
+        hrPayrollService.listAuditLogs(),
+      ]);
+      setRecords(payrollRows.map(mapPayrollFromApi));
+      setAuditLogs(auditRows.map(mapAuditFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load payroll data");
+      setRecords([]);
+      setAuditLogs([]);
+    } finally {
+      setLoadingPayroll(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadPayrollData();
+  }, [selectedMonth, selectedYear]);
 
   // Edit Adjustments Form State
   const [editBasic, setEditBasic] = useState(0);
@@ -329,10 +272,20 @@ export function ProcessPayrollView() {
   const [editOtherDeductions, setEditOtherDeductions] = useState(0);
   const [overrideReason, setOverrideReason] = useState("");
 
-  // Mark As Paid Form State
+  // Bulk Mark As Paid form state
   const [paymentDate, setPaymentDate] = useState("10/08/2026");
   const [paymentRefNo, setPaymentRefNo] = useState("PAY-REF-202608-001");
   const [bankRefNo, setBankRefNo] = useState("HDFC-TXN-987654321");
+
+  // salary_payments form state (Record Payment action)
+  const [salaryPaymentForm, setSalaryPaymentForm] = useState({
+    amount: 0,
+    paymentDate: "",
+    paymentMode: "Bank Transfer" as SalaryPaymentMode,
+    transactionReference: "",
+    status: "Completed" as SalaryPaymentStatus,
+    remarks: "",
+  });
 
   // Filtered Table Records
   const filteredRecords = useMemo(() => {
@@ -351,14 +304,14 @@ export function ProcessPayrollView() {
 
   // Summary Cards Metrics (8 Comprehensive Cards)
   const metrics = useMemo(() => {
-    const totalEmployees = records.length + 121; // 126
-    const processedEmployees = records.filter((r) => r.status !== "Draft").length + 121;
+    const totalEmployees = records.length;
+    const processedEmployees = records.filter((r) => r.status !== "Draft").length;
     const pendingEmployees = records.filter((r) => r.status === "Draft" || r.status === "Calculated").length;
-    const approvedEmployees = records.filter((r) => r.status === "Approved").length + 110;
+    const approvedEmployees = records.filter((r) => r.status === "Approved").length;
     const paidEmployees = records.filter((r) => r.status === "Paid" || r.status === "Locked").length;
 
-    const grossPayroll = records.reduce((sum, r) => sum + r.grossSalary, 3450000);
-    const totalDeductions = records.reduce((sum, r) => sum + r.totalDeductions, 410000);
+    const grossPayroll = records.reduce((sum, r) => sum + r.grossSalary, 0);
+    const totalDeductions = records.reduce((sum, r) => sum + r.deductionsTotal, 0);
     const netPayroll = grossPayroll - totalDeductions;
 
     return {
@@ -380,7 +333,14 @@ export function ProcessPayrollView() {
     setTimeout(() => {
       setIsGenerating(false);
       setOverallPayrollStage("Calculated");
-      setRecords((prev) => prev.map((r) => ({ ...r, status: "Calculated" })));
+      setRecords((prev) =>
+        prev.map((r) => ({
+          ...r,
+          status: "Calculated",
+          calculatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }))
+      );
       addAuditEntry(`Fetched and calculated payroll inputs for ${selectedMonth} ${selectedYear}`);
       setToastMessage(`Payroll calculated successfully for ${selectedMonth} ${selectedYear}! Fetched Attendance, Leaves, OT & Tax modules.`);
     }, 800);
@@ -399,7 +359,7 @@ export function ProcessPayrollView() {
   const handleBulkCalculate = () => {
     if (isPayrollLocked || selectedRecordIds.length === 0) return;
     setRecords((prev) =>
-      prev.map((r) => (selectedRecordIds.includes(r.id) ? { ...r, status: "Calculated" } : r))
+      prev.map((r) => (selectedRecordIds.includes(r.id) ? { ...r, status: "Calculated", calculatedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : r))
     );
     addAuditEntry(`Calculated ${selectedRecordIds.length} employee payroll records in bulk.`);
     setSelectedRecordIds([]);
@@ -409,7 +369,7 @@ export function ProcessPayrollView() {
   const handleBulkApprove = () => {
     if (isPayrollLocked || selectedRecordIds.length === 0) return;
     setRecords((prev) =>
-      prev.map((r) => (selectedRecordIds.includes(r.id) ? { ...r, status: "Approved" } : r))
+      prev.map((r) => (selectedRecordIds.includes(r.id) ? { ...r, status: "Approved", approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : r))
     );
     addAuditEntry(`Approved ${selectedRecordIds.length} employee payroll records in bulk.`);
     setSelectedRecordIds([]);
@@ -499,6 +459,144 @@ export function ProcessPayrollView() {
     setActiveActionDropdownId(null);
   };
 
+  const handleApproveRecord = async (r: EmployeePayrollRecord) => {
+    if (isPayrollLocked || r.status === "Approved" || r.status === "Paid" || r.status === "Locked") return;
+    try {
+      await hrPayrollService.approveRecord(r.id, PAYROLL_RECORDED_BY);
+      await loadPayrollData();
+      setActiveActionDropdownId(null);
+      setToastMessage(`Payroll approved for ${r.employeeName} (${formatPayrollPeriod(r.payrollMonth, r.payrollYear)}).`);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to approve payroll");
+    }
+  };
+
+  const handleOpenRecordPayment = (r: EmployeePayrollRecord) => {
+    if (r.status !== "Approved") {
+      setToastMessage(`Approve payroll for ${r.employeeName} before recording payment.`);
+      setActiveActionDropdownId(null);
+      return;
+    }
+    setRecordingPaymentRecord(r);
+    setSalaryPaymentForm({
+      amount: r.netSalary,
+      paymentDate: new Date().toISOString().slice(0, 10),
+      paymentMode: "Bank Transfer",
+      transactionReference: "",
+      status: "Completed",
+      remarks: "",
+    });
+    setActiveActionDropdownId(null);
+  };
+
+  const handleSinglePaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recordingPaymentRecord) return;
+    if (recordingPaymentRecord.status !== "Approved") {
+      setToastMessage("Payroll must be approved before recording payment.");
+      return;
+    }
+
+    try {
+      await hrPayrollService.recordPayment(recordingPaymentRecord.id, {
+        amount: salaryPaymentForm.amount,
+        paymentDate: salaryPaymentForm.paymentDate,
+        paymentMode: salaryPaymentForm.paymentMode,
+        transactionReference: salaryPaymentForm.transactionReference,
+        status: salaryPaymentForm.status,
+        remarks: salaryPaymentForm.remarks,
+        recordedBy: PAYROLL_RECORDED_BY,
+      });
+      await loadPayrollData();
+      setRecordingPaymentRecord(null);
+      setToastMessage(
+        `Salary payment recorded for ${recordingPaymentRecord.employeeName} — ₹${salaryPaymentForm.amount.toLocaleString("en-IN")} (${salaryPaymentForm.status}).`
+      );
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to record payment");
+    }
+  };
+
+  const handleViewPayslip = (r: EmployeePayrollRecord) => {
+    setViewingPayslipRecord(r);
+    setActiveActionDropdownId(null);
+  };
+
+  const renderPayrollActionMenu = (r: EmployeePayrollRecord) => {
+    const canApprove =
+      !isPayrollLocked && r.status !== "Approved" && r.status !== "Paid" && r.status !== "Locked";
+    const canRecordPayment = !isPayrollLocked && r.status === "Approved";
+
+    return (
+      <div className="relative" data-payroll-action-menu>
+        <button
+          type="button"
+          onClick={() =>
+            setActiveActionDropdownId(activeActionDropdownId === r.id ? null : r.id)
+          }
+          className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-600 font-bold border border-slate-200"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+
+        {activeActionDropdownId === r.id && (
+          <div className="absolute right-0 top-full mt-1 z-30 w-48 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 text-left text-xs animate-in fade-in">
+            <button
+              type="button"
+              onClick={() => {
+                setViewingRecord(r);
+                setActiveActionDropdownId(null);
+              }}
+              className="w-full px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium"
+            >
+              <Eye className="h-3.5 w-3.5 text-slate-500" /> View Payroll
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleViewPayslip(r)}
+              className="w-full px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium"
+            >
+              <FileText className="h-3.5 w-3.5 text-blue-600" /> View Payslip
+            </button>
+
+            <button
+              type="button"
+              disabled={!canApprove}
+              onClick={() => handleApproveRecord(r)}
+              className={cn(
+                "w-full px-3 py-2 rounded-xl flex items-center gap-2 font-semibold",
+                canApprove
+                  ? "text-emerald-800 hover:bg-emerald-50"
+                  : "text-slate-300 cursor-not-allowed",
+              )}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Approve Payroll
+            </button>
+
+            <button
+              type="button"
+              disabled={!canRecordPayment}
+              title={canRecordPayment ? undefined : "Approve payroll first"}
+              onClick={() => handleOpenRecordPayment(r)}
+              className={cn(
+                "w-full px-3 py-2 rounded-xl flex items-center gap-2 font-semibold border-t border-slate-100 mt-0.5 pt-2",
+                canRecordPayment
+                  ? "text-blue-800 hover:bg-blue-50"
+                  : "text-slate-300 cursor-not-allowed",
+              )}
+            >
+              <Landmark className="h-3.5 w-3.5 text-blue-600" /> Record Payment
+              {!canRecordPayment && r.status !== "Paid" && r.status !== "Locked" && (
+                <span className="ml-auto text-[10px] font-normal text-slate-400">Approve first</span>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const addAuditEntry = (action: string, notes?: string, reason?: string) => {
     const newEntry: PayrollAuditEntry = {
       id: `AUD-${Math.floor(10 + Math.random() * 90)}`,
@@ -534,14 +632,16 @@ export function ProcessPayrollView() {
               bonus: editBonus,
               otherEarnings: editOtherEarnings,
               grossSalary: gross,
+              earningsTotal: gross,
               leaveDeduction: editLeaveDed,
               pfDeduction: editPf,
               esiDeduction: editEsi,
               ptDeduction: editPt,
               tdsDeduction: editTds,
               otherDeductions: editOtherDeductions,
-              totalDeductions: totalDed,
+              deductionsTotal: totalDed,
               netSalary: net,
+              updatedAt: new Date().toISOString(),
             }
           : r
       )
@@ -1039,11 +1139,11 @@ export function ProcessPayrollView() {
                       </td>
 
                       <td className="py-3.5 px-4 font-bold text-emerald-800">
-                        ₹{r.grossSalary.toLocaleString("en-IN")}
+                        ₹{r.earningsTotal.toLocaleString("en-IN")}
                       </td>
 
                       <td className="py-3.5 px-4 font-bold text-rose-700">
-                        -₹{r.totalDeductions.toLocaleString("en-IN")}
+                        -₹{r.deductionsTotal.toLocaleString("en-IN")}
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -1068,54 +1168,8 @@ export function ProcessPayrollView() {
                         )}
                       </td>
 
-                      <td className="py-3.5 px-4 text-right relative">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setActiveActionDropdownId(
-                              activeActionDropdownId === r.id ? null : r.id
-                            )
-                          }
-                          className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-600 font-bold border border-slate-200"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
-
-                        {activeActionDropdownId === r.id && (
-                          <div className="absolute right-3 top-12 z-30 w-48 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 text-left text-xs animate-in fade-in">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setViewingRecord(r);
-                                setActiveActionDropdownId(null);
-                              }}
-                              className="w-full px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium"
-                            >
-                              <Eye className="h-3.5 w-3.5 text-slate-500" /> View Breakdown
-                            </button>
-
-                            {!isPayrollLocked && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditModal(r)}
-                                className="w-full px-3 py-2 rounded-xl text-emerald-800 hover:bg-emerald-50 flex items-center gap-2 font-semibold"
-                              >
-                                <Edit className="h-3.5 w-3.5 text-emerald-600" /> Edit Adjustments
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleCalculatePayroll();
-                                setActiveActionDropdownId(null);
-                              }}
-                              className="w-full px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium"
-                            >
-                              <RefreshCw className="h-3.5 w-3.5 text-slate-500" /> Recalculate
-                            </button>
-                          </div>
-                        )}
+                      <td className="py-3.5 px-4 text-right">
+                        {renderPayrollActionMenu(r)}
                       </td>
                     </tr>
 
@@ -1170,7 +1224,10 @@ export function ProcessPayrollView() {
           <div key={r.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <HREmployeeCell name={r.employeeName} id={r.employeeId} avatar={r.avatar} photoUrl={r.photoUrl} />
-              <StatusBadge status={r.status} />
+              <div className="flex items-center gap-2">
+                <StatusBadge status={r.status} />
+                {renderPayrollActionMenu(r)}
+              </div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
@@ -1180,7 +1237,7 @@ export function ProcessPayrollView() {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500 font-medium">Deductions:</span>
-                <span className="font-bold text-rose-700">-₹{r.totalDeductions.toLocaleString("en-IN")}</span>
+                <span className="font-bold text-rose-700">-₹{r.deductionsTotal.toLocaleString("en-IN")}</span>
               </div>
               <div className="flex justify-between border-t border-slate-200 pt-1 font-black">
                 <span className="text-slate-700">Net Salary:</span>
@@ -1188,15 +1245,10 @@ export function ProcessPayrollView() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-1.5">
-              <Button type="button" variant="outline" size="sm" onClick={() => setViewingRecord(r)} className="w-full text-xs font-bold">
-                View Breakdown
+            <div className="flex justify-end pt-1">
+              <Button type="button" variant="outline" size="sm" onClick={() => setViewingRecord(r)} className="text-xs font-bold">
+                View Payroll
               </Button>
-              {!isPayrollLocked && (
-                <Button type="button" variant="outline" size="sm" onClick={() => handleOpenEditModal(r)} className="w-full text-xs font-bold text-emerald-800 border-emerald-300">
-                  Edit Adjustments
-                </Button>
-              )}
             </div>
           </div>
         ))}
@@ -1374,11 +1426,11 @@ export function ProcessPayrollView() {
         </Modal>
       )}
 
-      {/* VIEW BREAKDOWN DRAWER */}
+      {/* VIEW PAYROLL DRAWER */}
       <Drawer
         isOpen={Boolean(viewingRecord)}
         onClose={() => setViewingRecord(null)}
-        title="Employee Payroll Breakdown"
+        title="View Payroll"
         icon={<Calculator className="h-5 w-5 text-emerald-700" />}
       >
         {viewingRecord && (
@@ -1392,16 +1444,75 @@ export function ProcessPayrollView() {
               designation={viewingRecord.designation}
             />
 
-            <div className="p-4 rounded-2xl bg-slate-900 text-white text-center">
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Net Salary Payable</span>
-              <span className="text-2xl font-black text-amber-400">₹{viewingRecord.netSalary.toLocaleString("en-IN")}</span>
+            <div className="grid grid-cols-2 gap-2 p-3.5 rounded-xl border border-slate-200 bg-slate-50">
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500">Record ID</span>
+                <p className="font-mono font-bold text-slate-900">{viewingRecord.id}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500">Employee ID</span>
+                <p className="font-mono font-bold text-slate-900">{viewingRecord.employeeId}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500">Payroll Month</span>
+                <p className="font-bold text-slate-900">{viewingRecord.payrollMonth}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500">Payroll Year</span>
+                <p className="font-bold text-slate-900">{viewingRecord.payrollYear}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500">Status</span>
+                <p className="font-bold text-slate-900">{viewingRecord.status}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500">Period</span>
+                <p className="font-bold text-slate-900">
+                  {formatPayrollPeriod(viewingRecord.payrollMonth, viewingRecord.payrollYear)}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500">Calculated At</span>
+                <p className="font-semibold text-slate-700">{formatTimestamp(viewingRecord.calculatedAt)}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500">Approved At</span>
+                <p className="font-semibold text-slate-700">{formatTimestamp(viewingRecord.approvedAt)}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500">Created At</span>
+                <p className="font-semibold text-slate-700">{formatTimestamp(viewingRecord.createdAt)}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500">Updated At</span>
+                <p className="font-semibold text-slate-700">{formatTimestamp(viewingRecord.updatedAt)}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-3 rounded-xl border border-slate-200 bg-white">
+                <span className="text-[10px] font-bold uppercase text-slate-500">Gross Salary</span>
+                <p className="text-lg font-black text-slate-900">₹{viewingRecord.grossSalary.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50/40">
+                <span className="text-[10px] font-bold uppercase text-emerald-700">Earnings Total</span>
+                <p className="text-lg font-black text-emerald-900">₹{viewingRecord.earningsTotal.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="p-3 rounded-xl border border-rose-200 bg-rose-50/40">
+                <span className="text-[10px] font-bold uppercase text-rose-700">Deductions Total</span>
+                <p className="text-lg font-black text-rose-900">₹{viewingRecord.deductionsTotal.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-900 text-white">
+                <span className="text-[10px] font-bold uppercase text-slate-400">Net Salary</span>
+                <p className="text-lg font-black text-amber-400">₹{viewingRecord.netSalary.toLocaleString("en-IN")}</p>
+              </div>
             </div>
 
             {/* Earnings Breakdown */}
             <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-1.5">
               <div className="flex justify-between items-center border-b border-emerald-200 pb-1">
-                <span className="font-extrabold text-emerald-950 uppercase text-[11px]">Gross Earnings</span>
-                <span className="font-extrabold text-emerald-900 text-xs">₹{viewingRecord.grossSalary.toLocaleString("en-IN")}</span>
+                <span className="font-extrabold text-emerald-950 uppercase text-[11px]">Earnings Breakdown</span>
+                <span className="font-extrabold text-emerald-900 text-xs">₹{viewingRecord.earningsTotal.toLocaleString("en-IN")}</span>
               </div>
               <p className="flex justify-between text-slate-600"><span>Basic Salary:</span> <strong>₹{viewingRecord.basicSalary.toLocaleString("en-IN")}</strong></p>
               <p className="flex justify-between text-slate-600"><span>HRA:</span> <strong>₹{viewingRecord.hra.toLocaleString("en-IN")}</strong></p>
@@ -1417,8 +1528,8 @@ export function ProcessPayrollView() {
             {/* Deductions Breakdown */}
             <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/40 space-y-1.5">
               <div className="flex justify-between items-center border-b border-rose-200 pb-1">
-                <span className="font-extrabold text-rose-950 uppercase text-[11px]">Total Deductions</span>
-                <span className="font-extrabold text-rose-900 text-xs">-₹{viewingRecord.totalDeductions.toLocaleString("en-IN")}</span>
+                <span className="font-extrabold text-rose-950 uppercase text-[11px]">Deductions Breakdown</span>
+                <span className="font-extrabold text-rose-900 text-xs">-₹{viewingRecord.deductionsTotal.toLocaleString("en-IN")}</span>
               </div>
               <p className="flex justify-between text-slate-600"><span>PF (Provident Fund):</span> <strong>₹{viewingRecord.pfDeduction.toLocaleString("en-IN")}</strong></p>
               <p className="flex justify-between text-slate-600"><span>ESI Insurance:</span> <strong>₹{viewingRecord.esiDeduction.toLocaleString("en-IN")}</strong></p>
@@ -1426,9 +1537,277 @@ export function ProcessPayrollView() {
               <p className="flex justify-between text-slate-600"><span>TDS (Income Tax):</span> <strong>₹{viewingRecord.tdsDeduction.toLocaleString("en-IN")}</strong></p>
               <p className="flex justify-between text-rose-800"><span>Leave Deductions:</span> <strong>₹{viewingRecord.leaveDeduction.toLocaleString("en-IN")}</strong></p>
             </div>
+
+            {salaryPayments.filter((p) => p.payrollId === viewingRecord.id).length > 0 && (
+              <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/40 space-y-2">
+                <span className="font-extrabold text-blue-950 uppercase text-[11px] block">Salary Payments</span>
+                {salaryPayments
+                  .filter((p) => p.payrollId === viewingRecord.id)
+                  .map((payment) => (
+                    <div key={payment.id} className="p-2.5 rounded-lg bg-white border border-blue-100 space-y-1">
+                      <div className="flex justify-between">
+                        <span className="font-mono font-bold text-slate-900">{payment.id}</span>
+                        <span className="font-bold text-blue-800">{payment.status}</span>
+                      </div>
+                      <p className="flex justify-between"><span>Amount:</span> <strong>₹{payment.amount.toLocaleString("en-IN")}</strong></p>
+                      <p className="flex justify-between"><span>Payment Date:</span> <strong>{payment.paymentDate}</strong></p>
+                      <p className="flex justify-between"><span>Mode:</span> <strong>{payment.paymentMode}</strong></p>
+                      <p className="flex justify-between"><span>Transaction Ref:</span> <strong className="font-mono">{payment.transactionReference}</strong></p>
+                      {payment.remarks && <p className="text-slate-600 italic">"{payment.remarks}"</p>}
+                      <p className="text-[10px] text-slate-500">Recorded by {payment.recordedBy} · {formatTimestamp(payment.createdAt)}</p>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         )}
       </Drawer>
+
+      {/* VIEW PAYSLIP MODAL */}
+      {viewingPayslipRecord && (
+        <Modal
+          isOpen={Boolean(viewingPayslipRecord)}
+          onClose={() => setViewingPayslipRecord(null)}
+          title={`Payslip: ${viewingPayslipRecord.employeeName}`}
+          description={`${formatPayrollPeriod(viewingPayslipRecord.payrollMonth, viewingPayslipRecord.payrollYear)} · ${viewingPayslipRecord.payrollId}`}
+          size="xl"
+        >
+          <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1 text-xs">
+            <div className="p-6 rounded-2xl border border-slate-300 bg-white space-y-4 shadow-sm">
+              <div className="flex justify-between items-start border-b border-slate-200 pb-4">
+                <div>
+                  <h2 className="text-lg font-black text-slate-900 uppercase tracking-wide">GRAND PALACE HOTEL &amp; RESORT</h2>
+                  <p className="text-slate-500 text-[11px]">101 Beachfront Boulevard, Goa, India</p>
+                </div>
+                <div className="text-right">
+                  <span className="px-3 py-1 bg-slate-900 text-amber-400 font-extrabold rounded-lg text-xs block">
+                    PAYSLIP
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono block pt-1">{viewingPayslipRecord.payrollId}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="space-y-1">
+                  <p><strong className="text-slate-900">Employee:</strong> {viewingPayslipRecord.employeeName}</p>
+                  <p><strong className="text-slate-900">Employee ID:</strong> {viewingPayslipRecord.employeeId}</p>
+                  <p><strong className="text-slate-900">Department:</strong> {viewingPayslipRecord.department}</p>
+                  <p><strong className="text-slate-900">Designation:</strong> {viewingPayslipRecord.designation}</p>
+                </div>
+                <div className="space-y-1">
+                  <p><strong className="text-slate-900">Pay Period:</strong> {formatPayrollPeriod(viewingPayslipRecord.payrollMonth, viewingPayslipRecord.payrollYear)}</p>
+                  <p><strong className="text-slate-900">Record ID:</strong> {viewingPayslipRecord.id}</p>
+                  <p><strong className="text-slate-900">Status:</strong> {viewingPayslipRecord.status}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 border border-slate-200 rounded-xl overflow-hidden">
+                <div className="border-r border-slate-200">
+                  <div className="bg-emerald-100/70 p-2 font-extrabold text-emerald-950 uppercase border-b border-slate-200">
+                    Earnings
+                  </div>
+                  <div className="p-3 space-y-1.5">
+                    <div className="flex justify-between"><span>Basic Salary</span><span className="font-bold">₹{viewingPayslipRecord.basicSalary.toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between"><span>HRA</span><span className="font-bold">₹{viewingPayslipRecord.hra.toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between"><span>Allowances</span><span className="font-bold">₹{viewingPayslipRecord.allowances.toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between"><span>Overtime</span><span className="font-bold">+₹{viewingPayslipRecord.overtimePay.toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between border-t border-slate-200 pt-2 font-black">
+                      <span>Total Earnings</span>
+                      <span>₹{viewingPayslipRecord.earningsTotal.toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div className="bg-rose-100/70 p-2 font-extrabold text-rose-950 uppercase border-b border-slate-200">
+                    Deductions
+                  </div>
+                  <div className="p-3 space-y-1.5">
+                    <div className="flex justify-between"><span>PF &amp; ESI</span><span className="font-bold">₹{(viewingPayslipRecord.pfDeduction + viewingPayslipRecord.esiDeduction).toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between"><span>PT &amp; TDS</span><span className="font-bold">₹{(viewingPayslipRecord.ptDeduction + viewingPayslipRecord.tdsDeduction).toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between"><span>Leave</span><span className="font-bold">₹{viewingPayslipRecord.leaveDeduction.toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between border-t border-slate-200 pt-2 font-black">
+                      <span>Total Deductions</span>
+                      <span>₹{viewingPayslipRecord.deductionsTotal.toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900 text-center">
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Net Salary Payable</span>
+                <span className="text-2xl font-black text-amber-400">₹{viewingPayslipRecord.netSalary.toLocaleString("en-IN")}</span>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* RECORD PAYMENT MODAL (salary_payments) */}
+      {recordingPaymentRecord && (
+        <Modal
+          isOpen={Boolean(recordingPaymentRecord)}
+          onClose={() => setRecordingPaymentRecord(null)}
+          title={`Record Payment: ${recordingPaymentRecord.employeeName}`}
+          description={`Create a salary_payments entry for ${formatPayrollPeriod(recordingPaymentRecord.payrollMonth, recordingPaymentRecord.payrollYear)}.`}
+          size="md"
+        >
+          <form onSubmit={handleSinglePaymentSubmit} className="space-y-4 text-xs max-h-[75vh] overflow-y-auto pr-1">
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <HREmployeeCell
+                name={recordingPaymentRecord.employeeName}
+                id={recordingPaymentRecord.employeeId}
+                avatar={recordingPaymentRecord.avatar}
+                photoUrl={recordingPaymentRecord.photoUrl}
+                department={recordingPaymentRecord.department}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50/80">
+              <div>
+                <label className="block font-bold text-slate-500 mb-1 uppercase text-[10px]">Payroll ID</label>
+                <input
+                  type="text"
+                  readOnly
+                  value={recordingPaymentRecord.id}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-mono font-bold text-slate-700 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-500 mb-1 uppercase text-[10px]">Employee ID</label>
+                <input
+                  type="text"
+                  readOnly
+                  value={recordingPaymentRecord.employeeId}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-mono font-bold text-slate-700 bg-white"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block font-bold text-slate-500 mb-1 uppercase text-[10px]">Recorded By</label>
+                <input
+                  type="text"
+                  readOnly
+                  value={PAYROLL_RECORDED_BY}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-700 bg-white"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Amount (₹)</label>
+              <input
+                type="number"
+                required
+                min={0}
+                step={1}
+                value={salaryPaymentForm.amount}
+                onChange={(e) =>
+                  setSalaryPaymentForm((prev) => ({ ...prev, amount: Number(e.target.value) }))
+                }
+                className="w-full rounded-xl border border-slate-200 p-2.5 font-black text-slate-900"
+              />
+              <p className="mt-1 text-[10px] text-slate-500">
+                Net salary payable: ₹{recordingPaymentRecord.netSalary.toLocaleString("en-IN")}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Payment Date</label>
+                <input
+                  type="date"
+                  required
+                  value={salaryPaymentForm.paymentDate}
+                  onChange={(e) =>
+                    setSalaryPaymentForm((prev) => ({ ...prev, paymentDate: e.target.value }))
+                  }
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Payment Mode</label>
+                <select
+                  required
+                  value={salaryPaymentForm.paymentMode}
+                  onChange={(e) =>
+                    setSalaryPaymentForm((prev) => ({
+                      ...prev,
+                      paymentMode: e.target.value as SalaryPaymentMode,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-slate-900 bg-white"
+                >
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="NEFT">NEFT</option>
+                  <option value="RTGS">RTGS</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Cheque">Cheque</option>
+                  <option value="Cash">Cash</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Transaction Reference</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. HDFC-TXN-987654321"
+                value={salaryPaymentForm.transactionReference}
+                onChange={(e) =>
+                  setSalaryPaymentForm((prev) => ({ ...prev, transactionReference: e.target.value }))
+                }
+                className="w-full rounded-xl border border-slate-200 p-2.5 font-mono font-bold text-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Status</label>
+              <select
+                required
+                value={salaryPaymentForm.status}
+                onChange={(e) =>
+                  setSalaryPaymentForm((prev) => ({
+                    ...prev,
+                    status: e.target.value as SalaryPaymentStatus,
+                  }))
+                }
+                className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-slate-900 bg-white"
+              >
+                <option value="Completed">Completed</option>
+                <option value="Pending">Pending</option>
+                <option value="Failed">Failed</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Remarks</label>
+              <textarea
+                rows={3}
+                placeholder="Optional notes about this disbursement..."
+                value={salaryPaymentForm.remarks}
+                onChange={(e) =>
+                  setSalaryPaymentForm((prev) => ({ ...prev, remarks: e.target.value }))
+                }
+                className="w-full rounded-xl border border-slate-200 p-2.5 font-medium text-slate-800 resize-none"
+              />
+            </div>
+
+            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-950 font-medium">
+              Workflow: <strong>Approve Payroll</strong> first, then record payment here. Payroll moves to{" "}
+              <strong>Paid</strong> only when payment status is <strong>Completed</strong>.
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <Button type="button" variant="outline" size="sm" onClick={() => setRecordingPaymentRecord(null)} className="rounded-xl text-xs">
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" className="rounded-xl text-xs font-bold bg-blue-700 hover:bg-blue-800 text-white">
+                Record Payment
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </ModulePageShell>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Building2,
   Search,
@@ -24,6 +24,8 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { hrDepartmentService } from "@/services/human-resources";
+import { mapDepartmentFromApi, mapDepartmentToApi } from "@/lib/hr/api-mappers";
 
 export type DepartmentStatus = "Active" | "Inactive";
 
@@ -40,132 +42,27 @@ export interface DepartmentMaster {
   employeeCount: number;
 }
 
-export const INITIAL_DEPARTMENTS: DepartmentMaster[] = [
-  {
-    id: "DEP-001",
-    deptCode: "FO-10",
-    departmentName: "Front Office",
-    headOfDepartment: "Rajesh Kumar",
-    headEmail: "rajesh.kumar@grandpalace.com",
-    location: "Main Lobby - Floor 1",
-    description: "Guest reception, concierge, bell desk, reservations, and front desk operations.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 24,
-  },
-  {
-    id: "DEP-002",
-    deptCode: "HK-20",
-    departmentName: "Housekeeping",
-    headOfDepartment: "Anjali Sharma",
-    headEmail: "anjali.sharma@grandpalace.com",
-    location: "Service Basement B1",
-    description: "Guest room cleaning, laundry, linen management, public area cleanliness, and floral maintenance.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 42,
-  },
-  {
-    id: "DEP-003",
-    deptCode: "FB-30",
-    departmentName: "Food & Beverage",
-    headOfDepartment: "Chef Vikramjit Singh",
-    headEmail: "vikramjit.singh@grandpalace.com",
-    location: "Main Kitchen & Restaurants",
-    description: "Fine dining restaurants, banquet kitchens, room service, bars, and culinary management.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 38,
-  },
-  {
-    id: "DEP-004",
-    deptCode: "ENG-40",
-    departmentName: "Engineering & Maintenance",
-    headOfDepartment: "Suresh Prabhu",
-    headEmail: "suresh.prabhu@grandpalace.com",
-    location: "Plant Room & Maintenance Deck",
-    description: "HVAC cooling systems, electrical power distribution, plumbing, carpentry, and building maintenance.",
-    status: "Active",
-    createdDate: "15/01/2025",
-    employeeCount: 16,
-  },
-  {
-    id: "DEP-005",
-    deptCode: "SEC-50",
-    departmentName: "Security & Safety",
-    headOfDepartment: "Rajiv Kapoor",
-    headEmail: "rajiv.kapoor@grandpalace.com",
-    location: "Security Gatehouse 1",
-    description: "24/7 premises security, CCTV monitoring, guest safety, baggage scanning, and POSH safety checks.",
-    status: "Active",
-    createdDate: "15/01/2025",
-    employeeCount: 18,
-  },
-  {
-    id: "DEP-006",
-    deptCode: "HR-60",
-    departmentName: "Human Resources",
-    headOfDepartment: "Neha Mehta",
-    headEmail: "neha.mehta@grandpalace.com",
-    location: "Admin Wing - Floor 2",
-    description: "Staff recruitment, payroll processing, statutory tax compliance, grievance redressal, and staff welfare.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 8,
-  },
-  {
-    id: "DEP-007",
-    deptCode: "FIN-70",
-    departmentName: "Finance & Accounts",
-    headOfDepartment: "Anil Deshmukh",
-    headEmail: "anil.deshmukh@grandpalace.com",
-    location: "Admin Wing - Floor 2",
-    description: "Night audit, revenue accounting, vendor payments, financial reporting, and tax audit.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 10,
-  },
-  {
-    id: "DEP-008",
-    deptCode: "MKT-80",
-    departmentName: "Sales & Marketing",
-    headOfDepartment: "Priya Patel",
-    headEmail: "priya.patel@grandpalace.com",
-    location: "Executive Offices",
-    description: "Corporate sales, wedding banquet bookings, digital marketing, PR, and OTA distribution.",
-    status: "Active",
-    createdDate: "01/02/2025",
-    employeeCount: 12,
-  },
-  {
-    id: "DEP-009",
-    deptCode: "IT-90",
-    departmentName: "IT & Systems",
-    headOfDepartment: "Arjun Verma",
-    headEmail: "arjun.verma@grandpalace.com",
-    location: "Server Room - Floor 2",
-    description: "Property Management System (PMS), POS terminals, Wi-Fi infrastructure, servers, and cybersecurity.",
-    status: "Active",
-    createdDate: "01/02/2025",
-    employeeCount: 6,
-  },
-  {
-    id: "DEP-010",
-    deptCode: "SPA-100",
-    departmentName: "Spa & Wellness",
-    headOfDepartment: "Kavita Rao",
-    headEmail: "kavita.rao@grandpalace.com",
-    location: "Wellness Center - Floor 4",
-    description: "Ayurvedic spa therapies, gymnasium, swimming pool lifeguard operations, and health club.",
-    status: "Active",
-    createdDate: "01/03/2025",
-    employeeCount: 9,
-  },
-];
-
 export function DepartmentMasterView() {
-  const [departments, setDepartments] = useState<DepartmentMaster[]>(INITIAL_DEPARTMENTS);
+  const [departments, setDepartments] = useState<DepartmentMaster[]>([]);
+  const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const loadDepartments = async () => {
+    setLoading(true);
+    try {
+      const rows = await hrDepartmentService.list();
+      setDepartments(rows.map(mapDepartmentFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load departments");
+      setDepartments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadDepartments();
+  }, []);
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -242,7 +139,7 @@ export function DepartmentMasterView() {
   };
 
   // Save Department (Validation for duplicate names & codes)
-  const handleSaveDepartment = (e: React.FormEvent) => {
+  const handleSaveDepartment = async (e: React.FormEvent) => {
     e.preventDefault();
     setCodeError("");
     setNameError("");
@@ -260,7 +157,6 @@ export function DepartmentMasterView() {
       return;
     }
 
-    // Duplicate check for name
     const isDuplicateName = departments.some(
       (d) =>
         d.departmentName.toLowerCase() === trimmedName.toLowerCase() &&
@@ -272,66 +168,59 @@ export function DepartmentMasterView() {
       return;
     }
 
-    if (editingDept) {
-      setDepartments((prev) =>
-        prev.map((d) =>
-          d.id === editingDept.id
-            ? {
-                ...d,
-                deptCode: trimmedCode,
-                departmentName: trimmedName,
-                headOfDepartment: formHeadName.trim() || "Unassigned",
-                headEmail: formHeadEmail.trim(),
-                location: formLocation.trim(),
-                description: formDescription.trim(),
-                status: formStatus,
-              }
-            : d
-        )
-      );
-      setToastMessage(`Updated department "${trimmedName}".`);
-    } else {
-      const newDept: DepartmentMaster = {
-        id: `DEP-${Math.floor(100 + Math.random() * 900)}`,
-        deptCode: trimmedCode,
-        departmentName: trimmedName,
-        headOfDepartment: formHeadName.trim() || "Unassigned",
-        headEmail: formHeadEmail.trim(),
-        location: formLocation.trim(),
-        description: formDescription.trim(),
-        status: formStatus,
-        createdDate: new Date().toLocaleDateString("en-GB"),
-        employeeCount: 0,
-      };
-      setDepartments((prev) => [newDept, ...prev]);
-      setToastMessage(`Created department "${trimmedName}".`);
+    const payload = mapDepartmentToApi({
+      deptCode: trimmedCode,
+      departmentName: trimmedName,
+      headOfDepartment: formHeadName.trim() || "Unassigned",
+      headEmail: formHeadEmail.trim(),
+      location: formLocation.trim(),
+      description: formDescription.trim(),
+      status: formStatus,
+    });
+
+    try {
+      if (editingDept) {
+        await hrDepartmentService.update(editingDept.id, payload);
+        setToastMessage(`Updated department "${trimmedName}".`);
+      } else {
+        await hrDepartmentService.create(payload);
+        setToastMessage(`Created department "${trimmedName}".`);
+      }
+      await loadDepartments();
+      setIsModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save department");
     }
-
-    setIsModalOpen(false);
   };
 
-  // Toggle Activate / Deactivate
-  const handleToggleStatus = (dept: DepartmentMaster) => {
+  const handleToggleStatus = async (dept: DepartmentMaster) => {
     const nextStatus: DepartmentStatus = dept.status === "Active" ? "Inactive" : "Active";
-    setDepartments((prev) =>
-      prev.map((d) => (d.id === dept.id ? { ...d, status: nextStatus } : d))
-    );
-    setToastMessage(`Department "${dept.departmentName}" is now ${nextStatus}.`);
+    try {
+      await hrDepartmentService.update(dept.id, { status: nextStatus });
+      await loadDepartments();
+      setToastMessage(`Department "${dept.departmentName}" is now ${nextStatus}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update status");
+    }
   };
 
-  // Delete Department with Usage Check
-  const handleDeleteDepartment = (dept: DepartmentMaster) => {
+  const handleDeleteDepartment = async (dept: DepartmentMaster) => {
     if (dept.employeeCount > 0) {
       alert(
-        `Cannot delete "${dept.departmentName}" because it has ${dept.employeeCount} active employee(s) assigned to it. Please reassign the employees to another department before deleting, or deactivate this department instead.`
+        `Cannot delete "${dept.departmentName}" because it has ${dept.employeeCount} active employee(s) assigned to it.`
       );
       return;
     }
 
     if (confirm(`Are you sure you want to delete department "${dept.departmentName}"?`)) {
-      setDepartments((prev) => prev.filter((d) => d.id !== dept.id));
-      if (viewingDept?.id === dept.id) setViewingDept(null);
-      setToastMessage(`Deleted department "${dept.departmentName}".`);
+      try {
+        await hrDepartmentService.remove(dept.id);
+        if (viewingDept?.id === dept.id) setViewingDept(null);
+        await loadDepartments();
+        setToastMessage(`Deleted department "${dept.departmentName}".`);
+      } catch (err) {
+        setToastMessage(err instanceof Error ? err.message : "Failed to delete department");
+      }
     }
   };
 

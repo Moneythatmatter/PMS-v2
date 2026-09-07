@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Award,
   Search,
@@ -22,6 +22,14 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
+import { hrDepartmentService, hrDesignationService } from "@/services/human-resources";
+import {
+  buildIdNameMap,
+  mapDepartmentFromApi,
+  mapDesignationFromApi,
+  mapDesignationToApi,
+} from "@/lib/hr/api-mappers";
+import type { DepartmentMaster } from "@/components/hr/DepartmentMasterView";
 
 export type DesignationStatus = "Active" | "Inactive";
 export type JobGrade = "Executive (L1)" | "Senior (L2)" | "Managerial (L3)" | "Director (L4)";
@@ -38,135 +46,44 @@ export interface DesignationMaster {
   employeeCount: number;
 }
 
-export const INITIAL_DEPT_LIST = [
-  "Front Office",
-  "Housekeeping",
-  "Food & Beverage",
-  "Engineering & Maintenance",
-  "Security & Safety",
-  "Human Resources",
-  "Finance & Accounts",
-  "Sales & Marketing",
-  "IT & Systems",
-  "Spa & Wellness",
-];
-
-export const INITIAL_DESIGNATIONS: DesignationMaster[] = [
-  {
-    id: "DES-001",
-    designationCode: "DSG-FO-01",
-    designationTitle: "Front Desk Manager",
-    department: "Front Office",
-    jobGrade: "Managerial (L3)",
-    description: "Oversees front desk shift operations, VIP guest check-ins, room inventory management, and receptionist staff.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 4,
-  },
-  {
-    id: "DES-002",
-    designationCode: "DSG-FO-02",
-    designationTitle: "Guest Relations Executive",
-    department: "Front Office",
-    jobGrade: "Executive (L1)",
-    description: "Handles guest inquiries, lobby greetings, loyalty member assistance, and special requests.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 12,
-  },
-  {
-    id: "DES-003",
-    designationCode: "DSG-HK-01",
-    designationTitle: "Executive Housekeeper",
-    department: "Housekeeping",
-    jobGrade: "Director (L4)",
-    description: "Head of housekeeping department overseeing room inspection standards, laundry contracts, and floral decor.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 2,
-  },
-  {
-    id: "DES-004",
-    designationCode: "DSG-HK-02",
-    designationTitle: "Housekeeping Supervisor",
-    department: "Housekeeping",
-    jobGrade: "Senior (L2)",
-    description: "Inspects cleaned guest rooms, manages floor attendants, and coordinates linen supply.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 15,
-  },
-  {
-    id: "DES-005",
-    designationCode: "DSG-FB-01",
-    designationTitle: "Executive Head Chef",
-    department: "Food & Beverage",
-    jobGrade: "Director (L4)",
-    description: "Leads culinary operations, menu planning, banquet kitchen standards, and food cost control.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 3,
-  },
-  {
-    id: "DES-006",
-    designationCode: "DSG-FB-02",
-    designationTitle: "Restaurant Captain",
-    department: "Food & Beverage",
-    jobGrade: "Senior (L2)",
-    description: "Manages restaurant table service, guest orders, beverage service, and dining room staff.",
-    status: "Active",
-    createdDate: "15/01/2025",
-    employeeCount: 18,
-  },
-  {
-    id: "DES-007",
-    designationCode: "DSG-HR-01",
-    designationTitle: "HR Manager",
-    department: "Human Resources",
-    jobGrade: "Managerial (L3)",
-    description: "Manages staff recruitment, payroll processing, statutory tax compliance, and grievance resolution.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 3,
-  },
-  {
-    id: "DES-008",
-    designationCode: "DSG-FIN-01",
-    designationTitle: "Finance & Accounts Lead",
-    department: "Finance & Accounts",
-    jobGrade: "Managerial (L3)",
-    description: "Oversees hotel revenue auditing, vendor payments, general ledger, and monthly closing balances.",
-    status: "Active",
-    createdDate: "01/01/2025",
-    employeeCount: 4,
-  },
-  {
-    id: "DES-009",
-    designationCode: "DSG-ENG-01",
-    designationTitle: "Chief Engineer",
-    department: "Engineering & Maintenance",
-    jobGrade: "Managerial (L3)",
-    description: "Maintains hotel HVAC cooling towers, electrical generators, water treatment plants, and safety equipment.",
-    status: "Active",
-    createdDate: "01/02/2025",
-    employeeCount: 2,
-  },
-  {
-    id: "DES-010",
-    designationCode: "DSG-SEC-01",
-    designationTitle: "Security Supervisor",
-    department: "Security & Safety",
-    jobGrade: "Senior (L2)",
-    description: "Controls entry points, CCTV surveillance monitoring, emergency evacuations, and perimeter patrols.",
-    status: "Active",
-    createdDate: "01/02/2025",
-    employeeCount: 8,
-  },
-];
-
 export function DesignationMasterView() {
-  const [designations, setDesignations] = useState<DesignationMaster[]>(INITIAL_DESIGNATIONS);
+  const [designations, setDesignations] = useState<DesignationMaster[]>([]);
+  const [departments, setDepartments] = useState<DepartmentMaster[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const deptNameById = useMemo(
+    () => new Map(departments.map((d) => [d.id, d.departmentName])),
+    [departments],
+  );
+  const deptIdByName = useMemo(
+    () => new Map(departments.map((d) => [d.departmentName, d.id])),
+    [departments],
+  );
+  const deptNames = useMemo(() => departments.map((d) => d.departmentName), [departments]);
+
+  const loadData = async () => {
+    try {
+      const [deptRows, desigRows] = await Promise.all([
+        hrDepartmentService.list(),
+        hrDesignationService.list(),
+      ]);
+      const mappedDepts = deptRows.map(mapDepartmentFromApi);
+      const idToName = buildIdNameMap(deptRows, "departmentName");
+      setDepartments(mappedDepts);
+      setDesignations(
+        desigRows.map((row) =>
+          mapDesignationFromApi(row, idToName.get(String(row.departmentId)) ?? ""),
+        ),
+      );
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load designations");
+      setDesignations([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, []);
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -183,7 +100,7 @@ export function DesignationMasterView() {
   // Form Fields
   const [formCode, setFormCode] = useState("");
   const [formTitle, setFormTitle] = useState("");
-  const [formDept, setFormDept] = useState(INITIAL_DEPT_LIST[0]);
+  const [formDept, setFormDept] = useState("");
   const [formGrade, setFormGrade] = useState<JobGrade>("Executive (L1)");
   const [formDescription, setFormDescription] = useState("");
   const [formStatus, setFormStatus] = useState<DesignationStatus>("Active");
@@ -220,7 +137,7 @@ export function DesignationMasterView() {
     setEditingDesignation(null);
     setFormCode(`DSG-${Math.floor(100 + Math.random() * 900)}`);
     setFormTitle("");
-    setFormDept(INITIAL_DEPT_LIST[0]);
+    setFormDept(deptNames[0] ?? "");
     setFormGrade("Executive (L1)");
     setFormDescription("");
     setFormStatus("Active");
@@ -244,7 +161,7 @@ export function DesignationMasterView() {
   };
 
   // Save Designation (Duplicate check)
-  const handleSaveDesignation = (e: React.FormEvent) => {
+  const handleSaveDesignation = async (e: React.FormEvent) => {
     e.preventDefault();
     setTitleError("");
     setCodeError("");
@@ -275,53 +192,48 @@ export function DesignationMasterView() {
       return;
     }
 
-    if (editingDesignation) {
-      setDesignations((prev) =>
-        prev.map((d) =>
-          d.id === editingDesignation.id
-            ? {
-                ...d,
-                designationCode: trimmedCode,
-                designationTitle: trimmedTitle,
-                department: formDept,
-                jobGrade: formGrade,
-                description: formDescription.trim(),
-                status: formStatus,
-              }
-            : d
-        )
-      );
-      setToastMessage(`Updated designation "${trimmedTitle}".`);
-    } else {
-      const newDesignation: DesignationMaster = {
-        id: `DES-${Math.floor(100 + Math.random() * 900)}`,
-        designationCode: trimmedCode,
-        designationTitle: trimmedTitle,
-        department: formDept,
-        jobGrade: formGrade,
-        description: formDescription.trim(),
-        status: formStatus,
-        createdDate: new Date().toLocaleDateString("en-GB"),
-        employeeCount: 0,
-      };
-      setDesignations((prev) => [newDesignation, ...prev]);
-      setToastMessage(`Created designation "${trimmedTitle}".`);
+    const departmentId = deptIdByName.get(formDept);
+    if (!departmentId) {
+      setTitleError("Please select a valid department.");
+      return;
     }
 
-    setIsModalOpen(false);
+    const payload = mapDesignationToApi({
+      designationCode: trimmedCode,
+      designationTitle: trimmedTitle,
+      departmentId,
+      jobGrade: formGrade,
+      description: formDescription.trim(),
+      status: formStatus,
+    });
+
+    try {
+      if (editingDesignation) {
+        await hrDesignationService.update(editingDesignation.id, payload);
+        setToastMessage(`Updated designation "${trimmedTitle}".`);
+      } else {
+        await hrDesignationService.create(payload);
+        setToastMessage(`Created designation "${trimmedTitle}".`);
+      }
+      await loadData();
+      setIsModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save designation");
+    }
   };
 
-  // Toggle Activate / Deactivate
-  const handleToggleStatus = (dsg: DesignationMaster) => {
+  const handleToggleStatus = async (dsg: DesignationMaster) => {
     const nextStatus: DesignationStatus = dsg.status === "Active" ? "Inactive" : "Active";
-    setDesignations((prev) =>
-      prev.map((d) => (d.id === dsg.id ? { ...d, status: nextStatus } : d))
-    );
-    setToastMessage(`Designation "${dsg.designationTitle}" is now ${nextStatus}.`);
+    try {
+      await hrDesignationService.update(dsg.id, { status: nextStatus });
+      await loadData();
+      setToastMessage(`Designation "${dsg.designationTitle}" is now ${nextStatus}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update status");
+    }
   };
 
-  // Delete Designation with Usage Check
-  const handleDeleteDesignation = (dsg: DesignationMaster) => {
+  const handleDeleteDesignation = async (dsg: DesignationMaster) => {
     if (dsg.employeeCount > 0) {
       alert(
         `Cannot delete "${dsg.designationTitle}" because it has ${dsg.employeeCount} employee(s) assigned to this title. Reassign employees before deleting, or deactivate this designation instead.`
@@ -330,9 +242,14 @@ export function DesignationMasterView() {
     }
 
     if (confirm(`Are you sure you want to delete designation "${dsg.designationTitle}"?`)) {
-      setDesignations((prev) => prev.filter((d) => d.id !== dsg.id));
-      if (viewingDesignation?.id === dsg.id) setViewingDesignation(null);
-      setToastMessage(`Deleted designation "${dsg.designationTitle}".`);
+      try {
+        await hrDesignationService.remove(dsg.id);
+        if (viewingDesignation?.id === dsg.id) setViewingDesignation(null);
+        await loadData();
+        setToastMessage(`Deleted designation "${dsg.designationTitle}".`);
+      } catch (err) {
+        setToastMessage(err instanceof Error ? err.message : "Failed to delete designation");
+      }
     }
   };
 
@@ -428,7 +345,7 @@ export function DesignationMasterView() {
                 className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
               >
                 <option value="ALL">All Departments</option>
-                {INITIAL_DEPT_LIST.map((dept) => (
+                {deptNames.map((dept) => (
                   <option key={dept} value={dept}>
                     {dept}
                   </option>
@@ -721,7 +638,7 @@ export function DesignationMasterView() {
                   onChange={(e) => setFormDept(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-white"
                 >
-                  {INITIAL_DEPT_LIST.map((dept) => (
+                  {deptNames.map((dept) => (
                     <option key={dept} value={dept}>
                       {dept}
                     </option>
@@ -845,7 +762,7 @@ export function DesignationMasterView() {
               className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-800 bg-white"
             >
               <option value="ALL">All Departments</option>
-              {INITIAL_DEPT_LIST.map((dept) => (
+              {deptNames.map((dept) => (
                 <option key={dept} value={dept}>
                   {dept}
                 </option>

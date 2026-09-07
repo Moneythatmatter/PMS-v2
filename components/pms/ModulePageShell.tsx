@@ -18,8 +18,8 @@ interface ModulePageShellProps {
   toastVariant?: "success" | "error";
   onDismissToast?: () => void;
   eyebrow?: string;
-  title: string;
-  description?: string;
+  title: React.ReactNode;
+  description?: React.ReactNode;
   breadcrumbs?: { label: string; href?: string }[];
   primaryAction?: { label: string; onClick: () => void };
   secondaryActions?: React.ReactNode;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, type ReactNode } from "react";
+import React, { useMemo, useState, useEffect, type ReactNode } from "react";
 import {
   ArrowLeft,
   Briefcase,
@@ -17,38 +17,35 @@ import { Button } from "@/components/ui/Button";
 import { DropdownSelect } from "@/components/ui/DropdownSelect";
 import { FormField, TextInput } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
-import { employeeDepartmentLabels } from "@/app/data/hr/employeeDepartmentOptions";
 import {
   AddEmployeePreviewModal,
   type EmployeeFormPreviewData,
 } from "@/components/hr/AddEmployeePreviewModal";
 import { cn } from "@/lib/utils";
+import { getLeavePolicySelectOptions } from "@/components/hr/LeavePolicyMasterView";
+import {
+  hrDepartmentService,
+  hrDesignationService,
+  hrEmploymentTypeService,
+  hrEmployeeService,
+  hrLeavePolicyService,
+  hrSalaryStructureService,
+  hrShiftTypeService,
+  hrDocumentTypeService,
+} from "@/services/human-resources";
+import {
+  buildNameIdMap,
+  mapDepartmentFromApi,
+  mapDesignationFromApi,
+  mapEmploymentTypeFromApi,
+  mapLeavePolicyFromApi,
+  mapSalaryStructureFromApi,
+  mapShiftTypeFromApi,
+  mapDocumentTypeFromApi,
+  mapEmployeeToApi,
+} from "@/lib/hr/api-mappers";
 
 const inputClass = "rounded-xl h-10 text-sm";
-
-const departmentOptions = employeeDepartmentLabels.map((label) => ({
-  value: label,
-  label,
-}));
-
-const designationOptions = [
-  "Front Desk Manager",
-  "Front Desk Associate",
-  "Executive Housekeeper",
-  "Housekeeping Attendant",
-  "Executive Chef",
-  "F&B Steward / Waiter",
-  "Maintenance Technician",
-  "HR Executive",
-  "Finance Manager",
-].map((label) => ({ value: label, label }));
-
-const employmentTypeOptions = [
-  { value: "Permanent", label: "Permanent" },
-  { value: "Contractual", label: "Contractual" },
-  { value: "Probation", label: "Probation" },
-  { value: "Trainee / Intern", label: "Trainee / Intern" },
-];
 
 const statusOptions = [
   { value: "Active", label: "Active" },
@@ -58,28 +55,16 @@ const statusOptions = [
 ];
 
 const shiftTypeOptions = [
-  { value: "Morning Shift (07:00 AM - 03:30 PM)", label: "Morning Shift (07:00 AM - 03:30 PM)" },
-  { value: "Evening Shift (03:00 PM - 11:30 PM)", label: "Evening Shift (03:00 PM - 11:30 PM)" },
-  { value: "Night Shift (11:00 PM - 07:30 AM)", label: "Night Shift (11:00 PM - 07:30 AM)" },
-  { value: "General Shift (09:00 AM - 05:30 PM)", label: "General Shift (09:00 AM - 05:30 PM)" },
+  { value: "Morning Shift", label: "Morning Shift" },
+  { value: "Evening Shift", label: "Evening Shift" },
+  { value: "Night Shift", label: "Night Shift" },
+  { value: "General Shift", label: "General Shift" },
 ];
 
 const weeklyOffOptions = [
   { value: "Sunday Only", label: "Sunday Only" },
   { value: "Rotational Off", label: "Rotational Off" },
   { value: "Alternate Saturdays & Sundays", label: "Alternate Saturdays & Sundays" },
-];
-
-const leavePolicyOptions = [
-  { value: "Standard Hotel Staff Policy (24 Days Annual)", label: "Standard Hotel Staff Policy (24 Days Annual)" },
-  { value: "Executive Officer Leave Policy (30 Days Annual)", label: "Executive Officer Leave Policy (30 Days Annual)" },
-  { value: "Contract Staff Policy (12 Days Annual)", label: "Contract Staff Policy (12 Days Annual)" },
-];
-
-const salaryStructureOptions = [
-  { value: "Executive Staff Slab B", label: "Executive Staff Slab B" },
-  { value: "Managerial Grade A", label: "Managerial Grade A" },
-  { value: "Operative Staff Slab C", label: "Operative Staff Slab C" },
 ];
 
 const genderOptions = [
@@ -93,16 +78,6 @@ const emergencyRelationOptions = [
   { value: "Parent", label: "Parent" },
   { value: "Sibling", label: "Sibling" },
   { value: "Friend", label: "Friend" },
-];
-
-const documentTypeOptions = [
-  { value: "Aadhaar Card", label: "Aadhaar Card" },
-  { value: "PAN Card", label: "PAN Card" },
-  { value: "Resume", label: "Resume" },
-  { value: "Offer Letter", label: "Offer Letter" },
-  { value: "Joining Letter", label: "Joining Letter" },
-  { value: "Bank Passbook", label: "Bank Passbook" },
-  { value: "Other Documents", label: "Other Documents" },
 ];
 
 interface UploadedDocument {
@@ -198,6 +173,68 @@ export function AddEmployeeView() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [saveAfterPreview, setSaveAfterPreview] = useState(false);
+  const [departmentOptions, setDepartmentOptions] = useState<{ value: string; label: string }[]>([]);
+  const [designationOptions, setDesignationOptions] = useState<{ value: string; label: string }[]>([]);
+  const [employmentTypeOptions, setEmploymentTypeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [shiftTypeOptionsLoaded, setShiftTypeOptionsLoaded] = useState<{ value: string; label: string }[]>([]);
+  const [leavePolicyOptions, setLeavePolicyOptions] = useState<{ value: string; label: string }[]>([]);
+  const [salaryStructureOptions, setSalaryStructureOptions] = useState<{ value: string; label: string }[]>([]);
+  const [documentTypeOptions, setDocumentTypeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [masterLookups, setMasterLookups] = useState<{
+    departmentNameToId: Map<string, string>;
+    designationNameToId: Map<string, string>;
+    employmentTypeNameToId: Map<string, string>;
+    shiftTypeNameToId: Map<string, string>;
+    leavePolicyNameToId: Map<string, string>;
+  }>({
+    departmentNameToId: new Map(),
+    designationNameToId: new Map(),
+    employmentTypeNameToId: new Map(),
+    shiftTypeNameToId: new Map(),
+    leavePolicyNameToId: new Map(),
+  });
+
+  useEffect(() => {
+    const loadMasters = async () => {
+      try {
+        const [deptRows, desigRows, empTypeRows, shiftRows, policyRows, structureRows, docTypeRows] =
+          await Promise.all([
+            hrDepartmentService.list(),
+            hrDesignationService.list(),
+            hrEmploymentTypeService.list(),
+            hrShiftTypeService.list(),
+            hrLeavePolicyService.list(),
+            hrSalaryStructureService.list(),
+            hrDocumentTypeService.list(),
+          ]);
+        const departments = deptRows.map(mapDepartmentFromApi);
+        const designations = desigRows.map((row) => mapDesignationFromApi(row));
+        const employmentTypes = empTypeRows.map(mapEmploymentTypeFromApi);
+        const shiftTypes = shiftRows.map(mapShiftTypeFromApi);
+        const leavePolicies = policyRows.map(mapLeavePolicyFromApi);
+        const structures = structureRows.map(mapSalaryStructureFromApi);
+        const docTypes = docTypeRows.map((row) => mapDocumentTypeFromApi(row));
+
+        setDepartmentOptions(departments.map((d) => ({ value: d.departmentName, label: d.departmentName })));
+        setDesignationOptions(designations.map((d) => ({ value: d.designationTitle, label: d.designationTitle })));
+        setEmploymentTypeOptions(employmentTypes.map((t) => ({ value: t.typeName, label: t.typeName })));
+        setShiftTypeOptionsLoaded(shiftTypes.map((s) => ({ value: s.shiftName, label: s.shiftName })));
+        setLeavePolicyOptions(getLeavePolicySelectOptions(leavePolicies));
+        setSalaryStructureOptions(structures.map((s) => ({ value: s.name, label: s.name })));
+        setDocumentTypeOptions(docTypes.map((d) => ({ value: d.name, label: d.name })));
+        setMasterLookups({
+          departmentNameToId: buildNameIdMap(deptRows, "departmentName"),
+          designationNameToId: buildNameIdMap(desigRows, "designationTitle"),
+          employmentTypeNameToId: buildNameIdMap(empTypeRows, "typeName"),
+          shiftTypeNameToId: buildNameIdMap(shiftRows, "shiftName"),
+          leavePolicyNameToId: buildNameIdMap(policyRows, "policyName"),
+        });
+      } catch (e) {
+        setToastMessage(e instanceof Error ? e.message : "Failed to load master data");
+      }
+    };
+    void loadMasters();
+  }, []);
 
   // Password visibility state
   const [showPassword, setShowPassword] = useState(false);
@@ -253,16 +290,8 @@ export function AddEmployeeView() {
   });
 
   // Section 6: Documents
-  const [documents, setDocuments] = useState<UploadedDocument[]>([
-    {
-      id: "doc-1",
-      type: "Aadhaar Card",
-      fileName: "aadhaar_card_front_back.pdf",
-      uploadDate: new Date().toLocaleDateString("en-GB"),
-      size: "1.2 MB",
-    },
-  ]);
-  const [selectedDocType, setSelectedDocType] = useState("Aadhaar Card");
+  const [documents, setDocuments] = useState<UploadedDocument[]>([]);
+  const [selectedDocType, setSelectedDocType] = useState("");
 
   // Live Auto-Calculated Salary Breakdown
   const salaryBreakdown = useMemo(() => {
@@ -369,9 +398,11 @@ export function AddEmployeeView() {
     setDocuments([]);
   };
 
-  const handleConfirmSave = () => {
+  const handleConfirmSave = async () => {
     setIsSubmitting(true);
-    window.setTimeout(() => {
+    try {
+      const payload = mapEmployeeToApi(formData, masterLookups);
+      await hrEmployeeService.create(payload);
       setIsSubmitting(false);
       setShowPreview(false);
       const fullName = `${formData.firstName} ${formData.lastName}`.trim();
@@ -385,7 +416,10 @@ export function AddEmployeeView() {
       window.setTimeout(() => {
         router.push("/human-resources/employees/list");
       }, 800);
-    }, 600);
+    } catch (e) {
+      setIsSubmitting(false);
+      setToastMessage(e instanceof Error ? e.message : "Failed to save employee");
+    }
   };
 
   // Mock File Upload Handler
@@ -595,7 +629,7 @@ export function AddEmployeeView() {
               <DropdownSelect
                 value={formData.shiftType}
                 onChange={(value) => updateField("shiftType", value)}
-                options={shiftTypeOptions}
+                options={shiftTypeOptionsLoaded.length ? shiftTypeOptionsLoaded : shiftTypeOptions}
                 placeholder="Select shift type"
                 aria-label="Shift type"
               />
