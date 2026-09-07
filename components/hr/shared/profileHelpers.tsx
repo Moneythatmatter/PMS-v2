@@ -723,7 +723,10 @@ export interface GrievanceItem {
   resolutionNote?: string;
 }
 
-const GRIEVANCE_STATUS_TONE: Record<GrievanceItem["status"], keyof typeof PROFILE_ICON_TONES> = {
+const GRIEVANCE_STATUS_TONE: Record<
+  GrievanceItem["status"],
+  "emerald" | "amber" | "rose" | "violet" | "slate" | "blue"
+> = {
   Open: "amber",
   Resolved: "emerald",
   Escalated: "violet",

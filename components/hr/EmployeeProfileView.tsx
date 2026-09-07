@@ -1029,23 +1029,25 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                 SECTION 9 & 11: TAB 7 - GRIEVANCES (Status Badges + Empty State)
             ───────────────────────────────────────────────────────────── */}
             {activeTab === "grievances" && (
-              <ProfileCard title="Grievances" className="animate-in fade-in duration-200" role="tabpanel">
-                <GrievancesPanel
-                  grievances={SAMPLE_GRIEVANCES[employee.id] ?? []}
-                  employeeName={employee.name}
-                />
-              </ProfileCard>
+              <div role="tabpanel">
+                <ProfileCard title="Grievances" className="animate-in fade-in duration-200">
+                  <GrievancesPanel
+                    grievances={SAMPLE_GRIEVANCES[employee.id] ?? []}
+                    employeeName={employee.name}
+                  />
+                </ProfileCard>
+              </div>
             )}
 
             {/* ─────────────────────────────────────────────────────────────
                 SECTION 10: TAB 8 - ACTIVITY LOG (With Filters)
             ───────────────────────────────────────────────────────────── */}
             {activeTab === "activity" && (
-              <ProfileCard
-                title="Activity log"
-                className="animate-in fade-in duration-200"
-                role="tabpanel"
-                action={
+              <div role="tabpanel">
+                <ProfileCard
+                  title="Activity log"
+                  className="animate-in fade-in duration-200"
+                  action={
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-1">
                       <Filter className="h-3 w-3 text-slate-400" />
@@ -1077,9 +1079,10 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
               >
                 <ActivityLogPanel items={filteredActivities} />
               </ProfileCard>
-            )}
+            </div>
+          )}
           </div>
-        </Modal>
+        </>
       )}
     </ModulePageShell>
   );
