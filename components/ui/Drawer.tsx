@@ -13,7 +13,7 @@ export interface DrawerProps {
   icon?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  maxWidth?: "sm" | "md" | "lg" | "xl";
+  maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl";
   /** Allow drag-resize from the left edge. Default true. */
   resizable?: boolean;
 }
@@ -23,6 +23,7 @@ const widthKeys = {
   md: "md",
   lg: "lg",
   xl: "xl",
+  "2xl": "xl",
 } as const;
 
 export function Drawer({

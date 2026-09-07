@@ -681,13 +681,13 @@ export function BalanceConfirmationView() {
               {/* Hotel Header Block */}
               <div className="text-center space-y-1 border-b border-slate-300 pb-3">
                 <h1 className="text-lg font-bold tracking-wide text-slate-900 font-sans">
-                  Luxy hotel
+                  Hotel & Resorts Private Limited
                 </h1>
                 <p className="text-[11px] text-slate-600 leading-tight">
-                  Luxy Hotel GACL Chowkdi, Dahej Bharuch Main Road, Dahej, Dist Bharuch. Gujarat Gujarat 392130
+                  GACL Chowkdi, Dahej Bharuch Main Road, Dahej, Dist Bharuch. Gujarat 392130
                 </p>
                 <p className="text-[11px] text-slate-600">
-                  Phone: 7069990770 • E-Mail: gm@hotelluxy.com • Web: www.hotelluxy.com
+                  Phone: +91 7069990770 • E-Mail: accounts@hotelresorts.com • Web: www.hotelresorts.com
                 </p>
                 <p className="text-[11px] font-bold text-slate-800">
                   GSTIN: 24AAIFL8217G1ZC State: GUJARAT
@@ -767,7 +767,7 @@ export function BalanceConfirmationView() {
 
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div className="border border-slate-200 p-3 rounded space-y-8">
-                    <p className="font-bold text-slate-800">For Luxy Hotel</p>
+                    <p className="font-bold text-slate-800">For Hotel & Resorts Private Limited</p>
                     <div className="pt-4 border-t border-slate-300">
                       <p className="font-semibold text-slate-700">Accounts Division Signatory</p>
                     </div>

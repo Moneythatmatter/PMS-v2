@@ -28,23 +28,18 @@ import { ChartOfAccountsView } from "@/components/accounts/ChartOfAccountsView";
 import { PartyMasterView } from "@/components/accounts/PartyMasterView";
 import { CompanyCreationView } from "@/components/accounts/CompanyCreationView";
 import { CompanySettingsView } from "@/components/accounts/CompanySettingsView";
-import { NextFiscalYearCreationView } from "@/components/accounts/NextFiscalYearCreationView";
-import { FiscalYearClosingView } from "@/components/accounts/FiscalYearClosingView";
-import { ClosedFiscalYearReversingView } from "@/components/accounts/ClosedFiscalYearReversingView";
+import { FiscalYearView } from "@/components/accounts/FiscalYearView";
 import { VoucherTypeView } from "@/components/accounts/VoucherTypeView";
 import { CurrencyMasterView } from "@/components/accounts/CurrencyMasterView";
 import { PartyTypeMasterView } from "@/components/accounts/PartyTypeMasterView";
 import { PartySubTypeMasterView } from "@/components/accounts/PartySubTypeMasterView";
-import { BankReconciliationTypeMasterView } from "@/components/accounts/BankReconciliationTypeMasterView";
 import { DivisionMasterView } from "@/components/accounts/DivisionMasterView";
-import { TransactionValidationView } from "@/components/accounts/TransactionValidationView";
-import { VoucherTypeUserPrivilegeView } from "@/components/accounts/VoucherTypeUserPrivilegeView";
-import { QueriesView } from "@/components/accounts/QueriesView";
 import { FinancialAnalysisView } from "@/components/accounts/FinancialAnalysisView";
 import { BalanceSheetView } from "@/components/accounts/BalanceSheetView";
 import { DayBookView } from "@/components/accounts/DayBookView";
-import { SecondaryReportsView } from "@/components/accounts/SecondaryReportsView";
-import { AccountsToolsView } from "@/components/accounts/AccountsToolsView";
+import { PaymentMethodMasterView } from "@/components/accounts/PaymentMethodMasterView";
+import { RevenueCategoryMasterView } from "@/components/accounts/RevenueCategoryMasterView";
+import { TaxGstMasterView } from "@/components/accounts/TaxGstMasterView";
 import { ChevronRight, FolderOpen } from "lucide-react";
 
 function findNavLabel(slugPath: string): { title: string; category?: string } {
@@ -292,28 +287,20 @@ export default async function AccountsPage({
   }
 
   if (
+    slugPath === "masters/fiscal-year" ||
+    slugPath === "fiscal-year" ||
     slugPath === "masters/next-fiscal-year-creation" ||
     slugPath === "next-fiscal-year-creation" ||
     slugPath === "fiscal-year-creation" ||
-    slugPath === "next-fy"
-  ) {
-    return <NextFiscalYearCreationView />;
-  }
-
-  if (
+    slugPath === "next-fy" ||
     slugPath === "masters/fiscal-year-closing" ||
     slugPath === "fiscal-year-closing font" ||
-    slugPath === "fiscal-year-closing"
-  ) {
-    return <FiscalYearClosingView />;
-  }
-
-  if (
+    slugPath === "fiscal-year-closing" ||
     slugPath === "masters/closed-fiscal-year-reversing" ||
     slugPath === "closed-fiscal-year-reversing" ||
     slugPath === "closed-fy-reversing"
   ) {
-    return <ClosedFiscalYearReversingView />;
+    return <FiscalYearView />;
   }
 
   if (
@@ -349,15 +336,6 @@ export default async function AccountsPage({
   }
 
   if (
-    slugPath === "masters/bank-reconciliation-type" ||
-    slugPath === "bank-reconciliation-type" ||
-    slugPath === "bankreconciliationtype font" ||
-    slugPath === "bankreconciliationtype"
-  ) {
-    return <BankReconciliationTypeMasterView />;
-  }
-
-  if (
     slugPath === "masters/division" ||
     slugPath === "division" ||
     slugPath === "divisions"
@@ -366,27 +344,38 @@ export default async function AccountsPage({
   }
 
   if (
-    slugPath === "masters/transaction-validation" ||
-    slugPath === "transaction-validation" ||
-    slugPath === "transactionvalidation"
+    slugPath === "masters" ||
+    slugPath === "masters/index" ||
+    slugPath === "masters-directory"
   ) {
-    return <TransactionValidationView />;
+    return <ChartOfAccountsView />;
   }
 
   if (
-    slugPath === "masters/voucher-type-user-privilege" ||
-    slugPath === "voucher-type-user-privilege" ||
-    slugPath === "vouchertypeuserprivilege"
+    slugPath === "masters/tax-gst" ||
+    slugPath === "masters/tax-gst-master" ||
+    slugPath === "tax-gst" ||
+    slugPath === "tax-gst-master"
   ) {
-    return <VoucherTypeUserPrivilegeView />;
+    return <TaxGstMasterView />;
   }
 
   if (
-    slugPath === "queries" ||
-    slugPath === "queries/search" ||
-    slugPath === "query"
+    slugPath === "masters/payment-methods" ||
+    slugPath === "masters/payment-method-master" ||
+    slugPath === "payment-methods" ||
+    slugPath === "payment-method-master"
   ) {
-    return <QueriesView />;
+    return <PaymentMethodMasterView />;
+  }
+
+  if (
+    slugPath === "masters/revenue-categories" ||
+    slugPath === "masters/revenue-category-master" ||
+    slugPath === "revenue-categories" ||
+    slugPath === "revenue-category-master"
+  ) {
+    return <RevenueCategoryMasterView />;
   }
 
   if (
@@ -428,22 +417,6 @@ export default async function AccountsPage({
     slugPath === "daybook"
   ) {
     return <DayBookView />;
-  }
-
-  if (
-    slugPath === "reports2" ||
-    slugPath === "reports2/catalog" ||
-    slugPath === "reports-2"
-  ) {
-    return <SecondaryReportsView />;
-  }
-
-  if (
-    slugPath === "tools" ||
-    slugPath === "tools/utilities" ||
-    slugPath === "utilities"
-  ) {
-    return <AccountsToolsView />;
   }
 
   const { title, category } = findNavLabel(slugPath);

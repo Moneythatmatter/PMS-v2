@@ -332,7 +332,7 @@ function CalendarPanel({
   viewYear: number;
   viewMonth: number;
   joinLabel: string;
-  weekdayLabels: string[];
+  weekdayLabels: readonly string[] | string[];
   monthGrid: EmployeeAttendanceDay[];
   selectedDayIso: string | null;
   parsedJoinDate: Date;

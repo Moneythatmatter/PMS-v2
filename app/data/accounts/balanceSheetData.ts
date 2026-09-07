@@ -29,7 +29,7 @@ export interface BalanceSheetData {
 
 export const sampleBalanceSheetData: BalanceSheetData = {
   asOnDate: "31/03/2027",
-  companyName: "LUXY HOTEL & RESORTS PRIVATE LIMITED",
+  companyName: "HOTEL & RESORTS PRIVATE LIMITED",
   financialYear: "2026 - 2027",
   totalLiabilities: 485000000.0,
   totalAssets: 485000000.0,

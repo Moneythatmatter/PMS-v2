@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CarTaxiFront, CheckCircle2, Clock } from "lucide-react";
 import { taxiBookingService } from "@/services/front-office";
+import { todayIso } from "@/lib/reservation-dates";
 import { FormField, SelectInput, TextInput, formatINR } from "@/components/frontoffice/ui";
 import {
   ClickableTable,
@@ -16,6 +17,20 @@ import {
   useModulePage,
 } from "./common";
 
+function getCurrentTime(): string {
+  const d = new Date();
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+function getNextAvailableTime(): string {
+  const d = new Date(Date.now() + 15 * 60 * 1000);
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
 export function TaxiBookingView() {
   const { items, setItems, search, setSearch, toast, setToast, formOpen, setFormOpen, preview, setPreview, filtered } =
     useModulePage(() => taxiBookingService.list(), (r, q) => r.guest.toLowerCase().includes(q) || r.drop.toLowerCase().includes(q));
@@ -28,11 +43,13 @@ export function TaxiBookingView() {
   }, [guests, guestName]);
 
   const [drop, setDrop] = useState("Airport T1");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [time, setTime] = useState("08:00");
+  const [date, setDate] = useState(todayIso);
+  const [time, setTime] = useState(getNextAvailableTime);
   const [fare, setFare] = useState("850");
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+  const [saving, setSaving] = useState(false);
+  const isSavingRef = useRef(false);
   const guest = guests.find((g) => g.guestName === guestName);
 
   const list = useMemo(() => {
@@ -42,24 +59,85 @@ export function TaxiBookingView() {
     return rows;
   }, [filtered, filter, sortBy]);
 
+  const handleOpenForm = () => {
+    const today = todayIso();
+    setDate(today);
+    setTime(getNextAvailableTime());
+    setFormOpen(true);
+  };
+
   const handleSave = async () => {
+    if (isSavingRef.current) return;
+
+    if (!guestName) {
+      setToast("Please select a guest.");
+      return;
+    }
+    if (!drop.trim()) {
+      setToast("Please enter a destination.");
+      return;
+    }
+    if (!date) {
+      setToast("Please select a date.");
+      return;
+    }
+    if (!time) {
+      setToast("Please select a pickup time.");
+      return;
+    }
+
+    const today = todayIso();
+    const currentTime = getCurrentTime();
+
+    if (date < today) {
+      setToast("Booking date cannot be in the past.");
+      return;
+    }
+
+    if (date === today && time < currentTime) {
+      setToast("Booking time cannot be in the past for today.");
+      return;
+    }
+
+    isSavingRef.current = true;
+    setSaving(true);
+
     try {
       const record = await taxiBookingService.create({
-        guest: guestName, room: guest?.room ?? "—", pickup: "Hotel Lobby", drop, date,
-        time: new Date(`2000-01-01T${time}`).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
-        driver: "Unassigned", vehicle: "—", fare: parseFloat(fare) || 850, status: "Scheduled",
+        guest: guestName,
+        room: guest?.room ?? "—",
+        pickup: "Hotel Lobby",
+        drop: drop.trim(),
+        date,
+        time: new Date(`2000-01-01T${time}`).toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }),
+        driver: "Unassigned",
+        vehicle: "—",
+        fare: parseFloat(fare) || 850,
+        status: "Scheduled",
       });
       setItems((prev) => [record, ...prev]);
       setFormOpen(false);
-      setToast(`Taxi booked for ${guestName} to ${drop}.`);
+      setToast(`Taxi booked for ${guestName} to ${drop.trim()}.`);
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      isSavingRef.current = false;
+      setSaving(false);
     }
   };
 
   return (
     <ModuleShell toast={toast} setToast={setToast}
-      header={{ title: "Taxi / Cab Booking", desc: "Arrange transport for in-house and departing guests.", btn: "Book Taxi", onBtn: () => setFormOpen(true) }}
+      header={{
+        title: "Taxi / Cab Booking",
+        desc: "Arrange transport for in-house and departing guests.",
+        btn: "Book Taxi",
+        onBtn: handleOpenForm,
+      }}
       stats={[
         { label: "Scheduled", value: items.filter((r) => r.status === "Scheduled").length, accent: "#15803d", icon: CarTaxiFront, sublabel: "Upcoming trips" },
         { label: "Completed", value: items.filter((r) => r.status === "Completed").length, accent: "#10b981", icon: CheckCircle2 },
@@ -81,14 +159,57 @@ export function TaxiBookingView() {
           { key: "status", header: "Status", render: (r) => <Pill className={statusColors[r.status]}>{r.status}</Pill> },
         ]}
       />
-      <FormDrawer open={formOpen} onClose={() => setFormOpen(false)} title="Book Taxi" onSave={handleSave}>
-        <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{guests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName} — Room {g.room}</option>)}</SelectInput></FormField>
-        <FormField label="Destination"><TextInput value={drop} onChange={(e) => setDrop(e.target.value)} /></FormField>
+      <FormDrawer
+        open={formOpen}
+        onClose={() => {
+          if (!saving) setFormOpen(false);
+        }}
+        title="Book Taxi"
+        onSave={handleSave}
+        isSaving={saving}
+      >
+        <FormField label="Guest">
+          <SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>
+            {guests.map((g) => (
+              <option key={g.id} value={g.guestName}>
+                {g.guestName} — Room {g.room}
+              </option>
+            ))}
+          </SelectInput>
+        </FormField>
+        <FormField label="Destination">
+          <TextInput value={drop} onChange={(e) => setDrop(e.target.value)} />
+        </FormField>
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Date"><TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} /></FormField>
-          <FormField label="Time"><TextInput type="time" value={time} onChange={(e) => setTime(e.target.value)} /></FormField>
+          <FormField label="Date">
+            <TextInput
+              type="date"
+              min={todayIso()}
+              value={date}
+              onChange={(e) => {
+                const nextDate = e.target.value;
+                setDate(nextDate);
+                if (nextDate === todayIso() && time < getCurrentTime()) {
+                  setTime(getNextAvailableTime());
+                }
+              }}
+            />
+          </FormField>
+          <FormField
+            label="Time"
+            helperText={date === todayIso() ? "Must be current or future time" : undefined}
+          >
+            <TextInput
+              type="time"
+              min={date === todayIso() ? getCurrentTime() : undefined}
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+            />
+          </FormField>
         </div>
-        <FormField label="Estimated Fare (₹)"><TextInput type="number" value={fare} onChange={(e) => setFare(e.target.value)} /></FormField>
+        <FormField label="Estimated Fare (₹)">
+          <TextInput type="number" value={fare} onChange={(e) => setFare(e.target.value)} />
+        </FormField>
       </FormDrawer>
       <PreviewDrawer open={!!preview} onClose={() => setPreview(null)} title={preview?.guest ?? ""} desc={`${preview?.pickup} → ${preview?.drop}`}>
         {preview && <PreviewGrid icon={CarTaxiFront} rows={[["Room", preview.room], ["Date", preview.date], ["Time", preview.time], ["Driver", preview.driver], ["Vehicle", preview.vehicle], ["Fare", formatINR(preview.fare)], ["Status", preview.status]]} />}

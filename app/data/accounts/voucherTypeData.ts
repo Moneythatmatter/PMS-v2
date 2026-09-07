@@ -1,213 +1,101 @@
-export interface VoucherTypeRecord {
-  id: string;
-  voucherTypeId: string;
-  voucherTypeName: string;
-  voucherShortName: string;
-  seqNo: number;
-  underVoucherType: string;
-  voucherNoType: "Automatic" | "Manual" | "Monthly Reset" | "Yearly Reset";
-  voucherPrefix: string;
-  docType: "None" | "Invoice" | "Receipt" | "Payment" | "Credit Note" | "Debit Note" | "Journal";
-  defaultDrCr: "DR" | "CR";
-  defaultRefType: "New Ref" | "Agst Ref" | "Advance" | "On Account";
-  activeTransaction: boolean;
-  provisionalTrn: boolean;
-  defaultDateSystemDate: boolean;
-  commonNarrationMandatory: boolean;
-  transactionBgColor: string;
-  voucherPrintingRequired: boolean;
-  tdsApplicable: boolean;
-  acceptBankBranchName: boolean;
-  recurringChargeApplicable: boolean;
-  otherDeductionsApplicable: boolean;
-  approvalApplicable: boolean;
-  allowExcelImport: boolean;
-  atleastOneCreditBankLedger: boolean;
-  atleastOneCreditCashLedger: boolean;
-  signBy: string;
-  updatedBy: string;
-  updatedDate: string;
+export type VoucherCategory =
+  | "Receipt"
+  | "Payment"
+  | "Journal"
+  | "Contra"
+  | "Credit Note"
+  | "Debit Note";
+
+export interface VoucherTypeModel {
+  voucherTypeId: string; // e.g. "VT-001" (Primary Key)
+  voucherTypeName: string; // e.g. "Receipt Voucher"
+  shortCode: string; // e.g. "RV" (uppercase, unique)
+  category: VoucherCategory;
+  sequence: number;
+
+  numberingMethod: "Automatic" | "Manual";
+  prefixTemplate: string; // e.g. "RV/{FY}/"
+  startingNumber: number; // e.g. 1
+  resetFrequency: "Yearly" | "Monthly" | "Never";
+
+  defaultEntryNature: "Debit" | "Credit" | "Both";
+
+  partyRequired: boolean;
+  divisionRequired: boolean;
+
+  status: "Active" | "Inactive";
+
+  companyId?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string;
+  updatedBy?: string;
+  hasTransactions?: boolean;
+  transactionCount?: number;
 }
 
-export const sampleVoucherTypesData: VoucherTypeRecord[] = [
+// Current active fiscal year code for live numbering preview
+export const currentFiscalYearCode = "26-27";
+
+// Standard Hotel PMS V1 Default Seed Voucher Types (strictly 2 records)
+export const sampleVoucherTypesList: VoucherTypeModel[] = [
   {
-    id: "vt-journal",
-    voucherTypeId: "Journal",
-    voucherTypeName: "Journal Voucher",
-    voucherShortName: "JV",
-    seqNo: 1,
-    underVoucherType: "Primary",
-    voucherNoType: "Automatic",
-    voucherPrefix: "JV/26-27/",
-    docType: "Journal",
-    defaultDrCr: "DR",
-    defaultRefType: "Agst Ref",
-    activeTransaction: true,
-    provisionalTrn: false,
-    defaultDateSystemDate: true,
-    commonNarrationMandatory: true,
-    transactionBgColor: "#ecfdf5", // Emerald light
-    voucherPrintingRequired: true,
-    tdsApplicable: true,
-    acceptBankBranchName: false,
-    recurringChargeApplicable: true,
-    otherDeductionsApplicable: true,
-    approvalApplicable: true,
-    allowExcelImport: true,
-    atleastOneCreditBankLedger: false,
-    atleastOneCreditCashLedger: false,
-    signBy: "Abhijit Suthar (Senior Controller)",
-    updatedBy: "Jay Admin",
-    updatedDate: "31/07/2026 18:30",
+    voucherTypeId: "VT-001",
+    voucherTypeName: "Receipt Voucher",
+    shortCode: "RV",
+    category: "Receipt",
+    sequence: 1,
+    numberingMethod: "Automatic",
+    prefixTemplate: "RV/{FY}/",
+    startingNumber: 1,
+    resetFrequency: "Yearly",
+    defaultEntryNature: "Debit",
+    partyRequired: true,
+    divisionRequired: false,
+    status: "Active",
+    companyId: "comp-101",
+    createdAt: "01 Apr 2024",
+    updatedAt: "10 Jan 2025",
+    createdBy: "Finance Admin",
+    updatedBy: "Finance Admin",
+    hasTransactions: true,
+    transactionCount: 320,
   },
   {
-    id: "vt-payments",
-    voucherTypeId: "Payments",
-    voucherTypeName: "Bank & Cash Payment Voucher",
-    voucherShortName: "PV",
-    seqNo: 2,
-    underVoucherType: "Primary",
-    voucherNoType: "Automatic",
-    voucherPrefix: "PAY/26-27/",
-    docType: "Payment",
-    defaultDrCr: "DR",
-    defaultRefType: "Agst Ref",
-    activeTransaction: true,
-    provisionalTrn: false,
-    defaultDateSystemDate: true,
-    commonNarrationMandatory: true,
-    transactionBgColor: "#f0fdf4",
-    voucherPrintingRequired: true,
-    tdsApplicable: true,
-    acceptBankBranchName: true,
-    recurringChargeApplicable: false,
-    otherDeductionsApplicable: true,
-    approvalApplicable: true,
-    allowExcelImport: false,
-    atleastOneCreditBankLedger: true,
-    atleastOneCreditCashLedger: false,
-    signBy: "Accounts Manager",
-    updatedBy: "System Auditor",
-    updatedDate: "30/07/2026 14:20",
-  },
-  {
-    id: "vt-receipts",
-    voucherTypeId: "Receipts",
-    voucherTypeName: "Guest & Party Receipt Voucher",
-    voucherShortName: "RV",
-    seqNo: 3,
-    underVoucherType: "Primary",
-    voucherNoType: "Automatic",
-    voucherPrefix: "RCP/26-27/",
-    docType: "Receipt",
-    defaultDrCr: "CR",
-    defaultRefType: "Advance",
-    activeTransaction: true,
-    provisionalTrn: false,
-    defaultDateSystemDate: true,
-    commonNarrationMandatory: true,
-    transactionBgColor: "#eff6ff",
-    voucherPrintingRequired: true,
-    tdsApplicable: false,
-    acceptBankBranchName: true,
-    recurringChargeApplicable: false,
-    otherDeductionsApplicable: false,
-    approvalApplicable: false,
-    allowExcelImport: true,
-    atleastOneCreditBankLedger: false,
-    atleastOneCreditCashLedger: false,
-    signBy: "Front Desk Cashier",
-    updatedBy: "Jay Admin",
-    updatedDate: "29/07/2026 11:10",
-  },
-  {
-    id: "vt-contra",
-    voucherTypeId: "Contra",
-    voucherTypeName: "Bank Cash Contra Transfer",
-    voucherShortName: "CV",
-    seqNo: 4,
-    underVoucherType: "Primary",
-    voucherNoType: "Automatic",
-    voucherPrefix: "CON/26-27/",
-    docType: "None",
-    defaultDrCr: "DR",
-    defaultRefType: "On Account",
-    activeTransaction: true,
-    provisionalTrn: false,
-    defaultDateSystemDate: true,
-    commonNarrationMandatory: false,
-    transactionBgColor: "#fefce8",
-    voucherPrintingRequired: false,
-    tdsApplicable: false,
-    acceptBankBranchName: true,
-    recurringChargeApplicable: false,
-    otherDeductionsApplicable: false,
-    approvalApplicable: false,
-    allowExcelImport: false,
-    atleastOneCreditBankLedger: true,
-    atleastOneCreditCashLedger: true,
-    signBy: "Cashier Lead",
-    updatedBy: "Jay Admin",
-    updatedDate: "28/07/2026 16:45",
-  },
-  {
-    id: "vt-credit-note",
-    voucherTypeId: "Credit Note",
-    voucherTypeName: "Customer Credit Note Adjustment",
-    voucherShortName: "CN",
-    seqNo: 5,
-    underVoucherType: "Primary",
-    voucherNoType: "Automatic",
-    voucherPrefix: "CN/26-27/",
-    docType: "Credit Note",
-    defaultDrCr: "CR",
-    defaultRefType: "Agst Ref",
-    activeTransaction: true,
-    provisionalTrn: false,
-    defaultDateSystemDate: true,
-    commonNarrationMandatory: true,
-    transactionBgColor: "#faf5ff",
-    voucherPrintingRequired: true,
-    tdsApplicable: true,
-    acceptBankBranchName: false,
-    recurringChargeApplicable: false,
-    otherDeductionsApplicable: true,
-    approvalApplicable: true,
-    allowExcelImport: false,
-    atleastOneCreditBankLedger: false,
-    atleastOneCreditCashLedger: false,
-    signBy: "Billing Manager",
-    updatedBy: "System Auditor",
-    updatedDate: "25/07/2026 10:15",
-  },
-  {
-    id: "vt-debit-note",
-    voucherTypeId: "Debit Note",
-    voucherTypeName: "Vendor Debit Note Adjustment",
-    voucherShortName: "DN",
-    seqNo: 6,
-    underVoucherType: "Primary",
-    voucherNoType: "Automatic",
-    voucherPrefix: "DN/26-27/",
-    docType: "Debit Note",
-    defaultDrCr: "DR",
-    defaultRefType: "Agst Ref",
-    activeTransaction: true,
-    provisionalTrn: false,
-    defaultDateSystemDate: true,
-    commonNarrationMandatory: true,
-    transactionBgColor: "#fff1f2",
-    voucherPrintingRequired: true,
-    tdsApplicable: true,
-    acceptBankBranchName: false,
-    recurringChargeApplicable: false,
-    otherDeductionsApplicable: true,
-    approvalApplicable: true,
-    allowExcelImport: false,
-    atleastOneCreditBankLedger: false,
-    atleastOneCreditCashLedger: false,
-    signBy: "Purchase Audit Manager",
-    updatedBy: "System Auditor",
-    updatedDate: "24/07/2026 15:00",
+    voucherTypeId: "VT-002",
+    voucherTypeName: "Payment Voucher",
+    shortCode: "PV",
+    category: "Payment",
+    sequence: 2,
+    numberingMethod: "Automatic",
+    prefixTemplate: "PV/{FY}/",
+    startingNumber: 1,
+    resetFrequency: "Yearly",
+    defaultEntryNature: "Credit",
+    partyRequired: true,
+    divisionRequired: false,
+    status: "Active",
+    companyId: "comp-101",
+    createdAt: "01 Apr 2024",
+    updatedAt: "12 Jan 2025",
+    createdBy: "Finance Admin",
+    updatedBy: "Finance Admin",
+    hasTransactions: true,
+    transactionCount: 285,
   },
 ];
+
+// Helper to generate a live preview of the voucher number
+export function formatVoucherNumberPreview(
+  template: string,
+  startingNo: number,
+  method: "Automatic" | "Manual",
+  fyCode: string = currentFiscalYearCode
+): string {
+  if (method === "Manual") {
+    return "(Manual Number Entry at Voucher Posting)";
+  }
+  const prefix = (template || "").replace("{FY}", fyCode);
+  const numStr = String(startingNo || 1).padStart(5, "0");
+  return `${prefix}${numStr}`;
+}

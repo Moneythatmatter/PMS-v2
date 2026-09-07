@@ -66,12 +66,12 @@ export function Modal({
     >
       <div
         className={cn(
-          `w-full ${maxWidthClass} rounded-xl bg-white p-6 shadow-2xl transition-all`,
+          `w-full ${maxWidthClass} max-h-[90vh] flex flex-col rounded-2xl bg-white p-6 shadow-2xl transition-all overflow-hidden`,
           className
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between border-b pb-3 mb-4">
+        <div className="flex items-start justify-between border-b pb-3 mb-4 shrink-0">
           <div>
             <h3 className="text-lg font-semibold text-neutral-900">{title}</h3>
             {description && (
@@ -87,8 +87,8 @@ export function Modal({
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div>{children}</div>
-        {footer && <div className="mt-6 flex justify-end gap-3 border-t pt-4">{footer}</div>}
+        <div className="overflow-y-auto pr-1 flex-1 space-y-4">{children}</div>
+        {footer && <div className="mt-4 flex justify-end gap-3 border-t pt-3 shrink-0">{footer}</div>}
       </div>
     </div>
   );

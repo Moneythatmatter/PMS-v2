@@ -60,6 +60,11 @@ export function Header({ user: fallbackUser }: HeaderProps) {
             <p className="truncate text-sm font-semibold tracking-tight text-white uppercase">
               Impact <span className="text-emerald-500">PMS</span>
             </p>
+            {propertyCtx?.property && (
+              <p className="truncate text-[10px] text-neutral-400">
+                {propertyCtx.property.name}
+              </p>
+            )}
           </div>
         </div>
 

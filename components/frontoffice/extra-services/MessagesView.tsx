@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock, Mail, MessageSquare } from "lucide-react";
 import type { MessageRecord } from "@/app/data/frontoffice/modules";
 import { messageService } from "@/services/front-office";
@@ -25,9 +25,13 @@ export function MessagesView() {
   const guests = useInHouseGuests();
 
   const [type, setType] = useState<MessageRecord["type"]>("Internal");
+  const [priority, setPriority] = useState<MessageRecord["priority"]>("Normal");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [guestName, setGuestName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const isSavingRef = useRef(false);
+
   useEffect(() => {
     if (!guestName && guests[0]) setGuestName(guests[0].guestName);
   }, [guests, guestName]);
@@ -40,21 +44,48 @@ export function MessagesView() {
     return rows;
   }, [filtered, filter, sortBy]);
 
+  const handleOpenForm = () => {
+    setSubject("");
+    setBody("");
+    setPriority("Normal");
+    setType("Internal");
+    if (!guestName && guests[0]) setGuestName(guests[0].guestName);
+    setFormOpen(true);
+  };
+
   const handleSave = async () => {
-    if (!subject.trim()) { setToast("Please enter a subject."); return; }
+    if (isSavingRef.current) return;
+    if (!subject.trim()) {
+      setToast("Please enter a subject.");
+      return;
+    }
     const guest = guests.find((g) => g.guestName === guestName);
+
+    isSavingRef.current = true;
+    setSaving(true);
+
     try {
       const record = await messageService.create({
-        type, subject, body: body || subject, guest: guestName,
-        room: guest?.room, date: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
-        read: false, priority: type === "Internal" ? "High" : "Normal",
+        type,
+        subject: subject.trim(),
+        body: (body || subject).trim(),
+        guest: guestName,
+        room: guest?.room,
+        date: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+        read: false,
+        priority,
       });
       setItems((prev) => [record, ...prev]);
       setFormOpen(false);
-      setSubject(""); setBody("");
+      setSubject("");
+      setBody("");
+      setPriority("Normal");
       setToast("Message created.");
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      isSavingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -70,7 +101,12 @@ export function MessagesView() {
 
   return (
     <ModuleShell toast={toast} setToast={setToast}
-      header={{ title: "Messages", desc: "Internal notes and guest communication.", btn: "New Message", onBtn: () => setFormOpen(true) }}
+      header={{
+        title: "Messages",
+        desc: "Internal notes and guest communication.",
+        btn: "New Message",
+        onBtn: handleOpenForm,
+      }}
       stats={[
         { label: "Unread", value: items.filter((r) => !r.read).length, accent: "#f59e0b", icon: Mail, sublabel: "Needs attention" },
         { label: "Guest Messages", value: items.filter((r) => r.type === "Guest").length, icon: MessageSquare },
@@ -88,11 +124,53 @@ export function MessagesView() {
           { key: "subject", header: "Subject", render: (r) => <><p className={cn("font-medium", !r.read && "text-slate-900")}>{r.subject}{!r.read && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />}</p><p className="text-xs text-slate-400">{r.type}</p></> },
           { key: "guest", header: "Guest", render: (r) => r.guest },
           { key: "date", header: "Date", render: (r) => r.date },
-          { key: "priority", header: "Priority", render: (r) => <Pill className={r.priority === "High" ? priorityColors.High : priorityColors.Low}>{r.priority}</Pill> },
+          {
+            key: "priority",
+            header: "Priority",
+            render: (r) => (
+              <Pill
+                className={
+                  r.priority === "High"
+                    ? priorityColors.High
+                    : r.priority === "Low"
+                      ? priorityColors.Low
+                      : "bg-slate-100 text-slate-700"
+                }
+              >
+                {r.priority}
+              </Pill>
+            ),
+          },
         ]}
       />
-      <FormDrawer open={formOpen} onClose={() => setFormOpen(false)} title="New Message" onSave={handleSave}>
-        <FormField label="Type"><SelectInput value={type} onChange={(e) => setType(e.target.value as MessageRecord["type"])}><option>Internal</option><option>Guest</option><option>System</option></SelectInput></FormField>
+      <FormDrawer
+        open={formOpen}
+        onClose={() => {
+          if (!saving) setFormOpen(false);
+        }}
+        title="New Message"
+        onSave={handleSave}
+        isSaving={saving}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Type">
+            <SelectInput value={type} onChange={(e) => setType(e.target.value as MessageRecord["type"])}>
+              <option>Internal</option>
+              <option>Guest</option>
+              <option>System</option>
+            </SelectInput>
+          </FormField>
+          <FormField label="Priority">
+            <SelectInput
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as MessageRecord["priority"])}
+            >
+              <option value="Normal">Normal</option>
+              <option value="High">High</option>
+              <option value="Low">Low</option>
+            </SelectInput>
+          </FormField>
+        </div>
         <FormField label="Guest"><SelectInput value={guestName} onChange={(e) => setGuestName(e.target.value)}>{guests.map((g) => <option key={g.id} value={g.guestName}>{g.guestName}</option>)}</SelectInput></FormField>
         <FormField label="Subject" required><TextInput value={subject} onChange={(e) => setSubject(e.target.value)} /></FormField>
         <FormField label="Message"><TextAreaInput value={body} onChange={(e) => setBody(e.target.value)} /></FormField>

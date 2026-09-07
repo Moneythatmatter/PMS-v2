@@ -249,7 +249,7 @@ export default function RoomStatusOperations() {
       const matchFloor = floorFilter === "all" || r.floor === floorFilter;
       const matchRoomType =
         roomTypeFilter === "all" || roomTypeLabel(r) === roomTypeFilter;
-      const matchStatus = matchesHkStatusFilter(r, statusFilter);
+      const matchStatus = matchesHkStatusFilter(r.status, statusFilter);
 
       return matchSearch && matchFloor && matchRoomType && matchStatus;
     });

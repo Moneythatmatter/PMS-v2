@@ -207,8 +207,19 @@ export function FbOrderEntryPanel({
   const [orderInstruction, setOrderInstruction] = useState("");
   const [showInstruction, setShowInstruction] = useState(false);
   const [isHeld, setIsHeld] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [isKotLoading, setIsKotLoading] = useState(false);
+  const [isKotPrintLoading, setIsKotPrintLoading] = useState(false);
+  const [isSaveLoading, setIsSaveLoading] = useState(false);
+  const [isBillLoading, setIsBillLoading] = useState(false);
+  const [isSettleLoading, setIsSettleLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const isAnyActionRunning =
+    isKotLoading ||
+    isKotPrintLoading ||
+    isSaveLoading ||
+    isBillLoading ||
+    isSettleLoading;
 
   const activeOutletId = outletId;
 
@@ -239,14 +250,23 @@ export function FbOrderEntryPanel({
           name: String(data.order.guest ?? g.name),
         }));
       }
-      const items = (data.items as Record<string, unknown>[])
+      const itemsMap = new Map<string, CartLine>();
+      (data.items as Record<string, unknown>[])
         .filter((row) => String(row.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
-        .map((row) => ({
-        id: String(row.menuItemId ?? row.id ?? row.name),
-        name: String(row.name ?? "Item"),
-        qty: Number(row.quantity ?? 1),
-        price: Number(row.unitPrice ?? 0),
-      }));
+        .forEach((row, idx) => {
+          const id = String(row.menuItemId ?? row.id ?? row.name ?? `item-${idx}`);
+          const name = String(row.name ?? "Item");
+          const qty = Number(row.quantity ?? 1);
+          const price = Number(row.unitPrice ?? 0);
+          const groupKey = `${id}__${price}__${name}`;
+          const existing = itemsMap.get(groupKey);
+          if (existing) {
+            existing.qty += qty;
+          } else {
+            itemsMap.set(groupKey, { id, name, qty, price });
+          }
+        });
+      const items = Array.from(itemsMap.values());
       setSavedLines(items);
       const bills = data.bills as Record<string, unknown>[];
       const bill = bills?.[0];
@@ -413,6 +433,7 @@ export function FbOrderEntryPanel({
   };
 
   const placeOrder = async (options?: { print?: boolean }) => {
+    if (isAnyActionRunning) return;
     if (!activeOutletId) {
       setFormError("Select an outlet first.");
       return;
@@ -425,10 +446,16 @@ export function FbOrderEntryPanel({
       setFormError("Select an in-house guest for room service.");
       return;
     }
-    try {
-      setSaving(true);
-      setFormError(null);
 
+    const isPrint = Boolean(options?.print);
+    if (isPrint) {
+      setIsKotPrintLoading(true);
+    } else {
+      setIsKotLoading(true);
+    }
+    setFormError(null);
+
+    try {
       const paxRaw = pax.trim();
       const paxCount = paxRaw ? Math.max(1, Number(paxRaw) || 0) : undefined;
       const tableRef =
@@ -551,7 +578,11 @@ export function FbOrderEntryPanel({
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Failed to send KOT");
     } finally {
-      setSaving(false);
+      if (isPrint) {
+        setIsKotPrintLoading(false);
+      } else {
+        setIsKotLoading(false);
+      }
     }
   };
 
@@ -592,12 +623,13 @@ export function FbOrderEntryPanel({
   };
 
   const handleManageSave = async () => {
+    if (isAnyActionRunning) return;
     if (!activeOutletId) {
       setFormError("Select an outlet first.");
       return;
     }
     try {
-      setSaving(true);
+      setIsSaveLoading(true);
       setFormError(null);
       if (formLines.length) {
         await sendNewItemsAsKot();
@@ -610,11 +642,12 @@ export function FbOrderEntryPanel({
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Failed to save");
     } finally {
-      setSaving(false);
+      setIsSaveLoading(false);
     }
   };
 
   const handleSaveAndPrintBill = async () => {
+    if (isAnyActionRunning) return;
     if (!activeOutletId) {
       setFormError("Select an outlet first.");
       return;
@@ -624,7 +657,7 @@ export function FbOrderEntryPanel({
       return;
     }
     try {
-      setSaving(true);
+      setIsBillLoading(true);
       setFormError(null);
       let orderId = activeOrderId;
       let linesForPrint = allDisplayLines;
@@ -670,11 +703,12 @@ export function FbOrderEntryPanel({
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Failed to print bill");
     } finally {
-      setSaving(false);
+      setIsBillLoading(false);
     }
   };
 
   const handleSettle = async () => {
+    if (isAnyActionRunning) return;
     if (!activeBillId) {
       setFormError("No bill found for this order.");
       return;
@@ -685,7 +719,7 @@ export function FbOrderEntryPanel({
       return;
     }
     try {
-      setSaving(true);
+      setIsSettleLoading(true);
       setFormError(null);
       const remaining = orderTotal;
       await posService.payBill(activeBillId, {
@@ -700,7 +734,7 @@ export function FbOrderEntryPanel({
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Settlement failed");
     } finally {
-      setSaving(false);
+      setIsSettleLoading(false);
     }
   };
 
@@ -792,15 +826,16 @@ export function FbOrderEntryPanel({
                 <p className="mt-6 text-sm text-slate-500">Loading order…</p>
               ) : (
                 <ul className="mt-4 divide-y divide-slate-100">
-                  {allDisplayLines.map((line) => (
+                  {allDisplayLines.map((line, idx) => (
                     <li
-                      key={`${line.id}-${line.name}`}
-                      className="flex items-center justify-between py-2.5 text-sm"
+                      key={`settle-${line.id}-${line.name}-${idx}`}
+                      className="flex items-center justify-between py-3 text-base font-semibold"
                     >
-                      <span>
-                        {line.qty}× {line.name}
+                      <span className="text-slate-900">
+                        <span className="font-mono font-bold text-emerald-800 mr-2">{line.qty}×</span>
+                        {line.name}
                       </span>
-                      <span className="font-semibold text-slate-800">
+                      <span className="font-mono font-bold text-slate-900">
                         {formatINR(line.qty * line.price)}
                       </span>
                     </li>
@@ -808,8 +843,8 @@ export function FbOrderEntryPanel({
                 </ul>
               )}
               <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4">
-                <span className="font-medium text-slate-600">Bill total</span>
-                <span className="text-xl font-bold text-emerald-800">
+                <span className="text-base font-bold text-slate-700">Bill total</span>
+                <span className="text-2xl font-black text-emerald-800 font-mono">
                   {formatINR(orderTotal)}
                 </span>
               </div>
@@ -853,31 +888,31 @@ export function FbOrderEntryPanel({
               No items in this category
             </div>
           ) : (
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredItems.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => addItem(item)}
-                  className="group relative flex min-h-[72px] flex-col justify-center rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-md"
+                  className="group relative flex min-h-[82px] flex-col justify-center rounded-xl border border-slate-200 bg-white p-3 text-left shadow-2xs transition hover:border-emerald-400 hover:shadow-md cursor-pointer"
                 >
                   <span
                     className={cn(
-                      "absolute bottom-0 left-0 top-0 w-1 rounded-l-lg",
-                      item.isVegetarian ? "bg-emerald-500" : "bg-red-500",
+                      "absolute bottom-0 left-0 top-0 w-1.5 rounded-l-xl",
+                      item.isVegetarian ? "bg-emerald-500" : "bg-rose-500",
                     )}
                     aria-hidden
                   />
-                  <p className="pl-2 text-sm font-semibold leading-snug text-slate-900 group-hover:text-emerald-800">
+                  <p className="pl-2 text-[15px] font-bold leading-snug text-slate-900 group-hover:text-emerald-800">
                     {item.name}
                   </p>
                   {item.itemCode && (
-                    <p className="pl-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                    <p className="pl-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
                       {item.itemCode}
                     </p>
                   )}
                   {item.price > 0 && (
-                    <p className="mt-1 pl-2 text-xs font-bold text-emerald-700">
+                    <p className="mt-1 pl-2 text-sm font-black font-mono text-emerald-700">
                       {formatINR(item.price)}
                     </p>
                   )}
@@ -1117,90 +1152,90 @@ export function FbOrderEntryPanel({
         )}
 
         <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 border-b border-slate-100 bg-slate-50/80 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 border-b border-slate-100 bg-slate-50/80 px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600">
             <span>Item</span>
-            <span className="text-center">Qty</span>
-            <span className="text-right">Price</span>
-            <span className="w-6" />
+            <span className="text-center w-16">Qty</span>
+            <span className="text-right w-20">Price</span>
+            <span className="w-7" />
           </div>
           {(isManage || isSettle) && savedLines.length > 0 && (
             <>
-              <p className="bg-slate-100 px-3 py-1 text-[10px] font-semibold uppercase text-slate-500">
+              <p className="bg-slate-100 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-600">
                 {isSettle ? "Bill items" : "On order"}
               </p>
               <ul className="divide-y divide-slate-100 border-b border-slate-200">
-                {savedLines.map((line) => (
+                {savedLines.map((line, idx) => (
                   <li
-                    key={`saved-${line.id}-${line.name}`}
-                    className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-2 px-3 py-2.5 text-sm text-slate-700"
+                    key={`saved-${line.id}-${line.name}-${idx}`}
+                    className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-2 px-3.5 py-3 text-sm text-slate-700"
                   >
-                    <span className="truncate font-medium">{line.name}</span>
-                    <span className="text-center text-xs font-semibold">{line.qty}</span>
-                    <span className="w-16 text-right text-xs font-semibold">
+                    <span className="truncate text-[15px] font-bold text-slate-800">{line.name}</span>
+                    <span className="w-16 text-center text-sm font-extrabold text-slate-900 font-mono">{line.qty}</span>
+                    <span className="w-20 text-right text-[15px] font-black font-mono text-slate-900">
                       {formatINR(line.qty * line.price)}
                     </span>
-                    <span className="w-6" />
+                    <span className="w-7" />
                   </li>
                 ))}
               </ul>
             </>
           )}
           {!isSettle && formLines.length > 0 && isManage && (
-            <p className="bg-amber-50 px-3 py-1 text-[10px] font-semibold uppercase text-amber-800">
+            <p className="bg-amber-50 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-amber-800">
               New items
             </p>
           )}
           {!isSettle && formLines.length === 0 && !savedLines.length ? (
-            <p className="px-4 py-10 text-center text-xs text-slate-400">
+            <p className="px-4 py-10 text-center text-sm text-slate-400 font-medium">
               {isManage ? "Tap items to add more" : "Tap items to add to this order"}
             </p>
           ) : !isSettle ? (
             <ul className="divide-y divide-slate-100">
-              {formLines.map((line) => (
+              {formLines.map((line, idx) => (
                 <li
-                  key={line.id}
-                  className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-2 px-3 py-2.5 text-sm"
+                  key={`cart-${line.id}-${idx}`}
+                  className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-2 px-3.5 py-3 text-sm transition-colors hover:bg-slate-50/50"
                 >
-                  <span className="truncate font-medium text-slate-900">
+                  <span className="truncate text-[15px] font-bold text-slate-900">
                     {line.name}
                   </span>
-                  <div className="flex items-center gap-0.5">
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => updateQty(line.id, -1)}
-                      className="rounded p-0.5 text-slate-400 hover:bg-slate-100"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer"
                       aria-label="Decrease quantity"
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </button>
-                    <span className="w-6 text-center text-xs font-semibold">
+                    <span className="w-7 text-center text-sm font-extrabold text-slate-900 font-mono">
                       {line.qty}
                     </span>
                     <button
                       type="button"
                       onClick={() => updateQty(line.id, 1)}
-                      className="rounded p-0.5 text-slate-400 hover:bg-slate-100"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer"
                       aria-label="Increase quantity"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <span className="w-16 text-right text-xs font-semibold text-slate-800">
+                  <span className="w-20 text-right text-[15px] font-black font-mono text-slate-900">
                     {formatINR(line.qty * line.price)}
                   </span>
                   <button
                     type="button"
                     onClick={() => removeLine(line.id)}
-                    className="rounded p-1 text-red-400 hover:bg-red-50"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
                     aria-label={`Remove ${line.name}`}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </li>
               ))}
             </ul>
           ) : isSettle && allDisplayLines.length === 0 && !loadingOrder ? (
-            <p className="px-4 py-10 text-center text-xs text-slate-400">
+            <p className="px-4 py-10 text-center text-sm text-slate-400 font-medium">
               No items on this bill
             </p>
           ) : null}
@@ -1234,21 +1269,21 @@ export function FbOrderEntryPanel({
             </div>
           )}
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-600">
+            <span className="text-[15px] font-bold text-slate-700">
               {isManage || isSettle ? "Bill total" : "Total"}
             </span>
-            <span className="text-xl font-bold text-emerald-800">
+            <span className="text-2xl font-black text-emerald-800 font-mono">
               {formatINR(isManage || isSettle ? orderTotal : formTotal)}
             </span>
           </div>
           {isSettle ? (
             <Button
               type="button"
-              className="w-full bg-emerald-700 hover:bg-emerald-800"
-              disabled={saving || !activeBillId}
+              className="w-full bg-emerald-700 hover:bg-emerald-800 cursor-pointer"
+              disabled={isAnyActionRunning || !activeBillId}
               onClick={() => void handleSettle()}
             >
-              {saving ? "Settling…" : "Settle"}
+              {isSettleLoading ? "Settling…" : "Settle"}
             </Button>
           ) : isManage ? (
             <div className="space-y-2">
@@ -1257,46 +1292,46 @@ export function FbOrderEntryPanel({
                   <Button
                     type="button"
                     variant="outline"
-                    className="shrink-0 px-4"
-                    disabled={saving}
+                    className="shrink-0 px-4 cursor-pointer"
+                    disabled={isAnyActionRunning}
                     onClick={clearCart}
                   >
                     Clear
                   </Button>
                   <Button
                     type="button"
-                    className="flex-1 bg-emerald-700 hover:bg-emerald-800"
-                    disabled={saving}
+                    className="flex-1 bg-emerald-700 hover:bg-emerald-800 cursor-pointer"
+                    disabled={isAnyActionRunning}
                     onClick={() => void placeOrder()}
                   >
-                    {saving ? "Sending…" : "KOT"}
+                    {isKotLoading ? "Sending…" : "KOT"}
                   </Button>
                   <Button
                     type="button"
-                    className="flex-1 bg-emerald-800 hover:bg-emerald-900"
-                    disabled={saving}
+                    className="flex-1 bg-emerald-800 hover:bg-emerald-900 cursor-pointer"
+                    disabled={isAnyActionRunning}
                     onClick={() => void placeOrder({ print: true })}
                   >
-                    {saving ? "Sending…" : "KOT and Print"}
+                    {isKotPrintLoading ? "Sending…" : "KOT and Print"}
                   </Button>
                 </div>
               )}
               <div className="flex gap-2">
                 <Button
                   type="button"
-                  className="flex-1 bg-emerald-700 hover:bg-emerald-800"
-                  disabled={saving || (!activeOrderId && !formLines.length)}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 cursor-pointer"
+                  disabled={isAnyActionRunning || (!activeOrderId && !formLines.length)}
                   onClick={() => void handleManageSave()}
                 >
-                  {saving ? "Saving…" : "Save"}
+                  {isSaveLoading ? "Saving…" : "Save"}
                 </Button>
                 <Button
                   type="button"
-                  className="flex-1 bg-slate-800 hover:bg-slate-900"
-                  disabled={saving || (!activeOrderId && !formLines.length)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-900 cursor-pointer"
+                  disabled={isAnyActionRunning || (!activeOrderId && !formLines.length)}
                   onClick={() => void handleSaveAndPrintBill()}
                 >
-                  {saving ? "Printing…" : "Save and Print Bill"}
+                  {isBillLoading ? "Printing…" : "Save and Print Bill"}
                 </Button>
               </div>
             </div>
@@ -1305,27 +1340,27 @@ export function FbOrderEntryPanel({
               <Button
                 type="button"
                 variant="outline"
-                className="shrink-0 px-4"
-                disabled={!formLines.length || saving}
+                className="shrink-0 px-4 cursor-pointer"
+                disabled={!formLines.length || isAnyActionRunning}
                 onClick={clearCart}
               >
                 Clear
               </Button>
               <Button
                 type="button"
-                className="flex-1 bg-emerald-700 hover:bg-emerald-800"
-                disabled={saving || !formLines.length}
+                className="flex-1 bg-emerald-700 hover:bg-emerald-800 cursor-pointer"
+                disabled={isAnyActionRunning || !formLines.length}
                 onClick={() => void placeOrder()}
               >
-                {saving ? "Sending…" : "KOT"}
+                {isKotLoading ? "Sending…" : "KOT"}
               </Button>
               <Button
                 type="button"
-                className="flex-1 bg-emerald-800 hover:bg-emerald-900"
-                disabled={saving || !formLines.length}
+                className="flex-1 bg-emerald-800 hover:bg-emerald-900 cursor-pointer"
+                disabled={isAnyActionRunning || !formLines.length}
                 onClick={() => void placeOrder({ print: true })}
               >
-                {saving ? "Sending…" : "KOT and Print"}
+                {isKotPrintLoading ? "Sending…" : "KOT and Print"}
               </Button>
             </div>
           )}

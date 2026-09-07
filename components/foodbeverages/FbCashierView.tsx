@@ -21,22 +21,21 @@ export function FbCashierView() {
   const [shifts, setShifts] = useState<FbCashierShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | "Open" | "Closed">("all");
+  const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [cashActual, setCashActual] = useState("");
   const [notes, setNotes] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!outletId && outlets[0]?.id) setOutletId(outlets[0].id);
-  }, [outlets, outletId]);
+  // Defaults to "" (All Outlets) when entering the page
 
   useEffect(() => {
-    if (!outletId) return;
     let cancelled = false;
     (async () => {
       try {
         setLoading(true);
-        const data = await fbCashierService.list(outletId);
+        const data = await fbCashierService.list(outletId || undefined);
         if (!cancelled) {
           setShifts(data);
           setError(null);
@@ -58,20 +57,41 @@ export function FbCashierView() {
   const outletShifts = useMemo(() => {
     const q = search.trim().toLowerCase();
     return shifts.filter((s) => {
-      if (s.outletId !== outletId) return false;
+      if (outletId && s.outletId !== outletId) return false;
+      if (statusFilter !== "all" && s.status !== statusFilter) return false;
       if (!q) return true;
+      const sales = s.cashSales + s.cardSales + s.upiSales;
+      const salesFormatted = formatINR(sales).toLowerCase();
+      const declaredFormatted =
+        s.declaredCash != null ? formatINR(s.declaredCash).toLowerCase() : "";
+      const outletName =
+        outlets.find((o) => o.id === s.outletId)?.name?.toLowerCase() || "";
       return (
         s.cashier.toLowerCase().includes(q) ||
         s.shift.toLowerCase().includes(q) ||
-        s.status.toLowerCase().includes(q)
+        s.status.toLowerCase().includes(q) ||
+        (s.openedAt && s.openedAt.toLowerCase().includes(q)) ||
+        outletName.includes(q) ||
+        String(sales).includes(q) ||
+        salesFormatted.includes(q) ||
+        (s.declaredCash != null && String(s.declaredCash).includes(q)) ||
+        declaredFormatted.includes(q) ||
+        (s.openingFloat != null && String(s.openingFloat).includes(q))
       );
     });
-  }, [shifts, outletId, search]);
+  }, [shifts, outletId, statusFilter, search, outlets]);
 
-  const openShift = useMemo(
-    () => shifts.find((s) => s.outletId === outletId && s.status === "Open") ?? null,
-    [shifts, outletId],
-  );
+  const openShift = useMemo(() => {
+    if (outletId) {
+      return shifts.find((s) => s.outletId === outletId && s.status === "Open") ?? null;
+    }
+    return shifts.find((s) => s.status === "Open") ?? null;
+  }, [shifts, outletId]);
+
+  const selectedShift = useMemo(() => {
+    if (!selectedShiftId) return null;
+    return shifts.find((s) => s.id === selectedShiftId) ?? null;
+  }, [shifts, selectedShiftId]);
 
   const expectedCash = openShift
     ? openShift.openingFloat + openShift.cashSales - openShift.refunds
@@ -91,6 +111,11 @@ export function FbCashierView() {
   const cashVariance = openShift ? actualCash - expectedCash : 0;
 
   const openNewShift = async () => {
+    const targetOutletId = outletId || outlets[0]?.id;
+    if (!targetOutletId) {
+      setToast("Please select an outlet before opening a shift.");
+      return;
+    }
     if (openShift) {
       setToast("Close the current shift before opening a new one.");
       return;
@@ -110,7 +135,7 @@ export function FbCashierView() {
         refunds: 0,
         declaredCash: null,
         status: "Open",
-        outletId,
+        outletId: targetOutletId,
       });
       setShifts((prev) => [shift, ...prev]);
       setCashActual("");
@@ -166,6 +191,8 @@ export function FbCashierView() {
     );
   }
 
+  const isFiltered = search.trim().length > 0 || statusFilter !== "all";
+
   return (
     <ModulePageShell
       eyebrow="Restaurants"
@@ -175,11 +202,26 @@ export function FbCashierView() {
       onDismissToast={() => setToast(null)}
       wrapChildren={false}
       beforeFilters={
-        <FbOutletSelect outlets={outlets} value={outletId} onChange={setOutletId} />
+        <FbOutletSelect
+          outlets={outlets}
+          value={outletId}
+          onChange={setOutletId}
+          allowAll
+          allLabel="All Outlets"
+        />
       }
       search={search}
       onSearchChange={setSearch}
-      searchPlaceholder="Search cashier or shift…"
+      searchPlaceholder="Search cashier, shift, status, amount…"
+      filterPills={{
+        active: statusFilter,
+        onChange: (val) => setStatusFilter(val as "all" | "Open" | "Closed"),
+        options: [
+          { id: "all", label: "All Shifts" },
+          { id: "Open", label: "Open" },
+          { id: "Closed", label: "Closed" },
+        ],
+      }}
       primaryAction={{ label: "Open Shift", onClick: openNewShift }}
       stats={[
         {
@@ -210,21 +252,104 @@ export function FbCashierView() {
         <section className="rounded-xl border border-slate-200 bg-white p-4 lg:col-span-3">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">Active shift close</h2>
+              <h2 className="text-sm font-semibold text-slate-900">
+                {selectedShift && selectedShift.id !== openShift?.id
+                  ? `Shift details · ${selectedShift.cashier}`
+                  : "Active shift close"}
+              </h2>
               <p className="text-[11px] text-slate-500">
-                {openShift
-                  ? `${openShift.shift} · opened ${openShift.openedAt}`
-                  : "No open shift for this outlet"}
+                {selectedShift && selectedShift.id !== openShift?.id
+                  ? `${selectedShift.shift} · opened ${selectedShift.openedAt} · Status: ${selectedShift.status}`
+                  : openShift
+                    ? `${openShift.shift} · opened ${openShift.openedAt}`
+                    : "No open shift for this outlet"}
               </p>
             </div>
-            {openShift && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                Open
-              </span>
+            {selectedShift && selectedShift.id !== openShift?.id ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={() => setSelectedShiftId(null)}
+              >
+                Back to active shift
+              </Button>
+            ) : (
+              openShift && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                  Open
+                </span>
+              )
             )}
           </div>
 
-          {openShift ? (
+          {selectedShift && selectedShift.id !== openShift?.id ? (
+            <div className="space-y-4">
+              <div className="grid gap-2 sm:grid-cols-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                  <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                    <IndianRupee className="h-3.5 w-3.5" /> Cash sales
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-slate-900">
+                    {formatINR(selectedShift.cashSales)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                  <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                    <CreditCard className="h-3.5 w-3.5" /> Card
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-slate-900">
+                    {formatINR(selectedShift.cardSales)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                  <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                    <Smartphone className="h-3.5 w-3.5" /> UPI
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-slate-900">
+                    {formatINR(selectedShift.upiSales)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm space-y-2">
+                <div className="flex justify-between text-slate-600">
+                  <span>Opening Float</span>
+                  <span className="font-semibold text-slate-900">
+                    {formatINR(selectedShift.openingFloat)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Gross Collections</span>
+                  <span className="font-semibold text-emerald-700">
+                    {formatINR(
+                      selectedShift.cashSales + selectedShift.cardSales + selectedShift.upiSales,
+                    )}
+                  </span>
+                </div>
+                {selectedShift.declaredCash != null && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Declared Cash</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatINR(selectedShift.declaredCash)}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-600">
+                  <span>Shift Status</span>
+                  <span
+                    className={cn(
+                      "font-semibold",
+                      selectedShift.status === "Open" ? "text-amber-700" : "text-emerald-700",
+                    )}
+                  >
+                    {selectedShift.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : openShift ? (
             <div className="space-y-4">
               <div className="grid gap-2 sm:grid-cols-3">
                 <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
@@ -274,11 +399,16 @@ export function FbCashierView() {
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                 <div className="text-sm">
                   <p className="text-slate-500">
-                    Expected drawer <span className="font-semibold text-slate-900">{formatINR(expectedCash)}</span>
+                    Expected drawer{" "}
+                    <span className="font-semibold text-slate-900">
+                      {formatINR(expectedCash)}
+                    </span>
                   </p>
                   <p className="text-slate-500">
                     Expected all modes{" "}
-                    <span className="font-semibold text-slate-900">{formatINR(expectedTotal)}</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatINR(expectedTotal)}
+                    </span>
                   </p>
                 </div>
                 <p
@@ -321,36 +451,88 @@ export function FbCashierView() {
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 lg:col-span-2">
-          <h2 className="mb-3 text-sm font-semibold text-slate-900">Shift history</h2>
-          <ul className="divide-y divide-slate-100">
-            {outletShifts.map((shift) => (
-              <li key={shift.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">{shift.cashier}</p>
-                  <p className="text-[11px] text-slate-500">
-                    {shift.shift} · {shift.openedAt}
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-slate-500">
-                    Sales{" "}
-                    {formatINR(shift.cashSales + shift.cardSales + shift.upiSales)}
-                    {shift.declaredCash != null &&
-                      ` · Declared ${formatINR(shift.declaredCash)}`}
-                  </p>
-                </div>
-                <span
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Shift history{" "}
+              <span className="ml-1 text-xs font-normal text-slate-500">
+                ({outletShifts.length} {isFiltered ? `of ${shifts.length}` : ""})
+              </span>
+            </h2>
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setStatusFilter("all");
+                }}
+                className="text-xs text-emerald-700 hover:underline"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <ul className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto pr-1">
+            {outletShifts.map((shift) => {
+              const isSelected = selectedShiftId === shift.id;
+              const outletName = outlets.find((o) => o.id === shift.outletId)?.name;
+              return (
+                <li
+                  key={shift.id}
+                  onClick={() => setSelectedShiftId(shift.id === selectedShiftId ? null : shift.id)}
                   className={cn(
-                    "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                    shift.status === "Open" && "bg-amber-100 text-amber-800",
-                    shift.status === "Closed" && "bg-emerald-100 text-emerald-800",
-                    shift.status === "Pending" && "bg-slate-100 text-slate-600",
+                    "group flex cursor-pointer items-start justify-between gap-3 rounded-lg p-2.5 transition-colors hover:bg-slate-50",
+                    isSelected && "bg-emerald-50/70 ring-1 ring-emerald-300",
                   )}
                 >
-                  {shift.status}
-                </span>
-              </li>
-            ))}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-emerald-700">
+                      {shift.cashier}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      {shift.shift} · {shift.openedAt}
+                      {outletName && !outletId && (
+                        <span className="ml-1 text-slate-400">({outletName})</span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      Sales {formatINR(shift.cashSales + shift.cardSales + shift.upiSales)}
+                      {shift.declaredCash != null &&
+                        ` · Declared ${formatINR(shift.declaredCash)}`}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                      shift.status === "Open" && "bg-amber-100 text-amber-800",
+                      shift.status === "Closed" && "bg-emerald-100 text-emerald-800",
+                      shift.status === "Pending" && "bg-slate-100 text-slate-600",
+                    )}
+                  >
+                    {shift.status}
+                  </span>
+                </li>
+              );
+            })}
             {outletShifts.length === 0 && (
-              <li className="py-8 text-center text-sm text-slate-400">No shifts yet</li>
+              <li className="py-8 text-center text-sm text-slate-400">
+                {isFiltered ? (
+                  <div>
+                    <p>No shifts matching your filters</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearch("");
+                        setStatusFilter("all");
+                      }}
+                      className="mt-2 text-xs font-medium text-emerald-700 hover:underline"
+                    >
+                      Clear search & filters
+                    </button>
+                  </div>
+                ) : (
+                  "No shifts yet"
+                )}
+              </li>
             )}
           </ul>
         </section>
