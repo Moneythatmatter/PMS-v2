@@ -49,19 +49,23 @@ type ItemLookupOption = { id: string; name: string };
 
 type ItemLookups = {
   categories: ItemLookupOption[];
-  taxGroups: ItemLookupOption[];
 };
 
 const ITEM_FK_COLUMNS: Record<string, keyof ItemLookups> = {
   categoryId: "categories",
-  taxGroupId: "taxGroups",
 };
 
-function mapLookupRows(rows: Record<string, unknown>[]): ItemLookupOption[] {
-  return rows.map((row) => ({
-    id: String(row.id ?? ""),
-    name: String(row.name ?? row.code ?? row.id ?? "—"),
-  }));
+function mapCategoryLookupRows(rows: Record<string, unknown>[]): ItemLookupOption[] {
+  return rows
+    .filter((row) => row.isActive !== false && String(row.status ?? "").toLowerCase() !== "inactive")
+    .map((row) => {
+      const id = String(row.id ?? "");
+      const code = String(row.code ?? "").trim();
+      const name = String(row.name ?? code ?? id);
+      const label = code && name ? `${code} — ${name}` : name;
+      return { id, name: label };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function reportTypeFromPath(path: string) {
@@ -424,7 +428,7 @@ function toModuleDefinition(
         }));
         return {
           ...col,
-          inputType: "select" as const,
+          inputType: col.inputType === "searchSelect" ? ("searchSelect" as const) : ("select" as const),
           options,
           render: (row: ModuleRow) => {
             const val = row[col.key];
@@ -522,26 +526,17 @@ export function FbModuleView({
             let mapped = data.map((row) => normalizeRow(path, row));
             if (path.includes("/menu/items")) {
               try {
-                const [categories, taxGroups] = await Promise.all([
-                  menuCategoryService.list(),
-                  fbTaxGroupService.list(),
-                ]);
+                const categories = await menuCategoryService.list();
                 if (!cancelled) {
                   setItemLookups({
-                    categories: mapLookupRows(
+                    categories: mapCategoryLookupRows(
                       (categories ?? []) as Record<string, unknown>[],
-                    ),
-                    taxGroups: mapLookupRows(
-                      (taxGroups ?? []) as Record<string, unknown>[],
                     ),
                   });
                 }
               } catch {
                 if (!cancelled) {
-                  setItemLookups({
-                    categories: [],
-                    taxGroups: [],
-                  });
+                  setItemLookups({ categories: [] });
                 }
               }
             } else if (!cancelled) {

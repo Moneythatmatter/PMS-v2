@@ -34,7 +34,7 @@ export interface FbColumn {
   header: string;
   format?: "currency" | "percent";
   align?: "left" | "center" | "right";
-  inputType?: "text" | "number" | "select" | "currency" | "tel" | "time" | "date";
+  inputType?: "text" | "number" | "select" | "searchSelect" | "currency" | "tel" | "time" | "date";
   options?: { value: string; label: string }[] | string[];
   placeholder?: string;
   helperText?: string;
@@ -587,7 +587,7 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
   /* ——— Menu ——— */
   "/food-beverages/menu/categories": page({
     title: "Categories",
-    description: "Hierarchical menu categories shared across outlets.",
+    description: "Menu categories shared across outlets.",
     outletScope: "none",
     actionLabel: "Add Category",
     searchPlaceholder: "Search category…",
@@ -600,7 +600,6 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
     stats: [
       { label: "Categories", value: 12, sublabel: "Configured" },
       { label: "Active", value: 10, accent: "#10b981", sublabel: "On menu" },
-      { label: "Top Level", value: 8, sublabel: "Root categories" },
       { label: "Inactive", value: 2, accent: "#f59e0b", sublabel: "Hidden" },
     ],
     columns: [
@@ -628,23 +627,6 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
         helperText: "Optional description",
       },
       {
-        key: "parentId",
-        header: "Parent ID",
-        inputType: "text",
-        placeholder: "Leave blank for top-level",
-        helperText: "Parent category UUID (optional)",
-      },
-      {
-        key: "displayOrder",
-        header: "Order",
-        inputType: "number",
-        min: 0,
-        step: 1,
-        placeholder: "e.g. 1",
-        helperText: "Display sort order",
-        required: true,
-      },
-      {
         key: "isActive",
         header: "Status",
         inputType: "select",
@@ -662,7 +644,6 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
         code: "STAR",
         name: "Starters",
         description: "Appetizers and small plates",
-        displayOrder: 1,
         isActive: "true",
         status: "Active",
       },
@@ -671,7 +652,6 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
         code: "MAIN",
         name: "Main Course",
         description: "Curries, grills, and mains",
-        displayOrder: 2,
         isActive: "true",
         status: "Active",
       },
@@ -680,17 +660,6 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
         code: "BEV",
         name: "Beverages",
         description: "Hot and cold drinks",
-        displayOrder: 3,
-        isActive: "true",
-        status: "Active",
-      },
-      {
-        id: "a1000001-0000-4000-8000-000000000005",
-        code: "VEG-STAR",
-        name: "Vegetarian Starters",
-        description: "Vegetarian appetizers",
-        parentId: "a1000001-0000-4000-8000-000000000001",
-        displayOrder: 1,
         isActive: "true",
         status: "Active",
       },
@@ -699,7 +668,7 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
 
   "/food-beverages/menu/items": page({
     title: "Items",
-    description: "Sellable menu items linked to categories and tax groups.",
+    description: "Sellable menu items linked to categories.",
     outletScope: "none",
     actionLabel: "Add Item",
     searchPlaceholder: "Search item or code…",
@@ -741,17 +710,11 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
       {
         key: "categoryId",
         header: "Category",
-        inputType: "select",
+        inputType: "searchSelect",
         options: [],
-        helperText: "Menu category",
+        placeholder: "Search category…",
+        helperText: "Select menu category",
         required: true,
-      },
-      {
-        key: "taxGroupId",
-        header: "Tax Group",
-        inputType: "select",
-        options: [],
-        helperText: "Tax group (optional)",
       },
       {
         key: "price",
@@ -770,16 +733,6 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
           { value: "false", label: "No" },
         ],
         helperText: "Vegetarian item flag",
-        required: true,
-      },
-      {
-        key: "displayOrder",
-        header: "Order",
-        inputType: "number",
-        min: 0,
-        step: 1,
-        placeholder: "e.g. 1",
-        helperText: "Menu display sort order",
         required: true,
       },
       {
@@ -810,7 +763,6 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
         description: "Creamy tomato-based curry",
         categoryId: "a1000001-0000-4000-8000-000000000002",
         isVegetarian: "false",
-        displayOrder: 1,
         isActive: "true",
         status: "Active",
       },
@@ -820,7 +772,6 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
         name: "Paneer Tikka",
         categoryId: "a1000001-0000-4000-8000-000000000001",
         isVegetarian: "true",
-        displayOrder: 2,
         isActive: "true",
         status: "Active",
       },

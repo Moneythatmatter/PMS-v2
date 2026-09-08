@@ -11,6 +11,7 @@ import {
   SelectInput,
   TextInput,
 } from "@/components/frontoffice/ui";
+import { SearchSelect } from "@/components/frontoffice/SearchSelect";
 import { cn } from "@/lib/utils";
 import type { ModuleColumn, ModuleListDefinition, ModuleRow } from "./module-types";
 import { ModulePageShell } from "./ModulePageShell";
@@ -430,6 +431,7 @@ export function ModuleListPage({
 
       const isSelect =
         col.inputType === "select" ||
+        col.inputType === "searchSelect" ||
         col.key === "outletId" ||
         (col.options !== undefined && col.options.length > 0);
       if (isSelect && raw !== "" && col.key === "outletId" && outlets.length > 0) {
@@ -1066,19 +1068,21 @@ export function ModuleListPage({
         {actionKind === "add" || actionKind === "generic" ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {editableColumns(definition.columns).map((col) => {
+              const isSearchSelect = col.inputType === "searchSelect";
               const isSelect =
-                col.inputType === "select" ||
-                col.key === "status" ||
-                col.key === "type" ||
-                col.key === "outletId" ||
-                col.key === "bookingStatus" ||
-                (col.key === "tableNo" &&
-                  col.inputType !== "text" &&
-                  definition.title !== "Tables" &&
-                  ((definition.tableInventory && definition.tableInventory.length > 0) ||
-                    tableOpsRows.length > 0 ||
-                    (col.options && col.options.length > 0))) ||
-                (col.options !== undefined && col.options.length > 0);
+                !isSearchSelect &&
+                (col.inputType === "select" ||
+                  col.key === "status" ||
+                  col.key === "type" ||
+                  col.key === "outletId" ||
+                  col.key === "bookingStatus" ||
+                  (col.key === "tableNo" &&
+                    col.inputType !== "text" &&
+                    definition.title !== "Tables" &&
+                    ((definition.tableInventory && definition.tableInventory.length > 0) ||
+                      tableOpsRows.length > 0 ||
+                      (col.options && col.options.length > 0))) ||
+                  (col.options !== undefined && col.options.length > 0));
 
               const isNumber =
                 col.inputType === "number" ||
@@ -1097,7 +1101,7 @@ export function ModuleListPage({
                 col.key === "eventDate";
 
               let selectOptions: { value: string; label: string }[] = [];
-              if (isSelect) {
+              if (isSelect || isSearchSelect) {
                 if (col.key === "outletId" && outlets.length > 0) {
                   selectOptions = outlets.map((o) => ({ value: o.id, label: o.name }));
                 } else if (col.key === "tableNo" && definition.title !== "Tables") {
@@ -1147,9 +1151,11 @@ export function ModuleListPage({
                   ? "e.g. 0"
                   : isNumber
                     ? "e.g. 10"
-                    : isSelect
-                      ? `Select ${col.header.toLowerCase()}`
-                      : `Enter ${col.header.toLowerCase()}`);
+                    : isSearchSelect
+                      ? `Search ${col.header.toLowerCase()}…`
+                      : isSelect
+                        ? `Select ${col.header.toLowerCase()}`
+                        : `Enter ${col.header.toLowerCase()}`);
 
               const helperText =
                 col.helperText ??
@@ -1159,7 +1165,8 @@ export function ModuleListPage({
                     ? "Numeric value only"
                     : undefined);
 
-              const defaultValue = isSelect ? (selectOptions[0]?.value ?? "") : "";
+              const defaultValue =
+                isSearchSelect ? "" : isSelect ? (selectOptions[0]?.value ?? "") : "";
               const currentValue = form[col.key] !== undefined ? form[col.key] : defaultValue;
 
               const phoneRaw = String(form.phone ?? "").trim();
@@ -1196,7 +1203,21 @@ export function ModuleListPage({
                   error={fieldError}
                   helperText={fieldError ? undefined : helperText}
                 >
-                  {isSelect ? (
+                  {isSearchSelect ? (
+                    <SearchSelect
+                      options={selectOptions.map((opt) => ({
+                        id: opt.value,
+                        label: opt.label,
+                      }))}
+                      selectedId={String(currentValue ?? "").trim() || null}
+                      placeholder={placeholder}
+                      onSelect={(option) =>
+                        setForm((prev) => ({ ...prev, [col.key]: option.id }))
+                      }
+                      onClear={() => setForm((prev) => ({ ...prev, [col.key]: "" }))}
+                      lockInputWhenSelected
+                    />
+                  ) : isSelect ? (
                     <SelectInput
                       value={currentValue}
                       onChange={(e) => {
