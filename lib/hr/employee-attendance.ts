@@ -5,6 +5,8 @@ export type EmployeeAttendanceStatus =
   | "Half Day"
   | "On Leave"
   | "Weekly Off"
+  | "Holiday"
+  | "Pending"
   | "Future"
   | "Before Join";
 
@@ -27,6 +29,8 @@ export interface EmployeeAttendanceMonthSummary {
   halfDay: number;
   onLeave: number;
   weeklyOff: number;
+  holiday: number;
+  pending: number;
   overtimeHours: number;
   workingDays: number;
 }
@@ -299,6 +303,8 @@ export function summarizeAttendanceMonth(
   const halfDay = countable.filter((d) => d.status === "Half Day").length;
   const onLeave = countable.filter((d) => d.status === "On Leave").length;
   const weeklyOff = countable.filter((d) => d.status === "Weekly Off").length;
+  const holiday = countable.filter((d) => d.status === "Holiday").length;
+  const pending = countable.filter((d) => d.status === "Pending").length;
 
   const overtimeHours = countable.reduce((sum, d) => {
     if (d.status === "Present" || d.status === "Late") {
@@ -314,6 +320,8 @@ export function summarizeAttendanceMonth(
     halfDay,
     onLeave,
     weeklyOff,
+    holiday,
+    pending,
     overtimeHours: Math.round(overtimeHours * 10) / 10,
     workingDays: present + late + halfDay,
   };
@@ -328,6 +336,57 @@ export function formatAttendanceMonthLabel(year: number, month: number): string 
 
 export function getWeekdayLabels(): readonly string[] {
   return WEEKDAY_LABELS;
+}
+
+export function attendanceRecordToCalendarDay(
+  iso: string,
+  record: CalendarAttendanceOverlay,
+): Pick<EmployeeAttendanceDay, "status" | "shift" | "checkIn" | "checkOut" | "workedHours"> {
+  const apiStatus = record.status;
+  let status: EmployeeAttendanceStatus = "Present";
+
+  if (apiStatus === "On Leave") status = "On Leave";
+  else if (apiStatus === "Absent") status = "Absent";
+  else if (apiStatus === "Weekly Off") status = "Weekly Off";
+  else if (apiStatus === "Holiday") status = "Holiday";
+  else if (apiStatus === "Pending") status = "Pending";
+  else if (apiStatus === "Late") status = "Late";
+  else if (apiStatus === "Half Day") status = "Half Day";
+  else if (apiStatus === "Present") status = "Present";
+
+  const onLeave = status === "On Leave";
+  const noPunch = !record.checkIn || record.checkIn === "—";
+
+  return {
+    status,
+    shift: onLeave
+      ? (record.leaveTypeName ?? "Leave")
+      : (record.shiftName ?? "—"),
+    checkIn: noPunch ? "-" : record.checkIn!,
+    checkOut: noPunch || !record.checkOut || record.checkOut === "—" ? "-" : record.checkOut,
+    workedHours: Number(record.workedHours ?? 0),
+  };
+}
+
+export interface CalendarAttendanceOverlay {
+  status: string;
+  shiftName?: string;
+  checkIn?: string;
+  checkOut?: string;
+  workedHours?: number;
+  leaveTypeName?: string | null;
+  dayType?: string;
+}
+
+export function mergeAttendanceRecordsIntoGrid(
+  monthGrid: EmployeeAttendanceDay[],
+  recordsByDate: Map<string, CalendarAttendanceOverlay>,
+): EmployeeAttendanceDay[] {
+  return monthGrid.map((day) => {
+    const record = recordsByDate.get(day.iso);
+    if (!record) return day;
+    return { ...day, ...attendanceRecordToCalendarDay(day.iso, record) };
+  });
 }
 
 export function listAttendanceLogForMonth(
@@ -563,8 +622,12 @@ export function getHeatmapCellClass(status: EmployeeAttendanceStatus): string {
       return "bg-slate-200 hover:ring-2 hover:ring-slate-300 hover:ring-offset-1";
     case "On Leave":
       return "bg-sky-400 hover:ring-2 hover:ring-sky-300 hover:ring-offset-1";
+    case "Holiday":
+      return "bg-violet-400 hover:ring-2 hover:ring-violet-300 hover:ring-offset-1";
     case "Absent":
       return "bg-rose-400 hover:ring-2 hover:ring-rose-300 hover:ring-offset-1";
+    case "Pending":
+      return "bg-amber-100 hover:ring-2 hover:ring-amber-200 hover:ring-offset-1";
     case "Future":
     case "Before Join":
     default:
@@ -588,8 +651,12 @@ export function getCalendarCellClass(
       return "bg-slate-100 text-slate-400";
     case "On Leave":
       return "bg-sky-300 text-sky-950";
+    case "Holiday":
+      return "bg-violet-300 text-violet-950";
     case "Absent":
       return "bg-rose-300 text-rose-950";
+    case "Pending":
+      return "bg-amber-100 text-amber-900";
     case "Future":
     case "Before Join":
     default:

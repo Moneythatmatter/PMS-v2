@@ -11,7 +11,10 @@ export interface EmployeeItem {
   employmentType: "Permanent" | "Contractual" | "Probation" | "Trainee";
   shiftType: "Morning Shift" | "Evening Shift" | "Night Shift" | "General Shift";
   joinDate: string;
-  salary: number;
+  salaryStructureId?: string;
+  salaryStructureName?: string;
+  structureGrossSalary?: number;
+  structureNetSalary?: number;
   status: "Active" | "On Leave" | "Inactive";
   gender: "Male" | "Female";
   emergencyContact: string;

@@ -70,13 +70,32 @@ export function HRKPICard({
   const styles = toneStyles[tone];
 
   return (
-    <div className={cn("p-4 rounded-2xl border shadow-xs flex items-center justify-between", styles.bg, styles.border, className)}>
-      <div>
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</p>
-        <h4 className={cn("text-2xl font-black mt-1", styles.text)}>{value}</h4>
-        {subtitle && <p className="text-[11px] font-semibold mt-0.5 text-slate-500">{subtitle}</p>}
+    <div
+      className={cn(
+        "flex min-w-0 items-center justify-between gap-3 rounded-2xl border p-3.5 shadow-xs sm:p-4",
+        styles.bg,
+        styles.border,
+        className,
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[11px] font-bold uppercase tracking-wider text-slate-500 sm:text-xs">
+          {label}
+        </p>
+        <h4 className={cn("mt-1 truncate text-xl font-black sm:text-2xl", styles.text)}>{value}</h4>
+        {subtitle && (
+          <p className="mt-0.5 line-clamp-2 text-[10px] font-semibold text-slate-500 sm:text-[11px]">
+            {subtitle}
+          </p>
+        )}
       </div>
-      <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center border shrink-0", styles.iconBg, styles.iconText)}>
+      <div
+        className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border sm:h-10 sm:w-10",
+          styles.iconBg,
+          styles.iconText,
+        )}
+      >
         {icon}
       </div>
     </div>

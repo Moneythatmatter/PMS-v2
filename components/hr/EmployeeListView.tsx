@@ -74,7 +74,7 @@ const employeeExportColumns: ExportColumn<Record<string, string | number>>[] = [
   { key: "designation", header: "Role" },
   { key: "employmentType", header: "Employment Type" },
   { key: "shiftType", header: "Shift" },
-  { key: "salary", header: "Salary (INR)" },
+  { key: "salaryStructureName", header: "Salary Structure" },
   { key: "status", header: "Status" },
   { key: "joinDate", header: "Join Date" },
 ];
@@ -89,7 +89,8 @@ function buildEmployeeExportRows(employees: EmployeeItem[]) {
     designation: emp.designation,
     employmentType: emp.employmentType,
     shiftType: emp.shiftType,
-    salary: emp.salary,
+    salaryStructureName: emp.salaryStructureName ?? "Not assigned",
+    structureGrossSalary: emp.structureGrossSalary ?? 0,
     status: emp.status,
     joinDate: emp.joinDate,
   }));
@@ -632,7 +633,9 @@ export function EmployeeListView() {
                         </span>
                       </div>
                       <div className="mt-3 flex items-center justify-between">
-                        <p className="font-bold text-slate-900">{formatEmployeeSalary(emp.salary)}</p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {emp.salaryStructureName || "No salary structure"}
+                        </p>
                         <span className="text-xs text-slate-500">{emp.employmentType}</span>
                       </div>
                     </div>
@@ -651,7 +654,7 @@ export function EmployeeListView() {
                 <ListTableHeaderCell>Employee</ListTableHeaderCell>
                 <ListTableHeaderCell>Role</ListTableHeaderCell>
                 <ListTableHeaderCell>Department</ListTableHeaderCell>
-                <ListTableHeaderCell>Salary</ListTableHeaderCell>
+                <ListTableHeaderCell>Salary structure</ListTableHeaderCell>
                 <ListTableHeaderCell>Status</ListTableHeaderCell>
                 <ListTableHeaderCell align="right" className="w-28">
                   Actions
@@ -683,8 +686,13 @@ export function EmployeeListView() {
                     </ListTableCell>
                     <ListTableCell>
                       <p className="font-semibold text-slate-900">
-                        {formatEmployeeSalary(emp.salary)}
+                        {emp.salaryStructureName || "Not assigned"}
                       </p>
+                      {(emp.structureGrossSalary ?? 0) > 0 && (
+                        <p className="text-xs text-slate-500">
+                          Gross ₹{emp.structureGrossSalary!.toLocaleString("en-IN")}
+                        </p>
+                      )}
                     </ListTableCell>
                     <ListTableCell>
                       <EmployeeStatusBadge status={emp.status} />

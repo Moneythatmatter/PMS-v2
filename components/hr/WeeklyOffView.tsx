@@ -29,8 +29,18 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Modal, Button, StatusBadge } from "@/components/ui";
+import { Modal, Button, StatusBadge, Drawer } from "@/components/ui";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
+import { HrSearchFilterToolbar } from "@/components/hr/shared/HrSearchFilterToolbar";
+import { ReportExportModal } from "@/components/shared/ReportExportModal";
+import {
+  ListSummaryCards,
+  ToolbarFilterGroup,
+  ToolbarFilterSelect,
+} from "@/components/shared/list-table";
+import { employeeDepartmentFilterOptions } from "@/app/data/hr/employeeDepartmentOptions";
+import { exportGenericReport, filterByIsoDateRange, normalizeToIsoDate } from "@/lib/hr/report-export";
+import type { ExportColumn } from "@/lib/exportUtils";
 import { cn } from "@/lib/utils";
 import { hrWeeklyOffService, hrEmployeeService } from "@/services/human-resources";
 import { mapWeeklyOffFromApi, mapWeeklyOffToApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
@@ -55,6 +65,46 @@ export interface WeeklyOffAssignment {
 }
 
 const DAYS_OF_WEEK = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+const weeklyOffTypeFilterOptions = [
+  { value: "ALL", label: "All off types" },
+  { value: "Fixed", label: "Fixed schedule" },
+  { value: "Rotational", label: "Rotational" },
+] as const;
+
+const weeklyOffDayFilterOptions = [
+  { value: "ALL", label: "All days" },
+  ...DAYS_OF_WEEK.map((d) => ({ value: d, label: d })),
+] as const;
+
+const weeklyOffStatusFilterOptions = [
+  { value: "ALL", label: "All statuses" },
+  { value: "Active", label: "Active" },
+  { value: "Upcoming", label: "Upcoming" },
+  { value: "Expired", label: "Expired" },
+] as const;
+
+type WeeklyOffExportRow = {
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  type: string;
+  days: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  status: string;
+};
+
+const weeklyOffExportColumns: ExportColumn<WeeklyOffExportRow>[] = [
+  { key: "employeeId", header: "Employee ID" },
+  { key: "employeeName", header: "Employee Name" },
+  { key: "department", header: "Department" },
+  { key: "type", header: "Off Type" },
+  { key: "days", header: "Weekly Off Day(s)" },
+  { key: "effectiveFrom", header: "Effective From" },
+  { key: "effectiveTo", header: "Effective To" },
+  { key: "status", header: "Status" },
+];
 
 export function WeeklyOffView() {
   const [assignments, setAssignments] = useState<WeeklyOffAssignment[]>([])
@@ -87,6 +137,8 @@ export function WeeklyOffView() {
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Modals & Drawers state
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -110,6 +162,13 @@ export function WeeklyOffView() {
   const [assignEffectiveFrom, setAssignEffectiveFrom] = useState("");
   const [assignEffectiveTo, setAssignEffectiveTo] = useState("");
   const [assignRemarks, setAssignRemarks] = useState("");
+  const [assignSaving, setAssignSaving] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [previewDepartment, setPreviewDepartment] = useState("ALL");
+  const [staffingPreview, setStaffingPreview] = useState<Awaited<
+    ReturnType<typeof hrWeeklyOffService.staffingPreview>
+  > | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Close Employee Combobox Popover when clicking outside
   useEffect(() => {
@@ -128,6 +187,7 @@ export function WeeklyOffView() {
   const [bulkDays, setBulkDays] = useState<string[]>(["Sunday"]);
   const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState("");
   const [bulkEffectiveTo, setBulkEffectiveTo] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   // Filtered Assignments
   const filteredAssignments = useMemo(() => {
@@ -146,14 +206,91 @@ export function WeeklyOffView() {
     });
   }, [assignments, searchTerm, selectedDepartment, selectedType, selectedDay, selectedStatus]);
 
-  // KPI Metrics
+  // KPI Metrics (derived from assignments — no mock inflation)
   const kpiMetrics = useMemo(() => {
     const totalAssigned = assignments.length;
-    const fixed = assignments.filter((a) => a.type === "Fixed" && a.status === "Active").length + 76; // Mock total staff
-    const rotational = assignments.filter((a) => a.type === "Rotational" && a.status === "Active").length + 20;
-    const upcoming = assignments.filter((a) => a.status === "Upcoming").length + 4;
-    return { totalAssigned: 106, fixed, rotational, upcoming };
+    const fixed = assignments.filter((a) => a.type === "Fixed" && a.status === "Active").length;
+    const rotational = assignments.filter((a) => a.type === "Rotational" && a.status === "Active").length;
+    const upcoming = assignments.filter((a) => a.status === "Upcoming").length;
+    return { totalAssigned, fixed, rotational, upcoming };
   }, [assignments]);
+
+  const summaryStats = useMemo(
+    () => [
+      { label: "Employees assigned", value: kpiMetrics.totalAssigned, color: "#16a34a", icon: "users" as const },
+      { label: "Fixed weekly off", value: kpiMetrics.fixed, color: "#0284c7", icon: "calendar-off" as const, filterId: "Fixed" },
+      { label: "Rotational weekly off", value: kpiMetrics.rotational, color: "#f59e0b", icon: "repeat" as const, filterId: "Rotational" },
+      { label: "Upcoming changes", value: kpiMetrics.upcoming, color: "#9333ea", icon: "clock" as const, filterId: "Upcoming" },
+    ],
+    [kpiMetrics],
+  );
+
+  const hasActiveFilters =
+    searchTerm !== "" ||
+    selectedDepartment !== "ALL" ||
+    selectedType !== "ALL" ||
+    selectedDay !== "ALL" ||
+    selectedStatus !== "ALL";
+
+  const resetFilters = () => {
+    setSearchTerm("");
+    setSelectedDepartment("ALL");
+    setSelectedType("ALL");
+    setSelectedDay("ALL");
+    setSelectedStatus("ALL");
+  };
+
+  const handleStatFilter = (filterId: string) => {
+    if (filterId === "Fixed" || filterId === "Rotational") {
+      setSelectedType((prev) => (prev === filterId ? "ALL" : filterId));
+      return;
+    }
+    if (filterId === "Upcoming") {
+      setSelectedStatus((prev) => (prev === "Upcoming" ? "ALL" : "Upcoming"));
+    }
+  };
+
+  const handleWeeklyOffExport = async (options: {
+    format: "csv" | "excel" | "pdf";
+    fromDate: string;
+    toDate: string;
+  }) => {
+    setExporting(true);
+    try {
+      const ranged = filterByIsoDateRange(
+        filteredAssignments,
+        (a) => normalizeToIsoDate(a.effectiveFrom),
+        options.fromDate,
+        options.toDate,
+      );
+      const rows: WeeklyOffExportRow[] = ranged.map((a) => ({
+        employeeId: a.employeeId,
+        employeeName: a.employeeName,
+        department: a.department,
+        type: a.type,
+        days: a.days.join(", "),
+        effectiveFrom: a.effectiveFrom,
+        effectiveTo: a.effectiveTo,
+        status: a.status,
+      }));
+      exportGenericReport(rows, weeklyOffExportColumns, options, "Weekly_Off_Schedule");
+      setToastMessage(`Exported ${rows.length} weekly off assignment(s).`);
+      setIsExportModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const renderWeeklyOffFilters = () => (
+    <ToolbarFilterGroup>
+      <ToolbarFilterSelect value={selectedDepartment} onChange={setSelectedDepartment} options={[...employeeDepartmentFilterOptions]} ariaLabel="Filter by department" />
+      <ToolbarFilterSelect value={selectedType} onChange={setSelectedType} options={[...weeklyOffTypeFilterOptions]} ariaLabel="Filter by off type" />
+      <ToolbarFilterSelect value={selectedDay} onChange={setSelectedDay} options={[...weeklyOffDayFilterOptions]} ariaLabel="Filter by off day" />
+      <ToolbarFilterSelect value={selectedStatus} onChange={setSelectedStatus} options={[...weeklyOffStatusFilterOptions]} ariaLabel="Filter by status" />
+    </ToolbarFilterGroup>
+  );
 
   // Bulk preview list
   const bulkPreviewStaff = useMemo(() => {
@@ -173,7 +310,44 @@ export function WeeklyOffView() {
     }
   };
 
+  // Staffing preview — live when day + date range selected in assign modal
+  useEffect(() => {
+    if (!isAssignModalOpen || !assignEffectiveFrom || !assignDays.length) {
+      setStaffingPreview(null);
+      return;
+    }
+    const previewDay = assignDays[0];
+    const effectiveTo = assignEffectiveTo || assignEffectiveFrom;
+    const timer = window.setTimeout(async () => {
+      setPreviewLoading(true);
+      try {
+        const result = await hrWeeklyOffService.staffingPreview({
+          day: previewDay,
+          effectiveFrom: assignEffectiveFrom,
+          effectiveTo,
+          department: previewDepartment,
+          excludeEmployeeId: assignEmpId || undefined,
+        });
+        setStaffingPreview(result);
+      } catch {
+        setStaffingPreview(null);
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [
+    isAssignModalOpen,
+    assignDays,
+    assignEffectiveFrom,
+    assignEffectiveTo,
+    previewDepartment,
+    assignEmpId,
+  ]);
+
   const handleOpenSingleAssign = (existing?: WeeklyOffAssignment) => {
+    setAssignError(null);
+    setPreviewDepartment("ALL");
     if (existing) {
       setEditingAssignment(existing);
       setAssignEmpId(existing.employeeId);
@@ -183,6 +357,8 @@ export function WeeklyOffView() {
       setAssignDays(existing.days);
       setAssignRotationPattern(existing.rotationPattern || "");
       setAssignRemarks(existing.remarks || "");
+      setAssignEffectiveFrom(normalizeToIsoDate(existing.effectiveFrom) ?? "");
+      setAssignEffectiveTo(normalizeToIsoDate(existing.effectiveTo) ?? "");
     } else {
       const todayIso = new Date().toISOString().split("T")[0];
       setEditingAssignment(null);
@@ -199,93 +375,111 @@ export function WeeklyOffView() {
     setIsAssignModalOpen(true);
   };
 
-  const handleSaveSingleAssign = (e: React.FormEvent) => {
+  const handleSaveSingleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!assignEmpId) {
+      setAssignError("Please select an employee.");
+      return;
+    }
+    if (!assignEffectiveFrom) {
+      setAssignError("Effective from date is required.");
+      return;
+    }
+
     const empObj = employees.find((x) => x.id === assignEmpId);
-    const empName = empObj?.name || "Rajesh Kumar";
-    const empDept = empObj?.department || "Front Office";
-    const empDesig = empObj?.designation || "Staff";
-    const empAvatar = empObj?.avatar || "RK";
-
-    const fromParts = assignEffectiveFrom.split("-");
-    const toParts = assignEffectiveTo.split("-");
-    const formattedFrom = fromParts.length === 3 ? `${fromParts[2]}/${fromParts[1]}/${fromParts[0]}` : assignEffectiveFrom;
-    const formattedTo = toParts.length === 3 ? `${toParts[2]}/${toParts[1]}/${toParts[0]}` : assignEffectiveTo;
-
+    const empName = empObj?.name ?? assignEmpId;
     const rotationPatternStr = assignType === "Rotational" ? assignRotationPattern || "Rotational Shift Off" : undefined;
 
-    if (editingAssignment) {
-      setAssignments((prev) =>
-        prev.map((a) =>
-          a.id === editingAssignment.id
-            ? {
-                ...a,
-                type: assignType,
-                days: assignDays,
-                rotationPattern: rotationPatternStr,
-                effectiveFrom: formattedFrom,
-                effectiveTo: formattedTo,
-                remarks: assignRemarks,
-              }
-            : a
-        )
-      );
-      setToastMessage(`Updated weekly off for ${empName} (${assignDays.join(", ")}).`);
-    } else {
-      const newWO: WeeklyOffAssignment = {
-        id: `WO-${Math.floor(400 + Math.random() * 600)}`,
-        employeeId: assignEmpId || "EMP-0101",
-        employeeName: empName,
-        department: empDept,
-        designation: empDesig,
-        avatar: empAvatar,
+    setAssignSaving(true);
+    setAssignError(null);
+    try {
+      const payload = mapWeeklyOffToApi({
+        employeeId: assignEmpId,
         type: assignType,
         days: assignDays,
         rotationPattern: rotationPatternStr,
-        effectiveFrom: formattedFrom,
-        effectiveTo: formattedTo,
-        status: "Active",
-        assignedBy: "Neha Mehta (HR Admin)",
+        effectiveFrom: assignEffectiveFrom,
+        effectiveTo: assignEffectiveTo || assignEffectiveFrom,
+        assignedBy: "HR Admin",
         remarks: assignRemarks || "Assigned via Weekly Off Center.",
-      };
+      });
 
-      setAssignments((prev) => [newWO, ...prev]);
-      setToastMessage(`Assigned ${assignDays.join(", ")} weekly off to ${empName}.`);
+      if (editingAssignment) {
+        await hrWeeklyOffService.update(editingAssignment.id, payload);
+        setToastMessage(`Updated weekly off for ${empName} (${assignDays.join(", ")}).`);
+      } else {
+        await hrWeeklyOffService.create(payload);
+        setToastMessage(`Assigned ${assignDays.join(", ")} weekly off to ${empName}.`);
+      }
+      await loadWeeklyOffs();
+      setIsAssignModalOpen(false);
+    } catch (err) {
+      setAssignError(err instanceof Error ? err.message : "Failed to save weekly off assignment.");
+    } finally {
+      setAssignSaving(false);
     }
-    setIsAssignModalOpen(false);
   };
 
-  const handleSaveBulkAssign = (e: React.FormEvent) => {
+  const handleSaveBulkAssign = async (e: React.FormEvent) => {
     e.preventDefault();
-    const fromParts = bulkEffectiveFrom.split("-");
-    const toParts = bulkEffectiveTo.split("-");
-    const formattedFrom = fromParts.length === 3 ? `${fromParts[2]}/${fromParts[1]}/${fromParts[0]}` : bulkEffectiveFrom;
-    const formattedTo = toParts.length === 3 ? `${toParts[2]}/${toParts[1]}/${toParts[0]}` : bulkEffectiveTo;
+    if (!bulkDepartment || !bulkEffectiveFrom) {
+      setToastMessage("Select department and effective from date.");
+      return;
+    }
 
-    setAssignments((prev) =>
-      prev.map((a) => {
-        if (bulkDepartment === "ALL" || a.department === bulkDepartment) {
-          return {
-            ...a,
-            type: bulkType,
-            days: bulkDays,
-            effectiveFrom: formattedFrom,
-            effectiveTo: formattedTo,
-            status: "Active",
-            assignedBy: "HR Admin (Bulk Action)",
-          };
+    const targets =
+      bulkDepartment === "ALL" ? employees : employees.filter((a) => a.department === bulkDepartment);
+
+    if (targets.length === 0) {
+      setToastMessage("No employees found for the selected department.");
+      return;
+    }
+
+    setBulkSaving(true);
+    try {
+      let created = 0;
+      let skipped = 0;
+      for (const emp of targets) {
+        try {
+          await hrWeeklyOffService.create(
+            mapWeeklyOffToApi({
+              employeeId: emp.id,
+              type: bulkType,
+              days: bulkDays,
+              effectiveFrom: bulkEffectiveFrom,
+              effectiveTo: bulkEffectiveTo || bulkEffectiveFrom,
+              assignedBy: "HR Admin (Bulk Action)",
+              remarks: "Bulk assigned via Weekly Off Center.",
+            }),
+          );
+          created++;
+        } catch {
+          skipped++;
         }
-        return a;
-      })
-    );
-
-    setIsBulkModalOpen(false);
-    setToastMessage(`Bulk assigned ${bulkDays.join(", ")} weekly off to all ${bulkDepartment} staff.`);
+      }
+      await loadWeeklyOffs();
+      setIsBulkModalOpen(false);
+      setToastMessage(
+        skipped > 0
+          ? `Bulk assigned ${bulkDays.join(", ")} to ${created} employee(s). ${skipped} skipped due to conflicts.`
+          : `Bulk assigned ${bulkDays.join(", ")} weekly off to ${created} employee(s).`,
+      );
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Bulk assignment failed.");
+    } finally {
+      setBulkSaving(false);
+    }
   };
 
-  const handleRemoveAssignment = (id: string, empName: string) => {
-    setAssignments((prev) => prev.filter((a) => a.id !== id));
-    setToastMessage(`Removed weekly off assignment for ${empName}.`);
+  const handleRemoveAssignment = async (id: string, empName: string) => {
+    try {
+      await hrWeeklyOffService.remove(id);
+      await loadWeeklyOffs();
+      setViewingAssignment(null);
+      setToastMessage(`Removed weekly off assignment for ${empName}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to remove assignment.");
+    }
   };
 
   return (
@@ -316,7 +510,12 @@ export function WeeklyOffView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setIsBulkModalOpen(true)}
+            onClick={() => {
+              const todayIso = new Date().toISOString().split("T")[0];
+              setBulkEffectiveFrom(todayIso);
+              setBulkEffectiveTo(`${new Date().getFullYear()}-12-31`);
+              setIsBulkModalOpen(true);
+            }}
             className="rounded-xl text-xs font-bold bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50 shadow-xs cursor-pointer"
           >
             <Users className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
@@ -327,7 +526,7 @@ export function WeeklyOffView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setToastMessage("Exporting weekly off schedule to CSV...")}
+            onClick={() => setIsExportModalOpen(true)}
             className="rounded-xl text-xs font-medium bg-white text-slate-700 border-slate-300 shadow-xs"
           >
             <Printer className="h-3.5 w-3.5 mr-1 text-slate-500" />
@@ -336,173 +535,31 @@ export function WeeklyOffView() {
         </div>
       }
     >
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: 4 KPI SUMMARY CARDS
-      ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Employees Assigned</p>
-            <h4 className="text-2xl font-black text-slate-900 mt-1">{kpiMetrics.totalAssigned} Staff</h4>
-            <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">100% Scheduled Rest Days</p>
-          </div>
-          <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200">
-            <Users className="h-5 w-5" />
-          </div>
-        </div>
+      <ListSummaryCards
+        stats={summaryStats}
+        className="mb-5"
+        activeFilterId={
+          selectedType !== "ALL"
+            ? selectedType
+            : selectedStatus === "Upcoming"
+              ? "Upcoming"
+              : ""
+        }
+        onFilterClick={handleStatFilter}
+      />
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fixed Weekly Off</p>
-            <h4 className="text-2xl font-black text-blue-900 mt-1">{kpiMetrics.fixed} Staff</h4>
-            <p className="text-[11px] text-blue-700 font-semibold mt-0.5">Fixed Day Schedule</p>
-          </div>
-          <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-200">
-            <CalendarOff className="h-5 w-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rotational Weekly Off</p>
-            <h4 className="text-2xl font-black text-amber-900 mt-1">{kpiMetrics.rotational} Staff</h4>
-            <p className="text-[11px] text-amber-700 font-semibold mt-0.5">Shift Roster Offs</p>
-          </div>
-          <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200">
-            <Repeat className="h-5 w-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Upcoming Changes</p>
-            <h4 className="text-2xl font-black text-purple-900 mt-1">{kpiMetrics.upcoming} Changes</h4>
-            <p className="text-[11px] text-purple-700 font-semibold mt-0.5">Effective Next Month</p>
-          </div>
-          <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center border border-purple-200">
-            <Clock className="h-5 w-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 2: FILTERS TOOLBAR
-      ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          {/* Full-width Rounded Search Input */}
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search Employee, ID or Off Day..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Filters Toggle Button (Right) */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilterPanel(!showFilterPanel)}
-              className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
-              <span>Filters</span>
-            </Button>
-
-            <button
-              type="button"
-              onClick={() => setIsMobileFilterOpen(true)}
-              className="md:hidden p-2 rounded-full border border-slate-200 bg-white text-slate-700"
-            >
-              <SlidersHorizontal className="h-4 w-4 text-emerald-700" />
-            </button>
-          </div>
-        </div>
-
-        {/* Collapsible Secondary Filters Drawer Bar */}
-        {showFilterPanel && (
-          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in-50">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <select
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All Departments</option>
-                <option value="Front Office">Front Office</option>
-                <option value="Housekeeping">Housekeeping</option>
-                <option value="Food & Beverage">Food &amp; Beverage</option>
-                <option value="Kitchen">Kitchen</option>
-                <option value="HR">HR</option>
-                <option value="Accounts">Accounts</option>
-              </select>
-
-              <select
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All Off Types</option>
-                <option value="Fixed">Fixed Schedule</option>
-                <option value="Rotational">Rotational Shift Off</option>
-              </select>
-
-              <select
-                value={selectedDay}
-                onChange={(e) => setSelectedDay(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All Days</option>
-                {DAYS_OF_WEEK.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="Active">Active</option>
-                <option value="Upcoming">Upcoming</option>
-                <option value="Expired">Expired</option>
-              </select>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSearchTerm("");
-                setSelectedDepartment("ALL");
-                setSelectedType("ALL");
-                setSelectedDay("ALL");
-                setSelectedStatus("ALL");
-              }}
-              className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
-            >
-              Reset Filters
-            </button>
-          </div>
-        )}
-      </div>
+      <HrSearchFilterToolbar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Search employee, ID or off day..."
+        showFilterPanel={showFilterPanel}
+        onToggleFilterPanel={() => setShowFilterPanel((v) => !v)}
+        hasActiveFilters={hasActiveFilters}
+        onReset={resetFilters}
+        onOpenMobileFilters={() => setIsMobileFilterOpen(true)}
+        filters={renderWeeklyOffFilters()}
+        extraFilters={renderWeeklyOffFilters()}
+      />
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION 3: MAIN WEEKLY OFF ASSIGNMENTS TABLE
@@ -804,6 +861,84 @@ export function WeeklyOffView() {
             </div>
           </div>
 
+          {/* Staffing preview — informational only */}
+          {assignDays.length > 0 && assignEffectiveFrom && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <Info className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-emerald-900">
+                    {assignDays[0]} — Staffing Preview
+                  </p>
+                  <p className="text-[10px] text-emerald-700/80 font-medium">
+                    Active/overlapping weekly offs during the selected period. Informational only — does not block assignment.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-[10px] font-bold text-slate-600 uppercase shrink-0">Department</label>
+                <select
+                  value={previewDepartment}
+                  onChange={(e) => setPreviewDepartment(e.target.value)}
+                  className="flex-1 text-xs rounded-lg border border-slate-200 p-1.5 bg-white font-semibold"
+                >
+                  <option value="ALL">All departments</option>
+                  {[...employeeDepartmentFilterOptions]
+                    .filter((o) => o.value !== "ALL")
+                    .map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {previewLoading ? (
+                <p className="text-xs text-slate-500 font-medium py-2">Loading coverage...</p>
+              ) : staffingPreview && staffingPreview.employees.length > 0 ? (
+                <>
+                  {Object.keys(staffingPreview.departmentCounts).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(staffingPreview.departmentCounts).map(([dept, count]) => (
+                        <span
+                          key={dept}
+                          className="px-2 py-0.5 rounded-md bg-white border border-emerald-200 text-[10px] font-bold text-emerald-800"
+                        >
+                          {dept}: {count} off
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {staffingPreview.employees.map((emp) => (
+                      <div
+                        key={`${emp.assignmentId}-${emp.employeeId}`}
+                        className="flex items-center justify-between p-2 bg-white rounded-lg border border-emerald-100 text-xs"
+                      >
+                        <span className="font-bold text-slate-900">{emp.employeeName}</span>
+                        <span className="text-slate-500 text-[11px] font-semibold">{emp.department}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] font-bold text-emerald-800">
+                    {staffingPreview.total} employee{staffingPreview.total === 1 ? "" : "s"} already have {assignDays[0]} off during this period.
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-slate-500 font-medium py-1">
+                  No overlapping {assignDays[0]} weekly offs found for the selected period.
+                </p>
+              )}
+            </div>
+          )}
+
+          {assignError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs font-semibold text-rose-800">
+              {assignError}
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
             <Button
               type="button"
@@ -811,6 +946,7 @@ export function WeeklyOffView() {
               size="sm"
               onClick={() => setIsAssignModalOpen(false)}
               className="rounded-xl text-xs"
+              disabled={assignSaving}
             >
               Cancel
             </Button>
@@ -818,8 +954,9 @@ export function WeeklyOffView() {
               type="submit"
               size="sm"
               className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white"
+              disabled={assignSaving}
             >
-              Save Assignment
+              {assignSaving ? "Saving..." : "Save Assignment"}
             </Button>
           </div>
         </form>
@@ -950,8 +1087,9 @@ export function WeeklyOffView() {
               type="submit"
               size="sm"
               className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white"
+              disabled={bulkSaving}
             >
-              Confirm Bulk Assignment
+              {bulkSaving ? "Assigning..." : "Confirm Bulk Assignment"}
             </Button>
           </div>
         </form>
@@ -960,86 +1098,94 @@ export function WeeklyOffView() {
       {/* ─────────────────────────────────────────────────────────────
           SIDE DRAWER: VIEW WEEKLY OFF DETAILS
       ───────────────────────────────────────────────────────────── */}
-      {viewingAssignment && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs animate-in fade-in-50">
-          <div
-            className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between overflow-y-auto animate-in slide-in-from-right duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div>
-              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
-                <div className="flex items-center gap-2">
-                  <CalendarOff className="h-5 w-5 text-emerald-700" />
-                  <h3 className="font-bold text-sm text-slate-900">Weekly Off Schedule Details</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setViewingAssignment(null)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="p-5 space-y-4">
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-sm text-slate-900">{viewingAssignment.employeeName}</h4>
-                    <span className="font-mono text-xs font-bold text-slate-600">{viewingAssignment.employeeId}</span>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    {viewingAssignment.designation} • <span className="text-emerald-700 font-semibold">{viewingAssignment.department}</span>
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-500">Assignment Type</span>
-                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      {viewingAssignment.type} Schedule
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                    {viewingAssignment.days.map((day) => (
-                      <span key={day} className="px-3 py-1 rounded-xl bg-emerald-700 text-white text-xs font-bold shadow-2xs">
-                        🌴 Every {day}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500 font-medium">Effective Date Range</span>
-                    <span className="font-bold text-slate-800">
-                      {viewingAssignment.effectiveFrom} → {viewingAssignment.effectiveTo}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500 font-medium">Attendance Overtime Rule</span>
-                    <span className="font-bold text-emerald-700">2.0x OT or Comp-Off</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500 font-medium">Assigned By</span>
-                    <span className="font-semibold text-slate-800">{viewingAssignment.assignedBy}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-200 bg-slate-50">
+      <Drawer
+        isOpen={Boolean(viewingAssignment)}
+        onClose={() => setViewingAssignment(null)}
+        title="Weekly Off Schedule Details"
+        icon={<CalendarOff className="h-5 w-5 text-emerald-700" />}
+        footer={
+          viewingAssignment ? (
+            <div className="flex gap-2 w-full">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  void handleRemoveAssignment(viewingAssignment.id, viewingAssignment.employeeName)
+                }
+                className="rounded-xl text-xs font-bold text-rose-700 border-rose-200 hover:bg-rose-50"
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" /> Remove
+              </Button>
               <Button
                 type="button"
                 size="sm"
                 onClick={() => handleOpenSingleAssign(viewingAssignment)}
-                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold h-9"
+                className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold h-9"
               >
                 <Edit2 className="mr-1 h-3.5 w-3.5" /> Edit Rest Day Schedule
               </Button>
             </div>
-          </div>
-        </div>
-      )}
+          ) : undefined
+        }
+      >
+        {viewingAssignment && (
+          <>
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-sm text-slate-900">{viewingAssignment.employeeName}</h4>
+                <span className="font-mono text-xs font-bold text-slate-600">{viewingAssignment.employeeId}</span>
+              </div>
+              <p className="text-xs text-slate-500">
+                {viewingAssignment.designation} •{" "}
+                <span className="text-emerald-700 font-semibold">{viewingAssignment.department}</span>
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Assignment Type</span>
+                <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  {viewingAssignment.type} Schedule
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                {viewingAssignment.days.map((day) => (
+                  <span key={day} className="px-3 py-1 rounded-xl bg-emerald-700 text-white text-xs font-bold shadow-2xs">
+                    🌴 Every {day}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">Effective Date Range</span>
+                <span className="font-bold text-slate-800">
+                  {viewingAssignment.effectiveFrom} → {viewingAssignment.effectiveTo}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">Attendance Overtime Rule</span>
+                <span className="font-bold text-emerald-700">2.0x OT or Comp-Off</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">Assigned By</span>
+                <span className="font-semibold text-slate-800">{viewingAssignment.assignedBy}</span>
+              </div>
+            </div>
+          </>
+        )}
+      </Drawer>
+      <ReportExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onExport={handleWeeklyOffExport}
+        defaultDate={new Date().toLocaleDateString("en-CA")}
+        title="Export weekly off schedule"
+        description="Choose file type and time period. Current filters apply to the export."
+        exporting={exporting}
+      />
     </ModulePageShell>
   );
 }

@@ -61,17 +61,116 @@ export const hrHolidayService = crud<Record<string, unknown>>("/masters/holidays
 export const hrSalaryComponentService = crud<Record<string, unknown>>("/masters/salary-components");
 export const hrDocumentCategoryService = crud<Record<string, unknown>>("/masters/document-categories");
 export const hrDocumentTypeService = crud<Record<string, unknown>>("/masters/document-types");
-export const hrAttendanceService = crud<Record<string, unknown>>("/attendance");
+export const hrAttendanceService = {
+  list: (query = "") => api.get<Record<string, unknown>[]>(hrPath(`/attendance${query}`)),
+  listRange: (fromDate: string, toDate: string) =>
+    api.get<Record<string, unknown>[]>(
+      hrPath(
+        `/attendance?fromDate=${encodeURIComponent(fromDate)}&toDate=${encodeURIComponent(toDate)}`,
+      ),
+    ),
+  getDaily: (date: string) =>
+    api.get<Record<string, unknown>[]>(hrPath(`/attendance/daily?date=${encodeURIComponent(date)}`)),
+  getForEmployee: (employeeId: string) =>
+    api.get<Record<string, unknown>[]>(hrPath(`/attendance/employee/${employeeId}`)),
+  get: (id: string) => api.get<Record<string, unknown>>(hrPath(`/attendance/${id}`)),
+  punchIn: (body: {
+    employeeId: string;
+    attendanceDate?: string;
+    punchInAt?: string;
+    source?: string;
+    remarks?: string;
+    changedBy?: string;
+  }) => api.post<Record<string, unknown>>(hrPath("/attendance/punch-in"), body),
+  punchOut: (body: {
+    employeeId: string;
+    attendanceDate?: string;
+    punchOutAt?: string;
+    source?: string;
+    remarks?: string;
+    changedBy?: string;
+  }) => api.post<Record<string, unknown>>(hrPath("/attendance/punch-out"), body),
+  correct: (
+    id: string,
+    body: {
+      punchIn?: string | null;
+      punchOut?: string | null;
+      attendanceStatus?: string;
+      remarks?: string;
+      overrideReason: string;
+      changedBy?: string;
+    },
+  ) => api.post<Record<string, unknown>>(hrPath(`/attendance/${id}/correct`), body),
+  recalculate: (id: string) =>
+    api.post<Record<string, unknown>>(hrPath(`/attendance/${id}/recalculate`), {}),
+  processAbsence: (body?: { attendanceDate?: string }) =>
+    api.post<Record<string, unknown>>(hrPath("/attendance/process-absence"), body ?? {}),
+  create: (body: Record<string, unknown>) => api.post(hrPath("/attendance"), body),
+  update: (id: string, body: Record<string, unknown>) => api.put(hrPath(`/attendance/${id}`), body),
+  remove: (id: string) => api.delete<{ id: string }>(hrPath(`/attendance/${id}`)),
+};
 export const hrShiftAssignmentService = crud<Record<string, unknown>>("/shift-assignments");
-export const hrWeeklyOffService = crud<Record<string, unknown>>("/weekly-offs");
-export const hrLeaveApplicationService = crud<Record<string, unknown>>("/leave-applications");
+export const hrWeeklyOffService = {
+  ...crud<Record<string, unknown>>("/weekly-offs"),
+  staffingPreview: (params: {
+    day: string;
+    effectiveFrom: string;
+    effectiveTo: string;
+    department?: string;
+    excludeEmployeeId?: string;
+  }) => {
+    const q = new URLSearchParams({
+      day: params.day,
+      effectiveFrom: params.effectiveFrom,
+      effectiveTo: params.effectiveTo,
+    });
+    if (params.department && params.department !== "ALL") {
+      q.set("department", params.department);
+    }
+    if (params.excludeEmployeeId) {
+      q.set("excludeEmployeeId", params.excludeEmployeeId);
+    }
+    return api.get<{
+      day: string;
+      effectiveFrom: string;
+      effectiveTo: string;
+      total: number;
+      departmentCounts: Record<string, number>;
+      employees: Array<{
+        employeeId: string;
+        employeeName: string;
+        department: string;
+        designation: string;
+        assignmentId: string;
+        effectiveFrom: string;
+        effectiveTo: string | null;
+      }>;
+    }>(hrPath(`/weekly-offs/staffing-preview?${q}`));
+  },
+};
+export const hrLeaveApplicationService = {
+  ...crud<Record<string, unknown>>("/leave-applications"),
+  previewDays: (body: {
+    employeeId: string;
+    fromDate: string;
+    toDate: string;
+    durationOption?: string;
+  }) => api.post<Record<string, unknown>>(hrPath("/leave-applications/preview-days"), body),
+  approve: (id: string, approvedBy?: string) =>
+    api.post<Record<string, unknown>>(hrPath(`/leave-applications/${id}/approve`), { approvedBy }),
+  cancel: (id: string, body?: { changedBy?: string; newToDate?: string }) =>
+    api.post<Record<string, unknown>>(hrPath(`/leave-applications/${id}/cancel`), body ?? {}),
+  modify: (
+    id: string,
+    body: { fromDate: string; toDate: string; changedBy?: string; durationOption?: string },
+  ) => api.post<Record<string, unknown>>(hrPath(`/leave-applications/${id}/modify`), body),
+};
 export const hrOvertimeService = crud<Record<string, unknown>>("/overtime");
 export const hrHolidayAttendanceService = crud<Record<string, unknown>>("/holiday-attendance");
 export const hrSalaryStructureService = crud<Record<string, unknown>>("/salary-structures");
 export const hrPayslipService = crud<Record<string, unknown>>("/payslips");
 export const hrComplaintCategoryService = crud<Record<string, unknown>>("/complaint-categories");
 export const hrComplaintService = crud<Record<string, unknown>>("/complaints");
-export const hrApprovalWorkflowService = crud<Record<string, unknown>>("/approval-workflows");
 export const hrTaxRuleService = crud<Record<string, unknown>>("/tax/rules");
 
 export const hrPayrollSettingsService = {

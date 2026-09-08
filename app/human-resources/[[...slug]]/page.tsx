@@ -16,7 +16,6 @@ import { PayrollSettingsView } from "@/components/hr/PayrollSettingsView";
 import { ProcessPayrollView } from "@/components/hr/ProcessPayrollView";
 import { PayslipsView } from "@/components/hr/PayslipsView";
 import { TaxManagementView } from "@/components/hr/TaxManagementView";
-import { ApprovalMatrixView } from "@/components/hr/ApprovalMatrixView";
 import { ComplaintCategoriesView } from "@/components/hr/ComplaintCategoriesView";
 import { RaiseComplaintView } from "@/components/hr/RaiseComplaintView";
 import { ComplaintListView } from "@/components/hr/ComplaintListView";
@@ -106,14 +105,6 @@ export default async function HumanResourcesPage({
 
   if (slugPath === "payroll/payroll-settings") {
     return <PayrollSettingsView />;
-  }
-
-  if (
-    slugPath === "approvals/approval-matrix" ||
-    slugPath === "approvals" ||
-    slugPath === "approval-matrix"
-  ) {
-    return <ApprovalMatrixView />;
   }
 
   if (

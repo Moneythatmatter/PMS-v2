@@ -22,12 +22,15 @@ import {
   formatAttendanceMonthLabel,
   getCalendarCellClass,
   getWeekdayLabels,
-  listAttendanceLogForMonth,
+  mergeAttendanceRecordsIntoGrid,
   parseEmployeeJoinDate,
   summarizeAttendanceMonth,
+  type CalendarAttendanceOverlay,
   type EmployeeAttendanceDay,
   type EmployeeAttendanceStatus,
 } from "@/lib/hr/employee-attendance";
+import { hrAttendanceService } from "@/services/human-resources";
+import { mapAttendanceFromApi } from "@/lib/hr/api-mappers";
 
 const COMPACT_WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
@@ -37,7 +40,9 @@ const STATUS_BADGE: Record<EmployeeAttendanceStatus, string> = {
   Absent: "bg-rose-100 text-rose-800 border-rose-200",
   "Half Day": "bg-purple-100 text-purple-800 border-purple-200",
   "On Leave": "bg-blue-100 text-blue-800 border-blue-200",
+  Holiday: "bg-violet-100 text-violet-800 border-violet-200",
   "Weekly Off": "bg-slate-200 text-slate-700 border-slate-300",
+  Pending: "bg-amber-50 text-amber-900 border-amber-200",
   Future: "bg-slate-50 text-slate-400 border-slate-100",
   "Before Join": "bg-slate-50 text-slate-300 border-slate-100",
 };
@@ -61,6 +66,8 @@ export interface EmployeeAttendanceGridProps {
   shiftType: string;
   showLog?: boolean;
   showSummary?: boolean;
+  /** Bump to reload attendance from API (e.g. after leave cancel). */
+  refreshKey?: number;
   /** Sidebar / overview embed — tighter layout, less chrome. */
   compact?: boolean;
   /** Full tab — main content left, compact calendar right (matches overview). */
@@ -79,6 +86,7 @@ export function EmployeeAttendanceGrid({
   compact = false,
   sideCalendar = false,
   leadingContent,
+  refreshKey = 0,
   onViewFullAttendance,
 }: EmployeeAttendanceGridProps) {
   const parsedJoinDate = useMemo(() => parseEmployeeJoinDate(joinDate), [joinDate]);
@@ -88,19 +96,52 @@ export function EmployeeAttendanceGrid({
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [selectedDayIso, setSelectedDayIso] = useState<string | null>(null);
-
-  const monthGrid = useMemo(
-    () =>
-      buildEmployeeAttendanceMonthGrid(
-        employeeId,
-        viewYear,
-        viewMonth,
-        parsedJoinDate,
-        shiftType,
-        today,
-      ),
-    [employeeId, viewYear, viewMonth, parsedJoinDate, shiftType, today],
+  const [recordsByDate, setRecordsByDate] = useState<Map<string, CalendarAttendanceOverlay>>(
+    new Map(),
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rows = await hrAttendanceService.getForEmployee(employeeId);
+        if (cancelled) return;
+        const map = new Map<string, CalendarAttendanceOverlay>();
+        for (const row of rows) {
+          const mapped = mapAttendanceFromApi(row);
+          const iso = String(row.attendanceDate ?? row.recordDate ?? "").slice(0, 10);
+          if (!iso) continue;
+          map.set(iso, {
+            status: mapped.status,
+            shiftName: mapped.shiftName,
+            checkIn: mapped.checkIn,
+            checkOut: mapped.checkOut,
+            workedHours: mapped.workedHours,
+            leaveTypeName: mapped.leaveTypeName,
+            dayType: mapped.dayType,
+          });
+        }
+        setRecordsByDate(map);
+      } catch {
+        if (!cancelled) setRecordsByDate(new Map());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeId, refreshKey]);
+
+  const monthGrid = useMemo(() => {
+    const base = buildEmployeeAttendanceMonthGrid(
+      employeeId,
+      viewYear,
+      viewMonth,
+      parsedJoinDate,
+      shiftType,
+      today,
+    );
+    return mergeAttendanceRecordsIntoGrid(base, recordsByDate);
+  }, [employeeId, viewYear, viewMonth, parsedJoinDate, shiftType, today, recordsByDate]);
 
   const monthSummary = useMemo(
     () => summarizeAttendanceMonth(monthGrid),
@@ -109,15 +150,16 @@ export function EmployeeAttendanceGrid({
 
   const monthLog = useMemo(
     () =>
-      listAttendanceLogForMonth(
-        employeeId,
-        viewYear,
-        viewMonth,
-        parsedJoinDate,
-        shiftType,
-        today,
-      ),
-    [employeeId, viewYear, viewMonth, parsedJoinDate, shiftType, today],
+      monthGrid
+        .filter(
+          (d) =>
+            d.inMonth &&
+            d.status !== "Future" &&
+            d.status !== "Before Join",
+        )
+        .slice()
+        .sort((a, b) => b.iso.localeCompare(a.iso)),
+    [monthGrid],
   );
 
   const selectedDay = useMemo(() => {
@@ -411,9 +453,10 @@ function CalendarPanel({
 
           <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 shrink-0">
             <LegendDot compact className="bg-emerald-600" label="Present" />
-            <LegendDot compact className="bg-emerald-400" label="Late" />
             <LegendDot compact className="bg-sky-300" label="Leave" />
+            <LegendDot compact className="bg-amber-100 border border-amber-300" label="Pending" />
             <LegendDot compact className="bg-rose-300" label="Absent" />
+            <LegendDot compact className="bg-violet-300" label="Holiday" />
           </div>
 
           {showFullAttendanceLink ? (
@@ -475,8 +518,10 @@ function CalendarPanel({
         <LegendDot className="bg-emerald-600" label="Present" />
         <LegendDot className="bg-emerald-400" label="Late" />
         <LegendDot className="bg-sky-300" label="Leave" />
+        <LegendDot className="bg-amber-100 border border-amber-300" label="Pending" />
         <LegendDot className="bg-rose-300" label="Absent" />
-        <LegendDot className="bg-slate-100 border border-slate-200" label="Off" />
+        <LegendDot className="bg-violet-300" label="Holiday" />
+        <LegendDot className="bg-slate-100 border border-slate-200" label="Weekly off" />
       </div>
 
       {showFullAttendanceLink ? (
@@ -517,8 +562,7 @@ function CalendarCell({
     );
   }
 
-  const interactive =
-    day.status !== "Future" && day.status !== "Before Join";
+  const interactive = day.status !== "Future" && day.status !== "Before Join";
 
   return (
     <button

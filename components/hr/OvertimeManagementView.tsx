@@ -23,8 +23,22 @@ import {
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge, SearchSelect } from "@/components/ui";
-import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
+import { HrSearchFilterToolbar } from "@/components/hr/shared/HrSearchFilterToolbar";
+import { ReportExportModal } from "@/components/shared/ReportExportModal";
+import {
+  ListSummaryCards,
+  ToolbarFilterGroup,
+  ToolbarFilterSelect,
+} from "@/components/shared/list-table";
+import { employeeDepartmentFilterOptions } from "@/app/data/hr/employeeDepartmentOptions";
+import {
+  exportGenericReport,
+  filterByIsoDateRange,
+  normalizeToIsoDate,
+  todayIsoDate,
+} from "@/lib/hr/report-export";
+import type { ExportColumn } from "@/lib/exportUtils";
 import { cn } from "@/lib/utils";
 import { hrOvertimeService, hrEmployeeService } from "@/services/human-resources";
 import { mapOvertimeFromApi, mapOvertimeToApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
@@ -65,6 +79,45 @@ export interface OvertimeRecord {
   approvalRemarks?: string;
 }
 
+const overtimeOtTypeFilterOptions = [
+  { value: "ALL", label: "All OT types" },
+  { value: "Regular OT", label: "Regular OT" },
+  { value: "Holiday OT", label: "Holiday OT" },
+  { value: "Weekly Off OT", label: "Weekly off OT" },
+  { value: "Emergency Call-In OT", label: "Emergency call-in" },
+  { value: "Night Differential OT", label: "Night differential" },
+] as const;
+
+const overtimeStatusFilterOptions = [
+  { value: "ALL", label: "All statuses" },
+  { value: "Pending", label: "Pending" },
+  { value: "Approved", label: "Approved" },
+  { value: "Rejected", label: "Rejected" },
+  { value: "Processed", label: "Processed" },
+] as const;
+
+type OvertimeExportRow = {
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  otType: string;
+  date: string;
+  overtimeHours: number;
+  payableAmount: number;
+  status: string;
+};
+
+const overtimeExportColumns: ExportColumn<OvertimeExportRow>[] = [
+  { key: "employeeId", header: "Employee ID" },
+  { key: "employeeName", header: "Employee Name" },
+  { key: "department", header: "Department" },
+  { key: "otType", header: "OT Type" },
+  { key: "date", header: "Date" },
+  { key: "overtimeHours", header: "OT Hours" },
+  { key: "payableAmount", header: "Payable (₹)" },
+  { key: "status", header: "Status" },
+];
+
 export function OvertimeManagementView() {
   const [records, setRecords] = useState<OvertimeRecord[]>([])
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
@@ -93,8 +146,11 @@ export function OvertimeManagementView() {
   const [selectedDepartment, setSelectedDepartment] = useState("ALL");
   const [selectedOtType, setSelectedOtType] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
+  const [selectedDate, setSelectedDate] = useState(todayIsoDate);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Modals & Side Drawer
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
@@ -122,21 +178,24 @@ export function OvertimeManagementView() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Filtered Records
+  const matchesBaseFilters = (r: OvertimeRecord) => {
+    const matchSearch =
+      r.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.shiftName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchDept = selectedDepartment === "ALL" || r.department === selectedDepartment;
+    const matchOtType = selectedOtType === "ALL" || r.otType === selectedOtType;
+    const matchStatus = selectedStatus === "ALL" || r.status === selectedStatus;
+    return matchSearch && matchDept && matchOtType && matchStatus;
+  };
+
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
-      const matchSearch =
-        r.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.shiftName.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchDept = selectedDepartment === "ALL" || r.department === selectedDepartment;
-      const matchOtType = selectedOtType === "ALL" || r.otType === selectedOtType;
-      const matchStatus = selectedStatus === "ALL" || r.status === selectedStatus;
-
-      return matchSearch && matchDept && matchOtType && matchStatus;
+      if (!matchesBaseFilters(r)) return false;
+      const iso = normalizeToIsoDate(r.date);
+      return iso === selectedDate;
     });
-  }, [records, searchTerm, selectedDepartment, selectedOtType, selectedStatus]);
+  }, [records, searchTerm, selectedDepartment, selectedOtType, selectedStatus, selectedDate]);
 
   // Meaningful KPI Metrics (Improvement #1)
   const metrics = useMemo(() => {
@@ -158,6 +217,87 @@ export function OvertimeManagementView() {
       uniqueEmployees,
     };
   }, [records]);
+
+  const summaryStats = useMemo(
+    () => [
+      {
+        label: "Pending approval",
+        value: metrics.pendingCount,
+        color: "#f59e0b",
+        icon: "clock" as const,
+        filterId: "Pending",
+      },
+      {
+        label: "Approved hours",
+        value: metrics.approvedHours,
+        color: "#16a34a",
+        icon: "check-circle" as const,
+        filterId: "Approved",
+      },
+      {
+        label: "OT cost impact",
+        value: `₹${metrics.totalCostPayable}`,
+        color: "#0284c7",
+        icon: "indian-rupee" as const,
+      },
+      {
+        label: "Employees with OT",
+        value: metrics.uniqueEmployees,
+        color: "#64748b",
+        icon: "users" as const,
+      },
+    ],
+    [metrics],
+  );
+
+  const today = todayIsoDate();
+  const hasActiveFilters =
+    searchTerm !== "" ||
+    selectedDepartment !== "ALL" ||
+    selectedOtType !== "ALL" ||
+    selectedStatus !== "ALL" ||
+    selectedDate !== today;
+
+  const resetFilters = () => {
+    setSearchTerm("");
+    setSelectedDepartment("ALL");
+    setSelectedOtType("ALL");
+    setSelectedStatus("ALL");
+    setSelectedDate(today);
+  };
+
+  const handleStatFilter = (status: string) => {
+    setSelectedStatus((prev) => (prev === status ? "ALL" : status));
+  };
+
+  const handleOvertimeExport = async (options: {
+    format: "csv" | "excel" | "pdf";
+    fromDate: string;
+    toDate: string;
+  }) => {
+    setExporting(true);
+    try {
+      const base = records.filter(matchesBaseFilters);
+      const ranged = filterByIsoDateRange(base, (r) => r.date, options.fromDate, options.toDate);
+      const rows: OvertimeExportRow[] = ranged.map((r) => ({
+        employeeId: r.employeeId,
+        employeeName: r.employeeName,
+        department: r.department,
+        otType: r.otType,
+        date: r.date,
+        overtimeHours: r.overtimeHours,
+        payableAmount: r.payableAmount,
+        status: r.status,
+      }));
+      exportGenericReport(rows, overtimeExportColumns, options, "Overtime_Report");
+      setToastMessage(`Exported ${rows.length} overtime record(s).`);
+      setIsExportModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Department OT Analysis Widget (Improvement #6)
   const departmentOtAnalysis = useMemo(() => {
@@ -314,7 +454,7 @@ export function OvertimeManagementView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setToastMessage("Exporting overtime report to CSV...")}
+            onClick={() => setIsExportModalOpen(true)}
             className="rounded-xl text-xs font-medium bg-white text-slate-700 border-slate-300 shadow-xs"
           >
             <Printer className="h-3.5 w-3.5 mr-1 text-slate-500" />
@@ -323,143 +463,71 @@ export function OvertimeManagementView() {
         </div>
       }
     >
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: CLEAR TOP KPI CARDS (Improvement #1)
-      ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <HRKPICard
-          label="Pending Approval"
-          value={`${metrics.pendingCount} Requests`}
-          subtitle="Requires HR Review"
-          tone="amber"
-          icon={<Clock className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Approved This Month"
-          value={`${metrics.approvedHours} Hours`}
-          subtitle="August 2026 Roster"
-          tone="emerald"
-          icon={<CheckCircle2 className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Overtime Cost Impact"
-          value={`₹${metrics.totalCostPayable}`}
-          subtitle="Forwarded to Payroll"
-          tone="blue"
-          icon={<IndianRupee className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Employees With OT"
-          value={`${metrics.uniqueEmployees} Staff`}
-          subtitle="Across All Depts"
-          tone="slate"
-          icon={<Users className="h-5 w-5" />}
-        />
-      </div>
+      <ListSummaryCards
+        stats={summaryStats}
+        className="mb-5"
+        activeFilterId={selectedStatus === "ALL" ? "" : selectedStatus}
+        onFilterClick={handleStatFilter}
+      />
 
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 2: FILTERS TOOLBAR
-      ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          {/* Full-width Rounded Search Input */}
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search Employee, Shift Code..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
+      <HrSearchFilterToolbar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Search employee or shift..."
+        selectedDate={selectedDate}
+        onDateChange={setSelectedDate}
+        maxDate={today}
+        showDatePicker
+        showFilterPanel={showFilterPanel}
+        onToggleFilterPanel={() => setShowFilterPanel((v) => !v)}
+        hasActiveFilters={hasActiveFilters}
+        onReset={resetFilters}
+        onOpenMobileFilters={() => setIsMobileFilterOpen(true)}
+        filters={
+          <ToolbarFilterGroup>
+            <ToolbarFilterSelect
+              value={selectedDepartment}
+              onChange={setSelectedDepartment}
+              options={[...employeeDepartmentFilterOptions]}
+              ariaLabel="Filter by department"
             />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Filters Toggle Button (Right) */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilterPanel(!showFilterPanel)}
-              className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
-              <span>Filters</span>
-            </Button>
-
-            <button
-              type="button"
-              onClick={() => setIsMobileFilterOpen(true)}
-              className="md:hidden p-2 rounded-full border border-slate-200 bg-white text-slate-700"
-            >
-              <SlidersHorizontal className="h-4 w-4 text-emerald-700" />
-            </button>
-          </div>
-        </div>
-
-        {/* Collapsible Secondary Filters Drawer Bar */}
-        {showFilterPanel && (
-          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in-50">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <select
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All Departments</option>
-                <option value="Front Office">Front Office</option>
-                <option value="Housekeeping">Housekeeping</option>
-                <option value="Food & Beverage">Food &amp; Beverage</option>
-              </select>
-
-              <select
-                value={selectedOtType}
-                onChange={(e) => setSelectedOtType(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All OT Types</option>
-                <option value="Regular OT">Regular OT (1.5x)</option>
-                <option value="Weekly Off OT">Weekly Off OT (2.0x)</option>
-                <option value="Emergency Call-In OT">Emergency Call-In (2.0x)</option>
-                <option value="Night Differential OT">Night Differential (1.75x)</option>
-              </select>
-
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="Pending">Pending</option>
-                <option value="Approved">Approved</option>
-                <option value="Rejected">Rejected</option>
-              </select>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSearchTerm("");
-                setSelectedDepartment("ALL");
-                setSelectedOtType("ALL");
-                setSelectedStatus("ALL");
-              }}
-              className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
-            >
-              Reset Filters
-            </button>
-          </div>
-        )}
-      </div>
+            <ToolbarFilterSelect
+              value={selectedOtType}
+              onChange={setSelectedOtType}
+              options={[...overtimeOtTypeFilterOptions]}
+              ariaLabel="Filter by OT type"
+            />
+            <ToolbarFilterSelect
+              value={selectedStatus}
+              onChange={setSelectedStatus}
+              options={[...overtimeStatusFilterOptions]}
+              ariaLabel="Filter by status"
+            />
+          </ToolbarFilterGroup>
+        }
+        extraFilters={
+          <ToolbarFilterGroup>
+            <ToolbarFilterSelect
+              value={selectedDepartment}
+              onChange={setSelectedDepartment}
+              options={[...employeeDepartmentFilterOptions]}
+              ariaLabel="Filter by department"
+            />
+            <ToolbarFilterSelect
+              value={selectedOtType}
+              onChange={setSelectedOtType}
+              options={[...overtimeOtTypeFilterOptions]}
+              ariaLabel="Filter by OT type"
+            />
+            <ToolbarFilterSelect
+              value={selectedStatus}
+              onChange={setSelectedStatus}
+              options={[...overtimeStatusFilterOptions]}
+              ariaLabel="Filter by status"
+            />
+          </ToolbarFilterGroup>
+        }
+      />
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION 3: MAIN DESKTOP TABLE & MOBILE CARD LAYOUT
@@ -958,6 +1026,17 @@ export function OvertimeManagementView() {
           </div>
         </Modal>
       )}
+
+      <ReportExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onExport={handleOvertimeExport}
+        defaultDate={selectedDate}
+        maxDate={today}
+        title="Export overtime report"
+        description="Choose file type and time period. Current filters apply to the export."
+        exporting={exporting}
+      />
     </ModulePageShell>
   );
 }

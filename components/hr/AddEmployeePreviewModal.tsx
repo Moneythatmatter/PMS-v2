@@ -31,7 +31,7 @@ export interface EmployeeFormPreviewData {
   weeklyOffPattern: string;
   leavePolicy: string;
   salaryStructure: string;
-  basicSalary: string;
+  salaryStructureName?: string;
   bankName: string;
   accountHolderName: string;
   accountNumber: string;
@@ -195,11 +195,7 @@ export function AddEmployeePreviewModal({
           icon={<CreditCard className="h-3.5 w-3.5" />}
           iconClassName="bg-amber-100 text-amber-800"
         >
-          <PreviewField label="Salary Structure" value={displayValue(data.salaryStructure)} />
-          <PreviewField
-            label="Basic Salary"
-            value={data.basicSalary ? `₹${Number(data.basicSalary).toLocaleString("en-IN")}` : "—"}
-          />
+          <PreviewField label="Salary Structure" value={displayValue(data.salaryStructureName ?? data.salaryStructure)} />
           <PreviewField label="Gross Salary" value={`₹${data.salaryBreakdown.gross.toLocaleString("en-IN")}`} />
           <PreviewField label="Net Salary" value={`₹${data.salaryBreakdown.net.toLocaleString("en-IN")}`} />
           <PreviewField label="Bank Name" value={displayValue(data.bankName)} />

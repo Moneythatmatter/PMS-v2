@@ -40,7 +40,17 @@ import {
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Modal } from "@/components/ui/Modal";
-import { Button } from "@/components/ui/Button";
+import { Button, Drawer } from "@/components/ui";
+import { HrSearchFilterToolbar } from "@/components/hr/shared/HrSearchFilterToolbar";
+import { ReportExportModal } from "@/components/shared/ReportExportModal";
+import {
+  ListSummaryCards,
+  ToolbarFilterGroup,
+  ToolbarFilterSelect,
+} from "@/components/shared/list-table";
+import { employeeDepartmentFilterOptions } from "@/app/data/hr/employeeDepartmentOptions";
+import { exportGenericReport, filterByIsoDateRange, normalizeToIsoDate } from "@/lib/hr/report-export";
+import type { ExportColumn } from "@/lib/exportUtils";
 import { cn } from "@/lib/utils";
 import { hrShiftAssignmentService, hrShiftTypeService, hrEmployeeService } from "@/services/human-resources";
 import { mapShiftAssignmentFromApi, mapShiftAssignmentToApi, mapShiftTypeFromApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
@@ -91,6 +101,34 @@ export interface ShiftAssignment {
   remarks?: string;
   history?: ShiftHistoryEntry[];
 }
+
+const shiftStatusFilterOptions = [
+  { value: "ALL", label: "All statuses" },
+  { value: "Active", label: "Active" },
+  { value: "Upcoming", label: "Upcoming" },
+  { value: "Expired", label: "Expired" },
+  { value: "Inactive", label: "Inactive" },
+] as const;
+
+type ShiftExportRow = {
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  shiftName: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  status: string;
+};
+
+const shiftExportColumns: ExportColumn<ShiftExportRow>[] = [
+  { key: "employeeId", header: "Employee ID" },
+  { key: "employeeName", header: "Employee Name" },
+  { key: "department", header: "Department" },
+  { key: "shiftName", header: "Shift" },
+  { key: "effectiveFrom", header: "Effective From" },
+  { key: "effectiveTo", header: "Effective To" },
+  { key: "status", header: "Status" },
+];
 
 export function ShiftManagementView() {
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([])
@@ -158,12 +196,15 @@ export function ShiftManagementView() {
   const [selectedShiftType, setSelectedShiftType] = useState<string>("ALL");
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
   const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Modals & Drawers State
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isQuickChangeModalOpen, setIsQuickChangeModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isUpcomingChangesDrawerOpen, setIsUpcomingChangesDrawerOpen] = useState(false);
 
   const [editingAssignment, setEditingAssignment] = useState<ShiftAssignment | null>(null);
   const [quickChangeTarget, setQuickChangeTarget] = useState<ShiftAssignment | null>(null);
@@ -231,6 +272,78 @@ export function ShiftManagementView() {
     const unassigned = 1; // 1 Staff has no shift assigned!
     return { morning, evening, night, weeklyOff, unassigned, total: morning + evening + night + weeklyOff + unassigned };
   }, [assignments]);
+
+  const summaryStats = useMemo(
+    () => [
+      { label: "Morning shift", value: coverageMetrics.morning, color: "#f59e0b", icon: "clock" as const },
+      { label: "Evening shift", value: coverageMetrics.evening, color: "#0284c7", icon: "clock" as const },
+      { label: "Night shift", value: coverageMetrics.night, color: "#9333ea", icon: "clock" as const },
+      { label: "Weekly off", value: coverageMetrics.weeklyOff, color: "#16a34a", icon: "calendar-off" as const },
+      { label: "Unassigned", value: coverageMetrics.unassigned, color: "#e11d48", icon: "alert-triangle" as const },
+    ],
+    [coverageMetrics],
+  );
+
+  const hasActiveFilters =
+    searchTerm !== "" ||
+    selectedDepartment !== "ALL" ||
+    selectedShiftType !== "ALL" ||
+    selectedStatus !== "ALL";
+
+  const resetFilters = () => {
+    setSearchTerm("");
+    setSelectedDepartment("ALL");
+    setSelectedShiftType("ALL");
+    setSelectedStatus("ALL");
+  };
+
+  const shiftTypeFilterOptions = useMemo(
+    () => [
+      { value: "ALL", label: "All shifts" },
+      ...masterShifts.map((s) => ({ value: s.id, label: s.name })),
+    ],
+    [masterShifts],
+  );
+
+  const handleShiftExport = async (options: {
+    format: "csv" | "excel" | "pdf";
+    fromDate: string;
+    toDate: string;
+  }) => {
+    setExporting(true);
+    try {
+      const ranged = filterByIsoDateRange(
+        filteredAssignments,
+        (a) => normalizeToIsoDate(a.effectiveFrom),
+        options.fromDate,
+        options.toDate,
+      );
+      const rows: ShiftExportRow[] = ranged.map((a) => ({
+        employeeId: a.employeeId,
+        employeeName: a.employeeName,
+        department: a.department,
+        shiftName: a.shiftName,
+        effectiveFrom: a.effectiveFrom,
+        effectiveTo: a.effectiveTo ?? "Until further notice",
+        status: a.status,
+      }));
+      exportGenericReport(rows, shiftExportColumns, options, "Shift_Roster");
+      setToastMessage(`Exported ${rows.length} shift assignment(s).`);
+      setIsExportModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const renderShiftFilters = () => (
+    <ToolbarFilterGroup>
+      <ToolbarFilterSelect value={selectedDepartment} onChange={setSelectedDepartment} options={[...employeeDepartmentFilterOptions]} ariaLabel="Filter by department" />
+      <ToolbarFilterSelect value={selectedShiftType} onChange={setSelectedShiftType} options={shiftTypeFilterOptions} ariaLabel="Filter by shift" />
+      <ToolbarFilterSelect value={selectedStatus} onChange={setSelectedStatus} options={[...shiftStatusFilterOptions]} ariaLabel="Filter by status" />
+    </ToolbarFilterGroup>
+  );
 
   // Upcoming Shift Changes List (Improvement #6)
   const upcomingChanges = useMemo(() => {
@@ -532,7 +645,21 @@ export function ShiftManagementView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setToastMessage("Exporting shift roster to CSV...")}
+            onClick={() => setIsUpcomingChangesDrawerOpen(true)}
+            className="rounded-xl text-xs font-bold bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50 shadow-xs cursor-pointer"
+          >
+            <CalendarDays className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+            Upcoming Changes
+            <span className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-extrabold text-emerald-800">
+              {upcomingChanges.length}
+            </span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsExportModalOpen(true)}
             className="rounded-xl text-xs font-medium bg-white text-slate-700 border-slate-300 shadow-xs"
           >
             <Printer className="h-3.5 w-3.5 mr-1 text-slate-500" />
@@ -541,218 +668,49 @@ export function ShiftManagementView() {
         </div>
       }
     >
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: CURRENT SHIFT COVERAGE WIDGET & UPCOMING CHANGES
-      ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-5">
-        {/* Coverage Widget (Improvement #1) */}
-        <div className="lg:col-span-8 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <div>
-              <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                <Users className="h-4 w-4 text-emerald-700" />
-                Current Shift Coverage Breakdown
-              </h3>
-              <p className="text-xs text-slate-500">Real-time roster distribution for active property operations.</p>
-            </div>
-            <span className="text-xs font-mono font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
-              {coverageMetrics.total} Total Staff
-            </span>
-          </div>
+      <ListSummaryCards stats={summaryStats} columns={5} className="mb-5" />
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-center text-xs">
-            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-1">
-              <span className="text-[10px] font-bold uppercase text-amber-800 block">Morning Shift</span>
-              <p className="text-2xl font-black text-amber-950">{coverageMetrics.morning}</p>
-              <span className="text-[10px] text-amber-700 block">07:00 - 15:30</span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-1">
-              <span className="text-[10px] font-bold uppercase text-blue-800 block">Evening Shift</span>
-              <p className="text-2xl font-black text-blue-950">{coverageMetrics.evening}</p>
-              <span className="text-[10px] text-blue-700 block">15:00 - 23:30</span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 space-y-1">
-              <span className="text-[10px] font-bold uppercase text-purple-800 block">Night Shift</span>
-              <p className="text-2xl font-black text-purple-950">{coverageMetrics.night}</p>
-              <span className="text-[10px] text-purple-700 block">23:00 - 07:30</span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 space-y-1">
-              <span className="text-[10px] font-bold uppercase text-emerald-800 block">Weekly Off</span>
-              <p className="text-2xl font-black text-emerald-950">{coverageMetrics.weeklyOff}</p>
-              <span className="text-[10px] text-emerald-700 block">Rest Day</span>
-            </div>
-
-            {/* Unassigned Warning Pill (Improvement #1) */}
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 space-y-1">
-              <span className="text-[10px] font-bold uppercase text-rose-800 block">Unassigned</span>
-              <p className="text-2xl font-black text-rose-950">{coverageMetrics.unassigned}</p>
-              <span className="text-[10px] text-rose-700 font-bold block">⚠️ Needs Shift</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Upcoming Shift Changes Card (Improvement #6) */}
-        <div className="lg:col-span-4 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                <CalendarDays className="h-4 w-4 text-emerald-700" />
-                Upcoming Shift Changes
-              </h4>
-              <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 rounded-full">
-                {upcomingChanges.length} Scheduled
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              {upcomingChanges.map((uc, i) => (
-                <div key={i} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-bold text-slate-900 block">{uc.empName}</span>
-                    <span className="text-[11px] text-slate-500 font-medium">
-                      {uc.fromShift} → <strong className="text-emerald-700">{uc.toShift}</strong>
-                    </span>
-                  </div>
-                  <span className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-[10px] font-mono font-bold text-slate-700 shadow-2xs">
-                    {uc.effectiveDate}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 2: STREAMLINED STANDARDIZED TOOLBAR & VIEW TOGGLE
-      ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          {/* Full-width Rounded Search Input */}
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search Employee, Shift Code..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Right-aligned Filter Dropdown & View Mode Switcher */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilterPanel(!showFilterPanel)}
-              className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
-              <span>Filters</span>
-            </Button>
-
-            {/* View Mode Switcher Pills */}
-            <div className="flex items-center border border-slate-200 rounded-full p-0.5 bg-slate-50 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setViewMode("table")}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-bold rounded-full transition flex items-center gap-1.5 cursor-pointer",
-                  viewMode === "table"
-                    ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
-                    : "text-slate-500 hover:text-slate-800"
-                )}
-              >
-                <Layers className="h-3.5 w-3.5" />
-                <span>Table View</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("roster")}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-bold rounded-full transition flex items-center gap-1.5 cursor-pointer",
-                  viewMode === "roster"
-                    ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
-                    : "text-slate-500 hover:text-slate-800"
-                )}
-              >
-                <CalendarDays className="h-3.5 w-3.5" />
-                <span>Weekly Roster</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Collapsible Secondary Filters Drawer Bar */}
-        {showFilterPanel && (
-          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in-50">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <select
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All Departments</option>
-                <option value="Front Office">Front Office</option>
-                <option value="Housekeeping">Housekeeping</option>
-                <option value="Food & Beverage">Food &amp; Beverage</option>
-                <option value="Accounts">Accounts</option>
-              </select>
-
-            <select
-              value={selectedShiftType}
-              onChange={(e) => setSelectedShiftType(e.target.value)}
-              className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
-            >
-              <option value="ALL">All Shifts</option>
-              {masterShifts.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="Active">Active</option>
-                <option value="Upcoming">Upcoming</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
-
+      <HrSearchFilterToolbar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Search employee or shift code..."
+        showFilterPanel={showFilterPanel}
+        onToggleFilterPanel={() => setShowFilterPanel((v) => !v)}
+        hasActiveFilters={hasActiveFilters}
+        onReset={resetFilters}
+        filters={renderShiftFilters()}
+        extraFilters={renderShiftFilters()}
+        trailing={
+          <div className="flex items-center rounded-full border border-slate-200 bg-slate-50 p-0.5 shadow-2xs">
             <button
               type="button"
-              onClick={() => {
-                setSearchTerm("");
-                setSelectedDepartment("ALL");
-                setSelectedShiftType("ALL");
-                setSelectedStatus("ALL");
-              }}
-              className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
+              onClick={() => setViewMode("table")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition cursor-pointer",
+                viewMode === "table"
+                  ? "border border-slate-200 bg-white text-emerald-800 shadow-2xs"
+                  : "text-slate-500 hover:text-slate-800",
+              )}
             >
-              Reset Filters
+              <Layers className="h-3.5 w-3.5" />
+              Table
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("roster")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition cursor-pointer",
+                viewMode === "roster"
+                  ? "border border-slate-200 bg-white text-emerald-800 shadow-2xs"
+                  : "text-slate-500 hover:text-slate-800",
+              )}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              Roster
             </button>
           </div>
-        )}
-      </div>
+        }
+      />
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION 3A: TABLE VIEW (With End Assignment, History, Quick Change, Assigned By/On)
@@ -1395,77 +1353,14 @@ export function ShiftManagementView() {
       {/* ─────────────────────────────────────────────────────────────
           SIDE DRAWER: VIEW ASSIGNMENT DETAILS
       ───────────────────────────────────────────────────────────── */}
-      {viewingAssignment && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs animate-in fade-in-50">
-          <div
-            className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between overflow-y-auto animate-in slide-in-from-right duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div>
-              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-emerald-700" />
-                  <h3 className="font-bold text-sm text-slate-900">Shift Schedule Details</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setViewingAssignment(null)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="p-5 space-y-4">
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-sm text-slate-900">{viewingAssignment.employeeName}</h4>
-                    <span className="font-mono text-xs font-bold text-slate-600">{viewingAssignment.employeeId}</span>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    {viewingAssignment.designation} • <span className="text-emerald-700 font-semibold">{viewingAssignment.department}</span>
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-500">Assigned Shift</span>
-                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      {viewingAssignment.shiftCode}
-                    </span>
-                  </div>
-                  <h3 className="font-bold text-base text-slate-900">{viewingAssignment.shiftName}</h3>
-
-                  <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t border-slate-100">
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Check-In Time</span>
-                      <span className="font-bold text-slate-900">{viewingAssignment.startTime} AM</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Check-Out Time</span>
-                      <span className="font-bold text-slate-900">{viewingAssignment.endTime} PM</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500 font-medium">Effective Date Range</span>
-                    <span className="font-bold text-slate-800">
-                      {viewingAssignment.effectiveFrom} → {viewingAssignment.effectiveTo || "Until Further Notice"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500 font-medium">Assigned By / On</span>
-                    <span className="font-semibold text-slate-800">
-                      {viewingAssignment.assignedBy} ({viewingAssignment.assignedOn})
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-2">
+      <Drawer
+        isOpen={Boolean(viewingAssignment)}
+        onClose={() => setViewingAssignment(null)}
+        title="Shift Schedule Details"
+        icon={<Clock className="h-5 w-5 text-emerald-700" />}
+        footer={
+          viewingAssignment ? (
+            <div className="w-full space-y-2">
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -1526,9 +1421,129 @@ export function ShiftManagementView() {
                 )}
               </div>
             </div>
+          ) : undefined
+        }
+      >
+        {viewingAssignment && (
+          <>
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-sm text-slate-900">{viewingAssignment.employeeName}</h4>
+                <span className="font-mono text-xs font-bold text-slate-600">{viewingAssignment.employeeId}</span>
+              </div>
+              <p className="text-xs text-slate-500">
+                {viewingAssignment.designation} •{" "}
+                <span className="text-emerald-700 font-semibold">{viewingAssignment.department}</span>
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Assigned Shift</span>
+                <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  {viewingAssignment.shiftCode}
+                </span>
+              </div>
+              <h3 className="font-bold text-base text-slate-900">{viewingAssignment.shiftName}</h3>
+
+              <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t border-slate-100">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Check-In Time</span>
+                  <span className="font-bold text-slate-900">{viewingAssignment.startTime} AM</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Check-Out Time</span>
+                  <span className="font-bold text-slate-900">{viewingAssignment.endTime} PM</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">Effective Date Range</span>
+                <span className="font-bold text-slate-800">
+                  {viewingAssignment.effectiveFrom} → {viewingAssignment.effectiveTo || "Until Further Notice"}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">Assigned By / On</span>
+                <span className="font-semibold text-slate-800">
+                  {viewingAssignment.assignedBy} ({viewingAssignment.assignedOn})
+                </span>
+              </div>
+            </div>
+          </>
+        )}
+      </Drawer>
+      <ReportExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onExport={handleShiftExport}
+        defaultDate={new Date().toLocaleDateString("en-CA")}
+        title="Export shift roster"
+        description="Choose file type and time period. Current filters apply to the export."
+        exporting={exporting}
+      />
+
+      {/* ─────────────────────────────────────────────────────────────
+          SIDE DRAWER: UPCOMING SHIFT CHANGES
+      ───────────────────────────────────────────────────────────── */}
+      <Drawer
+        isOpen={isUpcomingChangesDrawerOpen}
+        onClose={() => setIsUpcomingChangesDrawerOpen(false)}
+        title="Upcoming Shift Changes"
+        subtitle={`${upcomingChanges.length} scheduled change(s)`}
+        icon={<CalendarDays className="h-5 w-5 text-emerald-700" />}
+        maxWidth="md"
+        footer={
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              setIsUpcomingChangesDrawerOpen(false);
+              handleOpenSingleAssign();
+            }}
+            className="w-full rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white h-9 cursor-pointer"
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Schedule New Shift Change
+          </Button>
+        }
+      >
+        {upcomingChanges.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+            <CalendarDays className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+            <p className="text-xs font-bold text-slate-600">No upcoming shift changes</p>
+            <p className="mt-1 text-[11px] text-slate-400">Scheduled roster changes will appear here.</p>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="space-y-2">
+            {upcomingChanges.map((uc, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs"
+              >
+                <div className="min-w-0 flex-1">
+                  <span className="block font-bold text-slate-900">{uc.empName}</span>
+                  <span className="font-mono text-[10px] text-slate-400">{uc.empId}</span>
+                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+                    <span className="rounded-md bg-white px-1.5 py-0.5 border border-slate-200 text-slate-700">
+                      {uc.fromShift}
+                    </span>
+                    <ArrowRight className="h-3 w-3 shrink-0 text-emerald-600" />
+                    <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 border border-emerald-200 font-bold text-emerald-800">
+                      {uc.toShift}
+                    </span>
+                  </div>
+                </div>
+                <span className="ml-3 shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-mono font-bold text-slate-700 shadow-2xs">
+                  {uc.effectiveDate}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Drawer>
     </ModulePageShell>
   );
 }

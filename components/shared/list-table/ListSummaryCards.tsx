@@ -1,10 +1,33 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Briefcase, Building2, UserCheck, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  Briefcase,
+  Building2,
+  CalendarOff,
+  CheckCircle2,
+  Clock,
+  IndianRupee,
+  Repeat,
+  UserCheck,
+  Users,
+  XCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type ListSummaryIcon = "users" | "user-check" | "briefcase" | "building";
+export type ListSummaryIcon =
+  | "users"
+  | "user-check"
+  | "briefcase"
+  | "building"
+  | "check-circle"
+  | "alert-triangle"
+  | "x-circle"
+  | "clock"
+  | "calendar-off"
+  | "indian-rupee"
+  | "repeat";
 
 export interface ListSummaryStat {
   label: string;
@@ -19,21 +42,37 @@ const iconMap: Record<ListSummaryIcon, LucideIcon> = {
   "user-check": UserCheck,
   briefcase: Briefcase,
   building: Building2,
+  "check-circle": CheckCircle2,
+  "alert-triangle": AlertTriangle,
+  "x-circle": XCircle,
+  clock: Clock,
+  "calendar-off": CalendarOff,
+  "indian-rupee": IndianRupee,
+  repeat: Repeat,
 };
+
+const columnClasses = {
+  4: "grid-cols-2 lg:grid-cols-4",
+  5: "grid-cols-2 md:grid-cols-3 xl:grid-cols-5",
+} as const;
 
 interface ListSummaryCardsProps {
   stats: ListSummaryStat[];
   activeFilterId?: string;
   onFilterClick?: (filterId: string) => void;
+  columns?: 4 | 5;
+  className?: string;
 }
 
 export function ListSummaryCards({
   stats,
   activeFilterId = "all",
   onFilterClick,
+  columns = 4,
+  className,
 }: ListSummaryCardsProps) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className={cn("grid gap-3", columnClasses[columns], className)}>
       {stats.map((stat) => {
         const Icon = iconMap[stat.icon];
         const filterId = stat.filterId ?? "all";

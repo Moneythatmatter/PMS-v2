@@ -48,6 +48,8 @@ import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 import { hrEmployeeService } from "@/services/human-resources";
 import { mapEmployeeFromApi } from "@/lib/hr/api-mappers";
 import { EmployeeAttendanceGrid } from "@/components/hr/shared/EmployeeAttendanceGrid";
+import { EmployeeLeaveTab } from "@/components/hr/shared/EmployeeLeaveTab";
+import { EmployeePayrollTab } from "@/components/hr/shared/EmployeePayrollTab";
 import {
   ProfileCard,
   ProfileField,
@@ -56,9 +58,6 @@ import {
   CurrentShiftPanel,
   LeaveBalancePanel,
   LeaveHistoryPanel,
-  PayrollSalaryPanel,
-  PayrollBankPanel,
-  PayrollStatutoryPanel,
   DocumentCategoryPanel,
   GrievancesPanel,
   ActivityLogPanel,
@@ -315,11 +314,16 @@ function EmployeeProfileQuickMetrics({ employee }: { employee: EmployeeItem }) {
           <Wallet className="h-6 w-6" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-slate-500">Monthly gross</p>
-          <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-indigo-950">
-            ₹{employee.salary.toLocaleString("en-IN")}
+          <p className="text-xs font-medium text-slate-500">Salary structure</p>
+          <p className="mt-1 text-lg font-bold tracking-tight text-indigo-950">
+            {employee.salaryStructureName || "Not assigned"}
           </p>
-          <p className="mt-0.5 text-[10px] text-slate-400">Before deductions · per month</p>
+          {(employee.structureGrossSalary ?? 0) > 0 && (
+            <p className="mt-1 text-sm font-semibold tabular-nums text-indigo-800">
+              ₹{employee.structureGrossSalary!.toLocaleString("en-IN")} gross / month
+            </p>
+          )}
+          <p className="mt-0.5 text-[10px] text-slate-400">From assigned pay template</p>
         </div>
       </div>
     </div>
@@ -527,6 +531,7 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
   const [selectedEmpId, setSelectedEmpId] = useState<string | null>(initialEmpId ?? null);
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [attendanceRefreshKey, setAttendanceRefreshKey] = useState(0);
   const tabPanelRef = useRef<HTMLDivElement>(null);
 
   // Activity Log Filter States
@@ -538,24 +543,29 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
   const [isComboboxOpen, setIsComboboxOpen] = useState(false);
   const comboboxRef = useRef<HTMLDivElement>(null);
 
+  const reloadEmployees = useCallback(async () => {
+    try {
+      const rows = await hrEmployeeService.list();
+      const mapped = rows.map(mapEmployeeFromApi);
+      setEmployees(mapped);
+      return mapped;
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load employees");
+      setEmployees([]);
+      return [];
+    }
+  }, []);
+
   useEffect(() => {
-    const loadEmployees = async () => {
-      try {
-        const rows = await hrEmployeeService.list();
-        const mapped = rows.map(mapEmployeeFromApi);
-        setEmployees(mapped);
-        if (initialEmpId) {
-          setSelectedEmpId(initialEmpId);
-        } else if (mapped[0]) {
-          setSelectedEmpId(mapped[0].id);
-        }
-      } catch (e) {
-        setToastMessage(e instanceof Error ? e.message : "Failed to load employees");
-        setEmployees([]);
+    void (async () => {
+      const mapped = await reloadEmployees();
+      if (initialEmpId) {
+        setSelectedEmpId(initialEmpId);
+      } else if (mapped[0]) {
+        setSelectedEmpId(mapped[0].id);
       }
-    };
-    void loadEmployees();
-  }, [initialEmpId]);
+    })();
+  }, [initialEmpId, reloadEmployees]);
 
   // Active Selected Employee
   const employee = selectedEmpId ? employees.find((e) => e.id === selectedEmpId) || null : null;
@@ -908,6 +918,7 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                     showLog={false}
                     showSummary={false}
                     compact
+                    refreshKey={attendanceRefreshKey}
                     onViewFullAttendance={() => handleTabChange("attendance")}
                   />
                 </div>
@@ -932,6 +943,7 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                 joinDate={employee.joinDate}
                 shiftType={employee.shiftType}
                 sideCalendar
+                refreshKey={attendanceRefreshKey}
                 leadingContent={
                   <ProfileCard title="Current shift">
                     <CurrentShiftPanel shiftType={employee.shiftType} />
@@ -944,42 +956,20 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                 SECTION 6: TAB 4 - LEAVE MANAGEMENT (Categorized Balances & 2026 History Log)
             ───────────────────────────────────────────────────────────── */}
             {activeTab === "leave" && (
-              <div className="space-y-4 animate-in fade-in duration-200" role="tabpanel">
-                <ProfileCard title="Leave balance">
-                  <LeaveBalancePanel balances={LEAVE_BALANCES} />
-                  <p className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {LEAVE_BALANCES.map((item) => (
-                      <span key={item.label}>
-                        {item.label.split(" (")[0]}: {item.used} used of {item.allocated}
-                      </span>
-                    ))}
-                  </p>
-                </ProfileCard>
-
-                <ProfileCard title="Leave history — 2026">
-                  <LeaveHistoryPanel rows={LEAVE_HISTORY} />
-                </ProfileCard>
-              </div>
+              <EmployeeLeaveTab
+                employee={employee}
+                onLeaveChanged={() => {
+                  setAttendanceRefreshKey((k) => k + 1);
+                  void reloadEmployees();
+                }}
+                onToast={setToastMessage}
+              />
             )}
 
             {/* ─────────────────────────────────────────────────────────────
                 SECTION 7: TAB 5 - PAYROLL (Bank, UAN, PF, ESIC)
             ───────────────────────────────────────────────────────────── */}
-            {activeTab === "payroll" && (
-              <div className="space-y-4 animate-in fade-in duration-200" role="tabpanel">
-                <ProfileCard title="Salary structure">
-                  <PayrollSalaryPanel employee={employee} />
-                </ProfileCard>
-
-                <ProfileCard title="Bank details">
-                  <PayrollBankPanel employee={employee} />
-                </ProfileCard>
-
-                <ProfileCard title="Statutory">
-                  <PayrollStatutoryPanel employee={employee} />
-                </ProfileCard>
-              </div>
-            )}
+            {activeTab === "payroll" && <EmployeePayrollTab employee={employee} />}
 
             {/* ─────────────────────────────────────────────────────────────
                 SECTION 8: TAB 6 - CATEGORIZED DOCUMENTS ⭐⭐⭐

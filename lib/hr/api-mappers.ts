@@ -18,7 +18,6 @@ import type { HolidayAttendanceRecord } from "@/components/hr/HolidayAttendanceV
 import type { SalaryStructure } from "@/components/hr/SalaryStructureView";
 import type { PayslipRecord } from "@/components/hr/PayslipsView";
 import type { ConfigurableTaxRule } from "@/components/hr/TaxManagementView";
-import type { ApprovalWorkflow } from "@/components/hr/ApprovalMatrixView";
 import type { ComplaintCategory } from "@/components/hr/ComplaintCategoriesView";
 import type { ComplaintRecord } from "@/components/hr/ComplaintListView";
 import type { GrievanceComplaint } from "@/components/hr/RaiseComplaintView";
@@ -98,7 +97,10 @@ export function mapEmployeeFromApi(row: Record<string, unknown>): EmployeeItem {
     shiftType: (row.shiftType as EmployeeItem["shiftType"]) ?? "General Shift",
     joinDate: formatApiDate(row.joinDate as string),
     lastUpdated: formatApiDate(row.updatedAt as string),
-    salary: Number(row.salary ?? 0),
+    salaryStructureId: String(row.salaryStructureId ?? ""),
+    salaryStructureName: String(row.salaryStructureName ?? ""),
+    structureGrossSalary: Number(row.structureGrossSalary ?? 0),
+    structureNetSalary: Number(row.structureNetSalary ?? 0),
     status: (row.status as EmployeeItem["status"]) ?? "Active",
     gender: (row.gender as EmployeeItem["gender"]) ?? "Male",
     emergencyContact: String(row.emergencyContact ?? ""),
@@ -401,23 +403,6 @@ export function mapComplaintToApi(form: Record<string, unknown>) {
   return form;
 }
 
-export function mapApprovalWorkflowToApi(form: Omit<ApprovalWorkflow, "id" | "history">) {
-  return {
-    code: form.code,
-    module: form.module,
-    requestType: form.requestType,
-    version: form.version,
-    approvalLevelsCount: form.approvalLevelsCount,
-    levels: form.levels,
-    conditions: form.conditions,
-    effectiveFrom: form.effectiveFrom,
-    effectiveTo: form.effectiveTo === "—" ? undefined : form.effectiveTo,
-    status: form.status,
-    createdBy: form.createdBy,
-    isSystemLocked: form.isSystemLocked,
-  };
-}
-
 export function mapSalaryStructureToApi(form: Omit<SalaryStructure, "id" | "history">) {
   return {
     name: form.name,
@@ -461,15 +446,40 @@ export function mapShiftAssignmentToApi(form: Partial<ShiftAssignment>) {
   };
 }
 
+export function deriveWeeklyOffDisplayStatus(
+  effectiveFrom: string,
+  effectiveTo: string | undefined | null,
+  today = new Date().toISOString().slice(0, 10),
+): WeeklyOffAssignment["status"] {
+  const from = (effectiveFrom.includes("/")
+    ? effectiveFrom.split("/").reverse().join("-")
+    : effectiveFrom
+  ).slice(0, 10);
+  const toRaw = effectiveTo && effectiveTo !== "—" ? effectiveTo : null;
+  const to = toRaw
+    ? (toRaw.includes("/") ? toRaw.split("/").reverse().join("-") : toRaw).slice(0, 10)
+    : null;
+  const t = today.slice(0, 10);
+  if (t < from) return "Upcoming";
+  if (to && t > to) return "Expired";
+  return "Active";
+}
+
 export function mapWeeklyOffToApi(form: Partial<WeeklyOffAssignment>) {
+  const fromIso = form.effectiveFrom?.includes("/")
+    ? form.effectiveFrom.split("/").reverse().join("-")
+    : form.effectiveFrom;
+  const toRaw = form.effectiveTo && form.effectiveTo !== "—" ? form.effectiveTo : undefined;
+  const toIso = toRaw?.includes("/") ? toRaw.split("/").reverse().join("-") : toRaw;
+
   return {
     employeeId: form.employeeId,
     offType: form.type,
     days: form.days,
     rotationPattern: form.rotationPattern,
-    effectiveFrom: form.effectiveFrom,
-    effectiveTo: form.effectiveTo === "—" ? undefined : form.effectiveTo,
-    status: form.status,
+    effectiveFrom: fromIso,
+    effectiveTo: toIso,
+    status: form.status ?? "Active",
     assignedBy: form.assignedBy,
     remarks: form.remarks,
   };
@@ -619,10 +629,75 @@ type EmployeeLookup = {
   photoUrl?: string;
 };
 
+function formatPunchTime(value: unknown): string {
+  if (value == null || value === "" || value === "—") return "—";
+  const text = String(value);
+  if (/^\d{1,2}:\d{2}/.test(text) && !text.includes("T")) return text;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return text;
+  return parsed.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function parseTime12hToMinutes(time: string): number | null {
+  const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const meridiem = match[3].toUpperCase();
+  if (meridiem === "PM" && hours !== 12) hours += 12;
+  if (meridiem === "AM" && hours === 12) hours = 0;
+  return hours * 60 + minutes;
+}
+
+export function buildPunchTimestamp(dateIso: string, time12h: string): string | null {
+  const minutes = parseTime12hToMinutes(time12h);
+  if (minutes == null) return null;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  const [year, month, day] = dateIso.split("-").map(Number);
+  return new Date(year, month - 1, day, hours, mins, 0).toISOString();
+}
+
+const ATTENDANCE_STATUS_FROM_API: Record<string, AttendanceRecord["status"]> = {
+  PRESENT: "Present",
+  ABSENT: "Absent",
+  LEAVE: "On Leave",
+  HOLIDAY: "Holiday",
+  WEEKLY_OFF: "Weekly Off",
+  PENDING: "Pending",
+};
+
+const ATTENDANCE_STATUS_TO_API: Record<string, string> = {
+  Present: "PRESENT",
+  Late: "PRESENT",
+  "Half Day": "PRESENT",
+  Absent: "ABSENT",
+  "On Leave": "LEAVE",
+  "Weekly Off": "WEEKLY_OFF",
+  Holiday: "HOLIDAY",
+  Pending: "PENDING",
+};
+
 export function mapAttendanceFromApi(
   row: Record<string, unknown>,
   emp?: EmployeeLookup,
 ): AttendanceRecord {
+  const dateRaw = (row.attendanceDate ?? row.recordDate) as string | undefined;
+  const apiStatus = String(row.attendanceStatus ?? row.status ?? "PRESENT");
+  let status = ATTENDANCE_STATUS_FROM_API[apiStatus.toUpperCase()] ?? "Present";
+  const remarks = String(row.remarks ?? row.manualReason ?? "");
+  if (remarks.toLowerCase().includes("late") && status === "Present") {
+    status = "Late";
+  }
+
+  const shiftName = String(row.shiftName ?? emp?.shiftType ?? "General Shift");
+  const shiftCode = String(row.shiftCode ?? shiftName.split(" ")[0]?.slice(0, 5).toUpperCase() ?? "GEN");
+  const scheduled = Number(row.scheduledHours ?? row.expectedHours ?? 0);
+
   return {
     id: String(row.id),
     employeeId: String(row.employeeId ?? ""),
@@ -631,40 +706,67 @@ export function mapAttendanceFromApi(
     designation: emp?.designation ?? String(row.designation ?? ""),
     avatar: emp?.avatar ?? String(row.avatar ?? "??"),
     photoUrl: emp?.photoUrl,
-    shiftCode: String(row.shiftCode ?? ""),
-    shiftName: String(row.shiftName ?? ""),
-    date: formatApiDate(row.recordDate as string),
-    checkIn: String(row.checkIn ?? "—"),
-    checkOut: String(row.checkOut ?? "—"),
+    shiftId: row.shiftId as string | undefined,
+    shiftCode,
+    shiftName,
+    date: formatApiDate(dateRaw),
+    dayType: (row.dayType as AttendanceRecord["dayType"]) ?? "WORKING_DAY",
+    checkIn: formatPunchTime(row.punchIn ?? row.checkIn),
+    checkOut: formatPunchTime(row.punchOut ?? row.checkOut),
+    scheduledHours: scheduled,
     workedHours: Number(row.workedHours ?? 0),
-    expectedHours: Number(row.expectedHours ?? 0),
-    status: (row.status as AttendanceRecord["status"]) ?? "Present",
-    inLocation: row.inLocation as string | undefined,
-    outLocation: row.outLocation as string | undefined,
-    deviceType: (row.deviceType as AttendanceRecord["deviceType"]) ?? "Manual Entry",
-    isManualEntry: Boolean(row.isManualEntry),
-    manualReason: row.manualReason as string | undefined,
-    editedBy: row.editedBy as string | undefined,
-    editedOn: row.editedOn ? formatApiDate(row.editedOn as string) : undefined,
+    extraHours: Number(row.extraHours ?? row.overtimeHours ?? 0),
+    expectedHours: scheduled || 8,
+    status,
+    deviceType: "Manual Entry",
+    isManualEntry: String(row.source ?? "MANUAL") === "MANUAL",
+    manualReason: remarks || undefined,
+    holidayWorked: Boolean(row.holidayWorked),
+    leaveRequestId: row.leaveRequestId as string | undefined,
+    holidayId: row.holidayId as string | undefined,
+    holidayName: (row.holidayName as string | null) ?? null,
+    leaveTypeName: (row.leaveTypeName as string | null) ?? null,
+    source: (row.source as AttendanceRecord["source"]) ?? "MANUAL",
   };
 }
 
-export function mapAttendanceToApi(form: Partial<AttendanceRecord> & { recordDate?: string }) {
+export function mapAttendanceToApi(
+  form: Partial<AttendanceRecord> & { recordDate?: string; attendanceDate?: string },
+) {
+  const date = form.attendanceDate ?? form.recordDate ?? form.date;
+  const attendanceStatus =
+    ATTENDANCE_STATUS_TO_API[form.status ?? "Present"] ?? "PRESENT";
+  const dayType =
+    attendanceStatus === "WEEKLY_OFF"
+      ? "WEEKLY_OFF"
+      : attendanceStatus === "HOLIDAY"
+        ? "HOLIDAY"
+        : form.dayType ?? "WORKING_DAY";
+
+  const punchIn =
+    form.checkIn && form.checkIn !== "—" && date
+      ? buildPunchTimestamp(date, form.checkIn)
+      : undefined;
+  const punchOut =
+    form.checkOut && form.checkOut !== "—" && date
+      ? buildPunchTimestamp(date, form.checkOut)
+      : undefined;
+
   return {
     employeeId: form.employeeId,
-    shiftCode: form.shiftCode,
-    shiftName: form.shiftName,
-    recordDate: form.recordDate ?? form.date,
-    checkIn: form.checkIn,
-    checkOut: form.checkOut,
-    workedHours: form.workedHours,
-    expectedHours: form.expectedHours,
-    status: form.status,
-    inLocation: form.inLocation,
-    outLocation: form.outLocation,
-    deviceType: form.deviceType,
-    isManualEntry: form.isManualEntry,
-    manualReason: form.manualReason,
+    attendanceDate: date,
+    dayType,
+    attendanceStatus,
+    punchIn,
+    punchOut,
+    holidayWorked: form.holidayWorked ?? false,
+    leaveRequestId: form.leaveRequestId,
+    holidayId: form.holidayId,
+    remarks:
+      form.status === "Late"
+        ? form.manualReason || form.remarks || "Late arrival"
+        : form.manualReason ?? form.remarks,
+    source: form.source ?? "MANUAL",
   };
 }
 
@@ -715,7 +817,10 @@ export function mapWeeklyOffFromApi(
     rotationPattern: row.rotationPattern as string | undefined,
     effectiveFrom: formatApiDate(row.effectiveFrom as string),
     effectiveTo: row.effectiveTo ? formatApiDate(row.effectiveTo as string) : "—",
-    status: (row.status as WeeklyOffAssignment["status"]) ?? "Active",
+    status: deriveWeeklyOffDisplayStatus(
+      String(row.effectiveFrom ?? ""),
+      row.effectiveTo as string | undefined,
+    ),
     assignedBy: String(row.assignedBy ?? ""),
     remarks: row.remarks as string | undefined,
   };
@@ -741,7 +846,13 @@ export function mapLeaveApplicationFromApi(
     priority: (row.priority as LeaveApplication["priority"]) ?? "Normal",
     fromDate: formatApiDate(row.fromDate as string),
     toDate: formatApiDate(row.toDate as string),
+    fromDateIso: String(row.fromDate ?? "").slice(0, 10),
+    toDateIso: String(row.toDate ?? "").slice(0, 10),
     totalDays: Number(row.totalDays ?? 0),
+    effectiveDays: row.effectiveDays != null ? Number(row.effectiveDays) : undefined,
+    calendarDays: row.calendarDays != null ? Number(row.calendarDays) : undefined,
+    consumedDates: (row.consumedDates as string[] | undefined) ?? undefined,
+    excludedDates: (row.excludedDates as LeaveApplication["excludedDates"]) ?? undefined,
     reason: String(row.reason ?? ""),
     attachmentName: row.attachmentName as string | undefined,
     status: (row.status as LeaveApplication["status"]) ?? "Pending",
@@ -916,33 +1027,6 @@ export function mapTaxRuleFromApi(row: Record<string, unknown>): ConfigurableTax
   };
 }
 
-export function mapApprovalWorkflowFromApi(row: Record<string, unknown>): ApprovalWorkflow {
-  const rawConditions = row.conditions;
-  const conditions =
-    rawConditions && !Array.isArray(rawConditions)
-      ? (rawConditions as ApprovalWorkflow["conditions"])
-      : undefined;
-  return {
-    id: String(row.id),
-    code: String(row.code ?? ""),
-    module: (row.module as ApprovalWorkflow["module"]) ?? "Leave Management",
-    requestType: String(row.requestType ?? ""),
-    version: Number(row.version ?? 1),
-    approvalLevelsCount: Number(row.approvalLevelsCount ?? 0),
-    levels: (row.levels as ApprovalWorkflow["levels"]) ?? [],
-    conditions,
-    effectiveFrom: formatApiDate(row.effectiveFrom as string),
-    effectiveTo: row.effectiveTo ? formatApiDate(row.effectiveTo as string) : undefined,
-    status: (row.status as ApprovalWorkflow["status"]) ?? "Active",
-    createdBy: String(row.createdBy ?? ""),
-    createdDate: formatApiDate(row.createdAt as string),
-    lastModifiedBy: String(row.lastModifiedBy ?? row.createdBy ?? ""),
-    lastModifiedDate: formatApiDate(row.updatedAt as string),
-    history: (row.history as ApprovalWorkflow["history"]) ?? [],
-    isSystemLocked: Boolean(row.isSystemLocked),
-  };
-}
-
 export function mapComplaintCategoryFromApi(row: Record<string, unknown>): ComplaintCategory {
   return {
     id: String(row.id),
@@ -1071,7 +1155,7 @@ export function mapEmployeeToApi(form: Record<string, unknown>, lookups?: {
     shiftTypeId,
     leavePolicyId,
     joinDate: form.joinDate,
-    salary: form.basicSalary ? Number(form.basicSalary) : form.salary,
+    salaryStructureId: form.salaryStructureId ?? form.salaryStructure ?? undefined,
     status: form.status ?? "Active",
     gender: form.gender,
     dob: form.dob,

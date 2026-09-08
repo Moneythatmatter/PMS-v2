@@ -21,6 +21,7 @@ import {
   AddEmployeePreviewModal,
   type EmployeeFormPreviewData,
 } from "@/components/hr/AddEmployeePreviewModal";
+import type { SalaryStructure } from "@/components/hr/SalaryStructureView";
 import { cn } from "@/lib/utils";
 import { getLeavePolicySelectOptions } from "@/components/hr/LeavePolicyMasterView";
 import {
@@ -179,6 +180,7 @@ export function AddEmployeeView() {
   const [shiftTypeOptionsLoaded, setShiftTypeOptionsLoaded] = useState<{ value: string; label: string }[]>([]);
   const [leavePolicyOptions, setLeavePolicyOptions] = useState<{ value: string; label: string }[]>([]);
   const [salaryStructureOptions, setSalaryStructureOptions] = useState<{ value: string; label: string }[]>([]);
+  const [salaryStructures, setSalaryStructures] = useState<SalaryStructure[]>([]);
   const [documentTypeOptions, setDocumentTypeOptions] = useState<{ value: string; label: string }[]>([]);
   const [masterLookups, setMasterLookups] = useState<{
     departmentNameToId: Map<string, string>;
@@ -220,7 +222,8 @@ export function AddEmployeeView() {
         setEmploymentTypeOptions(employmentTypes.map((t) => ({ value: t.typeName, label: t.typeName })));
         setShiftTypeOptionsLoaded(shiftTypes.map((s) => ({ value: s.shiftName, label: s.shiftName })));
         setLeavePolicyOptions(getLeavePolicySelectOptions(leavePolicies));
-        setSalaryStructureOptions(structures.map((s) => ({ value: s.name, label: s.name })));
+        setSalaryStructureOptions(structures.map((s) => ({ value: s.id, label: s.name })));
+        setSalaryStructures(structures);
         setDocumentTypeOptions(docTypes.map((d) => ({ value: d.name, label: d.name })));
         setMasterLookups({
           departmentNameToId: buildNameIdMap(deptRows, "departmentName"),
@@ -267,7 +270,6 @@ export function AddEmployeeView() {
 
     // Section 4: Payroll Information
     salaryStructure: "",
-    basicSalary: "",
     bankName: "",
     accountHolderName: "",
     accountNumber: "",
@@ -293,18 +295,45 @@ export function AddEmployeeView() {
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
   const [selectedDocType, setSelectedDocType] = useState("");
 
-  // Live Auto-Calculated Salary Breakdown
-  const salaryBreakdown = useMemo(() => {
-    const basic = parseFloat(formData.basicSalary) || 0;
-    const hra = Math.round(basic * 0.4); // 40% HRA
-    const specialAllowance = Math.round(basic * 0.25); // 25% Special Allowance
-    const gross = basic + hra + specialAllowance;
-    const pfDeduction = Math.round(basic * 0.12); // 12% PF
-    const esicDeduction = gross < 21000 ? Math.round(gross * 0.0075) : 0;
-    const net = gross - pfDeduction - esicDeduction;
+  const selectedSalaryStructure = useMemo(
+    () => salaryStructures.find((s) => s.id === formData.salaryStructure),
+    [salaryStructures, formData.salaryStructure],
+  );
 
-    return { basic, hra, specialAllowance, gross, pfDeduction, esicDeduction, net };
-  }, [formData.basicSalary]);
+  const salaryBreakdown = useMemo(() => {
+    if (!selectedSalaryStructure) {
+      return { basic: 0, hra: 0, specialAllowance: 0, gross: 0, pfDeduction: 0, esicDeduction: 0, net: 0 };
+    }
+    const basic =
+      selectedSalaryStructure.earnings.find((e) =>
+        e.componentName.toLowerCase().includes("basic"),
+      )?.computedAmount ?? 0;
+    const hra =
+      selectedSalaryStructure.earnings.find((e) =>
+        e.componentName.toLowerCase().includes("hra"),
+      )?.computedAmount ?? 0;
+    const specialAllowance = Math.max(
+      0,
+      selectedSalaryStructure.grossSalary - basic - hra,
+    );
+    const pfDeduction =
+      selectedSalaryStructure.deductions.find((d) =>
+        d.componentName.toLowerCase().includes("pf"),
+      )?.computedAmount ?? 0;
+    const esicDeduction =
+      selectedSalaryStructure.deductions.find((d) =>
+        d.componentName.toLowerCase().includes("esi"),
+      )?.computedAmount ?? 0;
+    return {
+      basic,
+      hra,
+      specialAllowance,
+      gross: selectedSalaryStructure.grossSalary,
+      pfDeduction,
+      esicDeduction,
+      net: selectedSalaryStructure.netSalary,
+    };
+  }, [selectedSalaryStructure]);
 
   // Form input handler
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -324,13 +353,14 @@ export function AddEmployeeView() {
   const previewData: EmployeeFormPreviewData = useMemo(
     () => ({
       ...formData,
+      salaryStructureName: selectedSalaryStructure?.name,
       documents: documents.map((document) => ({
         type: document.type,
         fileName: document.fileName,
       })),
       salaryBreakdown,
     }),
-    [formData, documents, salaryBreakdown],
+    [formData, documents, salaryBreakdown, selectedSalaryStructure],
   );
 
   const validateForm = () => {
@@ -352,6 +382,10 @@ export function AddEmployeeView() {
     }
     if (!formData.employmentType) {
       setToastMessage("Please select an employment type.");
+      return false;
+    }
+    if (!formData.salaryStructure) {
+      setToastMessage("Please select a salary structure.");
       return false;
     }
     if (formData.enableSystemAccess && formData.password !== formData.confirmPassword) {
@@ -382,7 +416,7 @@ export function AddEmployeeView() {
       weeklyOffPattern: "",
       leavePolicy: "",
       salaryStructure: "",
-      basicSalary: "",
+      bankName: "",
       accountHolderName: "",
       accountNumber: "",
       panNumber: "",
@@ -401,7 +435,10 @@ export function AddEmployeeView() {
   const handleConfirmSave = async () => {
     setIsSubmitting(true);
     try {
-      const payload = mapEmployeeToApi(formData, masterLookups);
+      const payload = mapEmployeeToApi(
+        { ...formData, salaryStructureId: formData.salaryStructure },
+        masterLookups,
+      );
       await hrEmployeeService.create(payload);
       setIsSubmitting(false);
       setShowPreview(false);
@@ -680,16 +717,6 @@ export function AddEmployeeView() {
                 aria-label="Salary structure"
               />
             </FormField>
-            <FormField label="Basic Salary (₹)" required>
-              <TextInput
-                type="number"
-                name="basicSalary"
-                value={formData.basicSalary}
-                onChange={handleChange}
-                placeholder="20000"
-                className={inputClass}
-              />
-            </FormField>
             <FormField label="Bank Name">
               <TextInput name="bankName" value={formData.bankName} onChange={handleChange} placeholder="HDFC Bank" className={inputClass} />
             </FormField>
@@ -714,8 +741,11 @@ export function AddEmployeeView() {
           </div>
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
             <p className="border-b border-amber-200/60 pb-2 text-xs font-bold uppercase tracking-wide text-amber-900">
-              Live Salary Structure Breakdown
+              {selectedSalaryStructure
+                ? `Breakdown — ${selectedSalaryStructure.name}`
+                : "Select a salary structure to preview breakdown"}
             </p>
+            {selectedSalaryStructure && (
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div>
                 <p className="text-[10px] text-slate-500">Basic Salary</p>
@@ -734,6 +764,7 @@ export function AddEmployeeView() {
                 <p className="text-sm font-extrabold text-amber-950">₹{salaryBreakdown.gross.toLocaleString("en-IN")}</p>
               </div>
             </div>
+            )}
           </div>
         </FormSection>
 

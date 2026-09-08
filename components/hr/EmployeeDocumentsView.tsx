@@ -39,7 +39,7 @@ import {
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Modal } from "@/components/ui/Modal";
-import { Button } from "@/components/ui/Button";
+import { Button, Drawer } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 // 8 Standardized Categories
@@ -1179,118 +1179,103 @@ export function EmployeeDocumentsView() {
       {/* ─────────────────────────────────────────────────────────────
           SIDE DRAWER: DOCUMENT DETAILS, PREVIEW, REPLACE & VERIFY
       ───────────────────────────────────────────────────────────── */}
-      {activeDrawerDoc && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs animate-in fade-in-50">
-          <div
-            className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between overflow-y-auto animate-in slide-in-from-right duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div>
-              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-emerald-700" />
-                  <h3 className="font-bold text-sm text-slate-900">Document Verification Panel</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveDrawerDoc(null)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="p-5 space-y-4">
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-sm text-slate-900">{activeDrawerDoc.employeeName}</h4>
-                    <span className="font-mono text-xs text-slate-600 font-bold">{activeDrawerDoc.employeeId}</span>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    {activeDrawerDoc.designation} • <span className="text-emerald-700 font-semibold">{activeDrawerDoc.department}</span>
-                  </p>
-                </div>
-
-                <div className="space-y-2 border-b border-slate-100 pb-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-500">Document Title</span>
-                    {renderStatusBadge(activeDrawerDoc.status, activeDrawerDoc.daysUntilExpiry)}
-                  </div>
-                  <h3 className="font-bold text-base text-slate-900">{activeDrawerDoc.docTitle}</h3>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Uploaded Date</span>
-                      <span className="font-semibold text-slate-800">{activeDrawerDoc.uploadedDate}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Verified By</span>
-                      <span className="font-semibold text-slate-800">{activeDrawerDoc.verifiedBy || "—"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Simulated Viewer */}
-                <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 text-center text-white space-y-2">
-                  <FileText className="h-10 w-10 text-emerald-400 mx-auto" />
-                  <p className="text-xs font-semibold">{activeDrawerDoc.docTitle}</p>
-                  <p className="text-[10px] text-slate-400 font-mono">Format: {activeDrawerDoc.fileFormat} • Size: {activeDrawerDoc.fileSize}</p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setToastMessage(`Downloading ${activeDrawerDoc.docTitle}...`)}
-                    className="mt-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold h-7"
-                  >
-                    <Download className="mr-1 h-3 w-3" /> Download File
-                  </Button>
-                </div>
-
-                {/* HR Remarks Input */}
-                <div className="space-y-1.5 pt-1">
-                  <label className="block text-xs font-bold text-slate-700">HR Verification Remarks</label>
-                  <textarea
-                    rows={2}
-                    value={activeDrawerDoc.remarks || ""}
-                    onChange={(e) =>
-                      setActiveDrawerDoc((prev) => (prev ? { ...prev, remarks: e.target.value } : null))
-                    }
-                    placeholder="Add verification notes..."
-                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Drawer Footer: Download, Replace & Approve/Verify */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-2">
-              <div className="flex items-center gap-2">
-                {activeDrawerDoc.status !== "Verified" && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => handleVerify(activeDrawerDoc.id)}
-                    className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold h-9"
-                  >
-                    <Check className="mr-1 h-4 w-4" /> Approve &amp; Verify
-                  </Button>
-                )}
+      <Drawer
+        isOpen={Boolean(activeDrawerDoc)}
+        onClose={() => setActiveDrawerDoc(null)}
+        title="Document Verification Panel"
+        icon={<FileText className="h-5 w-5 text-emerald-700" />}
+        footer={
+          activeDrawerDoc ? (
+            <div className="flex w-full items-center gap-2">
+              {activeDrawerDoc.status !== "Verified" && (
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setReplaceDocTarget(activeDrawerDoc);
-                    setIsReplaceModalOpen(true);
-                  }}
-                  className="flex-1 text-slate-700 bg-white border-slate-300 rounded-xl text-xs font-bold h-9"
+                  onClick={() => handleVerify(activeDrawerDoc.id)}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold h-9"
                 >
-                  <RefreshCw className="mr-1 h-3.5 w-3.5" /> Replace Document
+                  <Check className="mr-1 h-4 w-4" /> Approve &amp; Verify
                 </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setReplaceDocTarget(activeDrawerDoc);
+                  setIsReplaceModalOpen(true);
+                }}
+                className="flex-1 text-slate-700 bg-white border-slate-300 rounded-xl text-xs font-bold h-9"
+              >
+                <RefreshCw className="mr-1 h-3.5 w-3.5" /> Replace Document
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        {activeDrawerDoc && (
+          <>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-sm text-slate-900">{activeDrawerDoc.employeeName}</h4>
+                <span className="font-mono text-xs text-slate-600 font-bold">{activeDrawerDoc.employeeId}</span>
+              </div>
+              <p className="text-xs text-slate-500">
+                {activeDrawerDoc.designation} •{" "}
+                <span className="text-emerald-700 font-semibold">{activeDrawerDoc.department}</span>
+              </p>
+            </div>
+
+            <div className="space-y-2 border-b border-slate-100 pb-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Document Title</span>
+                {renderStatusBadge(activeDrawerDoc.status, activeDrawerDoc.daysUntilExpiry)}
+              </div>
+              <h3 className="font-bold text-base text-slate-900">{activeDrawerDoc.docTitle}</h3>
+
+              <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Uploaded Date</span>
+                  <span className="font-semibold text-slate-800">{activeDrawerDoc.uploadedDate}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Verified By</span>
+                  <span className="font-semibold text-slate-800">{activeDrawerDoc.verifiedBy || "—"}</span>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 text-center text-white space-y-2">
+              <FileText className="h-10 w-10 text-emerald-400 mx-auto" />
+              <p className="text-xs font-semibold">{activeDrawerDoc.docTitle}</p>
+              <p className="text-[10px] text-slate-400 font-mono">
+                Format: {activeDrawerDoc.fileFormat} • Size: {activeDrawerDoc.fileSize}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setToastMessage(`Downloading ${activeDrawerDoc.docTitle}...`)}
+                className="mt-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold h-7"
+              >
+                <Download className="mr-1 h-3 w-3" /> Download File
+              </Button>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-xs font-bold text-slate-700">HR Verification Remarks</label>
+              <textarea
+                rows={2}
+                value={activeDrawerDoc.remarks || ""}
+                onChange={(e) =>
+                  setActiveDrawerDoc((prev) => (prev ? { ...prev, remarks: e.target.value } : null))
+                }
+                placeholder="Add verification notes..."
+                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+              />
+            </div>
+          </>
+        )}
+      </Drawer>
 
       {/* ─────────────────────────────────────────────────────────────
           MODAL 1: SINGLE UPLOAD MODAL

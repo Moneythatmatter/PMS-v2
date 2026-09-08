@@ -4,23 +4,32 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Calendar,
   Search,
-  Users,
-  Clock,
-  CheckCircle2,
   Eye,
   Printer,
-  Info,
   DollarSign,
   Plus,
-  SlidersHorizontal,
   X,
   ChevronDown,
   Check,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
-import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
+import { HrSearchFilterToolbar } from "@/components/hr/shared/HrSearchFilterToolbar";
+import { ReportExportModal } from "@/components/shared/ReportExportModal";
+import {
+  ListSummaryCards,
+  ToolbarFilterGroup,
+  ToolbarFilterSelect,
+} from "@/components/shared/list-table";
+import { employeeDepartmentFilterOptions } from "@/app/data/hr/employeeDepartmentOptions";
+import {
+  exportGenericReport,
+  filterByIsoDateRange,
+  normalizeToIsoDate,
+  todayIsoDate,
+} from "@/lib/hr/report-export";
+import type { ExportColumn } from "@/lib/exportUtils";
 import { cn } from "@/lib/utils";
 import { hrHolidayAttendanceService, hrEmployeeService } from "@/services/human-resources";
 import { mapHolidayAttendanceFromApi, mapHolidayAttendanceToApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
@@ -51,6 +60,45 @@ export interface HolidayAttendanceRecord {
   remarks?: string;
 }
 
+const holidayFilterOptions = [
+  { value: "ALL", label: "All holidays" },
+  { value: "Independence Day", label: "Independence Day" },
+  { value: "Republic Day", label: "Republic Day" },
+  { value: "Gandhi Jayanti", label: "Gandhi Jayanti" },
+  { value: "Diwali", label: "Diwali" },
+] as const;
+
+const holidayStatusFilterOptions = [
+  { value: "ALL", label: "All statuses" },
+  { value: "Pending", label: "Pending" },
+  { value: "Approved", label: "Approved" },
+  { value: "Rejected", label: "Rejected" },
+] as const;
+
+type HolidayExportRow = {
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  holidayName: string;
+  holidayDate: string;
+  workedHours: number;
+  holidayPayAmount: number;
+  approvalStatus: string;
+  payrollStatus: string;
+};
+
+const holidayExportColumns: ExportColumn<HolidayExportRow>[] = [
+  { key: "employeeId", header: "Employee ID" },
+  { key: "employeeName", header: "Employee Name" },
+  { key: "department", header: "Department" },
+  { key: "holidayName", header: "Holiday" },
+  { key: "holidayDate", header: "Date" },
+  { key: "workedHours", header: "Worked Hours" },
+  { key: "holidayPayAmount", header: "Holiday Pay (₹)" },
+  { key: "approvalStatus", header: "Approval Status" },
+  { key: "payrollStatus", header: "Payroll Status" },
+];
+
 export function HolidayAttendanceView() {
   const [records, setRecords] = useState<HolidayAttendanceRecord[]>([])
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
@@ -79,8 +127,11 @@ export function HolidayAttendanceView() {
   const [selectedHoliday, setSelectedHoliday] = useState("ALL");
   const [selectedDepartment, setSelectedDepartment] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
+  const [selectedDate, setSelectedDate] = useState(todayIsoDate);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Review Modal & Side Drawer & Add Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -111,21 +162,30 @@ export function HolidayAttendanceView() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const employeeLookup = useMemo(
+    () => new Map(employees.map((e) => [e.id, e])),
+    [employees],
+  );
+
+  const matchesBaseFilters = (r: HolidayAttendanceRecord) => {
+    const matchSearch =
+      r.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.holidayName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchHoliday = selectedHoliday === "ALL" || r.holidayName.includes(selectedHoliday);
+    const matchDept = selectedDepartment === "ALL" || r.department === selectedDepartment;
+    const matchStatus = selectedStatus === "ALL" || r.approvalStatus === selectedStatus;
+    return matchSearch && matchHoliday && matchDept && matchStatus;
+  };
+
   // Filtered Records
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
-      const matchSearch =
-        r.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.holidayName.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchHoliday = selectedHoliday === "ALL" || r.holidayName === selectedHoliday;
-      const matchDept = selectedDepartment === "ALL" || r.department === selectedDepartment;
-      const matchStatus = selectedStatus === "ALL" || r.approvalStatus === selectedStatus;
-
-      return matchSearch && matchHoliday && matchDept && matchStatus;
+      if (!matchesBaseFilters(r)) return false;
+      const iso = normalizeToIsoDate(r.holidayDate);
+      return iso === selectedDate;
     });
-  }, [records, searchTerm, selectedHoliday, selectedDepartment, selectedStatus]);
+  }, [records, searchTerm, selectedHoliday, selectedDepartment, selectedStatus, selectedDate]);
 
   // KPI Metrics
   const metrics = useMemo(() => {
@@ -140,6 +200,88 @@ export function HolidayAttendanceView() {
 
     return { holidayAttendanceRequests, approvedHolidayWork, pendingPayrollProcessing, totalPayAmount };
   }, [records]);
+
+  const summaryStats = useMemo(
+    () => [
+      {
+        label: "Holiday attendance requests",
+        value: metrics.holidayAttendanceRequests,
+        color: "#0284c7",
+        icon: "users" as const,
+      },
+      {
+        label: "Approved holiday work",
+        value: metrics.approvedHolidayWork,
+        color: "#16a34a",
+        icon: "check-circle" as const,
+        filterId: "Approved",
+      },
+      {
+        label: "Pending payroll processing",
+        value: metrics.pendingPayrollProcessing,
+        color: "#f59e0b",
+        icon: "clock" as const,
+        filterId: "Pending",
+      },
+      {
+        label: "Additional holiday pay",
+        value: `₹${metrics.totalPayAmount.toLocaleString("en-IN")}`,
+        color: "#9333ea",
+        icon: "indian-rupee" as const,
+      },
+    ],
+    [metrics],
+  );
+
+  const today = todayIsoDate();
+  const hasActiveFilters =
+    searchTerm !== "" ||
+    selectedHoliday !== "ALL" ||
+    selectedDepartment !== "ALL" ||
+    selectedStatus !== "ALL" ||
+    selectedDate !== today;
+
+  const resetFilters = () => {
+    setSearchTerm("");
+    setSelectedHoliday("ALL");
+    setSelectedDepartment("ALL");
+    setSelectedStatus("ALL");
+    setSelectedDate(today);
+  };
+
+  const handleStatFilter = (status: string) => {
+    setSelectedStatus((prev) => (prev === status ? "ALL" : status));
+  };
+
+  const handleHolidayExport = async (options: {
+    format: "csv" | "excel" | "pdf";
+    fromDate: string;
+    toDate: string;
+  }) => {
+    setExporting(true);
+    try {
+      const base = records.filter(matchesBaseFilters);
+      const ranged = filterByIsoDateRange(base, (r) => r.holidayDate, options.fromDate, options.toDate);
+      const rows: HolidayExportRow[] = ranged.map((r) => ({
+        employeeId: employeeLookup.get(r.employeeId)?.empCode ?? r.employeeId,
+        employeeName: r.employeeName,
+        department: r.department,
+        holidayName: r.holidayName,
+        holidayDate: r.holidayDate,
+        workedHours: r.workedHours,
+        holidayPayAmount: r.holidayPayAmount,
+        approvalStatus: r.approvalStatus,
+        payrollStatus: r.payrollStatus,
+      }));
+      exportGenericReport(rows, holidayExportColumns, options, "Holiday_Attendance_Report");
+      setToastMessage(`Exported ${rows.length} holiday attendance record(s).`);
+      setIsExportModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Handlers
   const handleOpenReviewModal = (record: HolidayAttendanceRecord) => {
@@ -275,7 +417,7 @@ export function HolidayAttendanceView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setToastMessage("Exporting holiday attendance report to CSV...")}
+            onClick={() => setIsExportModalOpen(true)}
             className="rounded-xl text-xs font-medium bg-white text-slate-700 border-slate-300 shadow-xs"
           >
             <Printer className="h-3.5 w-3.5 mr-1 text-slate-500" />
@@ -284,143 +426,71 @@ export function HolidayAttendanceView() {
         </div>
       }
     >
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: 4 SUMMARY CARDS
-      ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <HRKPICard
-          label="Holiday Attendance Requests"
-          value={`${metrics.holidayAttendanceRequests} Staff`}
-          subtitle="Punch Log Verified"
-          tone="blue"
-          icon={<Users className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Approved Holiday Work"
-          value={`${metrics.approvedHolidayWork} Approved`}
-          subtitle="Verified by HR"
-          tone="emerald"
-          icon={<CheckCircle2 className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Pending Payroll Processing"
-          value={`${metrics.pendingPayrollProcessing} Records`}
-          subtitle="Forwarded to Salary"
-          tone="amber"
-          icon={<Clock className="h-5 w-5" />}
-        />
-        <HRKPICard
-          label="Additional Holiday Pay Amount"
-          value={`₹${metrics.totalPayAmount.toLocaleString("en-IN")}`}
-          subtitle="Calculated Compensation"
-          tone="purple"
-          icon={<DollarSign className="h-5 w-5" />}
-        />
-      </div>
+      <ListSummaryCards
+        stats={summaryStats}
+        className="mb-5"
+        activeFilterId={selectedStatus === "ALL" ? "" : selectedStatus}
+        onFilterClick={handleStatFilter}
+      />
 
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 2: FILTERS TOOLBAR
-      ───────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs mb-5 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          {/* Full-width Rounded Search Input */}
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search Employee or Holiday..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-8 py-2 text-xs rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white font-medium text-slate-800 shadow-2xs"
+      <HrSearchFilterToolbar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Search employee or holiday..."
+        selectedDate={selectedDate}
+        onDateChange={setSelectedDate}
+        maxDate={today}
+        showDatePicker
+        showFilterPanel={showFilterPanel}
+        onToggleFilterPanel={() => setShowFilterPanel((v) => !v)}
+        hasActiveFilters={hasActiveFilters}
+        onReset={resetFilters}
+        onOpenMobileFilters={() => setIsMobileFilterOpen(true)}
+        filters={
+          <ToolbarFilterGroup>
+            <ToolbarFilterSelect
+              value={selectedHoliday}
+              onChange={setSelectedHoliday}
+              options={[...holidayFilterOptions]}
+              ariaLabel="Filter by holiday"
             />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Filters Toggle Button (Right) */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilterPanel(!showFilterPanel)}
-              className="rounded-full border-slate-200 text-xs font-bold gap-1.5 hidden md:inline-flex bg-white text-slate-700 hover:bg-slate-50 cursor-pointer px-4 shadow-2xs"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-700" />
-              <span>Filters</span>
-            </Button>
-
-            <button
-              type="button"
-              onClick={() => setIsMobileFilterOpen(true)}
-              className="md:hidden p-2 rounded-full border border-slate-200 bg-white text-slate-700"
-            >
-              <SlidersHorizontal className="h-4 w-4 text-emerald-700" />
-            </button>
-          </div>
-        </div>
-
-        {/* Collapsible Secondary Filters Drawer Bar */}
-        {showFilterPanel && (
-          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in-50">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <select
-                value={selectedHoliday}
-                onChange={(e) => setSelectedHoliday(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All Holidays</option>
-                <option value="Independence Day">Independence Day (15 Aug)</option>
-                <option value="Republic Day">Republic Day (26 Jan)</option>
-                <option value="Gandhi Jayanti">Gandhi Jayanti (02 Oct)</option>
-                <option value="Diwali">Diwali</option>
-              </select>
-
-              <select
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All Departments</option>
-                <option value="Front Office">Front Office</option>
-                <option value="Housekeeping">Housekeeping</option>
-                <option value="Food & Beverage">Food &amp; Beverage</option>
-              </select>
-
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="text-xs rounded-full border border-slate-200 py-1.5 px-3 bg-slate-50 font-bold text-slate-800"
-              >
-                <option value="ALL">All Approval Statuses</option>
-                <option value="Pending">Pending</option>
-                <option value="Approved">Approved</option>
-                <option value="Rejected">Rejected</option>
-              </select>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSearchTerm("");
-                setSelectedHoliday("ALL");
-                setSelectedDepartment("ALL");
-                setSelectedStatus("ALL");
-              }}
-              className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
-            >
-              Reset Filters
-            </button>
-          </div>
-        )}
-      </div>
+            <ToolbarFilterSelect
+              value={selectedDepartment}
+              onChange={setSelectedDepartment}
+              options={[...employeeDepartmentFilterOptions]}
+              ariaLabel="Filter by department"
+            />
+            <ToolbarFilterSelect
+              value={selectedStatus}
+              onChange={setSelectedStatus}
+              options={[...holidayStatusFilterOptions]}
+              ariaLabel="Filter by approval status"
+            />
+          </ToolbarFilterGroup>
+        }
+        extraFilters={
+          <ToolbarFilterGroup>
+            <ToolbarFilterSelect
+              value={selectedHoliday}
+              onChange={setSelectedHoliday}
+              options={[...holidayFilterOptions]}
+              ariaLabel="Filter by holiday"
+            />
+            <ToolbarFilterSelect
+              value={selectedDepartment}
+              onChange={setSelectedDepartment}
+              options={[...employeeDepartmentFilterOptions]}
+              ariaLabel="Filter by department"
+            />
+            <ToolbarFilterSelect
+              value={selectedStatus}
+              onChange={setSelectedStatus}
+              options={[...holidayStatusFilterOptions]}
+              ariaLabel="Filter by approval status"
+            />
+          </ToolbarFilterGroup>
+        }
+      />
 
       {/* ─────────────────────────────────────────────────────────────
           SECTION 3: MAIN DESKTOP TABLE & MOBILE CARDS
@@ -878,51 +948,80 @@ export function HolidayAttendanceView() {
         <Modal
           isOpen={isMobileFilterOpen}
           onClose={() => setIsMobileFilterOpen(false)}
-          title="Filter Holiday Records"
+          title="Filter holiday records"
           size="sm"
         >
           <div className="space-y-3 text-xs">
+            <ToolbarFilterSelect
+              value={selectedHoliday}
+              onChange={setSelectedHoliday}
+              options={[...holidayFilterOptions]}
+              ariaLabel="Filter by holiday"
+              className="w-full min-w-0"
+            />
+            <ToolbarFilterSelect
+              value={selectedDepartment}
+              onChange={setSelectedDepartment}
+              options={[...employeeDepartmentFilterOptions]}
+              ariaLabel="Filter by department"
+              className="w-full min-w-0"
+            />
+            <ToolbarFilterSelect
+              value={selectedStatus}
+              onChange={setSelectedStatus}
+              options={[...holidayStatusFilterOptions]}
+              ariaLabel="Filter by approval status"
+              className="w-full min-w-0"
+            />
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Department</label>
-              <select
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
-              >
-                <option value="ALL">All Departments</option>
-                <option value="Front Office">Front Office</option>
-                <option value="Housekeeping">Housekeeping</option>
-                <option value="Food & Beverage">Food &amp; Beverage</option>
-              </select>
+              <label className="mb-1 block font-bold text-slate-700">Date</label>
+              <input
+                type="date"
+                value={selectedDate}
+                max={today}
+                onChange={(e) => setSelectedDate(e.target.value > today ? today : e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 font-semibold"
+              />
             </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Approval Status</label>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
-              >
-                <option value="ALL">All Approval Statuses</option>
-                <option value="Pending">Pending</option>
-                <option value="Approved">Approved</option>
-                <option value="Rejected">Rejected</option>
-              </select>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex gap-2 border-t border-slate-100 pt-3">
+              {hasActiveFilters && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    resetFilters();
+                    setIsMobileFilterOpen(false);
+                  }}
+                  className="flex-1 rounded-xl text-xs font-bold"
+                >
+                  Reset
+                </Button>
+              )}
               <Button
                 type="button"
                 size="sm"
                 onClick={() => setIsMobileFilterOpen(false)}
-                className="w-full bg-emerald-700 text-white rounded-xl font-bold"
+                className="flex-1 rounded-xl bg-emerald-700 text-xs font-bold text-white"
               >
-                Apply Filters
+                Apply
               </Button>
             </div>
           </div>
         </Modal>
       )}
+
+      <ReportExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onExport={handleHolidayExport}
+        defaultDate={selectedDate}
+        maxDate={today}
+        title="Export holiday attendance report"
+        description="Choose file type and time period. Current table filters will apply."
+        exporting={exporting}
+      />
     </ModulePageShell>
   );
 }

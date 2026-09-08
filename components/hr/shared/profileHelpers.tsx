@@ -353,6 +353,8 @@ export function AttendanceMonthSummaryPanel({
       <ProfileIconField icon={Clock} tone="amber" label="Late" value={`${summary.late} days`} />
       <ProfileIconField icon={Calendar} tone="violet" label="Half day" value={`${summary.halfDay} days`} />
       <ProfileIconField icon={Heart} tone="indigo" label="On leave" value={`${summary.onLeave} days`} />
+      <ProfileIconField icon={Clock} tone="amber" label="Pending" value={`${summary.pending} days`} />
+      <ProfileIconField icon={Calendar} tone="violet" label="Holiday" value={`${summary.holiday} days`} />
       <ProfileIconField icon={TrendingUp} tone="blue" label="Overtime" value={`${summary.overtimeHours} hrs`} />
       <ProfileIconField icon={Briefcase} tone="emerald" label="Working days" value={`${summary.workingDays} days`} />
       <ProfileIconField icon={Building2} tone="slate" label="Weekly off" value={`${summary.weeklyOff} days`} />
@@ -505,15 +507,25 @@ export function LeaveBalancePanel({ balances }: { balances: LeaveBalanceItem[] }
 }
 
 export interface LeaveHistoryRow {
+  id?: string;
   type: string;
   dates: string;
   days: string;
   reason: string;
-  status: "Approved" | "Pending" | "Rejected";
+  status: "Approved" | "Pending" | "Rejected" | "Cancelled";
   approvedBy: string;
+  fromDateIso?: string;
+  toDateIso?: string;
+  effectiveDays?: number;
 }
 
-export function LeaveHistoryPanel({ rows }: { rows: LeaveHistoryRow[] }) {
+export function LeaveHistoryPanel({
+  rows,
+  renderActions,
+}: {
+  rows: LeaveHistoryRow[];
+  renderActions?: (row: LeaveHistoryRow) => React.ReactNode;
+}) {
   return (
     <div className="overflow-x-auto -mx-1">
       <table className="w-full text-left text-xs">
@@ -525,11 +537,12 @@ export function LeaveHistoryPanel({ rows }: { rows: LeaveHistoryRow[] }) {
             <th className="py-2.5 px-3">Reason</th>
             <th className="py-2.5 px-3">Status</th>
             <th className="py-2.5 px-3">Approved by</th>
+            {renderActions ? <th className="py-2.5 px-3">Actions</th> : null}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {rows.map((row, index) => (
-            <tr key={`${row.type}-${index}`} className="hover:bg-slate-50 transition-colors">
+            <tr key={row.id ?? `${row.type}-${index}`} className="hover:bg-slate-50 transition-colors">
               <td className="py-2.5 px-3 font-semibold text-slate-800">{row.type}</td>
               <td className="py-2.5 px-3 text-slate-700">{row.dates}</td>
               <td className="py-2.5 px-3 text-slate-900 font-medium">{row.days}</td>
@@ -537,10 +550,21 @@ export function LeaveHistoryPanel({ rows }: { rows: LeaveHistoryRow[] }) {
               <td className="py-2.5 px-3">
                 <ProfileStatusBadge
                   label={row.status}
-                  tone={row.status === "Approved" ? "emerald" : row.status === "Pending" ? "amber" : "rose"}
+                  tone={
+                    row.status === "Approved"
+                      ? "emerald"
+                      : row.status === "Pending"
+                        ? "amber"
+                        : row.status === "Cancelled"
+                          ? "slate"
+                          : "rose"
+                  }
                 />
               </td>
               <td className="py-2.5 px-3 text-slate-500">{row.approvedBy}</td>
+              {renderActions ? (
+                <td className="py-2.5 px-3">{renderActions(row)}</td>
+              ) : null}
             </tr>
           ))}
         </tbody>
@@ -550,7 +574,9 @@ export function LeaveHistoryPanel({ rows }: { rows: LeaveHistoryRow[] }) {
 }
 
 export interface PayrollPanelEmployee {
-  salary: number;
+  salaryStructureName?: string;
+  structureGrossSalary?: number;
+  structureNetSalary?: number;
   bankName?: string;
   bankAccount?: string;
   ifscCode?: string;
@@ -564,16 +590,25 @@ function formatInr(amount: number) {
 }
 
 export function PayrollSalaryPanel({ employee }: { employee: PayrollPanelEmployee }) {
-  const basic = Math.round(employee.salary * 0.5);
-  const hra = Math.round(employee.salary * 0.3);
-  const special = employee.salary - basic - hra;
+  const gross = employee.structureGrossSalary ?? 0;
+  const net = employee.structureNetSalary ?? 0;
 
   return (
     <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-5 gap-y-4">
-      <ProfileIconField icon={Wallet} tone="emerald" label="Monthly gross" value={formatInr(employee.salary)} />
-      <ProfileIconField icon={Briefcase} tone="slate" label="Basic pay (50%)" value={formatInr(basic)} />
-      <ProfileIconField icon={Building2} tone="violet" label="HRA (30%)" value={formatInr(hra)} />
-      <ProfileIconField icon={Gift} tone="indigo" label="Special allowance" value={formatInr(special)} />
+      <ProfileIconField
+        icon={Wallet}
+        tone="emerald"
+        label="Salary structure"
+        value={employee.salaryStructureName || "Not assigned"}
+      />
+      <ProfileIconField icon={Briefcase} tone="slate" label="Monthly gross" value={formatInr(gross)} />
+      <ProfileIconField icon={Building2} tone="violet" label="Monthly net" value={formatInr(net)} />
+      <ProfileIconField
+        icon={Gift}
+        tone="indigo"
+        label="Deductions"
+        value={formatInr(Math.max(0, gross - net))}
+      />
     </dl>
   );
 }
