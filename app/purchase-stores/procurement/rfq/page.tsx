@@ -34,6 +34,7 @@ import {
   Building2,
   User,
   Layers,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -62,6 +63,13 @@ import {
   normalizeRfqVendor,
 } from "@/app/data/rfqData";
 import type { PurchaseRequisition } from "@/app/data/purchaseRequisitionsData";
+import { PurchaseAttachmentPreviewModal } from "@/components/purchase-stores/ui/PurchaseAttachmentPreviewModal";
+import {
+  createAttachmentFromFile,
+  revokeAttachmentUrls,
+  MAX_ATTACHMENT_BYTES,
+  type PurchaseAttachmentRecord,
+} from "@/app/data/purchaseAttachmentUtils";
 import { usePsList } from "@/hooks/usePsResource";
 import { psRfqService, psRequisitionService, psSupplierService, psPurchaseOrderService, psProductService } from "@/services/purchase-stores/index";
 import {
@@ -146,9 +154,10 @@ export default function RequestForQuotationsPage() {
   const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
 
   // Form State for Create/Edit RFQ
+  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
   const [formPR, setFormPR] = useState("");
-  const [formBuyer, setFormBuyer] = useState("Purchase Executive");
-  const [formRFQDate, setFormRFQDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formBuyer, setFormBuyer] = useState("");
+  const [formRFQDate, setFormRFQDate] = useState("");
   const [formClosingDate, setFormClosingDate] = useState("");
   const [formPriority, setFormPriority] = useState<RFQRecord["priority"]>("Medium");
   const [formRemarks, setFormRemarks] = useState("");
@@ -163,15 +172,25 @@ export default function RequestForQuotationsPage() {
   );
 
   // Form Commercial Terms State
-  const [formDeliveryLoc, setFormDeliveryLoc] = useState("Central Stores Warehouse");
-  const [formDeliveryAddr, setFormDeliveryAddr] = useState("Dock 2, Hotel Grand Plaza, MG Road, New Delhi");
-  const [formPayTerms, setFormPayTerms] = useState("Net 30 Days post GRN & Invoice 3-way match");
+  const [formDeliveryLoc, setFormDeliveryLoc] = useState("");
+  const [formDeliveryAddr, setFormDeliveryAddr] = useState("");
+  const [formPayTerms, setFormPayTerms] = useState("");
   const [formCurrency, setFormCurrency] = useState("INR (₹)");
-  const [formExpDelivery, setFormExpDelivery] = useState("7 Days from PO issuance");
-  const [formTax, setFormTax] = useState("18% GST extra as applicable");
+  const [formExpDelivery, setFormExpDelivery] = useState("");
+  const [formTax, setFormTax] = useState("");
 
   // Form Attachments State
   const [formAttachments, setFormAttachments] = useState<RFQAttachment[]>([]);
+  const [previewAttachment, setPreviewAttachment] = useState<PurchaseAttachmentRecord | null>(null);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+
+  const formAttachmentsRef = useRef(formAttachments);
+  formAttachmentsRef.current = formAttachments;
+  useEffect(() => {
+    return () => {
+      revokeAttachmentUrls(formAttachmentsRef.current as PurchaseAttachmentRecord[]);
+    };
+  }, []);
 
   // Vendor Selection Reason State
   const [vendorSelectReason, setVendorSelectReason] = useState(
@@ -220,19 +239,21 @@ export default function RequestForQuotationsPage() {
 
   const openCreateDrawer = () => {
     setEditRFQ(null);
+    setFormPR("");
+    setFormBuyer("");
+    setFormRFQDate("");
+    setFormClosingDate("");
+    setFormPriority("Medium");
+    setFormRequestedItems([]);
     setFormVendors([]);
     setFormAttachments([]);
     setFormRemarks("");
-    setFormBuyer("Purchase Executive");
-    setFormRFQDate(new Date().toISOString().slice(0, 10));
-    const first = eligiblePRs[0];
-    if (first) {
-      handlePRSelectionChange(first.prNumber, first);
-    } else {
-      setFormPR("");
-      setFormRequestedItems([]);
-      setFormPriority("Medium");
-    }
+    setFormDeliveryLoc("");
+    setFormDeliveryAddr("");
+    setFormPayTerms("");
+    setFormCurrency("INR (₹)");
+    setFormExpDelivery("");
+    setFormTax("");
     setCreateDrawerOpen(true);
   };
 
@@ -603,25 +624,60 @@ export default function RequestForQuotationsPage() {
   };
 
   // Native File Picker Select Handler
-  const handleNativeFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNativeFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const newAtts: RFQAttachment[] = Array.from(files).map((file, idx) => {
-      const sizeInKb = Math.round(file.size / 1024);
-      const fileSize = sizeInKb > 1024 ? `${(sizeInKb / 1024).toFixed(1)} MB` : `${sizeInKb} KB`;
+    const oversized = Array.from(files).filter((f) => f.size > MAX_ATTACHMENT_BYTES);
+    if (oversized.length > 0) {
+      setToast({
+        message: `${oversized.map((f) => f.name).join(", ")} exceeds 5 MB limit.`,
+        variant: "info",
+      });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
 
-      return {
-        id: `att-rfq-${Date.now()}-${idx}`,
-        fileName: file.name,
-        fileSize: fileSize,
-        fileType: file.name.endsWith(".xlsx") ? "xlsx" : "pdf",
-      };
+    setUploadingAttachments(true);
+    try {
+      const newAtts = await Promise.all(
+        Array.from(files).map((file) =>
+          createAttachmentFromFile(file, formBuyer || "Purchase Executive"),
+        ),
+      );
+      setFormAttachments((prev) => [...prev, ...(newAtts as RFQAttachment[])]);
+      setToast({ message: `Attached ${files.length} document(s).`, variant: "success" });
+    } catch {
+      setToast({ message: "Failed to read file. Try again.", variant: "info" });
+    } finally {
+      setUploadingAttachments(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setFormAttachments((prev) => {
+      const removed = prev.find((a) => a.id === id);
+      if (removed?.previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(removed.previewUrl);
+      }
+      return prev.filter((a) => a.id !== id);
     });
+    setToast({ message: "Attachment removed.", variant: "info" });
+  };
 
-    setFormAttachments((prev) => [...prev, ...newAtts]);
-    setToast({ message: `Attached ${files.length} document(s).`, variant: "success" });
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const handlePreviewAttachment = (att: RFQAttachment | PurchaseAttachmentRecord) => {
+    setPreviewAttachment({
+      id: att.id,
+      fileName: att.fileName,
+      fileSize: att.fileSize,
+      fileType: (att.fileType as any) || "PDF",
+      dataUrl: att.dataUrl,
+      previewUrl: att.previewUrl,
+      mimeType: att.mimeType,
+      uploadedBy: att.uploadedBy,
+      uploadedOn: att.uploadedOn,
+    });
   };
 
   // Confirm Vendors Selection from Vendor Modal
@@ -643,38 +699,60 @@ export default function RequestForQuotationsPage() {
 
   // Save RFQ Form Handler
   const handleSaveRFQ = async (isSend: boolean) => {
-    if (isSend && formVendors.length === 0) {
-      setToast({ message: "Add at least one vendor before sending.", variant: "info" });
+    if (formRFQDate && formRFQDate < todayStr) {
+      setToast({ message: "RFQ Date cannot be in the past. Select today or a future date.", variant: "info" });
       return;
     }
+    if (formClosingDate && formClosingDate < (formRFQDate || todayStr)) {
+      setToast({ message: "Closing Date cannot be in the past or before the RFQ Date.", variant: "info" });
+      return;
+    }
+
+    const effectiveBuyer = formBuyer || "Purchase Executive";
+    const effectiveRfqDate = formRFQDate || todayStr;
+    const effectiveClosingDate = formClosingDate || effectiveRfqDate;
+
     const newRecord: Partial<RFQRecord> = {
       linkedPR: formPR || undefined,
       department: selectedPR?.department ?? "General",
-      buyer: formBuyer,
+      buyer: effectiveBuyer,
       invitedVendors: formVendors.map((v, i) => normalizeRfqVendor(v, i)),
-      closingDate: formClosingDate,
-      rfqDate: formRFQDate,
-      priority: formPriority,
+      closingDate: effectiveClosingDate,
+      rfqDate: effectiveRfqDate,
+      priority: formPriority || "Medium",
       status: isSend ? "Sent" : "Draft",
       requestedItems: formRequestedItems.map((item, i) => normalizeRfqRequestedItem(item, i)),
       commercialTerms: {
-        deliveryLocation: formDeliveryLoc,
-        deliveryAddress: formDeliveryAddr,
-        paymentTerms: formPayTerms,
-        currency: formCurrency,
-        expectedDelivery: formExpDelivery,
-        tax: formTax,
-        remarks: formRemarks,
+        deliveryLocation: formDeliveryLoc || "Central Warehouse",
+        deliveryAddress: formDeliveryAddr || "Main Receiving Dock",
+        paymentTerms: formPayTerms || "Net 30 Days post GRN",
+        currency: formCurrency || "INR (₹)",
+        expectedDelivery: formExpDelivery || "7 Days from PO",
+        tax: formTax || "18% GST Extra",
+        remarks: formRemarks || "",
       },
-      attachments: formAttachments,
+      attachments: formAttachments.map((att) => ({
+        id: att.id,
+        fileName: att.fileName,
+        fileSize: att.fileSize,
+        fileType: att.fileType,
+        dataUrl: att.dataUrl,
+        mimeType: att.mimeType,
+        uploadedBy: att.uploadedBy,
+        uploadedOn: att.uploadedOn,
+      })),
       comparisonData: editRFQ?.comparisonData ?? [],
       activityTimeline: [
         ...(editRFQ?.activityTimeline ?? []),
         {
           stage: isSend ? "Sent" : "Draft",
           timestamp: new Date().toISOString().slice(0, 10),
-          note: isSend ? "RFQ sent to invited vendors" : "RFQ saved as draft",
-          author: formBuyer,
+          note: isSend
+            ? formVendors.length > 0
+              ? `RFQ sent to ${formVendors.length} invited vendor(s)`
+              : "RFQ issued and published"
+            : "RFQ saved as draft",
+          author: effectiveBuyer,
         },
       ],
     };
@@ -684,7 +762,7 @@ export default function RequestForQuotationsPage() {
       if (editRFQ) {
         await psRfqService.update(editRFQ.id, newRecord);
         setEditRFQ(null);
-        setToast({ message: "RFQ Saved Successfully", variant: "success" });
+        setToast({ message: isSend ? "RFQ Sent Successfully" : "RFQ Saved Successfully", variant: "success" });
       } else {
         await psRfqService.create(newRecord);
         setCreateDrawerOpen(false);
@@ -1333,14 +1411,23 @@ export default function RequestForQuotationsPage() {
                 Attachments
               </h4>
               {selectedRFQ.attachments.length > 0 ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {selectedRFQ.attachments.map((att) => (
-                    <div key={att.id} className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 flex items-center gap-2">
-                      <Paperclip className="h-4 w-4 text-slate-500 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-extrabold text-slate-800 truncate">{att.fileName}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">{att.fileSize}</p>
+                    <div key={att.id} className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Paperclip className="h-4 w-4 text-slate-500 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-extrabold text-slate-800 truncate">{att.fileName}</p>
+                          <p className="text-[10px] text-slate-400 font-medium">{att.fileSize}</p>
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => handlePreviewAttachment(att)}
+                        className="px-2 py-1 text-[10px] font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-md transition-colors cursor-pointer shrink-0"
+                      >
+                        Preview
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -1446,14 +1533,22 @@ export default function RequestForQuotationsPage() {
               <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                 Draft
               </span>
-              <span className="text-slate-300">•</span>
-              <span className="truncate">
-                <strong className="text-slate-700 font-semibold">Linked PR:</strong> {formPR}
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="truncate">
-                <strong className="text-slate-700 font-semibold">Buyer:</strong> {formBuyer}
-              </span>
+              {formPR && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="truncate">
+                    <strong className="text-slate-700 font-semibold">Linked PR:</strong> {formPR}
+                  </span>
+                </>
+              )}
+              {formBuyer && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="truncate">
+                    <strong className="text-slate-700 font-semibold">Buyer:</strong> {formBuyer}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         }
@@ -1462,6 +1557,7 @@ export default function RequestForQuotationsPage() {
             <Button
               type="button"
               variant="outline"
+              disabled={saving}
               onClick={() => {
                 setCreateDrawerOpen(false);
                 setEditRFQ(null);
@@ -1474,17 +1570,21 @@ export default function RequestForQuotationsPage() {
             <Button
               type="button"
               variant="outline"
+              disabled={saving}
               onClick={() => handleSaveRFQ(false)}
               className="h-9 px-4 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer"
             >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
               Save Draft
             </Button>
 
             <Button
               type="button"
+              disabled={saving}
               onClick={() => handleSaveRFQ(true)}
-              className="h-9 px-5 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer focus:ring-2 focus:ring-emerald-500"
+              className="h-9 px-5 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer focus:ring-2 focus:ring-emerald-500 flex items-center gap-1.5"
             >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
               Send RFQ
             </Button>
           </div>
@@ -1533,6 +1633,7 @@ export default function RequestForQuotationsPage() {
                   onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormBuyer(e.target.value)}
                   className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
                 >
+                  <option value="">Select Buyer</option>
                   <option value="Purchase Executive">Purchase Executive</option>
                   <option value="Purchase Manager">Purchase Manager</option>
                 </SelectInput>
@@ -1541,8 +1642,15 @@ export default function RequestForQuotationsPage() {
               <FormField label="RFQ Date" required>
                 <TextInput
                   type="date"
+                  min={todayStr}
                   value={formRFQDate}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormRFQDate(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    const val = e.target.value;
+                    setFormRFQDate(val);
+                    if (formClosingDate && val && val > formClosingDate) {
+                      setFormClosingDate(val);
+                    }
+                  }}
                   className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
                 />
               </FormField>
@@ -1550,6 +1658,7 @@ export default function RequestForQuotationsPage() {
               <FormField label="Closing Date" required>
                 <TextInput
                   type="date"
+                  min={formRFQDate || todayStr}
                   value={formClosingDate}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormClosingDate(e.target.value)}
                   className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
@@ -1582,68 +1691,80 @@ export default function RequestForQuotationsPage() {
                   Requested Items ({formRequestedItems.length})
                 </h4>
                 <p className="text-[11px] text-slate-400 font-medium">
-                  Auto-populated from {formPR} · Read-only reference items
+                  {formPR ? `Auto-populated from ${formPR} · Read-only reference items` : "Select a Linked Purchase Requisition in Section 1 to populate requested items"}
                 </p>
               </div>
             </div>
 
-            {/* DESKTOP / TABLET COMPACT TABLE */}
-            <div className="hidden sm:block rounded-xl border border-slate-200 bg-white overflow-hidden">
-              <div className="max-h-[260px] overflow-y-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500 z-10">
-                    <tr>
-                      <th className="px-3.5 py-2">Item Description</th>
-                      <th className="px-3.5 py-2">Category</th>
-                      <th className="px-3.5 py-2 w-20 text-center">Quantity</th>
-                      <th className="px-3.5 py-2">Unit</th>
-                      <th className="px-3.5 py-2 text-right">Estimated Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                    {formRequestedItems.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="px-3.5 py-2 font-bold text-slate-900 min-w-[150px]">{item.item}</td>
-                        <td className="px-3.5 py-2 text-slate-600 text-[11px]">
-                          <span className="inline-flex px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-semibold">
-                            {item.category || "General"}
-                          </span>
-                        </td>
-                        <td className="px-3.5 py-2 text-center font-extrabold text-slate-900">{item.quantity}</td>
-                        <td className="px-3.5 py-2 text-slate-500 text-[11px]">{item.unit}</td>
-                        <td className="px-3.5 py-2 text-right font-extrabold text-emerald-800">
-                          ₹{item.estimatedRate.toLocaleString("en-IN")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* MOBILE STACKED CARDS */}
-            <div className="block sm:hidden space-y-2.5">
-              {formRequestedItems.map((item) => (
-                <div key={item.id} className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2 text-xs shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-900">{item.item}</span>
-                    <span className="inline-flex px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold">
-                      {item.category || "General"}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-[11px] pt-1.5 border-t border-slate-100">
-                    <div>
-                      <span className="text-slate-500 block text-[10px]">Quantity</span>
-                      <span className="font-extrabold text-slate-900">{item.quantity} {item.unit}</span>
-                    </div>
-                    <div className="col-span-2 text-right">
-                      <span className="text-slate-500 block text-[10px]">Est. Rate</span>
-                      <span className="font-extrabold text-emerald-800">₹{item.estimatedRate.toLocaleString("en-IN")}</span>
-                    </div>
+            {formRequestedItems.length > 0 ? (
+              <>
+                {/* DESKTOP / TABLET COMPACT TABLE */}
+                <div className="hidden sm:block rounded-xl border border-slate-200 bg-white overflow-hidden">
+                  <div className="max-h-[260px] overflow-y-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500 z-10">
+                        <tr>
+                          <th className="px-3.5 py-2">Item Description</th>
+                          <th className="px-3.5 py-2">Category</th>
+                          <th className="px-3.5 py-2 w-20 text-center">Quantity</th>
+                          <th className="px-3.5 py-2">Unit</th>
+                          <th className="px-3.5 py-2 text-right">Estimated Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                        {formRequestedItems.map((item) => (
+                          <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="px-3.5 py-2 font-bold text-slate-900 min-w-[150px]">{item.item}</td>
+                            <td className="px-3.5 py-2 text-slate-600 text-[11px]">
+                              <span className="inline-flex px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-semibold">
+                                {item.category || "General"}
+                              </span>
+                            </td>
+                            <td className="px-3.5 py-2 text-center font-extrabold text-slate-900">{item.quantity}</td>
+                            <td className="px-3.5 py-2 text-slate-500 text-[11px]">{item.unit}</td>
+                            <td className="px-3.5 py-2 text-right font-extrabold text-emerald-800">
+                              ₹{item.estimatedRate.toLocaleString("en-IN")}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              ))}
-            </div>
+
+                {/* MOBILE STACKED CARDS */}
+                <div className="block sm:hidden space-y-2.5">
+                  {formRequestedItems.map((item) => (
+                    <div key={item.id} className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2 text-xs shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900">{item.item}</span>
+                        <span className="inline-flex px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold">
+                          {item.category || "General"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-[11px] pt-1.5 border-t border-slate-100">
+                        <div>
+                          <span className="text-slate-500 block text-[10px]">Quantity</span>
+                          <span className="font-extrabold text-slate-900">{item.quantity} {item.unit}</span>
+                        </div>
+                        <div className="col-span-2 text-right">
+                          <span className="text-slate-500 block text-[10px]">Est. Rate</span>
+                          <span className="font-extrabold text-emerald-800">₹{item.estimatedRate.toLocaleString("en-IN")}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-5 text-center text-xs space-y-1">
+                <Package className="h-5 w-5 mx-auto text-slate-400" />
+                <p className="font-bold text-slate-700">No items loaded</p>
+                <p className="text-[10px] text-slate-400 font-medium">
+                  Select a Linked Purchase Requisition in Section 1 to populate requested items.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* SECTION 3: INVITED VENDORS CARD */}
@@ -1734,6 +1855,7 @@ export default function RequestForQuotationsPage() {
                 <TextInput
                   value={formDeliveryLoc}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDeliveryLoc(e.target.value)}
+                  placeholder="e.g. Central Warehouse / Main Kitchen"
                   className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
                 />
               </FormField>
@@ -1742,6 +1864,7 @@ export default function RequestForQuotationsPage() {
                 <TextInput
                   value={formDeliveryAddr}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDeliveryAddr(e.target.value)}
+                  placeholder="e.g. 123 Resort Boulevard, Sector 4"
                   className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
                 />
               </FormField>
@@ -1750,6 +1873,7 @@ export default function RequestForQuotationsPage() {
                 <TextInput
                   value={formPayTerms}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayTerms(e.target.value)}
+                  placeholder="e.g. Net 30 Days post GRN"
                   className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
                 />
               </FormField>
@@ -1758,6 +1882,7 @@ export default function RequestForQuotationsPage() {
                 <TextInput
                   value={formExpDelivery}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormExpDelivery(e.target.value)}
+                  placeholder="e.g. 7 Days from PO"
                   className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
                 />
               </FormField>
@@ -1766,6 +1891,7 @@ export default function RequestForQuotationsPage() {
                 <TextInput
                   value={formCurrency}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormCurrency(e.target.value)}
+                  placeholder="e.g. INR (₹)"
                   className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
                 />
               </FormField>
@@ -1774,6 +1900,7 @@ export default function RequestForQuotationsPage() {
                 <TextInput
                   value={formTax}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormTax(e.target.value)}
+                  placeholder="e.g. GST Extra as applicable (18%)"
                   className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
                 />
               </FormField>
@@ -1808,9 +1935,15 @@ export default function RequestForQuotationsPage() {
               <Button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingAttachments}
                 className="h-8 px-3 text-xs font-bold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
               >
-                <Plus className="h-3.5 w-3.5" /> Add Attachment
+                {uploadingAttachments ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Plus className="h-3.5 w-3.5" />
+                )}
+                Add Attachment
               </Button>
             </div>
 
@@ -1822,7 +1955,7 @@ export default function RequestForQuotationsPage() {
                     className="p-3.5 rounded-xl border border-slate-200 bg-white flex items-center justify-between gap-2.5 shadow-2xs hover:border-slate-300 transition-colors"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      {att.fileName.toLowerCase().endsWith(".xlsx") ? (
+                      {att.fileName.toLowerCase().endsWith(".xlsx") || att.fileName.toLowerCase().endsWith(".xls") ? (
                         <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100 shrink-0">
                           <FileSpreadsheet className="h-4 w-4" />
                         </div>
@@ -1844,14 +1977,14 @@ export default function RequestForQuotationsPage() {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
-                        onClick={() => setToast({ message: `Previewing ${att.fileName}`, variant: "info" })}
+                        onClick={() => handlePreviewAttachment(att)}
                         className="px-2 py-1 text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
                       >
                         Preview
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFormAttachments(formAttachments.filter((a) => a.id !== att.id))}
+                        onClick={() => handleRemoveAttachment(att.id)}
                         className="px-2 py-1 text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors cursor-pointer"
                       >
                         Remove
@@ -2386,6 +2519,21 @@ export default function RequestForQuotationsPage() {
           </div>
         </Drawer>
       )}
+
+      {/* HIDDEN FILE INPUT */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleNativeFileSelect}
+      />
+
+      {/* DOCUMENT / ATTACHMENT PREVIEW MODAL */}
+      <PurchaseAttachmentPreviewModal
+        attachment={previewAttachment}
+        onClose={() => setPreviewAttachment(null)}
+      />
     </div>
   );
 }

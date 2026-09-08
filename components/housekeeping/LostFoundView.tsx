@@ -67,6 +67,7 @@ export function LostFoundView() {
 
   const [lostSearch, setLostSearch] = useState("");
   const [lostStatusFilter, setLostStatusFilter] = useState("All");
+  const [lostComplaintsList, setLostComplaintsList] = useState(SAMPLE_LOST_COMPLAINTS);
 
   // Drawers
   const [createFoundOpen, setCreateFoundOpen] = useState(false);
@@ -142,7 +143,7 @@ export function LostFoundView() {
 
   // Filtered Lost Complaints
   const filteredLostComplaints = useMemo(() => {
-    return SAMPLE_LOST_COMPLAINTS.filter((c) => {
+    return lostComplaintsList.filter((c) => {
       const matchSearch =
         c.guest.toLowerCase().includes(lostSearch.toLowerCase()) ||
         c.id.toLowerCase().includes(lostSearch.toLowerCase()) ||
@@ -152,7 +153,7 @@ export function LostFoundView() {
 
       return matchSearch && matchStatus;
     });
-  }, [lostSearch, lostStatusFilter]);
+  }, [lostComplaintsList, lostSearch, lostStatusFilter]);
 
   const handleCreateFoundSubmit = () => {
     if (!foundName.trim()) return;
@@ -176,13 +177,35 @@ export function LostFoundView() {
   };
 
   const handleCreateLostSubmit = () => {
-    if (!lostItemName.trim()) return;
+    if (!lostItemName.trim()) {
+      setToast({ message: "Please enter the lost item name.", variant: "error" });
+      return;
+    }
+    const newId = `LC-${5000 + lostComplaintsList.length + 1}`;
+    const now = new Date();
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const dateStr = `${String(now.getDate()).padStart(2, "0")} ${months[now.getMonth()]} ${String(now.getFullYear()).slice(-2)}`;
+
+    const newComplaint = {
+      id: newId,
+      guest: lostGuest.trim() || "Guest",
+      room: lostRoom.trim() || "—",
+      lostItem: lostItemName.trim(),
+      description: lostDesc.trim() || "Reported lost item complaint.",
+      date: dateStr,
+      possibleLocation: lostRoom.trim() ? `Room ${lostRoom.trim()}` : "Hotel Premises",
+      matchedItem: "—",
+      status: "Open Search",
+    };
+
+    setLostComplaintsList((prev) => [newComplaint, ...prev]);
     setCreateLostOpen(false);
     setLostItemName("");
     setLostGuest("");
     setLostRoom("");
     setLostDesc("");
-    setToast({ message: `Lost complaint filed!`, variant: "success" });
+    setActiveTab("lost");
+    setToast({ message: `Lost complaint ${newId} logged successfully!`, variant: "success" });
   };
 
   const handleReturnItem = (id: string) => {
@@ -260,7 +283,7 @@ export function LostFoundView() {
         <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-2xs flex items-center justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Lost Complaints</p>
-            <h3 className="text-lg font-extrabold text-slate-800 leading-tight">{SAMPLE_LOST_COMPLAINTS.length}</h3>
+            <h3 className="text-lg font-extrabold text-slate-800 leading-tight">{lostComplaintsList.length}</h3>
           </div>
           <div className="rounded-lg bg-orange-50 p-2 text-orange-600 shrink-0">
             <AlertCircle className="h-4 w-4" />
@@ -293,7 +316,7 @@ export function LostFoundView() {
         <nav className="flex gap-4 overflow-x-auto scrollbar-none text-xs font-bold uppercase tracking-wider">
           {[
             { id: "found", label: `Active Found Items (${foundItemsList.length})` },
-            { id: "lost", label: `Lost Complaints (${SAMPLE_LOST_COMPLAINTS.length})` },
+            { id: "lost", label: `Lost Complaints (${lostComplaintsList.length})` },
             { id: "courier", label: `Courier Deliveries (${SAMPLE_COURIER_SHIPMENTS.length})` },
             { id: "retention", label: "Retention & Disposal" },
           ].map((tab) => (
@@ -525,36 +548,44 @@ export function LostFoundView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                {filteredLostComplaints.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50/50">
-                    <td className="px-3 py-2.5 text-[11px] font-extrabold text-orange-700">{c.id}</td>
-                    <td className="px-3 py-2.5">
-                      <span className="font-extrabold text-slate-800 block">{c.guest} (Rm {c.room})</span>
-                    </td>
-                    <td className="px-3 py-2.5 font-extrabold text-slate-800">{c.lostItem}</td>
-                    <td className="px-3 py-2.5 text-slate-500 max-w-xs truncate">{c.description}</td>
-                    <td className="px-3 py-2.5 font-mono text-[10px] text-slate-500">{c.date}</td>
-                    <td className="px-3 py-2.5 text-slate-600">{c.possibleLocation}</td>
-                    <td className="px-3 py-2.5 text-center">
-                      {c.matchedItem !== "—" ? (
-                        <span className="rounded bg-emerald-50 border border-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 text-[9px]">
-                          {c.matchedItem}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <span className={cn(
-                        "rounded-full px-2 py-0.5 text-[8.5px] border font-bold uppercase w-24 inline-block text-center",
-                        c.status === "Matched" ? "bg-emerald-50 text-emerald-800 border-emerald-200" :
-                        c.status === "Resolved" ? "bg-slate-100 text-slate-600 border-slate-200" : "bg-orange-50 text-orange-700 border-orange-200"
-                      )}>
-                        {c.status}
-                      </span>
+                {filteredLostComplaints.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-10 text-slate-400 italic font-medium text-xs">
+                      No lost complaints match your search or filter.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredLostComplaints.map((c) => (
+                    <tr key={c.id} className="hover:bg-slate-50/50">
+                      <td className="px-3 py-2.5 text-[11px] font-extrabold text-orange-700">{c.id}</td>
+                      <td className="px-3 py-2.5">
+                        <span className="font-extrabold text-slate-800 block">{c.guest} (Rm {c.room})</span>
+                      </td>
+                      <td className="px-3 py-2.5 font-extrabold text-slate-800">{c.lostItem}</td>
+                      <td className="px-3 py-2.5 text-slate-500 max-w-xs truncate">{c.description}</td>
+                      <td className="px-3 py-2.5 font-mono text-[10px] text-slate-500">{c.date}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{c.possibleLocation}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        {c.matchedItem !== "—" ? (
+                          <span className="rounded bg-emerald-50 border border-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 text-[9px]">
+                            {c.matchedItem}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className={cn(
+                          "rounded-full px-2 py-0.5 text-[8.5px] border font-bold uppercase w-24 inline-block text-center",
+                          c.status === "Matched" ? "bg-emerald-50 text-emerald-800 border-emerald-200" :
+                          c.status === "Resolved" ? "bg-slate-100 text-slate-600 border-slate-200" : "bg-orange-50 text-orange-700 border-orange-200"
+                        )}>
+                          {c.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

@@ -6,6 +6,7 @@ export { Drawer } from "./Drawer";
 export { AlertBanner } from "./AlertBanner";
 export { FOSearchToolbar } from "./FOSearchToolbar";
 export { FODatePicker } from "./FODatePicker";
+export { DigitalSignaturePad, type DigitalSignaturePadProps } from "@/components/ui/DigitalSignaturePad";
 
 interface FOPageHeaderProps {
   eyebrow?: string;

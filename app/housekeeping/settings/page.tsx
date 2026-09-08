@@ -164,6 +164,31 @@ export default function HousekeepingSettingsPage() {
     setToast({ message: "Unsaved changes discarded.", variant: "info" });
   };
 
+  const categoryKeywords: Record<string, string[]> = {
+    general: ["general", "property", "timezone", "time zone", "language", "shift", "schedule", "housekeeping status", "business date", "rollover", "audit"],
+    cleaning: ["room cleaning", "cleaning", "turnaround", "auto assign", "attendant", "rooms per staff", "priority", "vip", "checkout", "occupied", "vacant", "reopen", "inspection", "room release"],
+    inspection: ["room inspection", "inspection", "quality", "pass percentage", "cutoff", "random inspection", "audit", "critical defect", "auto fail", "photo evidence", "sop", "digital signature", "supervisor"],
+    requests: ["guest requests", "requests", "sla", "target", "escalation", "overdue", "supervisor alert", "notifications"],
+    laundry: ["laundry", "linen", "express", "surcharge", "delivery", "pickup", "window", "vendor", "outsourcing"],
+    lostfound: ["lost and found", "lost & found", "vault", "retention", "standard", "high value", "high-value", "perishable", "guest notification", "notification", "storage"],
+    deepcleaning: ["deep cleaning", "preventive maintenance", "recurring", "schedule", "block type", "ooo", "oos", "out of order", "out of service", "reminder", "before and after", "evidence photo", "photos"],
+    damagereports: ["damage reports", "damage", "billing", "recovery", "engineering", "repair ticket", "approval threshold", "amount", "photo evidence", "evidence"],
+    requisitions: ["store requisitions", "requisitions", "inventory", "issuance", "approval workflow", "budget validation", "digital receiving", "signature"],
+    notifications: ["notifications", "channels", "escalation", "email", "sms", "push", "mobile", "alerts", "emergency"],
+    auditsecurity: ["audit", "security", "governance", "immutable", "system audit logs", "retention", "client ip", "ip address", "device", "browser"],
+    integrations: ["integrations", "cross-module", "hardware", "front office", "pms", "iot", "occupancy sensors", "rfid", "key card", "door lock"],
+  };
+
+  const matchingCategoryIds = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return SETTING_CATEGORIES_METADATA.map((c) => c.id);
+    return SETTING_CATEGORIES_METADATA.filter((cat) => {
+      if (cat.label.toLowerCase().includes(q)) return true;
+      const kws = categoryKeywords[cat.id] || [];
+      return kws.some((kw) => kw.toLowerCase().includes(q) || q.includes(kw.toLowerCase()));
+    }).map((c) => c.id);
+  }, [searchQuery]);
+
   const renderCategoryIcon = (iconName: string) => {
     switch (iconName) {
       case "Sliders": return <Sliders className="h-4 w-4" />;
@@ -179,6 +204,515 @@ export default function HousekeepingSettingsPage() {
       case "Lock": return <Lock className="h-4 w-4" />;
       case "Layers": return <Layers className="h-4 w-4" />;
       default: return <Sliders className="h-4 w-4" />;
+    }
+  };
+
+  const renderCategorySection = (catId: string) => {
+    switch (catId) {
+      case "general":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">General Property Configuration</h3>
+              <p className="text-xs text-slate-500 font-medium">Default property timezone, work week schedule, and housekeeping operational status.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Property Time Zone">
+                <SelectInput
+                  value={currentSettings.propertyTimeZone}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateSetting("propertyTimeZone", e.target.value)}
+                  className="h-9 text-xs"
+                >
+                  <option value="Asia/Kolkata (GMT+05:30)">Asia/Kolkata (GMT+05:30)</option>
+                  <option value="UTC (GMT+00:00)">UTC (GMT+00:00)</option>
+                  <option value="America/New_York (EST)">America/New_York (EST)</option>
+                </SelectInput>
+              </FormField>
+
+              <FormField label="Default System Language">
+                <SelectInput
+                  value={currentSettings.defaultLanguage}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateSetting("defaultLanguage", e.target.value)}
+                  className="h-9 text-xs"
+                >
+                  <option value="English (United States)">English (United States)</option>
+                  <option value="Spanish (Español)">Spanish (Español)</option>
+                  <option value="French (Français)">French (Français)</option>
+                </SelectInput>
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Default Shift Schedule">
+                <TextInput
+                  value={currentSettings.defaultShift}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("defaultShift", e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+
+              <FormField label="Default Housekeeping Status">
+                <SelectInput
+                  value={currentSettings.defaultHousekeepingStatus}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateSetting("defaultHousekeepingStatus", e.target.value)}
+                  className="h-9 text-xs"
+                >
+                  <option value="Dirty (Checkout Pending)">Dirty (Checkout Pending)</option>
+                  <option value="Dirty (Stayover Servicing)">Dirty (Stayover Servicing)</option>
+                  <option value="Touch-up Required">Touch-up Required</option>
+                </SelectInput>
+              </FormField>
+            </div>
+
+            <ToggleSwitch
+              label="Business Date Auto-Rollover"
+              description="Automatically roll over business date at midnight audit."
+              checked={currentSettings.businessDateAutoRollover}
+              onChange={(val) => handleUpdateSetting("businessDateAutoRollover", val)}
+            />
+          </div>
+        );
+
+      case "cleaning":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">Room Cleaning & Turnaround Rules</h3>
+              <p className="text-xs text-slate-500 font-medium">Auto-assignment algorithms, room priority ordering, and credit caps.</p>
+            </div>
+
+            <ToggleSwitch
+              label="Auto Assign Rooms to Attendants"
+              description="Enable intelligent credit balancing algorithm for morning shift assignments."
+              checked={currentSettings.autoAssignRooms}
+              onChange={(val) => handleUpdateSetting("autoAssignRooms", val)}
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Maximum Rooms Per Staff Shift">
+                <TextInput
+                  type="number"
+                  value={currentSettings.maxRoomsPerStaff}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("maxRoomsPerStaff", parseInt(e.target.value, 10) || 0)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+
+              <FormField label="Cleaning Priority Ordering">
+                <SelectInput
+                  value={currentSettings.cleaningPriority}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateSetting("cleaningPriority", e.target.value as any)}
+                  className="h-9 text-xs"
+                >
+                  <option value="VIP First">VIP First</option>
+                  <option value="Checkout First">Checkout First</option>
+                  <option value="Occupied First">Occupied First</option>
+                  <option value="Vacant First">Vacant First</option>
+                </SelectInput>
+              </FormField>
+            </div>
+
+            <ToggleSwitch
+              label="Allow Reopen After Inspection"
+              description="Allow supervisors to reopen completed cleanings if quality issues are found."
+              checked={currentSettings.allowReopenAfterInspection}
+              onChange={(val) => handleUpdateSetting("allowReopenAfterInspection", val)}
+            />
+
+            <ToggleSwitch
+              label="Enable Auto Room Release"
+              description="Automatically release room to Front Office upon passing inspection."
+              checked={currentSettings.enableAutoRoomRelease}
+              onChange={(val) => handleUpdateSetting("enableAutoRoomRelease", val)}
+            />
+          </div>
+        );
+
+      case "inspection":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">Room Inspection & Quality Control</h3>
+              <p className="text-xs text-slate-500 font-medium">Passing score thresholds, critical defect auto-fails, and photo evidence.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Pass Percentage Cutoff Target (%)">
+                <TextInput
+                  type="number"
+                  value={currentSettings.passPercentageCutoff}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("passPercentageCutoff", parseInt(e.target.value, 10) || 0)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+
+              <FormField label="Random Inspection Audit Rate (%)">
+                <TextInput
+                  type="number"
+                  value={currentSettings.randomInspectionPercent}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("randomInspectionPercent", parseInt(e.target.value, 10) || 0)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+            </div>
+
+            <ToggleSwitch
+              label="Critical Defect Auto-Fail Trigger"
+              description="Failing any critical item (e.g. dirty toilet or unmade bed) causes instant audit failure."
+              checked={currentSettings.criticalDefectAutoFail}
+              onChange={(val) => handleUpdateSetting("criticalDefectAutoFail", val)}
+            />
+
+            <ToggleSwitch
+              label="Require Photo Evidence for Failed SOPs"
+              description="Mandate uploading a photo when marking a checklist item as failed."
+              checked={currentSettings.photoEvidenceRequired}
+              onChange={(val) => handleUpdateSetting("photoEvidenceRequired", val)}
+            />
+
+            <ToggleSwitch
+              label="Digital Signature Required for Sign-off"
+              description="Require supervisor digital canvas drawing before marking room Vacant Ready."
+              checked={currentSettings.digitalSignatureRequired}
+              onChange={(val) => handleUpdateSetting("digitalSignatureRequired", val)}
+            />
+          </div>
+        );
+
+      case "requests":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">Guest Requests & SLA Controls</h3>
+              <p className="text-xs text-slate-500 font-medium">Target completion SLAs, escalation triggers, and supervisor alerts.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Default Target SLA (Minutes)">
+                <TextInput
+                  type="number"
+                  value={currentSettings.defaultSlaMins}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("defaultSlaMins", parseInt(e.target.value, 10) || 0)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+
+              <FormField label="Escalation Time Trigger (Minutes)">
+                <TextInput
+                  type="number"
+                  value={currentSettings.escalationTimeMins}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("escalationTimeMins", parseInt(e.target.value, 10) || 0)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+            </div>
+
+            <ToggleSwitch
+              label="Notify Supervisor on Overdue SLA"
+              description="Send SMS & Push alert to Floor Supervisor if request exceeds SLA target."
+              checked={currentSettings.notifySupervisorOnOverdue}
+              onChange={(val) => handleUpdateSetting("notifySupervisorOnOverdue", val)}
+            />
+          </div>
+        );
+
+      case "laundry":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">Laundry & Linen Operations</h3>
+              <p className="text-xs text-slate-500 font-medium">Express surcharges, pickup/delivery windows, and off-site vendor outsourcing.</p>
+            </div>
+
+            <ToggleSwitch
+              label="Express Laundry Service Enabled"
+              description="Allow guests to request 3-hour express laundry processing."
+              checked={currentSettings.expressLaundryEnabled}
+              onChange={(val) => handleUpdateSetting("expressLaundryEnabled", val)}
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Express Surcharge (%)">
+                <TextInput
+                  type="number"
+                  value={currentSettings.expressSurchargePercent}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("expressSurchargePercent", parseInt(e.target.value, 10) || 0)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+
+              <FormField label="Default Delivery Window">
+                <TextInput
+                  value={currentSettings.defaultDeliveryTime}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("defaultDeliveryTime", e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+            </div>
+
+            <ToggleSwitch
+              label="Vendor Outsourcing Enabled"
+              description="Allow dispatching commercial linen batches to external laundry hubs."
+              checked={currentSettings.vendorOutsourcingEnabled}
+              onChange={(val) => handleUpdateSetting("vendorOutsourcingEnabled", val)}
+            />
+          </div>
+        );
+
+      case "lostfound":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">Lost & Found Vault Policy</h3>
+              <p className="text-xs text-slate-500 font-medium">Retention thresholds, high-value asset holding periods, and disposal sign-offs.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormField label="Standard Retention (Days)">
+                <TextInput
+                  type="number"
+                  value={currentSettings.defaultRetentionDays}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("defaultRetentionDays", parseInt(e.target.value, 10) || 0)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+
+              <FormField label="High-Value Retention (Days)">
+                <TextInput
+                  type="number"
+                  value={currentSettings.highValueRetentionDays}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("highValueRetentionDays", parseInt(e.target.value, 10) || 0)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+
+              <FormField label="Perishable Retention (Days)">
+                <TextInput
+                  type="number"
+                  value={currentSettings.perishableRetentionDays}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("perishableRetentionDays", parseInt(e.target.value, 10) || 0)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+            </div>
+
+            <ToggleSwitch
+              label="Automatic Guest Notification"
+              description="Send automated email/SMS to registered guest upon logging found item."
+              checked={currentSettings.automaticGuestNotification}
+              onChange={(val) => handleUpdateSetting("automaticGuestNotification", val)}
+            />
+          </div>
+        );
+
+      case "deepcleaning":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">Deep Cleaning & Preventive Maintenance</h3>
+              <p className="text-xs text-slate-500 font-medium">Recurring cycle frequency, room block hold types, and evidence photos.</p>
+            </div>
+
+            <ToggleSwitch
+              label="Recurring Cycle Schedule Enabled"
+              description="Automatically flag rooms for deep cleaning based on frequency setting."
+              checked={currentSettings.recurringScheduleEnabled}
+              onChange={(val) => handleUpdateSetting("recurringScheduleEnabled", val)}
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Default Block Type">
+                <SelectInput
+                  value={currentSettings.defaultBlockType}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateSetting("defaultBlockType", e.target.value as any)}
+                  className="h-9 text-xs"
+                >
+                  <option value="Out of Order (OOO)">Out of Order (OOO)</option>
+                  <option value="Out of Service (OOS)">Out of Service (OOS)</option>
+                </SelectInput>
+              </FormField>
+
+              <FormField label="Reminder Days Before Due">
+                <TextInput
+                  type="number"
+                  value={currentSettings.reminderDaysBeforeDue}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("reminderDaysBeforeDue", parseInt(e.target.value, 10) || 0)}
+                  className="h-9 text-xs"
+                />
+              </FormField>
+            </div>
+
+            <ToggleSwitch
+              label="Require Before & After Evidence Photos"
+              description="Require photo uploads before starting and after completing deep clean."
+              checked={currentSettings.requireBeforePhoto}
+              onChange={(val) => handleUpdateSetting("requireBeforePhoto", val)}
+            />
+          </div>
+        );
+
+      case "damagereports":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">Damage Reports & Billing Recovery</h3>
+              <p className="text-xs text-slate-500 font-medium">Approval limits, auto-engineering tickets, and guest charges.</p>
+            </div>
+
+            <ToggleSwitch
+              label="Auto Create Engineering Repair Ticket"
+              description="Automatically log a maintenance ticket when asset damage is reported."
+              checked={currentSettings.autoCreateEngineeringTicket}
+              onChange={(val) => handleUpdateSetting("autoCreateEngineeringTicket", val)}
+            />
+
+            <FormField label="Manager Approval Threshold Amount (₹)">
+              <TextInput
+                type="number"
+                value={currentSettings.approvalThresholdAmount}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("approvalThresholdAmount", parseInt(e.target.value, 10) || 0)}
+                className="h-9 text-xs"
+              />
+            </FormField>
+
+            <ToggleSwitch
+              label="Require Damage Photo Evidence"
+              description="Mandate uploading a photo before submitting a damage report."
+              checked={currentSettings.requireDamagePhotoEvidence}
+              onChange={(val) => handleUpdateSetting("requireDamagePhotoEvidence", val)}
+            />
+          </div>
+        );
+
+      case "requisitions":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">Store Requisitions & Inventory Issuance</h3>
+              <p className="text-xs text-slate-500 font-medium">Budget validation, emergency fast-tracks, and digital receiving signatures.</p>
+            </div>
+
+            <ToggleSwitch
+              label="Approval Workflow Enabled"
+              description="Require Executive Housekeeper sign-off for store requisitions over budget."
+              checked={currentSettings.approvalWorkflowEnabled}
+              onChange={(val) => handleUpdateSetting("approvalWorkflowEnabled", val)}
+            />
+
+            <ToggleSwitch
+              label="Budget Validation Check"
+              description="Validate request against cost center departmental budget limits."
+              checked={currentSettings.budgetValidation}
+              onChange={(val) => handleUpdateSetting("budgetValidation", val)}
+            />
+
+            <ToggleSwitch
+              label="Digital Receiving Signature"
+              description="Require digital sign-off when receiving materials from Central Stores."
+              checked={currentSettings.digitalReceivingSignature}
+              onChange={(val) => handleUpdateSetting("digitalReceivingSignature", val)}
+            />
+          </div>
+        );
+
+      case "notifications":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">Notification Channels & Escalation Alerts</h3>
+              <p className="text-xs text-slate-500 font-medium">Email, SMS, Push, and Manager alert triggers.</p>
+            </div>
+
+            <ToggleSwitch
+              label="Email Notifications"
+              description="Dispatch automated email digests for daily operations & reports."
+              checked={currentSettings.emailNotifications}
+              onChange={(val) => handleUpdateSetting("emailNotifications", val)}
+            />
+
+            <ToggleSwitch
+              label="SMS Emergency Alerts"
+              description="Send urgent SMS alerts for OOO holds & critical equipment failures."
+              checked={currentSettings.smsNotifications}
+              onChange={(val) => handleUpdateSetting("smsNotifications", val)}
+            />
+
+            <ToggleSwitch
+              label="Mobile App Push Notifications"
+              description="Push instant notifications to staff mobile handsets."
+              checked={currentSettings.pushNotifications}
+              onChange={(val) => handleUpdateSetting("pushNotifications", val)}
+            />
+          </div>
+        );
+
+      case "auditsecurity":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">Audit & Security Governance</h3>
+              <p className="text-xs text-slate-500 font-medium">Audit trail retention, IP capture, and immutable cryptographic logging.</p>
+            </div>
+
+            <ToggleSwitch
+              label="Enable Immutable System Audit Logs"
+              description="Record all room status changes and supervisor overrides in a tamper-proof trail."
+              checked={currentSettings.enableAuditLogs}
+              onChange={(val) => handleUpdateSetting("enableAuditLogs", val)}
+            />
+
+            <FormField label="Audit Trail Retention Period (Days)">
+              <TextInput
+                type="number"
+                value={currentSettings.auditRetentionDays}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("auditRetentionDays", parseInt(e.target.value, 10) || 0)}
+                className="h-9 text-xs"
+              />
+            </FormField>
+
+            <ToggleSwitch
+              label="Capture Client IP Address & Device Details"
+              description="Record actor IP addresses and browser user agent strings on every transaction."
+              checked={currentSettings.captureIpAddress}
+              onChange={(val) => handleUpdateSetting("captureIpAddress", val)}
+            />
+          </div>
+        );
+
+      case "integrations":
+        return (
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-sm font-extrabold text-slate-900">Cross-Module & Hardware Integrations</h3>
+              <p className="text-xs text-slate-500 font-medium">Front Office, SAP ERP, IoT sensors, and door key card systems.</p>
+            </div>
+
+            <ToggleSwitch
+              label="Front Office PMS Integration"
+              description="Real-time sync of room checkouts, arrivals, and guest status."
+              checked={currentSettings.frontOfficeIntegration}
+              onChange={(val) => handleUpdateSetting("frontOfficeIntegration", val)}
+            />
+
+            <ToggleSwitch
+              label="IoT Room Occupancy Sensors"
+              description="Sync door sensors & motion detectors for live room presence status."
+              checked={currentSettings.iotRoomSensors}
+              onChange={(val) => handleUpdateSetting("iotRoomSensors", val)}
+            />
+
+            <ToggleSwitch
+              label="RFID Key Card Door Lock System"
+              description="Sync smart lock audit logs and master key card permissions."
+              checked={currentSettings.keyCardSystem}
+              onChange={(val) => handleUpdateSetting("keyCardSystem", val)}
+            />
+          </div>
+        );
+
+      default:
+        return null;
     }
   };
 
@@ -232,23 +766,35 @@ export default function HousekeepingSettingsPage() {
         {/* Left Category Sidebar (4 Cols) */}
         <div className="lg:col-span-4 space-y-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2 sticky top-4">
-            <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider px-2 pt-1">
-              Setting Categories
-            </h3>
+            <div className="flex items-center justify-between px-2 pt-1">
+              <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+                Setting Categories
+              </h3>
+              {searchQuery.trim() && (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                  {matchingCategoryIds.length} match{matchingCategoryIds.length === 1 ? "" : "es"}
+                </span>
+              )}
+            </div>
 
             <div className="space-y-1">
               {SETTING_CATEGORIES_METADATA.map((cat) => {
+                const isMatching = matchingCategoryIds.includes(cat.id);
                 const isActive = activeCategory === cat.id;
                 return (
                   <button
                     key={cat.id}
                     type="button"
-                    onClick={() => setActiveCategory(cat.id)}
+                    onClick={() => {
+                      setActiveCategory(cat.id);
+                    }}
                     className={cn(
                       "w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer text-left",
                       isActive
                         ? "bg-emerald-700 text-white shadow-2xs"
-                        : "text-slate-650 hover:bg-slate-100 hover:text-slate-900"
+                        : searchQuery && !isMatching
+                          ? "opacity-35 text-slate-400 hover:bg-slate-50"
+                          : "text-slate-650 hover:bg-slate-100 hover:text-slate-900"
                     )}
                   >
                     <div className="flex items-center gap-2.5">
@@ -257,7 +803,11 @@ export default function HousekeepingSettingsPage() {
                       </span>
                       <span>{cat.label}</span>
                     </div>
-                    {isActive && <CheckCircle2 className="h-3.5 w-3.5 text-white shrink-0" />}
+                    {isActive ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-white shrink-0" />
+                    ) : searchQuery && isMatching ? (
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" title="Matching Search" />
+                    ) : null}
                   </button>
                 );
               })}
@@ -274,521 +824,76 @@ export default function HousekeepingSettingsPage() {
               value={searchQuery}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
               placeholder="Search setting name (e.g. inspection, laundry, SLA, notifications...)"
-              className="pl-9 h-9 text-xs rounded-xl w-full bg-white border-slate-200"
+              className="pl-9 pr-8 h-9 text-xs rounded-xl w-full bg-white border-slate-200"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
+                title="Clear Search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Form Card */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs space-y-5">
-            {/* GENERAL SETTINGS */}
-            {activeCategory === "general" && (
+          {searchQuery.trim() ? (
+            matchingCategoryIds.length > 0 ? (
               <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">General Property Configuration</h3>
-                  <p className="text-xs text-slate-500 font-medium">Default property timezone, work week schedule, and housekeeping operational status.</p>
+                <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-900">
+                  <div className="flex items-center gap-2">
+                    <Search className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>
+                      Showing settings across <strong>{matchingCategoryIds.length}</strong> categor{matchingCategoryIds.length === 1 ? "y" : "ies"} matching &ldquo;<strong>{searchQuery}</strong>&rdquo;
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                  >
+                    Clear search
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <FormField label="Property Time Zone">
-                    <SelectInput
-                      value={currentSettings.propertyTimeZone}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateSetting("propertyTimeZone", e.target.value)}
-                      className="h-9 text-xs"
-                    >
-                      <option value="Asia/Kolkata (GMT+05:30)">Asia/Kolkata (GMT+05:30)</option>
-                      <option value="UTC (GMT+00:00)">UTC (GMT+00:00)</option>
-                      <option value="America/New_York (EST)">America/New_York (EST)</option>
-                    </SelectInput>
-                  </FormField>
-
-                  <FormField label="Default System Language">
-                    <SelectInput
-                      value={currentSettings.defaultLanguage}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateSetting("defaultLanguage", e.target.value)}
-                      className="h-9 text-xs"
-                    >
-                      <option value="English (United States)">English (United States)</option>
-                      <option value="Spanish (Español)">Spanish (Español)</option>
-                      <option value="French (Français)">French (Français)</option>
-                    </SelectInput>
-                  </FormField>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <FormField label="Default Shift Schedule">
-                    <TextInput
-                      value={currentSettings.defaultShift}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("defaultShift", e.target.value)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-
-                  <FormField label="Default Housekeeping Status">
-                    <SelectInput
-                      value={currentSettings.defaultHousekeepingStatus}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateSetting("defaultHousekeepingStatus", e.target.value)}
-                      className="h-9 text-xs"
-                    >
-                      <option value="Dirty (Checkout Pending)">Dirty (Checkout Pending)</option>
-                      <option value="Dirty (Stayover Servicing)">Dirty (Stayover Servicing)</option>
-                      <option value="Touch-up Required">Touch-up Required</option>
-                    </SelectInput>
-                  </FormField>
-                </div>
-
-                <ToggleSwitch
-                  label="Business Date Auto-Rollover"
-                  description="Automatically roll over business date at midnight audit."
-                  checked={currentSettings.businessDateAutoRollover}
-                  onChange={(val) => handleUpdateSetting("businessDateAutoRollover", val)}
-                />
+                {matchingCategoryIds.map((catId) => (
+                  <div key={catId} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs space-y-5">
+                    {renderCategorySection(catId)}
+                  </div>
+                ))}
               </div>
-            )}
-
-            {/* ROOM CLEANING SETTINGS */}
-            {activeCategory === "cleaning" && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">Room Cleaning & Turnaround Rules</h3>
-                  <p className="text-xs text-slate-500 font-medium">Auto-assignment algorithms, room priority ordering, and credit caps.</p>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center space-y-3">
+                <div className="p-3 bg-slate-100 rounded-full w-12 h-12 mx-auto flex items-center justify-center text-slate-400">
+                  <Search className="h-6 w-6" />
                 </div>
-
-                <ToggleSwitch
-                  label="Auto Assign Rooms to Attendants"
-                  description="Enable intelligent credit balancing algorithm for morning shift assignments."
-                  checked={currentSettings.autoAssignRooms}
-                  onChange={(val) => handleUpdateSetting("autoAssignRooms", val)}
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <FormField label="Maximum Rooms Per Staff Shift">
-                    <TextInput
-                      type="number"
-                      value={currentSettings.maxRoomsPerStaff}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("maxRoomsPerStaff", parseInt(e.target.value, 10) || 0)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-
-                  <FormField label="Cleaning Priority Ordering">
-                    <SelectInput
-                      value={currentSettings.cleaningPriority}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateSetting("cleaningPriority", e.target.value as any)}
-                      className="h-9 text-xs"
-                    >
-                      <option value="VIP First">VIP First</option>
-                      <option value="Checkout First">Checkout First</option>
-                      <option value="Occupied First">Occupied First</option>
-                      <option value="Vacant First">Vacant First</option>
-                    </SelectInput>
-                  </FormField>
-                </div>
-
-                <ToggleSwitch
-                  label="Allow Reopen After Inspection"
-                  description="Allow supervisors to reopen completed cleanings if quality issues are found."
-                  checked={currentSettings.allowReopenAfterInspection}
-                  onChange={(val) => handleUpdateSetting("allowReopenAfterInspection", val)}
-                />
-
-                <ToggleSwitch
-                  label="Enable Auto Room Release"
-                  description="Automatically release room to Front Office upon passing inspection."
-                  checked={currentSettings.enableAutoRoomRelease}
-                  onChange={(val) => handleUpdateSetting("enableAutoRoomRelease", val)}
-                />
+                <p className="text-sm font-bold text-slate-800">No settings found matching &ldquo;{searchQuery}&rdquo;</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  Try searching for terms like &ldquo;inspection&rdquo;, &ldquo;laundry&rdquo;, &ldquo;SLA&rdquo;, &ldquo;photo&rdquo;, &ldquo;audit&rdquo;, or &ldquo;notifications&rdquo;.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSearchQuery("")}
+                  className="text-xs h-8 px-4 rounded-xl border-slate-300 !bg-white hover:!bg-slate-100 text-slate-700 font-bold cursor-pointer"
+                >
+                  Clear Search
+                </Button>
               </div>
-            )}
+            )
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs space-y-5">
+              {renderCategorySection(activeCategory)}
 
-            {/* ROOM INSPECTION SETTINGS */}
-            {activeCategory === "inspection" && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">Room Inspection & Quality Control</h3>
-                  <p className="text-xs text-slate-500 font-medium">Passing score thresholds, critical defect auto-fails, and photo evidence.</p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <FormField label="Pass Percentage Cutoff Target (%)">
-                    <TextInput
-                      type="number"
-                      value={currentSettings.passPercentageCutoff}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("passPercentageCutoff", parseInt(e.target.value, 10) || 0)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-
-                  <FormField label="Random Inspection Audit Rate (%)">
-                    <TextInput
-                      type="number"
-                      value={currentSettings.randomInspectionPercent}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("randomInspectionPercent", parseInt(e.target.value, 10) || 0)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-                </div>
-
-                <ToggleSwitch
-                  label="Critical Defect Auto-Fail Trigger"
-                  description="Failing any critical item (e.g. dirty toilet or unmade bed) causes instant audit failure."
-                  checked={currentSettings.criticalDefectAutoFail}
-                  onChange={(val) => handleUpdateSetting("criticalDefectAutoFail", val)}
-                />
-
-                <ToggleSwitch
-                  label="Require Photo Evidence for Failed SOPs"
-                  description="Mandate uploading a photo when marking a checklist item as failed."
-                  checked={currentSettings.photoEvidenceRequired}
-                  onChange={(val) => handleUpdateSetting("photoEvidenceRequired", val)}
-                />
-
-                <ToggleSwitch
-                  label="Digital Signature Required for Sign-off"
-                  description="Require supervisor digital canvas drawing before marking room Vacant Ready."
-                  checked={currentSettings.digitalSignatureRequired}
-                  onChange={(val) => handleUpdateSetting("digitalSignatureRequired", val)}
-                />
+              {/* Read-only Audit Metadata Section */}
+              <div className="pt-4 border-t border-slate-100 text-[11px] text-slate-400 font-medium flex items-center justify-between">
+                <span>Last Saved: <strong>{currentSettings.lastUpdated}</strong></span>
+                <span>Updated By: <strong>{currentSettings.updatedBy}</strong></span>
+                <span>Version: <strong>{currentSettings.version}</strong></span>
               </div>
-            )}
-
-            {/* GUEST REQUESTS SETTINGS */}
-            {activeCategory === "requests" && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">Guest Requests & SLA Controls</h3>
-                  <p className="text-xs text-slate-500 font-medium">Target completion SLAs, escalation triggers, and supervisor alerts.</p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <FormField label="Default Target SLA (Minutes)">
-                    <TextInput
-                      type="number"
-                      value={currentSettings.defaultSlaMins}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("defaultSlaMins", parseInt(e.target.value, 10) || 0)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-
-                  <FormField label="Escalation Time Trigger (Minutes)">
-                    <TextInput
-                      type="number"
-                      value={currentSettings.escalationTimeMins}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("escalationTimeMins", parseInt(e.target.value, 10) || 0)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-                </div>
-
-                <ToggleSwitch
-                  label="Notify Supervisor on Overdue SLA"
-                  description="Send SMS & Push alert to Floor Supervisor if request exceeds SLA target."
-                  checked={currentSettings.notifySupervisorOnOverdue}
-                  onChange={(val) => handleUpdateSetting("notifySupervisorOnOverdue", val)}
-                />
-              </div>
-            )}
-
-            {/* LAUNDRY SETTINGS */}
-            {activeCategory === "laundry" && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">Laundry & Linen Operations</h3>
-                  <p className="text-xs text-slate-500 font-medium">Express surcharges, pickup/delivery windows, and off-site vendor outsourcing.</p>
-                </div>
-
-                <ToggleSwitch
-                  label="Express Laundry Service Enabled"
-                  description="Allow guests to request 3-hour express laundry processing."
-                  checked={currentSettings.expressLaundryEnabled}
-                  onChange={(val) => handleUpdateSetting("expressLaundryEnabled", val)}
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <FormField label="Express Surcharge (%)">
-                    <TextInput
-                      type="number"
-                      value={currentSettings.expressSurchargePercent}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("expressSurchargePercent", parseInt(e.target.value, 10) || 0)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-
-                  <FormField label="Default Delivery Window">
-                    <TextInput
-                      value={currentSettings.defaultDeliveryTime}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("defaultDeliveryTime", e.target.value)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-                </div>
-
-                <ToggleSwitch
-                  label="Vendor Outsourcing Enabled"
-                  description="Allow dispatching commercial linen batches to external laundry hubs."
-                  checked={currentSettings.vendorOutsourcingEnabled}
-                  onChange={(val) => handleUpdateSetting("vendorOutsourcingEnabled", val)}
-                />
-              </div>
-            )}
-
-            {/* LOST & FOUND SETTINGS */}
-            {activeCategory === "lostfound" && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">Lost & Found Vault Policy</h3>
-                  <p className="text-xs text-slate-500 font-medium">Retention thresholds, high-value asset holding periods, and disposal sign-offs.</p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <FormField label="Standard Retention (Days)">
-                    <TextInput
-                      type="number"
-                      value={currentSettings.defaultRetentionDays}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("defaultRetentionDays", parseInt(e.target.value, 10) || 0)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-
-                  <FormField label="High-Value Retention (Days)">
-                    <TextInput
-                      type="number"
-                      value={currentSettings.highValueRetentionDays}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("highValueRetentionDays", parseInt(e.target.value, 10) || 0)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-
-                  <FormField label="Perishable Retention (Days)">
-                    <TextInput
-                      type="number"
-                      value={currentSettings.perishableRetentionDays}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("perishableRetentionDays", parseInt(e.target.value, 10) || 0)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-                </div>
-
-                <ToggleSwitch
-                  label="Automatic Guest Notification"
-                  description="Send automated email/SMS to registered guest upon logging found item."
-                  checked={currentSettings.automaticGuestNotification}
-                  onChange={(val) => handleUpdateSetting("automaticGuestNotification", val)}
-                />
-              </div>
-            )}
-
-            {/* DEEP CLEANING SETTINGS */}
-            {activeCategory === "deepcleaning" && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">Deep Cleaning & Preventive Maintenance</h3>
-                  <p className="text-xs text-slate-500 font-medium">Recurring cycle frequency, room block hold types, and evidence photos.</p>
-                </div>
-
-                <ToggleSwitch
-                  label="Recurring Cycle Schedule Enabled"
-                  description="Automatically flag rooms for deep cleaning based on frequency setting."
-                  checked={currentSettings.recurringScheduleEnabled}
-                  onChange={(val) => handleUpdateSetting("recurringScheduleEnabled", val)}
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <FormField label="Default Block Type">
-                    <SelectInput
-                      value={currentSettings.defaultBlockType}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateSetting("defaultBlockType", e.target.value as any)}
-                      className="h-9 text-xs"
-                    >
-                      <option value="Out of Order (OOO)">Out of Order (OOO)</option>
-                      <option value="Out of Service (OOS)">Out of Service (OOS)</option>
-                    </SelectInput>
-                  </FormField>
-
-                  <FormField label="Reminder Days Before Due">
-                    <TextInput
-                      type="number"
-                      value={currentSettings.reminderDaysBeforeDue}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("reminderDaysBeforeDue", parseInt(e.target.value, 10) || 0)}
-                      className="h-9 text-xs"
-                    />
-                  </FormField>
-                </div>
-
-                <ToggleSwitch
-                  label="Require Before & After Evidence Photos"
-                  description="Require photo uploads before starting and after completing deep clean."
-                  checked={currentSettings.requireBeforePhoto}
-                  onChange={(val) => handleUpdateSetting("requireBeforePhoto", val)}
-                />
-              </div>
-            )}
-
-            {/* DAMAGE REPORTS SETTINGS */}
-            {activeCategory === "damagereports" && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">Damage Reports & Billing Recovery</h3>
-                  <p className="text-xs text-slate-500 font-medium">Approval limits, auto-engineering tickets, and guest charges.</p>
-                </div>
-
-                <ToggleSwitch
-                  label="Auto Create Engineering Repair Ticket"
-                  description="Automatically log a maintenance ticket when asset damage is reported."
-                  checked={currentSettings.autoCreateEngineeringTicket}
-                  onChange={(val) => handleUpdateSetting("autoCreateEngineeringTicket", val)}
-                />
-
-                <FormField label="Manager Approval Threshold Amount (₹)">
-                  <TextInput
-                    type="number"
-                    value={currentSettings.approvalThresholdAmount}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("approvalThresholdAmount", parseInt(e.target.value, 10) || 0)}
-                    className="h-9 text-xs"
-                  />
-                </FormField>
-
-                <ToggleSwitch
-                  label="Require Damage Photo Evidence"
-                  description="Mandate uploading a photo before submitting a damage report."
-                  checked={currentSettings.requireDamagePhotoEvidence}
-                  onChange={(val) => handleUpdateSetting("requireDamagePhotoEvidence", val)}
-                />
-              </div>
-            )}
-
-            {/* REQUISITIONS SETTINGS */}
-            {activeCategory === "requisitions" && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">Store Requisitions & Inventory Issuance</h3>
-                  <p className="text-xs text-slate-500 font-medium">Budget validation, emergency fast-tracks, and digital receiving signatures.</p>
-                </div>
-
-                <ToggleSwitch
-                  label="Approval Workflow Enabled"
-                  description="Require Executive Housekeeper sign-off for store requisitions over budget."
-                  checked={currentSettings.approvalWorkflowEnabled}
-                  onChange={(val) => handleUpdateSetting("approvalWorkflowEnabled", val)}
-                />
-
-                <ToggleSwitch
-                  label="Budget Validation Check"
-                  description="Validate request against cost center departmental budget limits."
-                  checked={currentSettings.budgetValidation}
-                  onChange={(val) => handleUpdateSetting("budgetValidation", val)}
-                />
-
-                <ToggleSwitch
-                  label="Digital Receiving Signature"
-                  description="Require digital sign-off when receiving materials from Central Stores."
-                  checked={currentSettings.digitalReceivingSignature}
-                  onChange={(val) => handleUpdateSetting("digitalReceivingSignature", val)}
-                />
-              </div>
-            )}
-
-            {/* NOTIFICATIONS SETTINGS */}
-            {activeCategory === "notifications" && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">Notification Channels & Escalation Alerts</h3>
-                  <p className="text-xs text-slate-500 font-medium">Email, SMS, Push, and Manager alert triggers.</p>
-                </div>
-
-                <ToggleSwitch
-                  label="Email Notifications"
-                  description="Dispatch automated email digests for daily operations & reports."
-                  checked={currentSettings.emailNotifications}
-                  onChange={(val) => handleUpdateSetting("emailNotifications", val)}
-                />
-
-                <ToggleSwitch
-                  label="SMS Emergency Alerts"
-                  description="Send urgent SMS alerts for OOO holds & critical equipment failures."
-                  checked={currentSettings.smsNotifications}
-                  onChange={(val) => handleUpdateSetting("smsNotifications", val)}
-                />
-
-                <ToggleSwitch
-                  label="Mobile App Push Notifications"
-                  description="Push instant notifications to staff mobile handsets."
-                  checked={currentSettings.pushNotifications}
-                  onChange={(val) => handleUpdateSetting("pushNotifications", val)}
-                />
-              </div>
-            )}
-
-            {/* AUDIT & SECURITY SETTINGS */}
-            {activeCategory === "auditsecurity" && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">Audit & Security Governance</h3>
-                  <p className="text-xs text-slate-500 font-medium">Audit trail retention, IP capture, and immutable cryptographic logging.</p>
-                </div>
-
-                <ToggleSwitch
-                  label="Enable Immutable System Audit Logs"
-                  description="Record all room status changes and supervisor overrides in a tamper-proof trail."
-                  checked={currentSettings.enableAuditLogs}
-                  onChange={(val) => handleUpdateSetting("enableAuditLogs", val)}
-                />
-
-                <FormField label="Audit Trail Retention Period (Days)">
-                  <TextInput
-                    type="number"
-                    value={currentSettings.auditRetentionDays}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("auditRetentionDays", parseInt(e.target.value, 10) || 0)}
-                    className="h-9 text-xs"
-                  />
-                </FormField>
-
-                <ToggleSwitch
-                  label="Capture Client IP Address & Device Details"
-                  description="Record actor IP addresses and browser user agent strings on every transaction."
-                  checked={currentSettings.captureIpAddress}
-                  onChange={(val) => handleUpdateSetting("captureIpAddress", val)}
-                />
-              </div>
-            )}
-
-            {/* INTEGRATIONS SETTINGS */}
-            {activeCategory === "integrations" && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2.5">
-                  <h3 className="text-sm font-extrabold text-slate-900">Cross-Module & Hardware Integrations</h3>
-                  <p className="text-xs text-slate-500 font-medium">Front Office, SAP ERP, IoT sensors, and door key card systems.</p>
-                </div>
-
-                <ToggleSwitch
-                  label="Front Office PMS Integration"
-                  description="Real-time sync of room checkouts, arrivals, and guest status."
-                  checked={currentSettings.frontOfficeIntegration}
-                  onChange={(val) => handleUpdateSetting("frontOfficeIntegration", val)}
-                />
-
-                <ToggleSwitch
-                  label="IoT Room Occupancy Sensors"
-                  description="Sync door sensors & motion detectors for live room presence status."
-                  checked={currentSettings.iotRoomSensors}
-                  onChange={(val) => handleUpdateSetting("iotRoomSensors", val)}
-                />
-
-                <ToggleSwitch
-                  label="RFID Key Card Door Lock System"
-                  description="Sync smart lock audit logs and master key card permissions."
-                  checked={currentSettings.keyCardSystem}
-                  onChange={(val) => handleUpdateSetting("keyCardSystem", val)}
-                />
-              </div>
-            )}
-
-            {/* Read-only Audit Metadata Section */}
-            <div className="pt-4 border-t border-slate-100 text-[11px] text-slate-400 font-medium flex items-center justify-between">
-              <span>Last Saved: <strong>{currentSettings.lastUpdated}</strong></span>
-              <span>Updated By: <strong>{currentSettings.updatedBy}</strong></span>
-              <span>Version: <strong>{currentSettings.version}</strong></span>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

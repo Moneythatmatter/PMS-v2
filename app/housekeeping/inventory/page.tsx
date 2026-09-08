@@ -287,7 +287,7 @@ export default function HousekeepingInventoryPage() {
               onClick={() => setAddItemOpen(true)}
               className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white flex items-center justify-center gap-1.5 rounded-xl h-8 px-3.5 text-xs font-bold shrink-0 shadow-xs"
             >
-              <Plus className="h-3.5 w-3.5" /> + Add New Item
+              <Plus className="h-3.5 w-3.5" /> Add New Item
             </Button>
           </div>
         }

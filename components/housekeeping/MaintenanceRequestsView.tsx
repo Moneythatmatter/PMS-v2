@@ -23,6 +23,28 @@ const MAINTENANCE_CATEGORIES = [
   "Others",
 ];
 
+function parseIssue(problemStr: string): { category: string; description: string } {
+  if (!problemStr) return { category: "General", description: "—" };
+  if (problemStr.includes(" — ")) {
+    const parts = problemStr.split(" — ");
+    return {
+      category: parts[0].trim(),
+      description: parts.slice(1).join(" — ").trim(),
+    };
+  }
+  if (problemStr.includes(" - ")) {
+    const parts = problemStr.split(" - ");
+    return {
+      category: parts[0].trim(),
+      description: parts.slice(1).join(" - ").trim(),
+    };
+  }
+  return {
+    category: problemStr.trim(),
+    description: problemStr.trim(),
+  };
+}
+
 export function MaintenanceRequestsView() {
   const {
     maintenance,
@@ -43,7 +65,9 @@ export function MaintenanceRequestsView() {
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedReqId, setSelectedReqId] = useState<string | null>(null);
+  const [selectedDetailsReq, setSelectedDetailsReq] = useState<any>(null);
 
   // Form Fields
   const [roomNo, setRoomNo] = useState("104");
@@ -422,7 +446,11 @@ export function MaintenanceRequestsView() {
             return (
               <div
                 key={`${m.id}-${idx}-m`}
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"
+                onClick={() => {
+                  setSelectedDetailsReq(m);
+                  setDetailsOpen(true);
+                }}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs cursor-pointer hover:border-emerald-300 transition-colors"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -452,7 +480,7 @@ export function MaintenanceRequestsView() {
                     className={cn(
                       "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase",
                       m.priority === "Critical"
-                        ? "bg-red-100 text-red-700 border border-red-200"
+                        ? "bg-red-100 text-red-700 border border-red-200 font-extrabold"
                         : m.priority === "High"
                         ? "bg-red-50 text-red-700 border border-red-100"
                         : m.priority === "Medium"
@@ -464,7 +492,10 @@ export function MaintenanceRequestsView() {
                   </span>
                   <span>{m.engineer || "Unassigned"}</span>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="mt-3 flex flex-wrap gap-2"
+                >
                   {isOpen && (
                     <Button
                       variant="outline"
@@ -528,23 +559,21 @@ export function MaintenanceRequestsView() {
       </div>
 
       {/* Desktop table */}
-      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
+      <div className="hidden rounded-2xl border border-slate-200 bg-white shadow-xs md:block overflow-hidden">
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
             <tr>
-              <th className="px-5 py-3">ID</th>
-              <th className="px-5 py-3">Room</th>
-              <th className="px-5 py-3">Issue Details</th>
-              <th className="px-5 py-3">Priority</th>
-              <th className="px-5 py-3">Engineer</th>
-              <th className="px-5 py-3">Assigned At</th>
-              <th className="px-5 py-3">Started At</th>
-              <th className="px-5 py-3">Completed At</th>
-              <th className="px-5 py-3">Est. Completion</th>
-              <th className="px-5 py-3">Actual Completion</th>
-              <th className="px-5 py-3">Assign Type</th>
-              <th className="px-5 py-3">Status</th>
-              <th className="px-5 py-3 text-right">Actions</th>
+              <th className="px-3.5 py-3 w-16">ID</th>
+              <th className="px-3.5 py-3 w-24">Room</th>
+              <th className="px-3.5 py-3 min-w-[130px]">Issue</th>
+              <th className="px-3.5 py-3 w-20">Priority</th>
+              <th className="px-3.5 py-3 min-w-[120px]">Engineer</th>
+              <th className="px-3.5 py-3 min-w-[110px]">Assigned At</th>
+              <th className="px-3.5 py-3 min-w-[110px]">Est. Completion</th>
+              <th className="px-3.5 py-3 min-w-[95px]">Started At</th>
+              <th className="px-3.5 py-3 min-w-[95px]">Completed At</th>
+              <th className="px-3.5 py-3 w-24">Status</th>
+              <th className="px-3.5 py-3 text-right min-w-[140px]">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
@@ -554,20 +583,35 @@ export function MaintenanceRequestsView() {
               const isProgress = m.status === "In Progress";
               const isAwaiting = m.status === "Awaiting Verification";
               const isClosed = m.status === "Closed";
+              const parsed = parseIssue(m.problem);
 
               return (
-                <tr key={`${m.id}-${idx}`} className="hover:bg-slate-50/50">
-                  <td className="px-5 py-4 font-semibold text-slate-500">{m.id}</td>
-                  <td className="px-5 py-4 font-bold text-slate-800">Room {m.room}</td>
-                  <td className="px-5 py-4 text-slate-700 font-medium max-w-xs truncate">{m.problem}</td>
-                  <td className="px-5 py-4">
+                <tr
+                  key={`${m.id}-${idx}`}
+                  onClick={() => {
+                    setSelectedDetailsReq(m);
+                    setDetailsOpen(true);
+                  }}
+                  className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                >
+                  <td className="px-3.5 py-3 font-semibold text-slate-500 whitespace-nowrap">{m.id}</td>
+                  <td className="px-3.5 py-3 font-bold text-slate-800 whitespace-nowrap">Room {m.room}</td>
+                  <td className="px-3.5 py-3">
+                    <div className="flex flex-col items-start gap-0.5">
+                      <span className="font-bold text-slate-800">{parsed.category}</span>
+                      <span className="text-[11px] font-semibold text-emerald-700 group-hover:underline">
+                        View Details
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3.5 py-3 whitespace-nowrap">
                     <span
                       className={cn(
                         "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase",
                         m.priority === "Critical"
-                          ? "bg-red-100 text-red-700 border border-red-200 font-extrabold animate-pulse"
+                          ? "bg-red-100 text-red-700 border border-red-200 font-extrabold"
                           : m.priority === "High"
-                          ? "bg-red-50 text-red-650 border border-red-100"
+                          ? "bg-red-50 text-red-700 border border-red-100"
                           : m.priority === "Medium"
                           ? "bg-amber-50 text-amber-700 border border-amber-100"
                           : "bg-slate-100 text-slate-700"
@@ -576,27 +620,19 @@ export function MaintenanceRequestsView() {
                       {m.priority}
                     </span>
                   </td>
-                  <td className="px-5 py-4 text-slate-600 font-semibold">{m.engineer || "—"}</td>
-                  <td className="px-5 py-4 text-slate-400 font-normal">{m.assignedAt || "—"}</td>
-                  <td className="px-5 py-4 text-slate-400 font-normal">{m.startedAt || "—"}</td>
-                  <td className="px-5 py-4 text-slate-400 font-normal">{m.completedAt || "—"}</td>
-                  <td className="px-5 py-4 text-slate-400 font-normal">{m.estimatedCompletion || "—"}</td>
-                  <td className="px-5 py-4 text-slate-400 font-normal">{m.actualCompletion || "—"}</td>
-                  <td className="px-5 py-4 font-normal">
-                    {m.assignmentType ? (
-                      <span className="rounded-full bg-slate-105 border border-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-700 uppercase bg-slate-100">
-                        {m.assignmentType}
-                      </span>
-                    ) : "—"}
-                  </td>
-                  <td className="px-5 py-4">
+                  <td className="px-3.5 py-3 text-slate-700 font-semibold whitespace-nowrap">{m.engineer || "—"}</td>
+                  <td className="px-3.5 py-3 text-slate-500 font-normal whitespace-nowrap">{m.assignedAt || "—"}</td>
+                  <td className="px-3.5 py-3 text-slate-500 font-normal whitespace-nowrap">{m.estimatedCompletion || "—"}</td>
+                  <td className="px-3.5 py-3 text-slate-500 font-normal whitespace-nowrap">{m.startedAt || "—"}</td>
+                  <td className="px-3.5 py-3 text-slate-500 font-normal whitespace-nowrap">{m.completedAt || "—"}</td>
+                  <td className="px-3.5 py-3 whitespace-nowrap">
                     <span
                       className={cn(
                         "rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase",
                         m.status === "Closed"
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
                           : m.status === "Awaiting Verification"
-                          ? "bg-purple-50 text-purple-700 border border-purple-100 animate-pulse"
+                          ? "bg-purple-50 text-purple-700 border border-purple-100"
                           : m.status === "In Progress"
                           ? "bg-amber-50 text-amber-700 border border-amber-100"
                           : m.status === "Assigned"
@@ -609,7 +645,10 @@ export function MaintenanceRequestsView() {
                       {m.status}
                     </span>
                   </td>
-                  <td className="px-5 py-4 text-right space-x-1.5 whitespace-nowrap">
+                  <td
+                    onClick={(e) => e.stopPropagation()}
+                    className="px-3.5 py-3 text-right space-x-1.5 whitespace-nowrap"
+                  >
                     {isOpen && (
                       <Button
                         variant="outline"
@@ -649,7 +688,7 @@ export function MaintenanceRequestsView() {
                           onClick={() => handleMarkComplete(m.id)}
                           className="py-1 px-2.5 text-[10px] font-semibold bg-amber-600 hover:bg-amber-700 text-white"
                         >
-                          Complete Repair
+                          Complete
                         </Button>
                       </div>
                     )}
@@ -664,12 +703,9 @@ export function MaintenanceRequestsView() {
                       </Button>
                     )}
                     {isClosed && (
-                      <Button
-                        disabled
-                        className="py-1 px-2.5 text-[10px] font-semibold bg-slate-100 text-slate-400 border border-slate-200"
-                      >
+                      <span className="text-[11px] text-slate-400 font-semibold px-2 py-1">
                         Completed ✓
-                      </Button>
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -994,6 +1030,161 @@ export function MaintenanceRequestsView() {
             </Button>
           </div>
         )}
+      </Drawer>
+      {/* Drawer: View Details */}
+      <Drawer
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        title="Maintenance Request Details"
+      >
+        {selectedDetailsReq && (() => {
+          const parsed = parseIssue(selectedDetailsReq.problem);
+          return (
+            <div className="space-y-4 text-xs">
+              {/* Header summary banner */}
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200/80 p-3.5">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Request ID</span>
+                  <p className="text-sm font-extrabold text-slate-800">{selectedDetailsReq.id}</p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase",
+                      selectedDetailsReq.priority === "Critical"
+                        ? "bg-red-100 text-red-700 border border-red-200 font-extrabold"
+                        : selectedDetailsReq.priority === "High"
+                        ? "bg-red-50 text-red-700 border border-red-100"
+                        : selectedDetailsReq.priority === "Medium"
+                        ? "bg-amber-50 text-amber-700 border border-amber-100"
+                        : "bg-slate-100 text-slate-700"
+                    )}
+                  >
+                    {selectedDetailsReq.priority}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase",
+                      selectedDetailsReq.status === "Closed"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                        : selectedDetailsReq.status === "Awaiting Verification"
+                        ? "bg-purple-50 text-purple-700 border border-purple-100"
+                        : selectedDetailsReq.status === "In Progress"
+                        ? "bg-amber-50 text-amber-700 border border-amber-100"
+                        : selectedDetailsReq.status === "Assigned"
+                        ? "bg-blue-50 text-blue-700 border border-blue-100"
+                        : "bg-slate-100 text-slate-700 border border-slate-200"
+                    )}
+                  >
+                    {selectedDetailsReq.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Core Details Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-2.5">
+                  <span className="text-[9px] font-bold uppercase text-slate-400 block">Room</span>
+                  <span className="text-xs font-bold text-slate-800">Room {selectedDetailsReq.room}</span>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-2.5">
+                  <span className="text-[9px] font-bold uppercase text-slate-400 block">Issue Category</span>
+                  <span className="text-xs font-bold text-slate-800">{parsed.category}</span>
+                </div>
+              </div>
+
+              {/* Full Description */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block">
+                  Full Issue Description
+                </span>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 font-medium whitespace-pre-wrap">
+                  {parsed.description || selectedDetailsReq.problem}
+                </div>
+              </div>
+
+              {/* Personnel & Timing Details */}
+              <div className="space-y-2 rounded-xl border border-slate-100 bg-white p-3 text-xs">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block border-b border-slate-50 pb-1">
+                  Assignment & Timings
+                </span>
+                <div className="grid grid-cols-2 gap-y-2.5 gap-x-4 pt-1">
+                  <div>
+                    <span className="text-[9px] font-bold uppercase text-slate-400 block">Assigned Engineer</span>
+                    <span className="font-semibold text-slate-800">{selectedDetailsReq.engineer || "Unassigned"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-bold uppercase text-slate-400 block">Assign Type</span>
+                    <span className="font-semibold text-slate-800">{selectedDetailsReq.assignmentType || "Manual"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-bold uppercase text-slate-400 block">Assigned At</span>
+                    <span className="font-medium text-slate-600">{selectedDetailsReq.assignedAt || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-bold uppercase text-slate-400 block">Est. Completion</span>
+                    <span className="font-medium text-slate-600">{selectedDetailsReq.estimatedCompletion || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-bold uppercase text-slate-400 block">Started At</span>
+                    <span className="font-medium text-slate-600">{selectedDetailsReq.startedAt || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-bold uppercase text-slate-400 block">Completed At</span>
+                    <span className="font-medium text-slate-600">{selectedDetailsReq.completedAt || "—"}</span>
+                  </div>
+                  {selectedDetailsReq.actualCompletion && (
+                    <div className="col-span-2">
+                      <span className="text-[9px] font-bold uppercase text-slate-400 block">Actual Completion</span>
+                      <span className="font-medium text-slate-600">{selectedDetailsReq.actualCompletion}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Attachments if any */}
+              {selectedDetailsReq.attachments && selectedDetailsReq.attachments.length > 0 && (
+                <div className="space-y-2 rounded-xl border border-slate-100 bg-white p-3 text-xs">
+                  <span className="text-[10px] font-bold uppercase text-slate-400 block border-b border-slate-50 pb-1">
+                    Attachments ({selectedDetailsReq.attachments.length})
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {selectedDetailsReq.attachments.map((file: any, i: number) => (
+                      <div key={i} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                        {file.type === "image" && file.url && (
+                          <img src={file.url} alt={file.name} className="h-8 w-8 object-cover rounded border border-slate-200" />
+                        )}
+                        <span className="font-medium text-slate-700 truncate text-[11px]">{file.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Assignment History if any */}
+              {selectedDetailsReq.assignmentHistory && selectedDetailsReq.assignmentHistory.length > 0 && (
+                <div className="space-y-2 rounded-xl border border-slate-100 bg-white p-3 text-xs">
+                  <span className="text-[10px] font-bold uppercase text-slate-400 block border-b border-slate-50 pb-1">
+                    Assignment History
+                  </span>
+                  <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                    {selectedDetailsReq.assignmentHistory.map((h: any, idx: number) => (
+                      <div key={idx} className="border-b border-slate-50 last:border-b-0 pb-1.5 last:pb-0">
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="font-bold text-slate-700">{h.action}</span>
+                          <span className="text-slate-400">{h.timestamp}</span>
+                        </div>
+                        <p className="text-[9px] text-slate-500 mt-0.5">
+                          By {h.by} {h.reason && `• Reason: ${h.reason}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </Drawer>
     </div>
   );

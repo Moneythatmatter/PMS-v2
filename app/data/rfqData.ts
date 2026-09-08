@@ -22,7 +22,12 @@ export interface RFQAttachment {
   id: string;
   fileName: string;
   fileSize: string;
-  fileType: "pdf" | "xlsx" | "doc";
+  fileType: "pdf" | "xlsx" | "doc" | "image" | string;
+  dataUrl?: string;
+  previewUrl?: string;
+  mimeType?: string;
+  uploadedBy?: string;
+  uploadedOn?: string;
 }
 
 export interface VendorQuotationComparison {

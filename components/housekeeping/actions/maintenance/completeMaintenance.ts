@@ -19,6 +19,7 @@ export const startMaintenanceRepair = (
   });
 
   const req = currentMaintenance.find((r) => r.id === id);
+  if (!req || req.status === "In Progress" || req.status === "Closed") return;
   const history = req?.assignmentHistory || [];
   const newLog = {
     timestamp: nowStr,
@@ -74,6 +75,7 @@ export const completeMaintenanceRequest = (
   });
 
   const req = currentMaintenance.find((r) => r.id === id);
+  if (!req || req.status === "Awaiting Verification" || req.status === "Closed") return;
   const history = req?.assignmentHistory || [];
   const newLog = {
     timestamp: nowStr,
@@ -130,7 +132,7 @@ export const verifyMaintenanceRequest = (
   });
 
   const req = currentMaintenance.find((r) => r.id === id);
-  if (!req) return;
+  if (!req || req.status === "Closed") return;
 
   const engineerName = req.engineer;
   const history = req?.assignmentHistory || [];

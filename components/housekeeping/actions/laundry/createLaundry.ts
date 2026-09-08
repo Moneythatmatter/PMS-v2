@@ -4,8 +4,11 @@ import type { HKLaundryJob } from "../../HousekeepingTypes";
 import { hkLaundryService } from "@/services/housekeeping";
 
 export const addLaundryJob = (job: Omit<HKLaundryJob, "id" | "status" | "timeline">, laundryLength: number, dispatchers: HousekeepingDispatchers) => {
+  const uniqueCode = `${Date.now().toString(36).toUpperCase().slice(-4)}${Math.floor(10 + Math.random() * 90)}`;
+  const optimisticId = `LD-${uniqueCode}`;
+
   const record: HKLaundryJob = {
-    id: `LD-${String(laundryLength + 1).padStart(2, "0")}`,
+    id: optimisticId,
     type: job.type,
     item: job.item,
     quantity: job.quantity,
@@ -44,7 +47,16 @@ export const addLaundryJob = (job: Omit<HKLaundryJob, "id" | "status" | "timelin
 
   logAudit("Laundry", "Laundry Registered", `Registered laundry job: ${job.quantity}x ${job.item}. Status: Collection.`, job.room, dispatchers.currentUsername, dispatchers.setHistory);
 
-  void hkLaundryService.create(record).catch((err) => {
-    console.error("[HK] Failed to sync new laundry job to API", err);
-  });
+  void hkLaundryService
+    .create(record)
+    .then((created) => {
+      if (created && created.id) {
+        dispatchers.setLaundryJobs((prev) =>
+          prev.map((r) => (r.id === optimisticId ? { ...r, ...created } : r))
+        );
+      }
+    })
+    .catch((err) => {
+      console.error("[HK] Failed to sync new laundry job to API", err);
+    });
 };
