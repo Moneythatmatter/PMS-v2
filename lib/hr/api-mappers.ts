@@ -627,6 +627,7 @@ type EmployeeLookup = {
   designation?: string;
   avatar?: string;
   photoUrl?: string;
+  shiftType?: string;
 };
 
 function formatPunchTime(value: unknown): string {
@@ -764,8 +765,8 @@ export function mapAttendanceToApi(
     holidayId: form.holidayId,
     remarks:
       form.status === "Late"
-        ? form.manualReason || form.remarks || "Late arrival"
-        : form.manualReason ?? form.remarks,
+        ? form.manualReason || "Late arrival"
+        : form.manualReason,
     source: form.source ?? "MANUAL",
   };
 }

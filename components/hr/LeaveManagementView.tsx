@@ -36,7 +36,7 @@ import {
   ToolbarFilterSelect,
 } from "@/components/shared/list-table";
 import { employeeDepartmentFilterOptions } from "@/app/data/hr/employeeDepartmentOptions";
-import { exportGenericReport, filterByIsoDateRange, normalizeToIsoDate, todayIsoDate } from "@/lib/hr/report-export";
+import { exportGenericReport, filterByIsoDateRange, normalizeToIsoDate, todayIsoDate, type ReportExportOptions } from "@/lib/hr/report-export";
 import type { ExportColumn } from "@/lib/exportUtils";
 import { cn } from "@/lib/utils";
 import { hrLeaveApplicationService, hrEmployeeService, hrLeaveTypeService } from "@/services/human-resources";
@@ -476,11 +476,7 @@ export function LeaveManagementView() {
     return matchSearch && matchDept && matchType && matchStatus;
   };
 
-  const handleLeaveExport = async (options: {
-    format: "csv" | "excel" | "pdf";
-    fromDate: string;
-    toDate: string;
-  }) => {
+  const handleLeaveExport = async (options: ReportExportOptions) => {
     setExporting(true);
     try {
       const base = sortedApplications.filter(matchesLeaveBaseFilters);

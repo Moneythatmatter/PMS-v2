@@ -49,7 +49,7 @@ import {
   ToolbarFilterSelect,
 } from "@/components/shared/list-table";
 import { employeeDepartmentFilterOptions } from "@/app/data/hr/employeeDepartmentOptions";
-import { exportGenericReport, filterByIsoDateRange, normalizeToIsoDate } from "@/lib/hr/report-export";
+import { exportGenericReport, filterByIsoDateRange, normalizeToIsoDate, type ReportExportOptions } from "@/lib/hr/report-export";
 import type { ExportColumn } from "@/lib/exportUtils";
 import { cn } from "@/lib/utils";
 import { hrShiftAssignmentService, hrShiftTypeService, hrEmployeeService } from "@/services/human-resources";
@@ -305,11 +305,7 @@ export function ShiftManagementView() {
     [masterShifts],
   );
 
-  const handleShiftExport = async (options: {
-    format: "csv" | "excel" | "pdf";
-    fromDate: string;
-    toDate: string;
-  }) => {
+  const handleShiftExport = async (options: ReportExportOptions) => {
     setExporting(true);
     try {
       const ranged = filterByIsoDateRange(

@@ -28,6 +28,7 @@ import {
   filterByIsoDateRange,
   normalizeToIsoDate,
   todayIsoDate,
+  type ReportExportOptions,
 } from "@/lib/hr/report-export";
 import type { ExportColumn } from "@/lib/exportUtils";
 import { cn } from "@/lib/utils";
@@ -253,11 +254,7 @@ export function HolidayAttendanceView() {
     setSelectedStatus((prev) => (prev === status ? "ALL" : status));
   };
 
-  const handleHolidayExport = async (options: {
-    format: "csv" | "excel" | "pdf";
-    fromDate: string;
-    toDate: string;
-  }) => {
+  const handleHolidayExport = async (options: ReportExportOptions) => {
     setExporting(true);
     try {
       const base = records.filter(matchesBaseFilters);
