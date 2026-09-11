@@ -53,11 +53,12 @@ export const inspectRoom = (
 
       if (passed) {
         const hasReservation = Boolean(r.guestName) && r.foStatus !== "Occupied";
+        const nextStatus = hasReservation ? "Reserved" : "Vacant";
         return {
           ...r,
-          status: (hasReservation ? "Reserved" : "Vacant") as const,
-          hkStatus: "Inspected" as const,
-          foStatus: "Vacant" as const,
+          status: nextStatus,
+          hkStatus: "Inspected",
+          foStatus: "Vacant",
           assignedSupervisor: dispatchers.currentUsername,
           remarks: remarks || "Inspection passed.",
           inspectionHistory: updatedHistory,

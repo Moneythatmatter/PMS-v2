@@ -93,19 +93,21 @@ function formatCompactInr(n: number) {
 }
 
 function rowIsActive(r: ModuleRow): boolean {
-  if (r.isActive === false || String(r.isActive).toLowerCase() === "false") return false;
+  const activeValue = String(r.isActive ?? "").toLowerCase();
+  if (activeValue === "false" || activeValue === "0") return false;
   const status = String(r.status ?? "").toLowerCase();
   if (status === "inactive") return false;
   return (
     status === "active" ||
     status === "open" ||
-    r.isActive === true ||
-    String(r.isActive).toLowerCase() === "true"
+    activeValue === "true" ||
+    activeValue === "1"
   );
 }
 
 function rowIsVegetarian(r: ModuleRow): boolean {
-  return r.isVegetarian === true || String(r.isVegetarian).toLowerCase() === "true";
+  const value = String(r.isVegetarian ?? "").toLowerCase();
+  return value === "true" || value === "1";
 }
 
 function buildReportStats(
