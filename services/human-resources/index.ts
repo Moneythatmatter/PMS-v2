@@ -166,7 +166,6 @@ export const hrLeaveApplicationService = {
   ) => api.post<Record<string, unknown>>(hrPath(`/leave-applications/${id}/modify`), body),
 };
 export const hrOvertimeService = crud<Record<string, unknown>>("/overtime");
-export const hrHolidayAttendanceService = crud<Record<string, unknown>>("/holiday-attendance");
 export const hrSalaryStructureService = crud<Record<string, unknown>>("/salary-structures");
 export const hrPayslipService = crud<Record<string, unknown>>("/payslips");
 export const hrComplaintCategoryService = crud<Record<string, unknown>>("/complaint-categories");

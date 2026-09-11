@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, Crown, IndianRupee, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Calendar, IndianRupee, Users } from "lucide-react";
 import type { InHouseGuest } from "@/app/data/frontoffice/modules";
+import { checkOutHref } from "@/lib/check-in-navigation";
 import { reservationService } from "@/services/front-office";
 import { ReservationStatusBadge } from "@/components/frontoffice/reservation/ReservationStatusBadge";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +25,7 @@ import {
 } from "@/components/frontoffice/ui";
 
 export function InHouseGuestsView() {
+  const router = useRouter();
   const [guests, setGuests] = useState<InHouseGuest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,9 +59,7 @@ export function InHouseGuestsView() {
   const filtered = useMemo(() => {
     let rows = guests.filter((g) => {
       const matchesFilter =
-        filter === "all" ||
-        (filter === "vip" && g.isVip) ||
-        (filter === "balance" && g.balance > 5000);
+        filter === "all" || (filter === "balance" && g.balance > 5000);
       const query = search.toLowerCase();
       const matchesSearch =
         g.guestName.toLowerCase().includes(query) ||
@@ -77,7 +78,6 @@ export function InHouseGuestsView() {
   const stats = useMemo(
     () => ({
       total: guests.length,
-      vip: guests.filter((g) => g.isVip).length,
       totalBalance: guests.reduce((sum, g) => sum + g.balance, 0),
       avgNights:
         guests.length > 0
@@ -87,9 +87,12 @@ export function InHouseGuestsView() {
     [guests],
   );
 
+  const goToCheckOut = (guest: InHouseGuest) => {
+    router.push(checkOutHref(guest));
+  };
+
   if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
-
 
   const columns = [
     {
@@ -97,12 +100,7 @@ export function InHouseGuestsView() {
       header: "Guest",
       render: (r: InHouseGuest) => (
         <div>
-          <div className="flex items-center gap-1.5">
-            <span className="font-medium text-slate-900">{r.guestName}</span>
-            {r.isVip && (
-              <Crown className="h-3.5 w-3.5 text-amber-500" aria-label="VIP" />
-            )}
-          </div>
+          <span className="font-medium text-slate-900">{r.guestName}</span>
           {r.email && <p className="text-xs text-slate-400">{r.email}</p>}
         </div>
       ),
@@ -130,16 +128,6 @@ export function InHouseGuestsView() {
       ),
     },
     {
-      key: "restaurant",
-      header: "Restaurant",
-      render: (r: InHouseGuest) => formatINR(r.restaurantBill),
-    },
-    {
-      key: "laundry",
-      header: "Laundry",
-      render: (r: InHouseGuest) => formatINR(r.laundry),
-    },
-    {
       key: "status",
       header: "Status",
       render: (r: InHouseGuest) => <ReservationStatusBadge status={r.status} />,
@@ -149,10 +137,7 @@ export function InHouseGuestsView() {
       header: "Actions",
       render: (r: InHouseGuest) => (
         <ActionButtons
-          actions={[
-            { label: "Add Service", onClick: () => setToast(`Service charge added for ${r.guestName}.`) },
-            { label: "Check Out", onClick: () => setToast(`Opening checkout for ${r.guestName}…`) },
-          ]}
+          actions={[{ label: "Check Out", onClick: () => goToCheckOut(r) }]}
         />
       ),
     },
@@ -176,9 +161,8 @@ export function InHouseGuestsView() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <StatMiniCard label="In-House" value={stats.total} icon={Users} sublabel="Current guests" />
-        <StatMiniCard label="VIP Guests" value={stats.vip} accent="#f59e0b" icon={Crown} />
         <StatMiniCard label="Total Balance" value={formatINR(stats.totalBalance)} icon={IndianRupee} />
         <StatMiniCard label="Avg. Stay" value={`${stats.avgNights} nights`} icon={Calendar} />
       </div>
@@ -192,7 +176,6 @@ export function InHouseGuestsView() {
           onChange: setFilter,
           options: [
             { id: "all", label: "All" },
-            { id: "vip", label: "VIP" },
             { id: "balance", label: "High Balance" },
           ],
         }}
@@ -233,10 +216,7 @@ export function InHouseGuestsView() {
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <div className="flex items-center gap-1.5">
-                        <p className="font-semibold text-slate-900">{g.guestName}</p>
-                        {g.isVip && <Crown className="h-3.5 w-3.5 text-amber-500" />}
-                      </div>
+                      <p className="font-semibold text-slate-900">{g.guestName}</p>
                       <p className="text-xs text-slate-500">
                         {formatBookingGuestLine(g)} · Room {g.room} · {g.roomType}
                       </p>
@@ -247,13 +227,10 @@ export function InHouseGuestsView() {
                     <span>Balance: {formatINR(g.balance)}</span>
                     <span>Nights: {g.nights}</span>
                     <span>Check-out: {g.checkOut}</span>
-                    <span>Restaurant: {formatINR(g.restaurantBill)}</span>
                   </div>
                   <div className="mt-3 border-t border-slate-100 pt-3" onClick={(e) => e.stopPropagation()}>
                     <ActionButtons
-                      actions={[
-                        { label: "Check Out", onClick: () => setToast(`Opening checkout for ${g.guestName}…`) },
-                      ]}
+                      actions={[{ label: "Check Out", onClick: () => goToCheckOut(g) }]}
                     />
                   </div>
                 </div>
@@ -332,7 +309,7 @@ export function InHouseGuestsView() {
             <Button
               variant="outline"
               onClick={() => {
-                setToast(`Opening checkout for ${selectedGuest?.guestName}…`);
+                if (selectedGuest) goToCheckOut(selectedGuest);
                 setSelectedGuest(null);
               }}
             >
@@ -349,7 +326,6 @@ export function InHouseGuestsView() {
                 ["Check-out", selectedGuest.checkOut],
                 ["Nights", selectedGuest.nights],
                 ["Adults / Children", `${selectedGuest.adults} / ${selectedGuest.children}`],
-                ["VIP", selectedGuest.isVip ? "Yes" : "No"],
                 ["Status", selectedGuest.status],
               ].map(([label, value]) => (
                 <div key={label}>
@@ -363,18 +339,7 @@ export function InHouseGuestsView() {
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Folio Summary
               </p>
-              <SummaryRow label="Room Balance" value={formatINR(selectedGuest.balance)} />
-              <SummaryRow label="Restaurant" value={formatINR(selectedGuest.restaurantBill)} />
-              <SummaryRow label="Laundry" value={formatINR(selectedGuest.laundry)} />
-              <SummaryRow
-                label="Total Outstanding"
-                value={formatINR(
-                  selectedGuest.balance +
-                    selectedGuest.restaurantBill +
-                    selectedGuest.laundry,
-                )}
-                highlight
-              />
+              <SummaryRow label="Outstanding Balance" value={formatINR(selectedGuest.balance)} highlight />
             </div>
 
             {selectedGuest.email && (

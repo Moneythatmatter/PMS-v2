@@ -722,7 +722,7 @@ export function HolidayCalendarMasterView() {
                 onChange={(e) => setFormStatus(e.target.value as HolidayStatus)}
                 className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-800 bg-white"
               >
-                <option value="Active">🟢 Active (Applied to holiday attendance payroll)</option>
+                <option value="Active">🟢 Active (Applied to attendance and payroll)</option>
                 <option value="Inactive">⚪ Inactive (Archived / Disabled)</option>
               </select>
             </div>

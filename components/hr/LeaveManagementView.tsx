@@ -534,14 +534,14 @@ export function LeaveManagementView() {
     try {
       await hrLeaveApplicationService.approve(id, "Neha Mehta (HR Manager)");
       await loadApplications();
-      if (viewingLeave?.id === id) {
-        setViewingLeave((prev) =>
-          prev
+    if (viewingLeave?.id === id) {
+      setViewingLeave((prev) =>
+        prev
             ? { ...prev, status: "Approved", approvedBy: "Neha Mehta (HR Manager)" }
             : null,
-        );
-      }
-      setToastMessage(`Approved leave application for ${empName}.`);
+      );
+    }
+    setToastMessage(`Approved leave application for ${empName}.`);
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : "Failed to approve leave");
     } finally {
@@ -553,16 +553,16 @@ export function LeaveManagementView() {
     setActionLoadingId(id);
     try {
       await hrLeaveApplicationService.update(id, {
-        status: "Rejected",
-        approvedBy: "Neha Mehta (HR Manager)",
+              status: "Rejected",
+              approvedBy: "Neha Mehta (HR Manager)",
       });
       await loadApplications();
-      if (viewingLeave?.id === id) {
+    if (viewingLeave?.id === id) {
         setViewingLeave((prev) =>
           prev ? { ...prev, status: "Rejected", approvedBy: "Neha Mehta (HR Manager)" } : null,
         );
-      }
-      setToastMessage(`Rejected leave application for ${empName}.`);
+    }
+    setToastMessage(`Rejected leave application for ${empName}.`);
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : "Failed to reject leave");
     } finally {
@@ -655,33 +655,33 @@ export function LeaveManagementView() {
     try {
       await hrLeaveApplicationService.create(
         mapLeaveApplicationToApi({
-          employeeId: applyEmpId,
+      employeeId: applyEmpId,
           leaveTypeId: ltObj?.id,
           leaveTypeCode: ltObj?.code,
           leaveTypeName: ltObj?.name,
-          isPaid: ltObj?.isPaid ?? true,
-          durationOption: applyDuration,
-          priority: applyPriority,
-          fromDate: applyFromDate,
-          toDate: applyToDate,
+      isPaid: ltObj?.isPaid ?? true,
+      durationOption: applyDuration,
+      priority: applyPriority,
+      fromDate: applyFromDate,
+      toDate: applyToDate,
           totalDays,
-          reason: applyReason || "Leave request submitted.",
-          status: "Pending",
+      reason: applyReason || "Leave request submitted.",
+      status: "Pending",
           appliedOn: new Date().toISOString(),
-          approvalChain: [
+      approvalChain: [
             {
               role: "Dept Manager",
               approverName: "Dept Head",
               status: "Approved",
               date: new Date().toLocaleDateString("en-GB"),
             },
-            { role: "HR Manager", approverName: "Neha Mehta", status: "Pending" },
-          ],
+        { role: "HR Manager", approverName: "Neha Mehta", status: "Pending" },
+      ],
           balances: defaultEmployeeLeaveBalance(empObj),
         }),
       );
       await loadApplications();
-      setIsApplyModalOpen(false);
+    setIsApplyModalOpen(false);
       setToastMessage(`Submitted ${ltObj?.code ?? "leave"} request for ${empObj?.name ?? "employee"}.`);
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : "Failed to submit leave");
@@ -768,19 +768,19 @@ export function LeaveManagementView() {
                 <span
                   className={cn(
                     "rounded-full px-1.5 py-px text-[9px] font-extrabold uppercase tracking-wide border",
-                    risk.riskLevel.includes("High")
-                      ? "bg-rose-100 text-rose-800 border-rose-200"
-                      : risk.riskLevel.includes("Moderate")
-                        ? "bg-amber-100 text-amber-800 border-amber-200"
+                risk.riskLevel.includes("High")
+                  ? "bg-rose-100 text-rose-800 border-rose-200"
+                  : risk.riskLevel.includes("Moderate")
+                  ? "bg-amber-100 text-amber-800 border-amber-200"
                         : "bg-emerald-100 text-emerald-800 border-emerald-200",
                   )}
                 >
-                  {risk.riskLevel.replace(/[^a-zA-Z ]/g, "").trim()}
-                </span>
+                {risk.riskLevel.replace(/[^a-zA-Z ]/g, "").trim()}
               </span>
-            ))}
-          </div>
+              </span>
+          ))}
         </div>
+      </div>
       )}
 
       <HrSearchFilterToolbar
@@ -830,22 +830,22 @@ export function LeaveManagementView() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-700">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-700">
                   <thead className="bg-slate-50 text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
-                    <tr>
-                      <th className="py-3 px-4">Employee</th>
-                      <th className="py-3 px-4">Department</th>
-                      <th className="py-3 px-4">Leave Type</th>
-                      <th className="py-3 px-4">Date Range</th>
+                  <tr>
+                    <th className="py-3 px-4">Employee</th>
+                    <th className="py-3 px-4">Department</th>
+                    <th className="py-3 px-4">Leave Type</th>
+                    <th className="py-3 px-4">Date Range</th>
                       <th className="py-3 px-4">Days</th>
                       <th className="py-3 px-4">Applied On</th>
-                      <th className="py-3 px-4">Approved By</th>
-                      <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Approved By</th>
+                    <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
                     {filteredApplications.map((a) => (
                       <tr
                         key={a.id}
@@ -924,9 +924,9 @@ export function LeaveManagementView() {
                         </td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                </tbody>
+              </table>
+            </div>
             )}
           </div>
 

@@ -372,7 +372,7 @@ export default function RequestForQuotationsPage() {
     }
     try {
       await psRfqService.update(selectVendorModalRFQ.id, {
-        status: "Vendor Selected",
+            status: "Vendor Selected",
         selectedVendor: vendorName,
         activityTimeline: [
           ...selectVendorModalRFQ.activityTimeline,
@@ -559,7 +559,7 @@ export default function RequestForQuotationsPage() {
       });
 
       await psRfqService.update(rfq.id, {
-        status: "Converted to PO",
+              status: "Converted to PO",
         poNumber: created.poNumber,
         selectedVendor: vendorName,
       });
@@ -580,7 +580,7 @@ export default function RequestForQuotationsPage() {
     try {
       await psRfqService.update(rfq.id, { status: "Sent" });
       await reload();
-      setToast({ message: "RFQ Sent Successfully", variant: "success" });
+    setToast({ message: "RFQ Sent Successfully", variant: "success" });
     } catch (e) {
       setToast({ message: e instanceof Error ? e.message : "Send failed", variant: "info" });
     }
@@ -596,7 +596,7 @@ export default function RequestForQuotationsPage() {
     try {
       await psRfqService.update(rfq.id, { status: "Cancelled" });
       await reload();
-      setToast({ message: `RFQ ${rfq.rfqNumber} has been cancelled.`, variant: "info" });
+    setToast({ message: `RFQ ${rfq.rfqNumber} has been cancelled.`, variant: "info" });
     } catch (e) {
       setToast({ message: e instanceof Error ? e.message : "Cancel failed", variant: "info" });
     }
@@ -681,17 +681,17 @@ export default function RequestForQuotationsPage() {
 
     setSaving(true);
     try {
-      if (editRFQ) {
+    if (editRFQ) {
         await psRfqService.update(editRFQ.id, newRecord);
-        setEditRFQ(null);
-        setToast({ message: "RFQ Saved Successfully", variant: "success" });
-      } else {
+      setEditRFQ(null);
+      setToast({ message: "RFQ Saved Successfully", variant: "success" });
+    } else {
         await psRfqService.create(newRecord);
-        setCreateDrawerOpen(false);
-        setToast({
-          message: isSend ? "RFQ Sent Successfully" : "RFQ Saved Successfully",
-          variant: "success",
-        });
+      setCreateDrawerOpen(false);
+      setToast({
+        message: isSend ? "RFQ Sent Successfully" : "RFQ Saved Successfully",
+        variant: "success",
+      });
       }
       await reload();
     } catch (e) {
@@ -1092,19 +1092,19 @@ export default function RequestForQuotationsPage() {
               </span>{" "}
               of <span className="font-medium text-slate-700">{rfqList.length}</span>
             </span>
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
               <span className="whitespace-nowrap">Rows</span>
               <select
-                value={rowsPerPage}
+              value={rowsPerPage}
                 onChange={(e) => setRowsPerPage(e.target.value)}
                 aria-label="Rows per page"
                 className="h-8 w-[4.25rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
-              >
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
+            >
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
               </select>
-            </div>
+          </div>
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -1416,13 +1416,13 @@ export default function RequestForQuotationsPage() {
                   <ShoppingCart className="h-3.5 w-3.5" /> Convert to Purchase Order
                 </Button>
               )}
-              <Button
-                type="button"
-                onClick={() => setSelectedRFQ(null)}
-                className="w-full h-9 text-xs font-bold !bg-slate-900 hover:!bg-slate-800 text-white rounded-xl shadow-xs cursor-pointer"
-              >
-                Close RFQ Details
-              </Button>
+            <Button
+              type="button"
+              onClick={() => setSelectedRFQ(null)}
+              className="w-full h-9 text-xs font-bold !bg-slate-900 hover:!bg-slate-800 text-white rounded-xl shadow-xs cursor-pointer"
+            >
+              Close RFQ Details
+            </Button>
             </div>
           </div>
         </Drawer>
@@ -2177,21 +2177,21 @@ export default function RequestForQuotationsPage() {
                 selectVendorModalRFQ.comparisonData[0];
               if (!bid) return null;
               return (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] text-emerald-700 font-bold uppercase">Selected Vendor</span>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-emerald-700 font-bold uppercase">Selected Vendor</span>
                     <span className="text-amber-500 font-bold">{bid.rating}</span>
-                  </div>
+              </div>
                   <p className="text-base font-extrabold text-slate-900">{bid.vendorName}</p>
                   <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-700 pt-1 border-t border-emerald-100">
                     <span>Delivery: {bid.deliveryDays} days</span>
                     <span>Rate: ₹{bid.unitPrice.toLocaleString("en-IN")}/unit</span>
                   </div>
-                  <div className="flex justify-between text-xs font-bold text-slate-700 pt-1 border-t border-emerald-100">
-                    <span>Quoted Amount:</span>
+              <div className="flex justify-between text-xs font-bold text-slate-700 pt-1 border-t border-emerald-100">
+                <span>Quoted Amount:</span>
                     <span className="text-emerald-800 font-extrabold">₹{bid.totalAmount.toLocaleString("en-IN")}</span>
-                  </div>
-                </div>
+              </div>
+            </div>
               );
             })()}
 

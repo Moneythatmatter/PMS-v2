@@ -3,14 +3,9 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Clock,
-  Search,
   Edit2,
   Plus,
   Printer,
-  SlidersHorizontal,
-  X,
-  ChevronLeft,
-  ChevronRight,
   LogIn,
   LogOut,
 } from "lucide-react";
@@ -18,6 +13,7 @@ import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { AttendanceStatsCards } from "@/components/hr/shared/AttendanceStatsCards";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
+import { HrSearchFilterToolbar } from "@/components/hr/shared/HrSearchFilterToolbar";
 import { ReportExportModal } from "@/components/shared/ReportExportModal";
 import {
   ToolbarFilterGroup,
@@ -28,6 +24,7 @@ import {
   buildAttendanceExportRows,
   exportAttendanceReport,
   filterAttendanceForExport,
+  isHolidayPresentRecord,
 } from "@/lib/hr/attendance-export";
 import { hrAttendanceService, hrEmployeeService } from "@/services/human-resources";
 import { mapAttendanceFromApi, mapEmployeeFromApi, buildPunchTimestamp } from "@/lib/hr/api-mappers";
@@ -50,6 +47,11 @@ const attendanceStatusFilterOptions = [
   { value: "On Leave", label: "On leave" },
   { value: "Holiday", label: "Holiday" },
   { value: "Weekly Off", label: "Weekly off" },
+] as const;
+
+const attendanceRecordFilterOptions = [
+  { value: "ALL", label: "All records" },
+  { value: "HOLIDAY_PRESENT", label: "Holiday present" },
 ] as const;
 
 export interface AttendanceRecord {
@@ -118,12 +120,6 @@ function todayIsoDate(): string {
   return new Date().toLocaleDateString("en-CA");
 }
 
-function shiftIsoDate(iso: string, days: number): string {
-  const [year, month, day] = iso.split("-").map(Number);
-  const date = new Date(year, month - 1, day + days);
-  return date.toLocaleDateString("en-CA");
-}
-
 function isPastIsoDate(iso: string): boolean {
   return iso < todayIsoDate();
 }
@@ -170,6 +166,8 @@ export function AttendanceView() {
   const [selectedDepartment, setSelectedDepartment] = useState("ALL");
   const [selectedShift, setSelectedShift] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
+  const [selectedRecordFilter, setSelectedRecordFilter] = useState("ALL");
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -202,7 +200,6 @@ export function AttendanceView() {
   const isPastDate = isPastIsoDate(punchDate);
   const canEnterPunchOut = isPastDate || hasPunchedIn;
   const today = todayIsoDate();
-  const isAtToday = selectedDate >= today;
 
   const openManualPunchModal = (empId?: string) => {
     const targetEmpId = empId ?? punchEmpId;
@@ -263,8 +260,11 @@ export function AttendanceView() {
         r.status === selectedStatus ||
         (selectedStatus === "On Leave" &&
           (r.status === "On Leave" || r.status === "Weekly Off" || r.status === "Holiday"));
+      const matchRecordFilter =
+        selectedRecordFilter === "ALL" ||
+        (selectedRecordFilter === "HOLIDAY_PRESENT" && isHolidayPresentRecord(r));
 
-      return matchSearch && matchDept && matchShift && matchStatus;
+      return matchSearch && matchDept && matchShift && matchStatus && matchRecordFilter;
     });
   }, [
     dateScopedRecords,
@@ -273,6 +273,7 @@ export function AttendanceView() {
     selectedDepartment,
     selectedShift,
     selectedStatus,
+    selectedRecordFilter,
   ]);
 
   // KPI Metrics (selected date only)
@@ -296,6 +297,7 @@ export function AttendanceView() {
     setSelectedDepartment("ALL");
     setSelectedShift("ALL");
     setSelectedStatus("ALL");
+    setSelectedRecordFilter("ALL");
     setSelectedDate(todayIsoDate());
   };
 
@@ -304,7 +306,42 @@ export function AttendanceView() {
     selectedDepartment !== "ALL" ||
     selectedShift !== "ALL" ||
     selectedStatus !== "ALL" ||
+    selectedRecordFilter !== "ALL" ||
     selectedDate !== todayIsoDate();
+
+  const renderAttendanceFilters = () => (
+    <ToolbarFilterGroup>
+      <ToolbarFilterSelect
+        value={selectedDepartment}
+        onChange={setSelectedDepartment}
+        options={[...employeeDepartmentFilterOptions]}
+        ariaLabel="Filter by department"
+      />
+      <ToolbarFilterSelect
+        value={selectedShift}
+        onChange={setSelectedShift}
+        options={[...attendanceShiftFilterOptions]}
+        ariaLabel="Filter by shift"
+      />
+      <ToolbarFilterSelect
+        value={selectedStatus}
+        onChange={setSelectedStatus}
+        options={[...attendanceStatusFilterOptions]}
+        ariaLabel="Filter by status"
+      />
+    </ToolbarFilterGroup>
+  );
+
+  const renderAttendanceExtraFilters = () => (
+    <ToolbarFilterGroup>
+      <ToolbarFilterSelect
+        value={selectedRecordFilter}
+        onChange={setSelectedRecordFilter}
+        options={[...attendanceRecordFilterOptions]}
+        ariaLabel="Filter by attendance type"
+      />
+    </ToolbarFilterGroup>
+  );
 
   const handleAttendanceExport = async (options: {
     format: "csv" | "excel" | "pdf";
@@ -323,6 +360,7 @@ export function AttendanceView() {
         department: selectedDepartment,
         shift: selectedShift,
         status: selectedStatus,
+        recordFilter: selectedRecordFilter,
       });
       const exportRows = buildAttendanceExportRows(filtered, employeeLookup);
       exportAttendanceReport(exportRows, options);
@@ -502,102 +540,22 @@ export function AttendanceView() {
         activeStatus={selectedStatus === "ALL" ? undefined : selectedStatus}
       />
 
-      <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-          <div className="relative min-w-0 flex-1">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search employee by name, ID..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-full border border-slate-200 bg-white py-2 pl-10 pr-8 text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-emerald-600"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="hidden sm:contents">
-              <ToolbarFilterGroup>
-                <ToolbarFilterSelect
-                  value={selectedDepartment}
-                  onChange={setSelectedDepartment}
-                  options={[...employeeDepartmentFilterOptions]}
-                  ariaLabel="Filter by department"
-                />
-                <ToolbarFilterSelect
-                  value={selectedShift}
-                  onChange={setSelectedShift}
-                  options={[...attendanceShiftFilterOptions]}
-                  ariaLabel="Filter by shift"
-                />
-                <ToolbarFilterSelect
-                  value={selectedStatus}
-                  onChange={setSelectedStatus}
-                  options={[...attendanceStatusFilterOptions]}
-                  ariaLabel="Filter by status"
-                />
-              </ToolbarFilterGroup>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setSelectedDate((d) => shiftIsoDate(d, -1))}
-                aria-label="Previous day"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 hover:text-slate-900"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-
-              <input
-                type="date"
-                value={selectedDate}
-                max={today}
-                onChange={(e) => setSelectedDate(clampToToday(e.target.value))}
-                className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-2xs focus:outline-none focus:ring-2 focus:ring-emerald-600"
-              />
-
-              <button
-                type="button"
-                onClick={() => setSelectedDate((d) => clampToToday(shiftIsoDate(d, 1)))}
-                disabled={isAtToday}
-                aria-label="Next day"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="hidden text-xs font-bold text-emerald-700 hover:underline sm:inline"
-              >
-                Reset
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setIsMobileFilterOpen(true)}
-              className="rounded-full border border-slate-200 bg-white p-2 text-slate-700 sm:hidden"
-              aria-label="Open filters"
-            >
-              <SlidersHorizontal className="h-4 w-4 text-emerald-700" />
-            </button>
-          </div>
-        </div>
-      </div>
+      <HrSearchFilterToolbar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Search employee by name, ID..."
+        showFilterPanel={showFilterPanel}
+        onToggleFilterPanel={() => setShowFilterPanel((v) => !v)}
+        hasActiveFilters={hasActiveFilters}
+        onReset={resetFilters}
+        showDatePicker
+        selectedDate={selectedDate}
+        onDateChange={setSelectedDate}
+        maxDate={today}
+        onOpenMobileFilters={() => setIsMobileFilterOpen(true)}
+        filters={renderAttendanceFilters()}
+        extraFilters={renderAttendanceExtraFilters()}
+      />
 
       {/* Desktop Table View */}
       <div className="hidden sm:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
@@ -1005,6 +963,13 @@ export function AttendanceView() {
               onChange={setSelectedStatus}
               options={[...attendanceStatusFilterOptions]}
               ariaLabel="Filter by status"
+              className="w-full min-w-0"
+            />
+            <ToolbarFilterSelect
+              value={selectedRecordFilter}
+              onChange={setSelectedRecordFilter}
+              options={[...attendanceRecordFilterOptions]}
+              ariaLabel="Filter by attendance type"
               className="w-full min-w-0"
             />
             <div>

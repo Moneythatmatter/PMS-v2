@@ -52,8 +52,15 @@ import { employeeDepartmentFilterOptions } from "@/app/data/hr/employeeDepartmen
 import { exportGenericReport, filterByIsoDateRange, normalizeToIsoDate, type ReportExportOptions } from "@/lib/hr/report-export";
 import type { ExportColumn } from "@/lib/exportUtils";
 import { cn } from "@/lib/utils";
-import { hrShiftAssignmentService, hrShiftTypeService, hrEmployeeService } from "@/services/human-resources";
-import { mapShiftAssignmentFromApi, mapShiftAssignmentToApi, mapShiftTypeFromApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
+import { hrShiftAssignmentService, hrShiftTypeService, hrEmployeeService, hrWeeklyOffService } from "@/services/human-resources";
+import {
+  mapShiftAssignmentFromApi,
+  mapShiftAssignmentToApi,
+  mapShiftTypeFromApi,
+  mapEmployeeFromApi,
+  inferShiftCategory,
+  deriveWeeklyOffDisplayStatus,
+} from "@/lib/hr/api-mappers";
 import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
 export interface MasterShiftTemplate {
@@ -134,8 +141,12 @@ export function ShiftManagementView() {
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([])
   const [masterShifts, setMasterShifts] = useState<MasterShiftTemplate[]>([])
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
+  const [weeklyOffCount, setWeeklyOffCount] = useState(0);
   const [viewMode, setViewMode] = useState<"table" | "roster">("table");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [assignSaving, setAssignSaving] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [bulkSaving, setBulkSaving] = useState(false);
   const shiftCategoryColors: Record<string, { color: string; badgeColor: string }> = {
     Morning: { color: "bg-amber-100 text-amber-800 border-amber-300", badgeColor: "bg-amber-500 text-white" },
     Evening: { color: "bg-blue-100 text-blue-800 border-blue-300", badgeColor: "bg-blue-600 text-white" },
@@ -146,10 +157,11 @@ export function ShiftManagementView() {
 
   const loadShiftData = async () => {
     try {
-      const [assignRows, shiftRows, empRows] = await Promise.all([
+      const [assignRows, shiftRows, empRows, weeklyOffRows] = await Promise.all([
         hrShiftAssignmentService.list(),
         hrShiftTypeService.list(),
         hrEmployeeService.list(),
+        hrWeeklyOffService.list(),
       ]);
       const emps = empRows.map(mapEmployeeFromApi);
       setEmployees(emps);
@@ -157,11 +169,17 @@ export function ShiftManagementView() {
       setAssignments(
         assignRows.map((row) => mapShiftAssignmentFromApi(row, lookup.get(String(row.employeeId)))),
       );
+      setWeeklyOffCount(
+        weeklyOffRows.filter((row) =>
+          deriveWeeklyOffDisplayStatus(
+            String(row.effectiveFrom ?? ""),
+            row.effectiveTo as string | undefined,
+          ) === "Active",
+        ).length,
+      );
       setMasterShifts(
         shiftRows.map(mapShiftTypeFromApi).map((st) => {
-          const category = (["Morning", "Evening", "Night", "General", "Split"].includes(st.category)
-            ? st.category
-            : "General") as MasterShiftTemplate["category"];
+          const category = inferShiftCategory(st.shiftName, st.shiftCode, st.category);
           const colors = shiftCategoryColors[category] ?? shiftCategoryColors.General;
           return {
             id: st.id,
@@ -177,12 +195,12 @@ export function ShiftManagementView() {
           };
         }),
       );
-      if (emps[0]) setAssignEmpId(emps[0].id);
     } catch (e) {
       setToastMessage(e instanceof Error ? e.message : "Failed to load shift assignments");
       setAssignments([]);
       setMasterShifts([]);
       setEmployees([]);
+      setWeeklyOffCount(0);
     }
   };
 
@@ -228,7 +246,7 @@ export function ShiftManagementView() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-  const [assignEffectiveFrom, setAssignEffectiveFrom] = useState("2026-08-01");
+  const [assignEffectiveFrom, setAssignEffectiveFrom] = useState("");
   const [assignEffectiveTo, setAssignEffectiveTo] = useState("");
   const [assignRemarks, setAssignRemarks] = useState("");
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
@@ -242,7 +260,7 @@ export function ShiftManagementView() {
   const [bulkDesignation, setBulkDesignation] = useState("");
   const [bulkEmploymentType, setBulkEmploymentType] = useState("");
   const [bulkShiftId, setBulkShiftId] = useState("");
-  const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState("2026-08-01");
+  const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState("");
   const [bulkEffectiveTo, setBulkEffectiveTo] = useState("");
 
   // Filtered Assignments
@@ -265,13 +283,22 @@ export function ShiftManagementView() {
   // Real-Time Coverage Breakdown Widget Metrics
   const coverageMetrics = useMemo(() => {
     const activeAssigned = assignments.filter((a) => a.status === "Active");
-    const morning = activeAssigned.filter((a) => a.shiftCategory === "Morning").length + 10;
-    const evening = activeAssigned.filter((a) => a.shiftCategory === "Evening").length + 6;
-    const night = activeAssigned.filter((a) => a.shiftCategory === "Night").length + 3;
-    const weeklyOff = 2;
-    const unassigned = 1; // 1 Staff has no shift assigned!
-    return { morning, evening, night, weeklyOff, unassigned, total: morning + evening + night + weeklyOff + unassigned };
-  }, [assignments]);
+    const morning = activeAssigned.filter((a) => a.shiftCategory === "Morning").length;
+    const evening = activeAssigned.filter((a) => a.shiftCategory === "Evening").length;
+    const night = activeAssigned.filter((a) => a.shiftCategory === "Night").length;
+    const assignedEmployeeIds = new Set(activeAssigned.map((a) => a.employeeId));
+    const unassigned = employees.filter(
+      (e) => e.status !== "Inactive" && !assignedEmployeeIds.has(e.id),
+    ).length;
+    return {
+      morning,
+      evening,
+      night,
+      weeklyOff: weeklyOffCount,
+      unassigned,
+      total: morning + evening + night + weeklyOffCount + unassigned,
+    };
+  }, [assignments, employees, weeklyOffCount]);
 
   const summaryStats = useMemo(
     () => [
@@ -343,12 +370,21 @@ export function ShiftManagementView() {
 
   // Upcoming Shift Changes List (Improvement #6)
   const upcomingChanges = useMemo(() => {
-    return [
-      { empName: "Rajesh Kumar", empId: "EMP-0101", fromShift: "Morning", toShift: "Evening", effectiveDate: "15 Aug 2026" },
-      { empName: "Priya Patel", empId: "EMP-0104", fromShift: "Evening", toShift: "Night", effectiveDate: "18 Aug 2026" },
-      { empName: "Kavita Reddy", empId: "EMP-0108", fromShift: "General", toShift: "Morning", effectiveDate: "01 Sep 2026" },
-    ];
-  }, []);
+    return assignments
+      .filter((a) => a.status === "Upcoming")
+      .map((a) => {
+        const current = assignments.find(
+          (x) => x.employeeId === a.employeeId && x.status === "Active" && x.id !== a.id,
+        );
+        return {
+          empName: a.employeeName,
+          empId: a.employeeId,
+          fromShift: current?.shiftName ?? "Unassigned",
+          toShift: a.shiftName,
+          effectiveDate: a.effectiveFrom,
+        };
+      });
+  }, [assignments]);
 
   // Conflict Detection Check (Improvement #3)
   const checkConflict = (empId: string, currentId?: string) => {
@@ -366,27 +402,32 @@ export function ShiftManagementView() {
   const bulkPreviewStaff = useMemo(() => {
     if (bulkApplyTo === "Department") {
       if (!bulkDepartment) return [];
-      return assignments.filter((a) => bulkDepartment === "ALL" || a.department === bulkDepartment);
-    } else if (bulkApplyTo === "Designation") {
+      return bulkDepartment === "ALL"
+        ? employees
+        : employees.filter((e) => e.department === bulkDepartment);
+    }
+    if (bulkApplyTo === "Designation") {
       if (!bulkDesignation) return [];
-      return assignments.filter((a) => a.designation === bulkDesignation);
-    } else if (bulkApplyTo === "EmploymentType") {
+      return employees.filter((e) => e.designation === bulkDesignation);
+    }
+    if (bulkApplyTo === "EmploymentType") {
       if (!bulkEmploymentType) return [];
-      return assignments.filter((a) => a.employmentType === bulkEmploymentType);
+      return employees.filter((e) => e.employmentType === bulkEmploymentType);
     }
     return [];
-  }, [assignments, bulkApplyTo, bulkDepartment, bulkDesignation, bulkEmploymentType]);
+  }, [employees, bulkApplyTo, bulkDepartment, bulkDesignation, bulkEmploymentType]);
 
   // Single Assign Handler
   const handleOpenSingleAssign = (existing?: ShiftAssignment) => {
+    setAssignError(null);
     if (existing) {
       setEditingAssignment(existing);
       setAssignEmpId(existing.employeeId);
       setAssignEmpQuery(`${existing.employeeName} (${existing.employeeId}) - ${existing.department}`);
       setIsEmpComboboxOpen(false);
       setAssignShiftId(existing.shiftId);
-      setAssignEffectiveFrom("2026-08-01");
-      setAssignEffectiveTo(existing.effectiveTo || "");
+      setAssignEffectiveFrom(normalizeToIsoDate(existing.effectiveFrom) ?? "");
+      setAssignEffectiveTo(normalizeToIsoDate(existing.effectiveTo ?? "") ?? "");
       setAssignRemarks(existing.remarks || "");
       checkConflict(existing.employeeId, existing.id);
     } else {
@@ -404,95 +445,78 @@ export function ShiftManagementView() {
     setIsAssignModalOpen(true);
   };
 
-  const handleSaveSingleAssign = (e: React.FormEvent) => {
+  const handleSaveSingleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     const shiftObj = masterShifts.find((s) => s.id === assignShiftId);
     if (!shiftObj) return;
-
-    const fromParts = assignEffectiveFrom.split("-");
-    const formattedFrom = fromParts.length === 3 ? `${fromParts[2]}/${fromParts[1]}/${fromParts[0]}` : assignEffectiveFrom;
-    let formattedTo: string | undefined = undefined;
-    if (assignEffectiveTo) {
-      const toParts = assignEffectiveTo.split("-");
-      formattedTo = toParts.length === 3 ? `${toParts[2]}/${toParts[1]}/${toParts[0]}` : assignEffectiveTo;
+    if (!assignEmpId) {
+      setAssignError("Please select an employee.");
+      return;
+    }
+    if (!assignEffectiveFrom) {
+      setAssignError("Effective from date is required.");
+      return;
     }
 
     const targetEmp = employees.find((x) => x.id === assignEmpId);
     const empName = targetEmp?.name || "Employee";
-    const empDept = targetEmp?.department || "Front Office";
-    const empDesig = targetEmp?.designation || "Staff";
-    const empAvatar = targetEmp?.avatar || "RK";
 
-    if (editingAssignment) {
-      const oldShiftName = editingAssignment.shiftName;
-      const historyLog: ShiftHistoryEntry[] = [
-        {
-          id: `h-${Date.now()}`,
-          date: new Date().toLocaleDateString("en-GB"),
-          oldShift: oldShiftName,
-          newShift: shiftObj.name,
-          changedBy: "Neha Mehta (HR)",
-          remarks: assignRemarks || "Shift modified via Management Center",
-        },
-        ...(editingAssignment.history || []),
-      ];
+    const historyLog: ShiftHistoryEntry[] = editingAssignment
+      ? [
+          {
+            id: `h-${Date.now()}`,
+            date: new Date().toLocaleDateString("en-GB"),
+            oldShift: editingAssignment.shiftName,
+            newShift: shiftObj.name,
+            changedBy: "HR Admin",
+            remarks: assignRemarks || "Shift modified via Management Center",
+          },
+          ...(editingAssignment.history || []),
+        ]
+      : [
+          {
+            id: `h-${Date.now()}`,
+            date: new Date().toLocaleDateString("en-GB"),
+            oldShift: "None",
+            newShift: shiftObj.name,
+            changedBy: "HR Admin",
+            remarks: "Initial roster assignment",
+          },
+        ];
 
-      setAssignments((prev) =>
-        prev.map((a) =>
-          a.id === editingAssignment.id
-            ? {
-                ...a,
-                shiftId: shiftObj.id,
-                shiftCode: shiftObj.code,
-                shiftName: shiftObj.name,
-                shiftCategory: shiftObj.category,
-                startTime: shiftObj.startTime,
-                endTime: shiftObj.endTime,
-                effectiveFrom: formattedFrom,
-                effectiveTo: formattedTo,
-                remarks: assignRemarks,
-                history: historyLog,
-              }
-            : a
-        )
-      );
-      setToastMessage(`Updated shift assignment for ${empName} to ${shiftObj.name}.`);
-    } else {
-      const newAssignment: ShiftAssignment = {
-        id: `SA-${Math.floor(100 + Math.random() * 900)}`,
+    setAssignSaving(true);
+    setAssignError(null);
+    try {
+      const payload = mapShiftAssignmentToApi({
         employeeId: assignEmpId,
-        employeeName: empName,
-        department: empDept,
-        designation: empDesig,
-        employmentType: "Permanent",
-        avatar: empAvatar,
         shiftId: shiftObj.id,
         shiftCode: shiftObj.code,
         shiftName: shiftObj.name,
         shiftCategory: shiftObj.category,
         startTime: shiftObj.startTime,
         endTime: shiftObj.endTime,
-        effectiveFrom: formattedFrom,
-        effectiveTo: formattedTo,
+        effectiveFrom: assignEffectiveFrom,
+        effectiveTo: assignEffectiveTo || undefined,
         status: "Active",
-        assignedBy: "Neha Mehta (HR)",
-        assignedOn: new Date().toLocaleDateString("en-GB"),
+        assignedBy: "HR Admin",
         remarks: assignRemarks || "Assigned via Shift Management.",
-        history: [
-          {
-            id: `h-${Date.now()}`,
-            date: new Date().toLocaleDateString("en-GB"),
-            oldShift: "None",
-            newShift: shiftObj.name,
-            changedBy: "Neha Mehta (HR)",
-            remarks: "Initial Roster Assignment",
-          },
-        ],
-      };
-      setAssignments((prev) => [newAssignment, ...prev]);
-      setToastMessage(`Assigned ${shiftObj.name} to ${empName}.`);
+        history: historyLog,
+      });
+
+      if (editingAssignment) {
+        await hrShiftAssignmentService.update(editingAssignment.id, payload);
+        setToastMessage(`Updated shift assignment for ${empName} to ${shiftObj.name}.`);
+      } else {
+        await hrShiftAssignmentService.create(payload);
+        setToastMessage(`Assigned ${shiftObj.name} to ${empName}.`);
+      }
+      await loadShiftData();
+      setIsAssignModalOpen(false);
+    } catch (err) {
+      setAssignError(err instanceof Error ? err.message : "Failed to save shift assignment.");
+    } finally {
+      setAssignSaving(false);
     }
-    setIsAssignModalOpen(false);
   };
 
   // Quick Shift Change Handler (Improvement #5)
@@ -502,104 +526,117 @@ export function ShiftManagementView() {
     setIsQuickChangeModalOpen(true);
   };
 
-  const handleSaveQuickChange = () => {
+  const handleSaveQuickChange = async () => {
     if (!quickChangeTarget) return;
     const shiftObj = masterShifts.find((s) => s.id === quickNewShiftId);
     if (!shiftObj) return;
 
-    const oldShiftName = quickChangeTarget.shiftName;
     const historyLog: ShiftHistoryEntry[] = [
       {
         id: `h-${Date.now()}`,
         date: new Date().toLocaleDateString("en-GB"),
-        oldShift: oldShiftName,
+        oldShift: quickChangeTarget.shiftName,
         newShift: shiftObj.name,
-        changedBy: "Neha Mehta (Quick Action)",
-        remarks: "1-Click Quick Shift Swap",
+        changedBy: "HR Admin (Quick Action)",
+        remarks: "1-Click quick shift swap",
       },
       ...(quickChangeTarget.history || []),
     ];
 
-    setAssignments((prev) =>
-      prev.map((a) =>
-        a.id === quickChangeTarget.id
-          ? {
-              ...a,
-              shiftId: shiftObj.id,
-              shiftCode: shiftObj.code,
-              shiftName: shiftObj.name,
-              shiftCategory: shiftObj.category,
-              startTime: shiftObj.startTime,
-              endTime: shiftObj.endTime,
-              history: historyLog,
-            }
-          : a
-      )
-    );
-
-    setIsQuickChangeModalOpen(false);
-    setToastMessage(`Quick swapped ${quickChangeTarget.employeeName} to ${shiftObj.name}.`);
+    try {
+      await hrShiftAssignmentService.update(
+        quickChangeTarget.id,
+        mapShiftAssignmentToApi({
+          ...quickChangeTarget,
+          shiftId: shiftObj.id,
+          shiftCode: shiftObj.code,
+          shiftName: shiftObj.name,
+          shiftCategory: shiftObj.category,
+          startTime: shiftObj.startTime,
+          endTime: shiftObj.endTime,
+          history: historyLog,
+        }),
+      );
+      await loadShiftData();
+      setIsQuickChangeModalOpen(false);
+      setToastMessage(`Quick swapped ${quickChangeTarget.employeeName} to ${shiftObj.name}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Quick shift swap failed.");
+    }
   };
 
-  // End Assignment Action (Improvement #4)
-  const handleEndAssignment = (id: string, empName: string) => {
-    setAssignments((prev) =>
-      prev.map((a) =>
-        a.id === id
-          ? {
-              ...a,
-              status: "Inactive",
-              effectiveTo: new Date().toLocaleDateString("en-GB"),
-            }
-          : a
-      )
-    );
-    setToastMessage(`Ended shift assignment for ${empName}. Assignment marked Inactive with today's end date.`);
+  const handleEndAssignment = async (id: string, empName: string) => {
+    const target = assignments.find((a) => a.id === id);
+    if (!target) return;
+    const todayIso = new Date().toISOString().split("T")[0];
+    try {
+      await hrShiftAssignmentService.update(
+        id,
+        mapShiftAssignmentToApi({
+          ...target,
+          status: "Inactive",
+          effectiveTo: todayIso,
+        }),
+      );
+      await loadShiftData();
+      setToastMessage(`Ended shift assignment for ${empName}. Assignment marked inactive with today's end date.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to end shift assignment.");
+    }
   };
 
-  // Save Bulk Assignment (Improvement #7)
-  const handleSaveBulkAssign = (e: React.FormEvent) => {
+  const handleSaveBulkAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     const shiftObj = masterShifts.find((s) => s.id === bulkShiftId);
-    if (!shiftObj) return;
-
-    const fromParts = bulkEffectiveFrom.split("-");
-    const formattedFrom = fromParts.length === 3 ? `${fromParts[2]}/${fromParts[1]}/${fromParts[0]}` : bulkEffectiveFrom;
-    let formattedTo: string | undefined = undefined;
-    if (bulkEffectiveTo) {
-      const toParts = bulkEffectiveTo.split("-");
-      formattedTo = toParts.length === 3 ? `${toParts[2]}/${toParts[1]}/${toParts[0]}` : bulkEffectiveTo;
+    if (!shiftObj || !bulkEffectiveFrom) {
+      setToastMessage("Select shift type and effective from date.");
+      return;
+    }
+    if (bulkPreviewStaff.length === 0) {
+      setToastMessage("No employees found for the selected target group.");
+      return;
     }
 
-    setAssignments((prev) =>
-      prev.map((a) => {
-        let match = false;
-        if (bulkApplyTo === "Department") match = bulkDepartment === "ALL" || a.department === bulkDepartment;
-        else if (bulkApplyTo === "Designation") match = a.designation === bulkDesignation;
-        else if (bulkApplyTo === "EmploymentType") match = a.employmentType === bulkEmploymentType;
-        else match = true;
-
-        if (match) {
-          return {
-            ...a,
-            shiftId: shiftObj.id,
-            shiftCode: shiftObj.code,
-            shiftName: shiftObj.name,
-            shiftCategory: shiftObj.category,
-            startTime: shiftObj.startTime,
-            endTime: shiftObj.endTime,
-            effectiveFrom: formattedFrom,
-            effectiveTo: formattedTo,
-            status: "Active",
-            assignedBy: "HR Admin (Bulk Action)",
-          };
+    setBulkSaving(true);
+    try {
+      let updated = 0;
+      let created = 0;
+      for (const emp of bulkPreviewStaff) {
+        const existing = assignments.find(
+          (a) => a.employeeId === emp.id && a.status === "Active",
+        );
+        const payload = mapShiftAssignmentToApi({
+          employeeId: emp.id,
+          shiftId: shiftObj.id,
+          shiftCode: shiftObj.code,
+          shiftName: shiftObj.name,
+          shiftCategory: shiftObj.category,
+          startTime: shiftObj.startTime,
+          endTime: shiftObj.endTime,
+          effectiveFrom: bulkEffectiveFrom,
+          effectiveTo: bulkEffectiveTo || undefined,
+          status: "Active",
+          assignedBy: "HR Admin (Bulk Action)",
+          remarks: "Bulk assigned via Shift Management.",
+        });
+        if (existing) {
+          await hrShiftAssignmentService.update(existing.id, payload);
+          updated++;
+        } else {
+          await hrShiftAssignmentService.create(payload);
+          created++;
         }
-        return a;
-      })
-    );
-
-    setIsBulkModalOpen(false);
-    setToastMessage(`Bulk assigned ${shiftObj.name} to target staff.`);
+      }
+      await loadShiftData();
+      setIsBulkModalOpen(false);
+      setToastMessage(
+        `Bulk assigned ${shiftObj.name} to ${bulkPreviewStaff.length} employee(s) (${created} created, ${updated} updated).`,
+      );
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Bulk assignment failed.");
+    } finally {
+      setBulkSaving(false);
+    }
   };
 
   return (
@@ -727,7 +764,14 @@ export function ShiftManagementView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredAssignments.map((a) => (
+                {filteredAssignments.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-10 text-center text-xs text-slate-400">
+                      No shift assignments found. Assign a shift to get started.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAssignments.map((a) => (
                   <tr
                     key={a.id}
                     className="hover:bg-slate-50/80 transition cursor-pointer"
@@ -808,7 +852,8 @@ export function ShiftManagementView() {
                       <p className="text-[10px] text-slate-400">{a.assignedOn}</p>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -892,6 +937,11 @@ export function ShiftManagementView() {
         size="md"
       >
         <form onSubmit={handleSaveSingleAssign} className="space-y-4">
+          {assignError && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800">
+              {assignError}
+            </div>
+          )}
           {/* Conflict Warning Box (Improvement #3) */}
           {conflictWarning && (
             <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-900 flex items-start gap-2">
@@ -1067,9 +1117,10 @@ export function ShiftManagementView() {
             <Button
               type="submit"
               size="sm"
+              disabled={assignSaving}
               className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white"
             >
-              Save Shift Assignment
+              {assignSaving ? "Saving…" : "Save Shift Assignment"}
             </Button>
           </div>
         </form>
@@ -1206,11 +1257,11 @@ export function ShiftManagementView() {
             <div className="max-h-36 overflow-y-auto space-y-1.5">
               {bulkPreviewStaff.map((emp) => (
                 <div
-                  key={emp.employeeId}
+                  key={emp.id}
                   className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 text-xs"
                 >
                   <span className="font-bold text-slate-900">
-                    {emp.employeeName} ({emp.employeeId})
+                    {emp.name} ({emp.id})
                   </span>
                   <span className="text-slate-500 text-[11px] font-semibold">{emp.department}</span>
                 </div>
@@ -1231,9 +1282,10 @@ export function ShiftManagementView() {
             <Button
               type="submit"
               size="sm"
+              disabled={bulkSaving}
               className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white"
             >
-              Confirm Bulk Assignment
+              {bulkSaving ? "Assigning…" : "Confirm Bulk Assignment"}
             </Button>
           </div>
         </form>

@@ -14,6 +14,7 @@ import {
   Phone,
   Printer,
   User,
+  UserX,
   Utensils,
 } from "lucide-react";
 import type { ReservationBooking } from "@/app/data/types";
@@ -24,6 +25,7 @@ import { usePropertyOptional } from "@/components/platform/PropertyProvider";
 import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
 import { checkInHref, checkOutHref } from "@/lib/check-in-navigation";
+import { isNoShowEligible } from "@/lib/reservation-dates";
 import { formatBookingGuestLine } from "@/lib/reservation-display";
 import { printBookingDetail } from "./bookingPrintUtils";
 import { ReservationStatusBadge } from "./ReservationStatusBadge";
@@ -76,9 +78,10 @@ interface BookingDetailDrawerProps {
   booking: ReservationBooking | null;
   onClose: () => void;
   onCancel?: (booking: ReservationBooking) => void;
+  onNoShow?: (booking: ReservationBooking) => void;
 }
 
-export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetailDrawerProps) {
+export function BookingDetailDrawer({ booking, onClose, onCancel, onNoShow }: BookingDetailDrawerProps) {
   const propertyCtx = usePropertyOptional();
   const propertyName = propertyCtx?.property?.name ?? "IMPACT PMS";
   const [detail, setDetail] = useState<ReservationBooking | null>(booking);
@@ -142,13 +145,27 @@ export function BookingDetailDrawer({ booking, onClose, onCancel }: BookingDetai
                 Check Out
               </Button>
             </Link>
-          ) : detail.status !== "Cancelled" && detail.status !== "Checked Out" ? (
-            <Link href={checkInHref(detail)}>
-              <Button className="gap-1.5 bg-emerald-700 hover:bg-emerald-800">
-                <LogIn className="h-3.5 w-3.5" />
-                Check In
-              </Button>
-            </Link>
+          ) : detail.status !== "Cancelled" &&
+            detail.status !== "Checked Out" &&
+            detail.status !== "No Show" ? (
+            <>
+              {isNoShowEligible(detail) && onNoShow ? (
+                <Button
+                  variant="outline"
+                  className="gap-1.5 border-orange-200 text-orange-700 hover:bg-orange-50"
+                  onClick={() => onNoShow(detail)}
+                >
+                  <UserX className="h-3.5 w-3.5" />
+                  Mark No Show
+                </Button>
+              ) : null}
+              <Link href={checkInHref(detail)}>
+                <Button className="gap-1.5 bg-emerald-700 hover:bg-emerald-800">
+                  <LogIn className="h-3.5 w-3.5" />
+                  Check In
+                </Button>
+              </Link>
+            </>
           ) : null}
         </>
       }

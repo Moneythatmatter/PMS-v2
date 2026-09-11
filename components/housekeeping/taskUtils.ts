@@ -33,11 +33,11 @@ export function taskToRoomStatus(task: HKTask): HKRoom["status"] {
       return "Cleaning";
     case "PENDING_INSPECTION":
     case "COMPLETED":
-      return "Inspection Pending";
+      return "Clean";
     case "PENDING":
     case "ASSIGNED":
     default:
-      return "Vacant Dirty";
+      return "Dirty";
   }
 }
 

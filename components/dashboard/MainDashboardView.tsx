@@ -10,10 +10,14 @@ import {
   occupancyData,
   ratingsData,
   activityLog,
-  bookings,
   navItems,
   currentUser,
 } from "@/app/data";
+import type { Booking } from "@/app/data/types";
+import type { ReservationBooking } from "@/app/data/types";
+import { displayBookingNo } from "@/lib/booking-display";
+import { isArrivingToday } from "@/lib/reservation-dates";
+import { reservationService } from "@/services/front-office";
 import { AppShell } from "@/components/layout/AppShell";
 import { StatCard } from "@/components/ui/StatCard";
 import { GuestsChart } from "@/components/charts/GuestsChart";
@@ -31,9 +35,40 @@ import { hkRoomService } from "@/services/housekeeping";
 import { wakeUpCallService } from "@/services/front-office";
 import type { WakeUpCall } from "@/app/data/frontoffice/modules";
 
+function mapReservationStatus(status: string): Booking["status"] {
+  switch (status) {
+    case "Checked In":
+    case "In-House":
+      return "Checked In";
+    case "Cancelled":
+      return "Canceled";
+    case "Reserved":
+    case "Confirmed":
+      return "Confirmed";
+    default:
+      return "Pending";
+  }
+}
+
+function mapReservationToBooking(reservation: ReservationBooking): Booking {
+  const nights = reservation.nights ?? 1;
+  return {
+    id: displayBookingNo(reservation),
+    guestName: reservation.guestName ?? "Guest",
+    roomType: reservation.roomType ?? "—",
+    roomNo: reservation.roomNo ?? "TBA",
+    duration: `${nights} night${nights !== 1 ? "s" : ""}`,
+    checkIn: reservation.checkIn,
+    checkOut: reservation.checkOut,
+    status: mapReservationStatus(reservation.status),
+  };
+}
+
 export function MainDashboardView() {
   const [rooms, setRooms] = useState<HKRoom[]>([]);
   const [wakeUpCalls, setWakeUpCalls] = useState<WakeUpCall[]>([]);
+  const [todayBookings, setTodayBookings] = useState<Booking[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,12 +102,40 @@ export function MainDashboardView() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setBookingsLoading(true);
+        const reservations = await reservationService.list();
+        if (cancelled) return;
+        const rows = reservations
+          .filter(
+            (r) =>
+              isArrivingToday(r) &&
+              r.status !== "Cancelled" &&
+              r.status !== "No Show" &&
+              r.status !== "Checked Out",
+          )
+          .map(mapReservationToBooking);
+        setTodayBookings(rows);
+      } catch {
+        if (!cancelled) setTodayBookings([]);
+      } finally {
+        if (!cancelled) setBookingsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const computedOccupancy = useMemo(() => {
     if (!rooms.length) return occupancyData;
     const total = rooms.length;
     const occupied = rooms.filter((r) => r.status === "Occupied").length;
-    const vacantReady = rooms.filter((r) => r.status === "Vacant Ready").length;
-    const vacantDirty = rooms.filter((r) => r.status === "Vacant Dirty").length;
+    const vacantReady = rooms.filter((r) => r.status === "Vacant" || r.status === "Inspected").length;
+    const vacantDirty = rooms.filter((r) => r.status === "Dirty").length;
 
     const occRate = Math.round((occupied / total) * 100);
 
@@ -82,8 +145,8 @@ export function MainDashboardView() {
       total,
       statuses: [
         { label: "Occupied", count: occupied, color: "#16a34a" },
-        { label: "Vacant Ready", count: vacantReady, color: "#2563eb" },
-        { label: "Vacant Dirty", count: vacantDirty, color: "#eab308" },
+        { label: "Vacant", count: vacantReady, color: "#15803d" },
+        { label: "Dirty", count: vacantDirty, color: "#f59e0b" },
       ],
     };
   }, [rooms]);
@@ -133,8 +196,8 @@ export function MainDashboardView() {
           </div>
         </div>
 
-        <div className="min-w-0 overflow-hidden">
-          <BookingList bookings={bookings} />
+        <div className="min-w-0">
+          <BookingList bookings={todayBookings} loading={bookingsLoading} />
         </div>
       </div>
     </AppShell>

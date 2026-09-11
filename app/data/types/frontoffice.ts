@@ -66,6 +66,7 @@ export type ReservationStatus =
   | "Reserved"
   | "Checked Out"
   | "Cancelled"
+  | "No Show"
   | "In-House";
 
 export interface ReservationSummaryStat {
@@ -131,4 +132,5 @@ export type ReservationFilter =
   | "reserved"
   | "checked-out"
   | "cancelled"
+  | "no-show"
   | "outstanding";

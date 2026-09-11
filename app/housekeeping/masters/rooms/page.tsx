@@ -212,13 +212,10 @@ export default function RoomMasterConfig() {
               </h3>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
                 {floorRooms.map((room) => {
-                  const isDirty = room.status.includes("Dirty");
-                  const isReady = room.status === "Vacant Ready";
-                  const isCleaning = room.status === "Cleaning" || room.status === "Inspection Pending";
-                  const isBlocked =
-                    room.status === "Blocked" ||
-                    room.status === "Out of Order" ||
-                    room.status === "Out of Service";
+                  const isDirty = room.status === "Dirty";
+                  const isReady = room.status === "Vacant" || room.status === "Inspected";
+                  const isCleaning = room.status === "Cleaning" || room.status === "Clean";
+                  const isBlocked = room.status === "Blocked";
 
                   return (
                     <div
@@ -350,10 +347,16 @@ export default function RoomMasterConfig() {
                     <span
                       className={cn(
                         "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase",
-                        room.status === "Vacant Ready"
+                        room.status === "Vacant" || room.status === "Inspected"
                           ? "bg-emerald-50 text-emerald-700"
-                          : room.status.includes("Dirty")
-                          ? "bg-red-50 text-red-700"
+                          : room.status === "Dirty"
+                          ? "bg-amber-50 text-amber-700"
+                          : room.status === "Cleaning" || room.status === "Clean"
+                          ? "bg-sky-50 text-sky-700"
+                          : room.status === "Reserved"
+                          ? "bg-blue-50 text-blue-700"
+                          : room.status === "Occupied"
+                          ? "bg-violet-50 text-violet-700"
                           : "bg-slate-100 text-slate-700"
                       )}
                     >
@@ -395,15 +398,14 @@ export default function RoomMasterConfig() {
                 value={selectedRoom.status}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleStatusChange(roomKey(selectedRoom), e.target.value as any)}
               >
-                <option value="Vacant Ready">Vacant Ready (Clean & Inspected)</option>
-                <option value="Vacant Dirty">Vacant Dirty (Awaiting clean)</option>
-                <option value="Occupied">Occupied Clean (Stay-over ready)</option>
-                <option value="Occupied Dirty">Occupied Dirty (Stay-over dirty)</option>
-                <option value="Cleaning">Cleaning In Progress</option>
-                <option value="Inspection Pending">Inspection Pending</option>
-                <option value="Blocked">Blocked (Hold Reservation)</option>
-                <option value="Out of Order">Out of Order (OOO locks inventory)</option>
-                <option value="Out of Service">Out of Service (OOS minor repairs)</option>
+                <option value="Vacant">Vacant (Available for sale)</option>
+                <option value="Reserved">Reserved (Future booking)</option>
+                <option value="Occupied">Occupied (Guest checked in)</option>
+                <option value="Dirty">Dirty (Needs cleaning)</option>
+                <option value="Cleaning">Cleaning (In progress)</option>
+                <option value="Clean">Clean (Awaiting inspection)</option>
+                <option value="Inspected">Inspected (Ready for sale)</option>
+                <option value="Blocked">Blocked (Out of service)</option>
               </SelectInput>
             </FormField>
 

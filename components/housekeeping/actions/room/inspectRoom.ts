@@ -52,9 +52,10 @@ export const inspectRoom = (
       const updatedHistory = [newHistoryRecord, ...historyList];
 
       if (passed) {
+        const hasReservation = Boolean(r.guestName) && r.foStatus !== "Occupied";
         return {
           ...r,
-          status: "Vacant Ready" as const,
+          status: (hasReservation ? "Reserved" : "Vacant") as const,
           hkStatus: "Inspected" as const,
           foStatus: "Vacant" as const,
           assignedSupervisor: dispatchers.currentUsername,
@@ -64,7 +65,7 @@ export const inspectRoom = (
       }
       return {
         ...r,
-        status: "Vacant Dirty" as const,
+        status: "Dirty" as const,
         hkStatus: "Dirty" as const,
         remarks: remarks || "Inspection failed. Requires reclean.",
         inspectionHistory: updatedHistory,
@@ -79,7 +80,7 @@ export const inspectRoom = (
     logAudit(
       "Inspection",
       "Inspection Passed",
-      `Supervisor ${dispatchers.currentUsername} approved room ${label}. Quality Score: ${qualityScore}%. Signature: ${signature || "Signed"}. Remarks: ${remarks || "None"}. Room is now Vacant Ready.`,
+      `Supervisor ${dispatchers.currentUsername} approved room ${label}. Quality Score: ${qualityScore}%. Signature: ${signature || "Signed"}. Remarks: ${remarks || "None"}. Room is now ready for sale.`,
       label,
       dispatchers.currentUsername,
       dispatchers.setHistory,

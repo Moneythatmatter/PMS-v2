@@ -7,6 +7,7 @@ import { WorkspaceShell } from "@/components/platform/WorkspaceShell";
 import { Button } from "@/components/ui/Button";
 import {
   platformService,
+  type EmployeeLinkOption,
   type ManagedUserDto,
   type PlatformModule,
   type PropertyDto,
@@ -30,9 +31,11 @@ export function UserManagementView() {
     password: "",
     role: "Staff",
     isSuperAdmin: false,
+    employeeId: "" as string,
     propertyIds: [] as string[],
     permissions: {} as Record<string, Record<string, PermissionLevel>>,
   });
+  const [employeeOptions, setEmployeeOptions] = useState<EmployeeLinkOption[]>([]);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -77,10 +80,23 @@ export function UserManagementView() {
       password: "",
       role: selected.role,
       isSuperAdmin: Boolean(selected.isSuperAdmin),
+      employeeId: selected.employeeId ?? "",
       propertyIds: [...selected.propertyIds],
       permissions: perms,
     });
   }, [selected]);
+
+  useEffect(() => {
+    const propertyId = form.propertyIds[0];
+    if (!propertyId || form.isSuperAdmin) {
+      setEmployeeOptions([]);
+      return;
+    }
+    void platformService
+      .listEmployeeLinkOptions(propertyId)
+      .then(setEmployeeOptions)
+      .catch(() => setEmployeeOptions([]));
+  }, [form.propertyIds, form.isSuperAdmin]);
 
   const resetNew = () => {
     setSelectedId(null);
@@ -90,6 +106,7 @@ export function UserManagementView() {
       password: "",
       role: "Staff",
       isSuperAdmin: false,
+      employeeId: "",
       propertyIds: properties[0] ? [properties[0].id] : [],
       permissions: {},
     });
@@ -144,6 +161,7 @@ export function UserManagementView() {
         email: form.email,
         role: form.role,
         isSuperAdmin: form.isSuperAdmin,
+        employeeId: form.employeeId || null,
         propertyIds: form.propertyIds,
         permissions: flattenPermissions(),
       };
@@ -257,6 +275,36 @@ export function UserManagementView() {
             />
             Super administrator (all properties & modules)
           </label>
+
+          {!form.isSuperAdmin && form.propertyIds.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Employee portal link
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Required for Employee Portal login. Pick the HR employee record for this user.
+              </p>
+              <select
+                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                value={form.employeeId}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, employeeId: e.target.value }))
+                }
+              >
+                <option value="">— Not linked —</option>
+                {employeeOptions.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.empCode} — {emp.name} ({emp.email})
+                  </option>
+                ))}
+              </select>
+              {selected?.employeeLabel && !form.employeeId ? (
+                <p className="mt-1 text-xs text-amber-700">
+                  Previously linked: {selected.employeeLabel}
+                </p>
+              ) : null}
+            </div>
+          )}
 
           {!form.isSuperAdmin && (
             <>

@@ -9,7 +9,6 @@ import { ShiftManagementView } from "@/components/hr/ShiftManagementView";
 import { LeaveManagementView } from "@/components/hr/LeaveManagementView";
 import { OvertimeManagementView } from "@/components/hr/OvertimeManagementView";
 import { WeeklyOffView } from "@/components/hr/WeeklyOffView";
-import { HolidayAttendanceView } from "@/components/hr/HolidayAttendanceView";
 import { AttendanceView } from "@/components/hr/AttendanceView";
 import { SalaryStructureView } from "@/components/hr/SalaryStructureView";
 import { PayrollSettingsView } from "@/components/hr/PayrollSettingsView";
@@ -81,10 +80,6 @@ export default async function HumanResourcesPage({
 
   if (slugPath === "attendance-leave/weekly-off") {
     return <WeeklyOffView />;
-  }
-
-  if (slugPath === "attendance-leave/holiday-attendance") {
-    return <HolidayAttendanceView />;
   }
 
   if (slugPath === "payroll/process-payroll") {

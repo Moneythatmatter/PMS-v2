@@ -18,8 +18,9 @@ const statusToneMap: Record<string, BadgeTone> = {
   Active: "success",
   Confirmed: "success",
   "Checked In": "success",
-  Clean: "success",
+  Clean: "info",
   Inspected: "success",
+  Cleaning: "warning",
   Passed: "success",
   Paid: "success",
   Completed: "success",
@@ -62,7 +63,8 @@ const statusToneMap: Record<string, BadgeTone> = {
   "Checked Out": "info",
   Occupied: "info",
   Reserved: "info",
-  Vacant: "info",
+  Vacant: "success",
+  Blocked: "neutral",
   Info: "info",
 
   // Neutral

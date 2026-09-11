@@ -501,11 +501,11 @@ export default function BatchFEFOExpiryControlPage() {
       </OperationsFilterDrawer>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-        <ModuleDataTable
-          columns={columns}
-          rows={filteredBatches}
+      <ModuleDataTable
+        columns={columns}
+        rows={filteredBatches}
           emptyMessage="No batches match your search or filters."
-          onRowClick={(r) => setSelectedBatch(r as BatchRecord)}
+        onRowClick={(r) => setSelectedBatch(r as BatchRecord)}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
           renderMobileCard={(r: BatchRecord) => (
@@ -568,8 +568,8 @@ export default function BatchFEFOExpiryControlPage() {
             </button>
           )}
 
-          <button
-            type="button"
+            <button
+              type="button"
             onClick={() => {
               setStatusFilter("Near Expiry");
               setAlertsOpen(false);
@@ -585,10 +585,10 @@ export default function BatchFEFOExpiryControlPage() {
                 </p>
               </div>
             </div>
-          </button>
+            </button>
 
-          <button
-            type="button"
+            <button
+              type="button"
             onClick={() => {
               setStatusFilter("Expiring Soon");
               setAlertsOpen(false);
@@ -597,15 +597,15 @@ export default function BatchFEFOExpiryControlPage() {
           >
             <div className="flex items-start gap-2.5">
               <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-              <div>
+            <div>
                 <p className="text-sm font-semibold text-amber-950">Expiring this week</p>
                 <p className="mt-0.5 text-xs text-amber-800/80">
                   {expiringWeekCount} batch{expiringWeekCount === 1 ? "" : "es"} to issue first
-                </p>
-              </div>
+              </p>
+            </div>
             </div>
           </button>
-        </div>
+          </div>
       </Drawer>
 
       {/* VIEW BATCH DETAILS DRAWER */}

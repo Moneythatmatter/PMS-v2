@@ -611,22 +611,22 @@ export function SalaryStructureView() {
 
     const payload = mapSalaryStructureToApi({
       name: formName.trim(),
-      department: formDept,
-      employmentType: formEmpType,
+                department: formDept,
+                employmentType: formEmpType,
       structureType: existing?.structureType ?? "Grade-Based",
       version: existing?.version ?? 1,
       isCurrentVersion: existing?.isCurrentVersion ?? true,
       effectiveFrom: existing?.effectiveFrom ?? todayIso,
       effectiveTo: existing?.effectiveTo,
-      description: formDesc,
+                description: formDesc,
       status: existing?.status ?? "Active",
       overtimeEligible: existing?.overtimeEligible ?? true,
       incentives: existing?.incentives ?? 0,
-      earnings: computedEarnings,
-      deductions: computedDeductions,
-      grossSalary: gross,
-      totalDeductions: totalDed,
-      netSalary: net,
+                earnings: computedEarnings,
+                deductions: computedDeductions,
+                grossSalary: gross,
+                totalDeductions: totalDed,
+                netSalary: net,
       assignedEmployees: existing?.assignedEmployees ?? [],
       createdBy: existing?.createdBy ?? "HR Admin",
       createdDate: existing?.createdDate ?? todayIso,
@@ -637,12 +637,12 @@ export function SalaryStructureView() {
       if (editingStructureId) {
         await hrSalaryStructureService.update(editingStructureId, payload);
         setToastMessage(`Salary structure "${formName}" updated successfully.`);
-      } else {
+    } else {
         await hrSalaryStructureService.create(payload);
         setToastMessage(`Salary structure "${formName}" created successfully.`);
       }
       await loadStructures();
-      setIsCreateModalOpen(false);
+    setIsCreateModalOpen(false);
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : "Failed to save salary structure");
     }
@@ -718,7 +718,7 @@ export function SalaryStructureView() {
       setStructures(structureRows.map(mapSalaryStructureFromApi));
       setEmployees(empRows.map(mapEmployeeFromApi));
 
-      setIsAssignModalOpen(false);
+    setIsAssignModalOpen(false);
       setToastMessage(
         `Assigned "${assigningStructure.name}" to ${idsToAssign.size} employee(s).`,
       );
@@ -967,18 +967,18 @@ export function SalaryStructureView() {
               >
                 Reset
               </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsMobileFilterOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold sm:hidden"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Filters
-            </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsMobileFilterOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold sm:hidden"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Filters
+          </button>
         </div>
+      </div>
 
         <div className="hidden sm:block">
           <table className="w-full table-fixed text-left text-xs text-slate-700">
@@ -1020,27 +1020,27 @@ export function SalaryStructureView() {
                 </tr>
               ) : (
               filteredStructures.map((s) => (
-                <tr
-                  key={s.id}
+                  <tr
+                    key={s.id}
                   className="cursor-pointer transition hover:bg-slate-50/80"
-                  onClick={() => setViewingStructure(s)}
-                >
+                    onClick={() => setViewingStructure(s)}
+                  >
                   <td className="px-4 py-3">
                     <div className="flex min-w-0 items-center gap-2">
                       <p className="truncate font-semibold text-slate-900">{s.name}</p>
                       <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
-                        v{s.version}
-                      </span>
-                    </div>
+                          v{s.version}
+                        </span>
+                      </div>
                     <p className="mt-0.5 truncate text-[10px] text-slate-500">
                       {s.employmentType} · Updated {s.lastUpdated}
                     </p>
-                  </td>
+                    </td>
 
                   <td className="px-4 py-3">
                     <p className="font-medium text-slate-800">{s.department}</p>
                     <p className="text-[10px] text-slate-500">{s.structureType}</p>
-                  </td>
+                    </td>
 
                   <td className="px-4 py-3">
                     <p className="font-medium text-slate-800">
@@ -1049,7 +1049,7 @@ export function SalaryStructureView() {
                     <p className="text-[10px] text-slate-500">
                       {s.deductions.length} deduction{s.deductions.length !== 1 ? "s" : ""}
                     </p>
-                  </td>
+                    </td>
 
                   <td className="px-4 py-3">
                     <p className="font-bold tabular-nums text-slate-900">
@@ -1057,61 +1057,61 @@ export function SalaryStructureView() {
                     </p>
                     <p className="text-[10px] font-semibold tabular-nums text-emerald-700">
                       Net ₹{s.netSalary.toLocaleString("en-IN")}
-                    </p>
-                  </td>
+                      </p>
+                    </td>
 
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-800">
                       <Users className="h-3 w-3" />
                       {s.assignedEmployees.length}
                     </span>
-                  </td>
+                    </td>
 
                   <td className="px-4 py-3">
                     <StatusBadge status={s.status} />
-                  </td>
+                    </td>
 
                   <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-0.5">
                       <button
-                        type="button"
+                          type="button"
                         title="View"
-                        onClick={() => setViewingStructure(s)}
+                          onClick={() => setViewingStructure(s)}
                         className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
                       <button
-                        type="button"
+                          type="button"
                         title="Edit"
-                        onClick={() => handleOpenCreateModal(s)}
+                          onClick={() => handleOpenCreateModal(s)}
                         className="rounded-lg p-1.5 text-emerald-700 transition hover:bg-emerald-50"
                       >
                         <Edit className="h-4 w-4" />
                       </button>
                       <button
-                        type="button"
+                          type="button"
                         title="Assign"
-                        onClick={() => handleOpenAssignModal(s)}
+                          onClick={() => handleOpenAssignModal(s)}
                         className="rounded-lg p-1.5 text-blue-700 transition hover:bg-blue-50"
                       >
                         <UserPlus className="h-4 w-4" />
                       </button>
                       <button
-                        type="button"
+                            type="button"
                         title="Delete"
-                        onClick={() => handleDeleteStructure(s.id, s.name)}
+                          onClick={() => handleDeleteStructure(s.id, s.name)}
                         className="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50"
-                      >
+                        >
                         <Trash2 className="h-4 w-4" />
                       </button>
-                    </div>
-                  </td>
-                </tr>
+                      </div>
+                    </td>
+                  </tr>
               )))}
             </tbody>
           </table>
-        </div>
+      </div>
 
         <div className="sm:hidden p-4 space-y-3">
           {filteredStructures.length === 0 ? (
@@ -1136,56 +1136,56 @@ export function SalaryStructureView() {
             />
           ) : (
           filteredStructures.map((s) => (
-            <div
-              key={s.id}
-              onClick={() => setViewingStructure(s)}
+          <div
+            key={s.id}
+            onClick={() => setViewingStructure(s)}
               className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate font-bold text-slate-900">{s.name}</p>
                   <p className="text-[10px] text-slate-500">{s.department} · {s.employmentType}</p>
-                </div>
-                <StatusBadge status={s.status} />
               </div>
+              <StatusBadge status={s.status} />
+            </div>
 
               <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs">
                 <div>
                   <p className="text-[10px] text-slate-500">Gross</p>
                   <p className="font-bold tabular-nums text-slate-900">₹{s.grossSalary.toLocaleString("en-IN")}</p>
-                </div>
+              </div>
                 <div>
                   <p className="text-[10px] text-slate-500">Net</p>
                   <p className="font-bold tabular-nums text-emerald-800">₹{s.netSalary.toLocaleString("en-IN")}</p>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenCreateModal(s);
-                  }}
-                >
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="flex-1 bg-emerald-700 text-xs text-white"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenAssignModal(s);
-                  }}
-                >
-                  Assign
-                </Button>
               </div>
             </div>
+
+              <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                  className="flex-1 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenCreateModal(s);
+                }}
+              >
+                Edit
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                  className="flex-1 bg-emerald-700 text-xs text-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenAssignModal(s);
+                }}
+              >
+                Assign
+              </Button>
+            </div>
+          </div>
           )))}
         </div>
 
@@ -1316,14 +1316,14 @@ export function SalaryStructureView() {
                       subtitle={isBasic ? "Required — fixed monthly amount" : undefined}
                       calcType={item.calcType}
                       onCalcTypeChange={(val) =>
-                        setFormEarnings((prev) =>
+                          setFormEarnings((prev) =>
                           prev.map((line, i) => (i === idx ? { ...line, calcType: val } : line)),
                         )
                       }
                       calcLockedLabel={isBasic ? "Fixed (₹)" : undefined}
                       amount={item.amountOrPercentage}
                       onAmountChange={(val) =>
-                        setFormEarnings((prev) =>
+                          setFormEarnings((prev) =>
                           prev.map((line, i) =>
                             i === idx
                               ? {
@@ -1374,13 +1374,13 @@ export function SalaryStructureView() {
                       name={item.componentName}
                       calcType={item.calcType}
                       onCalcTypeChange={(val) =>
-                        setFormDeductions((prev) =>
+                          setFormDeductions((prev) =>
                           prev.map((line, i) => (i === idx ? { ...line, calcType: val } : line)),
                         )
                       }
                       amount={item.amountOrPercentage}
                       onAmountChange={(val) =>
-                        setFormDeductions((prev) =>
+                          setFormDeductions((prev) =>
                           prev.map((line, i) => (i === idx ? { ...line, amountOrPercentage: val } : line)),
                         )
                       }

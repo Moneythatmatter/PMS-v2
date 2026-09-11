@@ -29,8 +29,16 @@ export interface HKRoom {
   cleaningFrequency: "Daily" | "Stay-over" | "Weekly" | "On-Demand";
   deepCleaningFrequency: "Every 30 Days" | "Every 60 Days" | "Every 90 Days";
   lastDeepCleaned: string;
-  status: "Vacant Ready" | "Occupied" | "Vacant Dirty" | "Occupied Dirty" | "Cleaning" | "Inspection Pending" | "Blocked" | "Out of Order" | "Out of Service";
-  hkStatus: "Clean" | "Dirty" | "Cleaning" | "Inspected" | "OOO" | "OOS";
+  status:
+    | "Vacant"
+    | "Reserved"
+    | "Occupied"
+    | "Dirty"
+    | "Cleaning"
+    | "Clean"
+    | "Inspected"
+    | "Blocked";
+  hkStatus: "Dirty" | "Cleaning" | "Clean" | "Inspected" | "OOS";
   foStatus: "Vacant" | "Occupied" | "Blocked";
   dnd: boolean;
   sleepOut: boolean;

@@ -19,17 +19,23 @@ function isHkEnum(value: string): value is HkRoomStatusEnum {
   return (HK_ENUMS as string[]).includes(value);
 }
 
+export type RoomDisplayStatus = HKRoom["status"];
+
 /** Map Front Office room status labels to hk_rooms enum for API writes. */
 export function foStatusToHkEnum(status: string): HkRoomStatusEnum {
   switch (status.trim()) {
     case "Vacant":
-    case "Clean":
+    case "Inspected":
       return "INSPECTED";
+    case "Clean":
+      return "CLEAN";
     case "Dirty":
       return "DIRTY";
-    case "Maintenance":
+    case "Cleaning":
       return "INSPECTING";
     case "Blocked":
+    case "Out of Service":
+    case "Out of Order":
       return "OUT_OF_SERVICE";
     default:
       return "DIRTY";
@@ -41,104 +47,102 @@ export function hkHousekeepingToHkEnum(value: string): HkRoomStatusEnum {
   switch (value.trim()) {
     case "Dirty":
       return "DIRTY";
-    case "In Progress":
+    case "Cleaning":
       return "INSPECTING";
     case "Clean":
-    case "Inspected":
-    default:
       return "CLEAN";
+    case "Inspected":
+      return "INSPECTED";
+    case "Out of Service":
+      return "OUT_OF_SERVICE";
+    default:
+      return "INSPECTED";
   }
 }
 
-/** Map legacy UI status labels to DB enum for API writes. */
+/** Map UI status labels to DB enum for API writes. */
 export function uiStatusToHkEnum(status: HKRoom["status"]): HkRoomStatusEnum {
   switch (status) {
-    case "Vacant Ready":
+    case "Vacant":
+    case "Inspected":
       return "INSPECTED";
-    case "Vacant Dirty":
-    case "Occupied Dirty":
+    case "Clean":
+      return "CLEAN";
+    case "Dirty":
       return "DIRTY";
     case "Cleaning":
-    case "Inspection Pending":
       return "INSPECTING";
-    case "Out of Order":
-    case "Out of Service":
-    case "Blocked":
-      return "OUT_OF_SERVICE";
+    case "Reserved":
+      return "INSPECTED";
     case "Occupied":
       return "CLEAN";
+    case "Blocked":
+      return "OUT_OF_SERVICE";
     default:
       return "DIRTY";
   }
 }
 
-/** Map DB enum (+ timestamps + occupancy) to legacy UI status fields. */
+function hkEnumToHkStatusLabel(enumStatus: HkRoomStatusEnum): HKRoom["hkStatus"] {
+  switch (enumStatus) {
+    case "DIRTY":
+      return "Dirty";
+    case "INSPECTING":
+      return "Cleaning";
+    case "CLEAN":
+      return "Clean";
+    case "INSPECTED":
+      return "Inspected";
+    case "OUT_OF_SERVICE":
+      return "OOS";
+    default:
+      return "Dirty";
+  }
+}
+
+/**
+ * Derive unified room display status from DB enum + reservation overlay.
+ *
+ * Priority: Blocked → Occupied → HK pipeline (Dirty/Cleaning/Clean) → Reserved → Vacant/Inspected
+ */
 export function hkEnumToUiFields(row: {
   status?: string;
-  lastCleanedAt?: string | null;
   isOccupied?: boolean;
+  hasReservation?: boolean;
+  isActive?: boolean;
 }): Pick<HKRoom, "status" | "hkStatus" | "foStatus"> {
   const raw = String(row.status ?? "DIRTY").trim().toUpperCase();
   const enumStatus: HkRoomStatusEnum = isHkEnum(raw) ? raw : "DIRTY";
   const isOccupied = row.isOccupied === true;
+  const hasReservation = row.hasReservation === true;
+  const isActive = row.isActive !== false;
+  const hkStatus = hkEnumToHkStatusLabel(enumStatus);
+
+  if (!isActive || enumStatus === "OUT_OF_SERVICE") {
+    return { status: "Blocked", hkStatus: "OOS", foStatus: "Blocked" };
+  }
 
   if (isOccupied) {
-    switch (enumStatus) {
-      case "INSPECTING":
-        if (row.lastCleanedAt) {
-          return {
-            status: "Inspection Pending",
-            hkStatus: "Cleaning",
-            foStatus: "Occupied",
-          };
-        }
-        return { status: "Cleaning", hkStatus: "Cleaning", foStatus: "Occupied" };
-      case "OUT_OF_SERVICE":
-        return {
-          status: "Out of Service",
-          hkStatus: "OOS",
-          foStatus: "Blocked",
-        };
-      case "DIRTY":
-        return { status: "Occupied", hkStatus: "Dirty", foStatus: "Occupied" };
-      case "CLEAN":
-        return { status: "Occupied", hkStatus: "Clean", foStatus: "Occupied" };
-      case "INSPECTED":
-        return { status: "Occupied", hkStatus: "Inspected", foStatus: "Occupied" };
-      default:
-        return { status: "Occupied", hkStatus: "Dirty", foStatus: "Occupied" };
-    }
+    return { status: "Occupied", hkStatus, foStatus: "Occupied" };
   }
 
-  switch (enumStatus) {
-    case "CLEAN":
-      return { status: "Vacant Ready", hkStatus: "Clean", foStatus: "Vacant" };
-    case "DIRTY":
-      return { status: "Vacant Dirty", hkStatus: "Dirty", foStatus: "Vacant" };
-    case "INSPECTING":
-      if (row.lastCleanedAt) {
-        return {
-          status: "Inspection Pending",
-          hkStatus: "Cleaning",
-          foStatus: "Vacant",
-        };
-      }
-      return { status: "Cleaning", hkStatus: "Cleaning", foStatus: "Vacant" };
-    case "INSPECTED":
-      return {
-        status: "Vacant Ready",
-        hkStatus: "Inspected",
-        foStatus: "Vacant",
-      };
-    case "OUT_OF_SERVICE":
-      return {
-        status: "Out of Service",
-        hkStatus: "OOS",
-        foStatus: "Blocked",
-      };
-    default:
-      return { status: "Vacant Dirty", hkStatus: "Dirty", foStatus: "Vacant" };
+  if (enumStatus === "DIRTY") {
+    return { status: "Dirty", hkStatus: "Dirty", foStatus: "Vacant" };
   }
+  if (enumStatus === "INSPECTING") {
+    return { status: "Cleaning", hkStatus: "Cleaning", foStatus: "Vacant" };
+  }
+  if (enumStatus === "CLEAN") {
+    return { status: "Clean", hkStatus: "Clean", foStatus: "Vacant" };
+  }
+  if (enumStatus === "INSPECTED") {
+    if (hasReservation) {
+      return { status: "Reserved", hkStatus: "Inspected", foStatus: "Vacant" };
+    }
+    return { status: "Vacant", hkStatus: "Inspected", foStatus: "Vacant" };
+  }
+
+  return { status: "Dirty", hkStatus: "Dirty", foStatus: "Vacant" };
 }
 
 /** Match a room by its primary key (`id`), FO room id, or display number (`roomNo`). */
@@ -182,6 +186,8 @@ type ApiHkRoom = Partial<HKRoom> & {
   notes?: string | null;
   status?: string;
   isOccupied?: boolean;
+  isActive?: boolean;
+  guestName?: string | null;
 };
 
 /** Normalize API slim row (or legacy local row) into HK UI shape. */
@@ -191,12 +197,16 @@ export function normalizeHkRoom(row: ApiHkRoom): HKRoom {
   const id = String(row.id ?? "").trim() || undefined;
 
   const rawStatus = String(row.status ?? "").trim().toUpperCase();
+  const isOccupied = row.isOccupied === true;
+  const hasReservation = Boolean(row.guestName) && !isOccupied;
+
   const ui =
     isHkEnum(rawStatus) || !row.hkStatus
       ? hkEnumToUiFields({
           status: rawStatus || "DIRTY",
-          lastCleanedAt: row.lastCleanedAt,
-          isOccupied: row.isOccupied,
+          isOccupied,
+          hasReservation,
+          isActive: row.isActive,
         })
       : {
           status: row.status as HKRoom["status"],
@@ -234,7 +244,7 @@ export function normalizeHkRoom(row: ApiHkRoom): HKRoom {
     cleaningProgress: row.cleaningProgress,
     photos: row.photos,
     inspectionHistory: row.inspectionHistory,
-    guestName: row.guestName,
+    guestName: row.guestName ?? undefined,
     checkoutDate: row.checkoutDate,
     housekeeping: row.housekeeping,
     maintenance: row.maintenance,

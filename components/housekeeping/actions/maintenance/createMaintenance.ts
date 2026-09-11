@@ -154,9 +154,9 @@ export const addMaintenanceRequest = (
   }
 
   if (req.priority === "Critical") {
-    changeRoomStatus(req.room, "Out of Order", dispatchers);
+    changeRoomStatus(req.room, "Blocked", dispatchers);
   } else if (req.priority === "High") {
-    changeRoomStatus(req.room, "Out of Service", dispatchers);
+    changeRoomStatus(req.room, "Blocked", dispatchers);
   }
 
   logAudit(
