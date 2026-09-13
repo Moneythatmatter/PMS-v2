@@ -281,7 +281,15 @@ export function CheckInForm() {
   }, []);
 
   const eligibleArrivals = useMemo(
-    () => pmsBookings.filter((b) => isEligibleForCheckIn(b.status)),
+    () =>
+      pmsBookings.filter(
+        (b) =>
+          b.status !== "Checked In" &&
+          b.status !== "Cancelled" &&
+          b.status !== "Checked Out" &&
+          b.status !== "In-House" &&
+          b.status !== "No Show",
+      ),
     [pmsBookings],
   );
 
@@ -743,7 +751,7 @@ export function CheckInForm() {
               <div className="mb-4 flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
                   <Search className="h-4 w-4" />
-                </div>
+                  </div>
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
                     Find Guest
@@ -791,12 +799,12 @@ export function CheckInForm() {
                   <Button
                     onClick={() => handleLookupBooking()}
                   className="h-11 gap-2 bg-emerald-700 hover:bg-emerald-800"
-                >
+                  >
                   Lookup Guest
                   <ArrowRight className="h-4 w-4" />
-                </Button>
-              </div>
-              {lookupError && (
+                  </Button>
+                </div>
+                {lookupError && (
                 <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
                   {lookupError}
                 </p>
@@ -908,12 +916,12 @@ export function CheckInForm() {
                             </p>
                     </div>
                   </div>
-                      </button>
+                        </button>
                     );
                   })
                 )}
-              </div>
-            </div>
+                    </div>
+                  </div>
           </div>
 
           {/* Right — guest card & registration form */}
@@ -945,8 +953,8 @@ export function CheckInForm() {
                           </p>
                           {(booking as { isVip?: boolean }).isVip && (
                             <Crown className="h-4 w-4 shrink-0 text-amber-500" />
-                          )}
-                        </div>
+                )}
+              </div>
                         <p className="text-sm text-slate-500">{formatBookingGuestLine(booking)}</p>
                       </div>
                     </div>
@@ -1034,7 +1042,7 @@ export function CheckInForm() {
                     errors={identityErrors}
                     readOnlyFields={lockedIdentityFields}
                   />
-                </SectionCard>
+            </SectionCard>
 
                 <SectionCard
                   icon={KeyRound}

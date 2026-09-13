@@ -92,6 +92,24 @@ function formatCompactInr(n: number) {
   return `₹${Math.round(n)}`;
 }
 
+function rowIsActive(r: ModuleRow): boolean {
+  const activeValue = String(r.isActive ?? "").toLowerCase();
+  if (activeValue === "false" || activeValue === "0") return false;
+  const status = String(r.status ?? "").toLowerCase();
+  if (status === "inactive") return false;
+  return (
+    status === "active" ||
+    status === "open" ||
+    activeValue === "true" ||
+    activeValue === "1"
+  );
+}
+
+function rowIsVegetarian(r: ModuleRow): boolean {
+  const value = String(r.isVegetarian ?? "").toLowerCase();
+  return value === "true" || value === "1";
+}
+
 function buildReportStats(
   path: string,
   rows: ModuleRow[],
@@ -389,13 +407,17 @@ function toModuleDefinition(
         if (stat.label === "Outlets" || stat.label === "Venues") {
           return { ...stat, value: rows.length };
         }
+        if (stat.label === "Items" || stat.label === "Categories") {
+          return { ...stat, value: rows.length };
+        }
         if (stat.label === "Active") {
-          const activeCount = rows.filter(
-            (r) =>
-              String(r.status ?? "").toLowerCase() === "active" ||
-              String(r.status ?? "").toLowerCase() === "open",
-          ).length;
-          return { ...stat, value: activeCount };
+          return { ...stat, value: rows.filter(rowIsActive).length };
+        }
+        if (stat.label === "Inactive") {
+          return { ...stat, value: rows.filter((r) => !rowIsActive(r)).length };
+        }
+        if (stat.label === "Vegetarian") {
+          return { ...stat, value: rows.filter(rowIsVegetarian).length };
         }
         if (stat.label === "Tables") {
           const totalTables = rows.reduce(

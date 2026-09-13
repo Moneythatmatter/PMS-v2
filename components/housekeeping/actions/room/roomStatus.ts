@@ -9,38 +9,31 @@ import {
   uiPriorityToApi,
 } from "../../guestRequestUtils";
 
-export const changeRoomStatus = (roomKey: string, status: HKRoom["status"], dispatchers: HousekeepingDispatchers) => {
-  let hkSt: HKRoom["hkStatus"] = "Clean";
-  let foSt: HKRoom["foStatus"] = "Vacant";
-
-  if (status === "Vacant Ready") {
-    hkSt = "Inspected";
-    foSt = "Vacant";
-  } else if (status === "Vacant Dirty") {
-    hkSt = "Dirty";
-    foSt = "Vacant";
-  } else if (status === "Occupied") {
-    hkSt = "Clean";
-    foSt = "Occupied";
-  } else if (status === "Occupied Dirty") {
-    hkSt = "Dirty";
-    foSt = "Occupied";
-  } else if (status === "Blocked") {
-    hkSt = "Clean";
-    foSt = "Blocked";
-  } else if (status === "Out of Order") {
-    hkSt = "OOO";
-    foSt = "Blocked";
-  } else if (status === "Out of Service") {
-    hkSt = "OOS";
-    foSt = "Vacant";
-  } else if (status === "Cleaning") {
-    hkSt = "Cleaning";
-    foSt = "Vacant";
-  } else if (status === "Inspection Pending") {
-    hkSt = "Cleaning";
-    foSt = "Vacant";
+function statusToFields(status: HKRoom["status"]): Pick<HKRoom, "hkStatus" | "foStatus"> {
+  switch (status) {
+    case "Vacant":
+      return { hkStatus: "Inspected", foStatus: "Vacant" };
+    case "Reserved":
+      return { hkStatus: "Inspected", foStatus: "Vacant" };
+    case "Occupied":
+      return { hkStatus: "Clean", foStatus: "Occupied" };
+    case "Dirty":
+      return { hkStatus: "Dirty", foStatus: "Vacant" };
+    case "Cleaning":
+      return { hkStatus: "Cleaning", foStatus: "Vacant" };
+    case "Clean":
+      return { hkStatus: "Clean", foStatus: "Vacant" };
+    case "Inspected":
+      return { hkStatus: "Inspected", foStatus: "Vacant" };
+    case "Blocked":
+      return { hkStatus: "OOS", foStatus: "Blocked" };
+    default:
+      return { hkStatus: "Dirty", foStatus: "Vacant" };
   }
+}
+
+export const changeRoomStatus = (roomKey: string, status: HKRoom["status"], dispatchers: HousekeepingDispatchers) => {
+  const { hkStatus, foStatus } = statusToFields(status);
 
   let apiId = roomKey;
   let label = roomKey;
@@ -54,8 +47,8 @@ export const changeRoomStatus = (roomKey: string, status: HKRoom["status"], disp
       return {
         ...r,
         status,
-        hkStatus: hkSt,
-        foStatus: foSt,
+        hkStatus,
+        foStatus,
       };
     });
   });
@@ -117,7 +110,6 @@ export const addHKRequest = (
 
   dispatchers.setRequests((prev) => [record, ...prev]);
 
-  // Update staff workload if assigned!
   if (req.assignedStaff && req.assignedStaff !== "—") {
     dispatchers.setStaff((prev) =>
       prev.map((s) => {
@@ -206,7 +198,6 @@ export const assignHKRequest = (
     })
   );
 
-  // Update workloads
   dispatchers.setStaff((prev) =>
     prev.map((s) => {
       let updated = { ...s };
@@ -257,7 +248,6 @@ export const completeHKRequest = (
     prev.map((r) => (r.id === id ? { ...r, status: "Completed" } : r))
   );
 
-  // Update workloads
   if (staffName && staffName !== "—") {
     dispatchers.setStaff((prev) =>
       prev.map((s) => {
@@ -273,7 +263,6 @@ export const completeHKRequest = (
     );
   }
 
-  // Deduct stock if laundry/towel/sachets
   dispatchers.setInventory((prev) =>
     prev.map((item) => {
       if (req?.issue.toLowerCase().includes("towel") && item.name.toLowerCase().includes("bath towel")) {
@@ -447,7 +436,6 @@ export const verifyCleaningPublicArea = (id: string, approved: boolean, remarks:
       const status = approved ? ("Clean" as const) : ("Dirty" as const);
       const inspectionStatus = approved ? ("Passed" as const) : ("Failed" as const);
 
-      // Add item to history
       const newHistoryLog = {
         id: `HPA-${String(Date.now()).slice(-6)}`,
         date: nowStr,

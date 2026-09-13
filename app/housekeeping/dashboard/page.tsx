@@ -76,13 +76,17 @@ const quickLinks = [
 
 function Pill({ status }: { status: string }) {
   const tone =
-    status === "Vacant Ready" || status === "Completed" || status === "Ready" || status === "Delivered"
+    status === "Vacant" || status === "Inspected" || status === "Completed" || status === "Ready" || status === "Delivered"
       ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-      : status === "Cleaning" || status === "Inspection Pending" || status === "Pending" || status === "Open"
+      : status === "Cleaning" || status === "Clean" || status === "Pending" || status === "Open"
         ? "bg-amber-50 text-amber-700 ring-amber-200"
-        : status.includes("Dirty") || status === "Critical" || status === "High"
+        : status === "Dirty" || status === "Critical" || status === "High"
           ? "bg-red-50 text-red-700 ring-red-200"
-          : "bg-slate-100 text-slate-600 ring-slate-200";
+          : status === "Reserved"
+            ? "bg-blue-50 text-blue-700 ring-blue-200"
+            : status === "Occupied"
+              ? "bg-violet-50 text-violet-700 ring-violet-200"
+              : "bg-slate-100 text-slate-600 ring-slate-200";
 
   return (
     <span className={cn("inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset", tone)}>
@@ -104,14 +108,13 @@ export default function HousekeepingDashboard() {
   } = useHousekeeping();
 
   const stats = useMemo(() => {
-    const dirty = rooms.filter((r) => r.status.includes("Dirty")).length;
+    const dirty = rooms.filter((r) => r.status === "Dirty").length;
     const cleaning = rooms.filter((r) => r.status === "Cleaning").length;
-    const pendingInspection = rooms.filter((r) => r.status === "Inspection Pending").length;
-    const ready = rooms.filter((r) => r.status === "Vacant Ready").length;
-    const occupied = rooms.filter((r) => r.status.startsWith("Occupied")).length;
-    const blocked = rooms.filter(
-      (r) => r.status === "Blocked" || r.status === "Out of Order" || r.status === "Out of Service",
-    ).length;
+    const pendingInspection = rooms.filter((r) => r.status === "Clean").length;
+    const ready = rooms.filter((r) => r.status === "Vacant" || r.status === "Inspected").length;
+    const reserved = rooms.filter((r) => r.status === "Reserved").length;
+    const occupied = rooms.filter((r) => r.status === "Occupied").length;
+    const blocked = rooms.filter((r) => r.status === "Blocked").length;
     const openRequests = requests.filter((r) => r.status !== "Completed").length;
     const openMaint = maintenance.filter((m) => m.status !== "Closed").length;
     const pendingLaundry = laundryJobs.filter((l) => l.status !== "Delivered").length;
@@ -123,6 +126,7 @@ export default function HousekeepingDashboard() {
       cleaning,
       pendingInspection,
       ready,
+      reserved,
       occupied,
       blocked,
       openRequests,
@@ -135,11 +139,11 @@ export default function HousekeepingDashboard() {
   }, [rooms, requests, maintenance, laundryJobs, publicAreas, inventory]);
 
   const inspectionPendingRooms = useMemo(
-    () => rooms.filter((r) => r.status === "Inspection Pending").slice(0, 6),
+    () => rooms.filter((r) => r.status === "Clean").slice(0, 6),
     [rooms],
   );
   const dirtyRooms = useMemo(
-    () => rooms.filter((r) => r.status.includes("Dirty")).slice(0, 6),
+    () => rooms.filter((r) => r.status === "Dirty").slice(0, 6),
     [rooms],
   );
   const activeRequests = useMemo(
@@ -153,12 +157,13 @@ export default function HousekeepingDashboard() {
   const laundryPreview = useMemo(() => laundryJobs.slice(0, 4), [laundryJobs]);
 
   const roomBreakdown = [
-    { label: "Dirty", count: stats.dirty, color: "#ef4444" },
-    { label: "Cleaning", count: stats.cleaning, color: "#f59e0b" },
-    { label: "Inspection", count: stats.pendingInspection, color: "#3b82f6" },
-    { label: "Vacant Ready", count: stats.ready, color: "#15803d" },
+    { label: "Vacant", count: stats.ready, color: "#15803d" },
+    { label: "Reserved", count: stats.reserved, color: "#2563eb" },
     { label: "Occupied", count: stats.occupied, color: "#8b5cf6" },
-    { label: "Blocked / Out of Service", count: stats.blocked, color: "#64748b" },
+    { label: "Dirty", count: stats.dirty, color: "#f59e0b" },
+    { label: "Cleaning", count: stats.cleaning, color: "#84cc16" },
+    { label: "Clean", count: stats.pendingInspection, color: "#0ea5e9" },
+    { label: "Blocked", count: stats.blocked, color: "#64748b" },
   ];
 
   const readyPct =
@@ -226,7 +231,7 @@ export default function HousekeepingDashboard() {
       sublabel: "Awaiting inspection",
     },
     {
-      label: "Vacant Ready",
+      label: "Vacant",
       value: stats.ready,
       accent: "#15803d",
       icon: CheckCircle2,

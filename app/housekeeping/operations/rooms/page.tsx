@@ -71,7 +71,7 @@ function HKRoomStatusCardTile({
   const showTimer = room.status === "Cleaning" && room.cleaningTimer;
   const showGuest =
     !!room.guestName &&
-    (room.status === "Occupied" || room.status === "Occupied Dirty");
+    (room.status === "Occupied" || room.status === "Reserved");
   const showStaff = !!room.assignedStaff && !showGuest;
   const footerText = showTimer
     ? formatTime(room.cleaningTimer!.elapsedSeconds)
@@ -232,10 +232,11 @@ export default function RoomStatusOperations() {
     !!selectedRoom &&
     !selectedRoomActiveTask &&
     selectedRoom.status !== "Cleaning" &&
-    selectedRoom.status !== "Inspection Pending" &&
-    (selectedRoom.status.includes("Dirty") ||
-      selectedRoom.status === "Vacant Ready" ||
-      selectedRoom.status.includes("Occupied"));
+    selectedRoom.status !== "Clean" &&
+    (selectedRoom.status === "Dirty" ||
+      selectedRoom.status === "Vacant" ||
+      selectedRoom.status === "Occupied" ||
+      selectedRoom.status === "Reserved");
 
   const filteredRooms = useMemo(() => {
     const q = search.toLowerCase();
@@ -273,11 +274,12 @@ export default function RoomStatusOperations() {
   const statusCounts = useMemo(
     () => ({
       all: pillScopeRooms.length,
-      dirty: countHkStatusFilter(pillScopeRooms, "dirty"),
+      vacant: countHkStatusFilter(pillScopeRooms, "vacant"),
+      reserved: countHkStatusFilter(pillScopeRooms, "reserved"),
       occupied: countHkStatusFilter(pillScopeRooms, "occupied"),
+      dirty: countHkStatusFilter(pillScopeRooms, "dirty"),
       cleaning: countHkStatusFilter(pillScopeRooms, "cleaning"),
-      inspection: countHkStatusFilter(pillScopeRooms, "inspection"),
-      ready: countHkStatusFilter(pillScopeRooms, "ready"),
+      clean: countHkStatusFilter(pillScopeRooms, "clean"),
       blocked: countHkStatusFilter(pillScopeRooms, "blocked"),
     }),
     [pillScopeRooms],
@@ -423,11 +425,12 @@ export default function RoomStatusOperations() {
             onChange: setStatusFilter,
             options: [
               { id: "all", label: `All (${statusCounts.all})` },
-              { id: "dirty", label: `Dirty (${statusCounts.dirty})` },
+              { id: "vacant", label: `Vacant (${statusCounts.vacant})` },
+              { id: "reserved", label: `Reserved (${statusCounts.reserved})` },
               { id: "occupied", label: `Occupied (${statusCounts.occupied})` },
+              { id: "dirty", label: `Dirty (${statusCounts.dirty})` },
               { id: "cleaning", label: `Cleaning (${statusCounts.cleaning})` },
-              { id: "inspection", label: `Inspection (${statusCounts.inspection})` },
-              { id: "ready", label: `Ready (${statusCounts.ready})` },
+              { id: "clean", label: `Clean (${statusCounts.clean})` },
               { id: "blocked", label: `Blocked (${statusCounts.blocked})` },
             ],
           }}
@@ -554,17 +557,17 @@ export default function RoomStatusOperations() {
               </div>
             )}
 
-            {!selectedRoomActiveTask && selectedRoom.status === "Inspection Pending" && (
-              <div className="text-center py-4 border border-dashed border-blue-100 rounded-xl">
-                <Layers className="h-8 w-8 text-blue-600 mx-auto" />
-                <p className="text-xs text-slate-500 mt-2">Awaiting supervisor inspection.</p>
+            {!selectedRoomActiveTask && selectedRoom.status === "Clean" && (
+              <div className="text-center py-4 border border-dashed border-sky-100 rounded-xl">
+                <Layers className="h-8 w-8 text-sky-600 mx-auto" />
+                <p className="text-xs text-slate-500 mt-2">Cleaning finished — awaiting supervisor inspection.</p>
               </div>
             )}
 
-            {!selectedRoomActiveTask && selectedRoom.status === "Vacant Ready" && (
+            {!selectedRoomActiveTask && (selectedRoom.status === "Vacant" || selectedRoom.status === "Inspected") && (
               <Button
                 variant="outline"
-                onClick={() => changeRoomStatus(roomKey(selectedRoom), "Vacant Dirty")}
+                onClick={() => changeRoomStatus(roomKey(selectedRoom), "Dirty")}
                 className="w-full text-xs"
               >
                 Mark as Dirty

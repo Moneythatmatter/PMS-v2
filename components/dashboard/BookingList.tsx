@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { CalendarDays, Plus, Search } from "lucide-react";
 import type { Booking } from "@/app/data/types";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/Button";
 
 interface BookingListProps {
   bookings: Booking[];
+  loading?: boolean;
 }
 
-export function BookingList({ bookings }: BookingListProps) {
+export function BookingList({ bookings, loading = false }: BookingListProps) {
   const [search, setSearch] = useState("");
 
   const filtered = bookings.filter(
@@ -22,13 +23,16 @@ export function BookingList({ bookings }: BookingListProps) {
       b.roomNo.includes(search),
   );
 
+  const showEmpty = !loading && filtered.length === 0;
+  const emptyFromSearch = showEmpty && bookings.length > 0 && search.trim().length > 0;
+
   return (
-    <Card className="p-4 sm:p-5">
+    <Card>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">Booking List</h3>
           <p className="mt-0.5 text-xs text-slate-500">
-            Recent and upcoming bookings
+            Today&apos;s arrivals only
           </p>
         </div>
         <Link href="/frontoffice/reservation/new" className="w-full sm:w-auto">
@@ -51,6 +55,26 @@ export function BookingList({ bookings }: BookingListProps) {
         </div>
       </div>
 
+      {loading ? (
+        <div className="flex min-h-[180px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60">
+          <p className="text-sm text-slate-500">Loading today&apos;s bookings…</p>
+        </div>
+      ) : showEmpty ? (
+        <div className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-10 text-center">
+          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+            <CalendarDays className="h-6 w-6" />
+          </div>
+          <p className="text-sm font-semibold text-slate-700">
+            {emptyFromSearch ? "No matching bookings" : "No booking today"}
+          </p>
+          <p className="mt-1 max-w-sm text-xs text-slate-500">
+            {emptyFromSearch
+              ? "Try a different guest name, booking ID, or room number."
+              : "There are no arrivals scheduled for today. Create a new booking when a guest reserves a room."}
+          </p>
+        </div>
+      ) : (
+        <>
       {/* Mobile card list */}
       <div className="space-y-3 md:hidden">
         {filtered.map((booking) => (
@@ -127,6 +151,8 @@ export function BookingList({ bookings }: BookingListProps) {
           </tbody>
         </table>
       </div>
+        </>
+      )}
     </Card>
   );
 }

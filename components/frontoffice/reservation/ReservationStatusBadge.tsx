@@ -7,6 +7,7 @@ const statusStyles: Record<ReservationStatus, string> = {
   Reserved: "bg-sky-50 text-sky-700 ring-sky-200",
   "Checked Out": "bg-slate-100 text-slate-600 ring-slate-200",
   Cancelled: "bg-red-50 text-red-700 ring-red-200",
+  "No Show": "bg-orange-50 text-orange-700 ring-orange-200",
   "In-House": "bg-violet-50 text-violet-700 ring-violet-200",
 };
 

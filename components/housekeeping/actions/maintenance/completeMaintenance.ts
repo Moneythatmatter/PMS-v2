@@ -175,8 +175,8 @@ export const verifyMaintenanceRequest = (
 
   const finalRoomStatus =
     targetHKStatus === "Clean" || targetHKStatus === "Inspected"
-      ? "Vacant Ready"
-      : "Vacant Dirty";
+      ? "Vacant"
+      : "Dirty";
   changeRoomStatus(req.room, finalRoomStatus as any, dispatchers);
 
   logAudit(

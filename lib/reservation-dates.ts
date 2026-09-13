@@ -64,8 +64,8 @@ export function isArrivingToday(booking: {
   checkIn?: string;
   arrivingToday?: boolean;
 }) {
-  if (booking.arrivingToday) return true;
-  return matchesToday(booking.checkIn);
+  // Match isArrivingOnDate — check-in date is the source of truth when present.
+  return isArrivingOnDate(booking, todayIso());
 }
 
 export function isArrivingOnDate(
@@ -99,4 +99,18 @@ export function isDepartingToday(booking: {
   // Only trust the stored flag when no check-out date is available.
   if (booking.checkOut) return matchesToday(booking.checkOut);
   return booking.departingToday === true;
+}
+
+const NO_SHOW_ELIGIBLE_STATUSES = new Set(["Reserved", "Confirmed"]);
+
+/** Guest can be marked no-show on or after the scheduled check-in date. */
+export function isNoShowEligible(booking: {
+  status?: string;
+  checkIn?: string;
+}): boolean {
+  const status = String(booking.status ?? "");
+  if (!NO_SHOW_ELIGIBLE_STATUSES.has(status)) return false;
+  const checkInIso = normalizeToIso(booking.checkIn);
+  if (!checkInIso) return false;
+  return checkInIso <= todayIso();
 }

@@ -22,6 +22,14 @@ export type UserPermissionDto = {
   permission: PermissionLevel;
 };
 
+export type EmployeeLinkOption = {
+  id: string;
+  propertyId: string;
+  empCode: string;
+  name: string;
+  email: string;
+};
+
 export type ManagedUserDto = {
   id: string;
   name: string;
@@ -30,6 +38,8 @@ export type ManagedUserDto = {
   initials: string;
   status: string;
   isSuperAdmin?: boolean;
+  employeeId?: string | null;
+  employeeLabel?: string;
   propertyIds: string[];
   permissions: Array<{
     id?: string;
@@ -56,12 +66,17 @@ export const platformService = {
       `/api/platform/permissions/me?propertyId=${encodeURIComponent(propertyId)}`,
     ),
   listUsers: () => api.get<ManagedUserDto[]>("/api/platform/users"),
+  listEmployeeLinkOptions: (propertyId: string) =>
+    api.get<EmployeeLinkOption[]>(
+      `/api/platform/users/employee-link-options?propertyId=${encodeURIComponent(propertyId)}`,
+    ),
   createUser: (body: {
     name: string;
     email: string;
     password: string;
     role?: string;
     isSuperAdmin?: boolean;
+    employeeId?: string | null;
     propertyIds?: string[];
     permissions?: UserPermissionDto[];
   }) => api.post<ManagedUserDto>("/api/platform/users", body),
@@ -72,6 +87,7 @@ export const platformService = {
       role: string;
       status: string;
       isSuperAdmin: boolean;
+      employeeId: string | null;
       propertyIds: string[];
       permissions: UserPermissionDto[];
     }>,

@@ -52,6 +52,7 @@ export const roomStatuses = [
   "Reserved",
   "Occupied",
   "Dirty",
+  "Cleaning",
   "Clean",
   "Maintenance",
   "Blocked",

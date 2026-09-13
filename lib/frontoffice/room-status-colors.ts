@@ -5,6 +5,7 @@ export type FoRoomStatus =
   | "Reserved"
   | "Occupied"
   | "Dirty"
+  | "Cleaning"
   | "Clean"
   | "Maintenance"
   | "Blocked";
@@ -14,6 +15,7 @@ export const FO_ROOM_STATUS_LEGEND_ORDER: FoRoomStatus[] = [
   "Reserved",
   "Occupied",
   "Dirty",
+  "Cleaning",
   "Clean",
   "Maintenance",
   "Blocked",
@@ -74,14 +76,26 @@ export const foRoomStatusColors: Record<
   Dirty: {
     label: "Dirty",
     description: "Needs housekeeping",
-    card: "border-amber-400/80 bg-gradient-to-br from-amber-200 to-amber-300 shadow-sm shadow-amber-300/50",
-    dot: "bg-amber-600 ring-2 ring-white/80",
-    legend: "bg-amber-300 border-amber-500",
-    roomNoText: "text-amber-950",
-    metaText: "text-amber-800",
-    statusText: "text-amber-900",
-    badge: "bg-amber-600/25 text-amber-950",
-    listBadge: "bg-amber-100 text-amber-800",
+    card: "border-red-400/80 bg-gradient-to-br from-red-200 to-red-300 shadow-sm shadow-red-300/50",
+    dot: "bg-red-600 ring-2 ring-white/80",
+    legend: "bg-red-300 border-red-500",
+    roomNoText: "text-red-950",
+    metaText: "text-red-800",
+    statusText: "text-red-900",
+    badge: "bg-red-600/25 text-red-950",
+    listBadge: "bg-red-100 text-red-800",
+  },
+  Cleaning: {
+    label: "Cleaning",
+    description: "Housekeeping in progress",
+    card: "border-yellow-400/80 bg-gradient-to-br from-yellow-200 to-yellow-300 shadow-sm shadow-yellow-300/50",
+    dot: "bg-yellow-600 ring-2 ring-white/80",
+    legend: "bg-yellow-300 border-yellow-500",
+    roomNoText: "text-yellow-950",
+    metaText: "text-yellow-800",
+    statusText: "text-yellow-900",
+    badge: "bg-yellow-600/25 text-yellow-950",
+    listBadge: "bg-yellow-100 text-yellow-800",
   },
   Clean: {
     label: "Clean",

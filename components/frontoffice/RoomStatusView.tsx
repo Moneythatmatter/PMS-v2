@@ -27,17 +27,20 @@ function compareRoomNo(a: string, b: string): number {
 
 function RoomStatusCardTile({ room }: { room: RoomStatusCard }) {
   const config = getFoRoomStatusConfig(room.status);
+  const isOccupied = room.status === "Occupied";
   const hasMaintenance = room.maintenance !== "OK";
   const footerText = hasMaintenance
     ? room.maintenance
-    : room.guestName ?? (room.checkoutDate ? `Out ${room.checkoutDate}` : null);
+    : isOccupied
+      ? room.guestName ?? (room.checkoutDate ? `Out ${room.checkoutDate}` : null)
+      : null;
 
   return (
     <div
       title={
         hasMaintenance
           ? `Maintenance: ${room.maintenance}`
-          : room.guestName
+          : isOccupied && room.guestName
             ? `${room.guestName}${room.checkoutDate ? ` · Out ${room.checkoutDate}` : ""}`
             : room.type
       }

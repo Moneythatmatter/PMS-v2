@@ -13,6 +13,7 @@ import {
   Pencil,
   Plus,
   Printer,
+  UserX,
   XCircle,
 } from "lucide-react";
 import type {
@@ -36,7 +37,7 @@ import { usePropertyOptional } from "@/components/platform/PropertyProvider";
 import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
 import { formatBookingGuestLine } from "@/lib/reservation-display";
-import { isArrivingToday } from "@/lib/reservation-dates";
+import { isArrivingToday, isNoShowEligible } from "@/lib/reservation-dates";
 import { checkInHref, checkOutHref } from "@/lib/check-in-navigation";
 import { BookingDetailDrawer } from "./BookingDetailDrawer";
 import { printBookingDetail } from "./bookingPrintUtils";
@@ -50,6 +51,7 @@ const statusFilters: { id: ReservationFilter; label: string }[] = [
   { id: "reserved", label: "Reserved" },
   { id: "checked-out", label: "Checked Out" },
   { id: "cancelled", label: "Cancelled" },
+  { id: "no-show", label: "No Show" },
   { id: "outstanding", label: "Outstanding" },
 ];
 
@@ -100,7 +102,8 @@ function matchesFilter(booking: ReservationBooking, filter: ReservationFilter) {
       return (
         isArrivingToday(booking) &&
         booking.status !== "Cancelled" &&
-        booking.status !== "Checked Out"
+        booking.status !== "Checked Out" &&
+        booking.status !== "No Show"
       );
     case "confirmed":
       return booking.status === "Confirmed";
@@ -112,6 +115,8 @@ function matchesFilter(booking: ReservationBooking, filter: ReservationFilter) {
       return booking.status === "Checked Out";
     case "cancelled":
       return booking.status === "Cancelled";
+    case "no-show":
+      return booking.status === "No Show";
     case "outstanding":
       return booking.balance > 0 && booking.status !== "Cancelled";
     default:
@@ -149,6 +154,7 @@ export function AllBookingsView() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewBooking, setViewBooking] = useState<ReservationBooking | null>(null);
   const [cancelBooking, setCancelBooking] = useState<ReservationBooking | null>(null);
+  const [noShowBooking, setNoShowBooking] = useState<ReservationBooking | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
@@ -332,6 +338,26 @@ export function AllBookingsView() {
       setToast(e instanceof Error ? e.message : "Failed to cancel booking");
     }
     setCancelBooking(null);
+  };
+
+  const handleNoShow = async () => {
+    if (!noShowBooking) return;
+    try {
+      await reservationService.update(noShowBooking.id, { status: "No Show" });
+      setBookings((prev) =>
+        prev.map((b) =>
+          b.id === noShowBooking.id ? { ...b, status: "No Show" as const } : b,
+        ),
+      );
+      const summary = await reservationService.summary();
+      setSummaryStats(summary);
+      setToast(
+        `Booking ${displayBookingNo(noShowBooking)} marked as no show. Room released.`,
+      );
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to mark no show");
+    }
+    setNoShowBooking(null);
   };
 
   const handleExport = () => {
@@ -729,8 +755,19 @@ export function AllBookingsView() {
                                     label: "Print",
                                     onClick: () => handlePrintBooking(booking),
                                   },
+                                  ...(isNoShowEligible(booking)
+                                    ? [
+                                      {
+                                        icon: UserX,
+                                        label: "Mark No Show",
+                                        onClick: () => setNoShowBooking(booking),
+                                        danger: true,
+                                      },
+                                    ]
+                                    : []),
                                   ...(booking.status === "Cancelled" ||
-                                    booking.status === "Checked Out"
+                                    booking.status === "Checked Out" ||
+                                    booking.status === "No Show"
                                     ? []
                                     : [
                                       {
@@ -790,6 +827,10 @@ export function AllBookingsView() {
           closeBookingDetail();
           setCancelBooking(b);
         }}
+        onNoShow={(b) => {
+          closeBookingDetail();
+          setNoShowBooking(b);
+        }}
       />
 
       <ConfirmModal
@@ -799,6 +840,16 @@ export function AllBookingsView() {
         title="Cancel Reservation"
         message={`Are you sure you want to cancel booking ${cancelBooking ? displayBookingNo(cancelBooking) : ""} for ${cancelBooking?.guestName}? This action cannot be undone.`}
         confirmLabel="Cancel Booking"
+        variant="danger"
+      />
+
+      <ConfirmModal
+        open={!!noShowBooking}
+        onClose={() => setNoShowBooking(null)}
+        onConfirm={handleNoShow}
+        title="Mark as No Show"
+        message={`Guest did not arrive for booking ${noShowBooking ? displayBookingNo(noShowBooking) : ""} (${noShowBooking?.guestName}). The reservation will be marked as No Show and the room will be released.`}
+        confirmLabel="Mark No Show"
         variant="danger"
       />
     </div>

@@ -651,7 +651,7 @@ export default function RoomInspection() {
 
     void reloadInspectionData();
     
-    setToast({ message: `Room ${selectedRoomNo} inspection successfully passed! Released to Vacant Ready.`, variant: "success" });
+    setToast({ message: `Room ${selectedRoomNo} inspection passed — room is now available for sale.`, variant: "success" });
     setSelectedRoomNo(null);
   };
 
@@ -714,26 +714,24 @@ export default function RoomInspection() {
 
   // Public Area card mappings
   const borderColors = {
-    "Inspection Pending": "border-blue-200 hover:border-blue-400 hover:shadow-blue-100/30 font-semibold",
-    "Vacant Ready": "border-emerald-200 hover:border-emerald-400 hover:shadow-emerald-100/30",
-    "Vacant Dirty": "border-red-200 hover:border-red-400 hover:shadow-red-100/30",
-    "Out of Order": "border-slate-200 hover:border-slate-400 hover:shadow-slate-100/30",
-    "Out of Service": "border-slate-200 hover:border-slate-400 hover:shadow-slate-100/30",
-    Cleaning: "border-amber-200 hover:border-amber-400 hover:shadow-amber-100/30",
-    Occupied: "border-indigo-200 hover:border-indigo-400 hover:shadow-indigo-100/30",
-    "Occupied Dirty": "border-red-200 hover:border-red-400 hover:shadow-red-100/30",
+    Clean: "border-sky-200 hover:border-sky-400 hover:shadow-sky-100/30 font-semibold",
+    Vacant: "border-emerald-200 hover:border-emerald-400 hover:shadow-emerald-100/30",
+    Dirty: "border-amber-200 hover:border-amber-400 hover:shadow-amber-100/30",
+    Cleaning: "border-lime-200 hover:border-lime-400 hover:shadow-lime-100/30",
+    Reserved: "border-blue-200 hover:border-blue-400 hover:shadow-blue-100/30",
+    Occupied: "border-violet-200 hover:border-violet-400 hover:shadow-violet-100/30",
+    Inspected: "border-teal-200 hover:border-teal-400 hover:shadow-teal-100/30",
     Blocked: "border-slate-200 hover:border-slate-400 hover:shadow-slate-100/30 bg-slate-50/30",
   };
 
   const statusBadges = {
-    "Inspection Pending": "bg-blue-50 text-blue-700 border border-blue-100",
-    "Vacant Ready": "bg-emerald-50 text-emerald-700 border border-emerald-100",
-    "Vacant Dirty": "bg-red-50 text-red-700 border border-red-100",
-    "Out of Order": "bg-slate-100 text-slate-650 border border-slate-200",
-    "Out of Service": "bg-slate-100 text-slate-650 border border-slate-200",
-    Cleaning: "bg-amber-50 text-amber-700 border border-amber-100 animate-pulse",
-    Occupied: "bg-indigo-50 text-indigo-700 border border-indigo-100",
-    "Occupied Dirty": "bg-red-50 text-red-700 border border-red-100",
+    Clean: "bg-sky-50 text-sky-700 border border-sky-100",
+    Vacant: "bg-emerald-50 text-emerald-700 border border-emerald-100",
+    Dirty: "bg-amber-50 text-amber-700 border border-amber-100",
+    Cleaning: "bg-lime-50 text-lime-700 border border-lime-100 animate-pulse",
+    Reserved: "bg-blue-50 text-blue-700 border border-blue-100",
+    Occupied: "bg-violet-50 text-violet-700 border border-violet-100",
+    Inspected: "bg-teal-50 text-teal-700 border border-teal-100",
     Blocked: "bg-slate-100 text-slate-600 border border-slate-200",
   };
 
@@ -942,19 +940,19 @@ export default function RoomInspection() {
                     item.task?.assignedToName ?? room.assignedStaff ?? "Unassigned";
                   const cardBorder =
                     item.queueStatus === "awaiting"
-                      ? borderColors["Inspection Pending"]
+                      ? borderColors.Clean
                       : item.queueStatus === "passed"
-                        ? borderColors["Vacant Ready"]
+                        ? borderColors.Vacant
                         : item.queueStatus === "failed"
-                          ? borderColors["Vacant Dirty"]
+                          ? borderColors.Dirty
                           : borderColors.Cleaning;
                   const cardBadge =
                     item.queueStatus === "awaiting"
-                      ? statusBadges["Inspection Pending"]
+                      ? statusBadges.Clean
                       : item.queueStatus === "passed"
-                        ? statusBadges["Vacant Ready"]
+                        ? statusBadges.Vacant
                         : item.queueStatus === "failed"
-                          ? statusBadges["Vacant Dirty"]
+                          ? statusBadges.Dirty
                           : statusBadges.Cleaning;
 
                   return (

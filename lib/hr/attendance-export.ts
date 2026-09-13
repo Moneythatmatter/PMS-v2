@@ -22,9 +22,22 @@ export interface AttendanceExportRecord {
   checkOut: string;
   workedHours: number;
   extraHours?: number;
+  holidayWorked?: boolean;
   holidayName?: string | null;
   leaveTypeName?: string | null;
   status: string;
+}
+
+export function isHolidayPresentRecord(record: {
+  holidayWorked?: boolean;
+  dayType?: AttendanceExportRecord["dayType"];
+  status: string;
+}): boolean {
+  return (
+    record.holidayWorked === true ||
+    (record.dayType === "HOLIDAY" &&
+      (record.status === "Present" || record.status === "Late" || record.status === "Half Day"))
+  );
 }
 
 export interface AttendanceExportOptions {
@@ -174,6 +187,7 @@ export function filterAttendanceForExport(
     department: string;
     shift: string;
     status: string;
+    recordFilter?: string;
   },
 ): AttendanceExportRecord[] {
   const term = filters.searchTerm.trim().toLowerCase();
@@ -196,8 +210,12 @@ export function filterAttendanceForExport(
         (record.status === "On Leave" ||
           record.status === "Weekly Off" ||
           record.status === "Holiday"));
+    const matchRecordFilter =
+      !filters.recordFilter ||
+      filters.recordFilter === "ALL" ||
+      (filters.recordFilter === "HOLIDAY_PRESENT" && isHolidayPresentRecord(record));
 
-    return matchSearch && matchDept && matchShift && matchStatus;
+    return matchSearch && matchDept && matchShift && matchStatus && matchRecordFilter;
   });
 }
 

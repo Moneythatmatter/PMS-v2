@@ -598,9 +598,9 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
     ],
     filterKeys: ["status"],
     stats: [
-      { label: "Categories", value: 12, sublabel: "Configured" },
-      { label: "Active", value: 10, accent: "#10b981", sublabel: "On menu" },
-      { label: "Inactive", value: 2, accent: "#f59e0b", sublabel: "Hidden" },
+      { label: "Categories", value: 0, sublabel: "Configured" },
+      { label: "Active", value: 0, accent: "#10b981", sublabel: "On menu" },
+      { label: "Inactive", value: 0, accent: "#f59e0b", sublabel: "Hidden" },
     ],
     columns: [
       {
@@ -679,9 +679,9 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
     ],
     filterKeys: ["status"],
     stats: [
-      { label: "Items", value: 86, sublabel: "In menu" },
-      { label: "Active", value: 79, accent: "#10b981", sublabel: "Sellable" },
-      { label: "Vegetarian", value: 24, sublabel: "Veg items" },
+      { label: "Items", value: 0, sublabel: "In menu" },
+      { label: "Active", value: 0, accent: "#10b981", sublabel: "Sellable" },
+      { label: "Vegetarian", value: 0, sublabel: "Veg items" },
     ],
     columns: [
       {

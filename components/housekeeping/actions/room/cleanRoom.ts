@@ -146,8 +146,8 @@ export const completeCleaning = (
       dispatchers.setHistory,
     );
     return patchRoom(prev, roomKey, {
-      status: "Inspection Pending",
-      hkStatus: "Dirty",
+      status: "Clean",
+      hkStatus: "Clean",
       cleaningProgress: 100,
       cleaningTimer: undefined,
       photos: photos && photos.length > 0 ? photos : prev.find((r) => matchesRoomKey(r, roomKey))?.photos,

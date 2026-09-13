@@ -14,7 +14,6 @@ import type { ShiftAssignment } from "@/components/hr/ShiftManagementView";
 import type { WeeklyOffAssignment } from "@/components/hr/WeeklyOffView";
 import type { LeaveApplication } from "@/components/hr/LeaveManagementView";
 import type { OvertimeRecord } from "@/components/hr/OvertimeManagementView";
-import type { HolidayAttendanceRecord } from "@/components/hr/HolidayAttendanceView";
 import type { SalaryStructure } from "@/components/hr/SalaryStructureView";
 import type { PayslipRecord } from "@/components/hr/PayslipsView";
 import type { ComplaintCategory } from "@/components/hr/ComplaintCategoriesView";
@@ -439,6 +438,48 @@ export function mapSalaryStructureToApi(form: Omit<SalaryStructure, "id" | "hist
   };
 }
 
+export function inferShiftCategory(
+  shiftName: string,
+  shiftCode: string,
+  dbCategory?: string,
+): ShiftAssignment["shiftCategory"] {
+  const name = shiftName.toLowerCase();
+  const code = shiftCode.toLowerCase();
+  if (dbCategory === "Night" || name.includes("night") || code.includes("ngt")) return "Night";
+  if (name.includes("morning") || code.includes("mrn")) return "Morning";
+  if (name.includes("evening") || code.includes("eve")) return "Evening";
+  if (name.includes("split")) return "Split";
+  return "General";
+}
+
+export function deriveShiftDisplayStatus(
+  effectiveFrom: string,
+  effectiveTo: string | undefined | null,
+  storedStatus?: string,
+  today = new Date().toISOString().slice(0, 10),
+): ShiftAssignment["status"] {
+  if (storedStatus === "Inactive") return "Inactive";
+  const from = (effectiveFrom.includes("/")
+    ? effectiveFrom.split("/").reverse().join("-")
+    : effectiveFrom
+  ).slice(0, 10);
+  const toRaw = effectiveTo && effectiveTo !== "—" ? effectiveTo : null;
+  const to = toRaw
+    ? (toRaw.includes("/") ? toRaw.split("/").reverse().join("-") : toRaw).slice(0, 10)
+    : null;
+  const t = today.slice(0, 10);
+  if (t < from) return "Upcoming";
+  if (to && t > to) return "Expired";
+  return "Active";
+}
+
+function toIsoDateField(value?: string): string | undefined {
+  if (!value || value === "—") return undefined;
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  if (value.includes("/")) return value.split("/").reverse().join("-").slice(0, 10);
+  return value;
+}
+
 export function mapShiftAssignmentToApi(form: Partial<ShiftAssignment>) {
   return {
     employeeId: form.employeeId,
@@ -448,13 +489,12 @@ export function mapShiftAssignmentToApi(form: Partial<ShiftAssignment>) {
     shiftCategory: form.shiftCategory,
     startTime: form.startTime,
     endTime: form.endTime,
-    effectiveFrom: form.effectiveFrom,
-    effectiveTo: form.effectiveTo,
-    status: form.status,
+    effectiveFrom: toIsoDateField(form.effectiveFrom),
+    effectiveTo: toIsoDateField(form.effectiveTo),
+    status: form.status ?? "Active",
     assignedBy: form.assignedBy,
-    assignedOn: form.assignedOn,
     remarks: form.remarks,
-    employmentType: form.employmentType,
+    history: form.history,
   };
 }
 
@@ -541,25 +581,6 @@ export function mapOvertimeToApi(form: Partial<OvertimeRecord>) {
     approvedBy: form.approvedBy,
     approvedOn: form.approvedOn,
     approvalRemarks: form.approvalRemarks,
-  };
-}
-
-export function mapHolidayAttendanceToApi(form: Partial<HolidayAttendanceRecord>) {
-  return {
-    employeeId: form.employeeId,
-    holidayName: form.holidayName,
-    holidayDate: form.holidayDate,
-    attendanceStatus: form.attendanceStatus,
-    checkIn: form.checkIn,
-    checkOut: form.checkOut,
-    workedHours: form.workedHours,
-    benefitType: form.benefitType,
-    holidayPayAmount: form.holidayPayAmount,
-    payrollStatus: form.payrollStatus,
-    approvalStatus: form.approvalStatus,
-    reviewedBy: form.reviewedBy,
-    reviewedDate: form.reviewedDate,
-    remarks: form.remarks,
   };
 }
 
@@ -787,6 +808,12 @@ export function mapShiftAssignmentFromApi(
   row: Record<string, unknown>,
   emp?: EmployeeLookup,
 ): ShiftAssignment {
+  const shiftName = String(row.shiftName ?? "");
+  const shiftCode = String(row.shiftCode ?? "");
+  const effectiveFrom = formatApiDate(row.effectiveFrom as string);
+  const effectiveTo = row.effectiveTo ? formatApiDate(row.effectiveTo as string) : undefined;
+  const storedStatus = String(row.status ?? "Active");
+
   return {
     id: String(row.id),
     employeeId: String(row.employeeId ?? row.employee_id ?? ""),
@@ -795,19 +822,19 @@ export function mapShiftAssignmentFromApi(
     designation: emp?.designation ?? String(row.designation ?? row.designation_name ?? ""),
     employmentType: ((row.employmentType ?? row.employment_type ?? "Permanent") as ShiftAssignment["employmentType"]) || "Permanent",
     avatar: emp?.avatar ?? String(row.avatar ?? "??"),
-    photoUrl: emp?.photoUrl ?? (row.photoUrl as string | undefined) ?? (row.photo_url as string | undefined),
-    shiftId: String(row.shiftTypeId ?? row.shift_type_id ?? row.shiftId ?? row.shift_id ?? ""),
-    shiftCode: String(row.shiftCode ?? row.shift_code ?? ""),
-    shiftName: String(row.shiftName ?? row.shift_name ?? ""),
-    shiftCategory: ((row.shiftCategory ?? row.shift_category ?? "General") as ShiftAssignment["shiftCategory"]) || "General",
-    startTime: String(row.startTime ?? row.start_time ?? ""),
-    endTime: String(row.endTime ?? row.end_time ?? ""),
-    effectiveFrom: formatApiDate((row.effectiveFrom ?? row.effective_from) as string),
-    effectiveTo: (row.effectiveTo || row.effective_to) ? formatApiDate((row.effectiveTo ?? row.effective_to) as string) : undefined,
-    status: ((row.status as ShiftAssignment["status"]) ?? "Active") || "Active",
-    assignedBy: String(row.assignedBy ?? row.assigned_by ?? "HR Admin"),
-    assignedOn: formatApiDate((row.assignedOn ?? row.assigned_on ?? row.createdAt ?? row.created_at) as string),
-    remarks: (row.remarks as string | undefined) ?? "",
+    photoUrl: emp?.photoUrl,
+    shiftId: String(row.shiftTypeId ?? row.shiftId ?? ""),
+    shiftCode,
+    shiftName,
+    shiftCategory: inferShiftCategory(shiftName, shiftCode, String(row.shiftCategory ?? "")),
+    startTime: String(row.startTime ?? ""),
+    endTime: String(row.endTime ?? ""),
+    effectiveFrom,
+    effectiveTo,
+    status: deriveShiftDisplayStatus(effectiveFrom, effectiveTo, storedStatus),
+    assignedBy: String(row.assignedBy ?? ""),
+    assignedOn: formatApiDate(row.assignedOn as string),
+    remarks: row.remarks as string | undefined,
     history: (row.history as ShiftAssignment["history"]) ?? [],
   };
 }
@@ -904,34 +931,6 @@ export function mapOvertimeFromApi(row: Record<string, unknown>, emp?: EmployeeL
     approvedBy: (row.approvedBy as string | undefined) ?? (row.approved_by as string | undefined),
     approvedOn: (row.approvedOn || row.approved_on) ? formatApiDate((row.approvedOn ?? row.approved_on) as string) : undefined,
     approvalRemarks: (row.approvalRemarks as string | undefined) ?? (row.approval_remarks as string | undefined),
-  };
-}
-
-export function mapHolidayAttendanceFromApi(
-  row: Record<string, unknown>,
-  emp?: EmployeeLookup,
-): HolidayAttendanceRecord {
-  return {
-    id: String(row.id),
-    employeeId: String(row.employeeId ?? ""),
-    employeeName: emp?.name ?? String(row.employeeName ?? ""),
-    department: emp?.department ?? String(row.department ?? ""),
-    designation: emp?.designation ?? String(row.designation ?? ""),
-    avatar: emp?.avatar ?? String(row.avatar ?? "??"),
-    photoUrl: emp?.photoUrl,
-    holidayName: String(row.holidayName ?? ""),
-    holidayDate: formatApiDate(row.holidayDate as string),
-    attendanceStatus: (row.attendanceStatus as HolidayAttendanceRecord["attendanceStatus"]) ?? "Present",
-    checkIn: String(row.checkIn ?? "—"),
-    checkOut: String(row.checkOut ?? "—"),
-    workedHours: Number(row.workedHours ?? 0),
-    benefitType: (row.benefitType as HolidayAttendanceRecord["benefitType"]) ?? "Additional Pay",
-    holidayPayAmount: Number(row.holidayPayAmount ?? 0),
-    payrollStatus: (row.payrollStatus as HolidayAttendanceRecord["payrollStatus"]) ?? "Pending Payroll Processing",
-    approvalStatus: (row.approvalStatus as HolidayAttendanceRecord["approvalStatus"]) ?? "Pending",
-    reviewedBy: row.reviewedBy as string | undefined,
-    reviewedDate: row.reviewedDate ? formatApiDate(row.reviewedDate as string) : undefined,
-    remarks: row.remarks as string | undefined,
   };
 }
 

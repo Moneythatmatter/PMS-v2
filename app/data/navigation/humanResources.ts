@@ -13,7 +13,6 @@ export const humanResourcesNavItems: ModuleNavItem[] = [
       { label: "Leave Management", href: "/human-resources/attendance-leave/leave-management", icon: "calendar" },
       { label: "Overtime", href: "/human-resources/attendance-leave/overtime", icon: "timer" },
       { label: "Weekly Off", href: "/human-resources/attendance-leave/weekly-off", icon: "calendar-off" },
-      { label: "Holiday Attendance", href: "/human-resources/attendance-leave/holiday-attendance", icon: "plane" },
     ],
   },
   {

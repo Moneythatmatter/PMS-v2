@@ -731,9 +731,9 @@ export function PayrollSettingsView() {
                 <div className="p-4 rounded-xl border border-purple-200 bg-purple-50/60 space-y-3 text-xs">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="font-extrabold text-purple-950 text-sm block">Holiday Attendance Benefit Policy</span>
+                      <span className="font-extrabold text-purple-950 text-sm block">Holiday Work Compensation Policy</span>
                       <p className="text-purple-800">
-                        Comp Off has been disabled. All holiday attendance is compensated strictly via <strong>Additional Pay (Extra Money)</strong> forwarded to Payroll.
+                        Comp Off has been disabled. Holiday work is compensated via <strong>Additional Pay (Extra Money)</strong> in payroll.
                       </p>
                     </div>
                     <span className="px-3 py-1 rounded-full text-xs font-black bg-purple-200 text-purple-900 border border-purple-300">
