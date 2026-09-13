@@ -85,7 +85,8 @@ export function getAttendanceMonthBounds(
 ): { min: { year: number; month: number }; max: { year: number; month: number } } {
   return {
     min: { year: joinDate.getFullYear(), month: joinDate.getMonth() },
-    max: { year: today.getFullYear(), month: today.getMonth() },
+    // Allow viewing the full calendar year so upcoming holidays are visible.
+    max: { year: today.getFullYear(), month: 11 },
   };
 }
 
@@ -353,6 +354,29 @@ export function mergeAttendanceRecordsIntoGrid(
     const record = recordsByDate.get(day.iso);
     if (!record) return day;
     return { ...day, ...attendanceRecordToCalendarDay(day.iso, record) };
+  });
+}
+
+export interface CalendarHolidayOverlay {
+  name: string;
+}
+
+export function mergeHolidaysIntoGrid(
+  monthGrid: EmployeeAttendanceDay[],
+  holidaysByDate: Map<string, CalendarHolidayOverlay>,
+): EmployeeAttendanceDay[] {
+  return monthGrid.map((day) => {
+    if (!day.inMonth || day.status === "Before Join") return day;
+    const holiday = holidaysByDate.get(day.iso);
+    if (!holiday) return day;
+    return {
+      ...day,
+      status: "Holiday",
+      shift: holiday.name,
+      checkIn: "-",
+      checkOut: "-",
+      workedHours: 0,
+    };
   });
 }
 

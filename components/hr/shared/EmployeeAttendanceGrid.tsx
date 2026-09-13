@@ -23,19 +23,17 @@ import {
   getCalendarCellClass,
   getWeekdayLabels,
   mergeAttendanceRecordsIntoGrid,
+  mergeHolidaysIntoGrid,
   parseEmployeeJoinDate,
   summarizeAttendanceMonth,
   type CalendarAttendanceOverlay,
+  type CalendarHolidayOverlay,
   type EmployeeAttendanceDay,
   type EmployeeAttendanceStatus,
 } from "@/lib/hr/employee-attendance";
-import {
-  hrAttendanceService,
-  hrHolidayService,
-  hrLeaveApplicationService,
-  hrShiftAssignmentService,
-} from "@/services/human-resources";
+import { hrAttendanceService, hrHolidayService } from "@/services/human-resources";
 import { mapAttendanceFromApi } from "@/lib/hr/api-mappers";
+import { normalizeToIsoDate } from "@/lib/hr/report-export";
 
 const COMPACT_WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
@@ -104,18 +102,20 @@ export function EmployeeAttendanceGrid({
   const [recordsByDate, setRecordsByDate] = useState<Map<string, CalendarAttendanceOverlay>>(
     new Map(),
   );
+  const [holidaysByDate, setHolidaysByDate] = useState<Map<string, CalendarHolidayOverlay>>(
+    new Map(),
+  );
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const [rows, holidays, leaveApps, shiftAssigns] = await Promise.all([
-          hrAttendanceService.getForEmployee(employeeId).catch(() => []),
-          hrHolidayService.list().catch(() => []),
-          hrLeaveApplicationService.list().catch(() => []),
-          hrShiftAssignmentService.list().catch(() => []),
+        const [rows, holidayRows] = await Promise.all([
+          hrAttendanceService.getForEmployee(employeeId),
+          hrHolidayService.list(),
         ]);
         if (cancelled) return;
+
         const map = new Map<string, CalendarAttendanceOverlay>();
 
         const parseToIso = (dStr: string) => {
@@ -222,10 +222,13 @@ export function EmployeeAttendanceGrid({
           const mapped = mapAttendanceFromApi(row);
           const iso = String(row.attendanceDate ?? row.recordDate ?? "").slice(0, 10);
           if (!iso) continue;
-          const prev = map.get(iso);
+          const holidayName = row.holidayName ? String(row.holidayName) : null;
           map.set(iso, {
             status: mapped.status,
-            shiftName: prev?.shiftName || mapped.shiftName,
+            shiftName:
+              mapped.status === "Holiday" && holidayName
+                ? holidayName
+                : mapped.shiftName,
             checkIn: mapped.checkIn,
             checkOut: mapped.checkOut,
             workedHours: mapped.workedHours,
@@ -234,8 +237,22 @@ export function EmployeeAttendanceGrid({
           });
         }
         setRecordsByDate(map);
+
+        const holidayMap = new Map<string, CalendarHolidayOverlay>();
+        for (const row of holidayRows) {
+          if (String(row.status ?? "Active") !== "Active") continue;
+          const iso =
+            normalizeToIsoDate(String(row.holidayDate ?? "")) ??
+            String(row.holidayDate ?? "").slice(0, 10);
+          if (!iso) continue;
+          holidayMap.set(iso, { name: String(row.holidayName ?? "Holiday") });
+        }
+        setHolidaysByDate(holidayMap);
       } catch {
-        if (!cancelled) setRecordsByDate(new Map());
+        if (!cancelled) {
+          setRecordsByDate(new Map());
+          setHolidaysByDate(new Map());
+        }
       }
     })();
     return () => {
@@ -252,8 +269,9 @@ export function EmployeeAttendanceGrid({
       shiftType,
       today,
     );
-    return mergeAttendanceRecordsIntoGrid(base, recordsByDate);
-  }, [employeeId, viewYear, viewMonth, parsedJoinDate, shiftType, today, recordsByDate]);
+    const withHolidays = mergeHolidaysIntoGrid(base, holidaysByDate);
+    return mergeAttendanceRecordsIntoGrid(withHolidays, recordsByDate);
+  }, [employeeId, viewYear, viewMonth, parsedJoinDate, shiftType, today, recordsByDate, holidaysByDate]);
 
   const monthSummary = useMemo(
     () => summarizeAttendanceMonth(monthGrid),
@@ -298,11 +316,7 @@ export function EmployeeAttendanceGrid({
   });
 
   const handleSelectDay = (day: EmployeeAttendanceDay) => {
-    if (
-      !day.inMonth ||
-      day.status === "Future" ||
-      day.status === "Before Join"
-    ) {
+    if (!day.inMonth || day.status === "Before Join") {
       return;
     }
     setSelectedDayIso(day.iso);
@@ -674,7 +688,7 @@ function CalendarCell({
     );
   }
 
-  const interactive = day.status !== "Future" && day.status !== "Before Join";
+  const interactive = day.status !== "Before Join";
 
   return (
     <button
@@ -725,7 +739,7 @@ function MonthNav({
       clamped.month > joinDate.getMonth());
   const canNext =
     clamped.year < today.getFullYear() ||
-    (clamped.year === today.getFullYear() && clamped.month < today.getMonth());
+    (clamped.year === today.getFullYear() && clamped.month < 11);
 
   const go = (delta: number) => {
     let y = clamped.year;

@@ -688,7 +688,7 @@ export function HRDashboardView() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
-          <PanelCard title="Birthdays & work anniversaries" subtitle="Upcoming celebrations">
+          <PanelCard title="Upcoming events" subtitle="Birthdays and work anniversaries">
             <div className="space-y-2.5">
               {events.length === 0 ? (
                 <p className="py-6 text-center text-xs text-slate-400">No upcoming celebrations.</p>
@@ -738,9 +738,14 @@ export function HRDashboardView() {
             </div>
           </PanelCard>
 
-          <PanelCard title="Holidays & shift exceptions" subtitle="Upcoming schedule changes">
+          <PanelCard title="Upcoming holidays" subtitle="Public and festival holidays">
             <div className="space-y-2.5">
-              {holidaysAndShifts.map((hs) => (
+              {holidaysAndShifts.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-400">
+                  No upcoming holidays scheduled.
+                </p>
+              ) : (
+                holidaysAndShifts.map((hs) => (
                 <ListRow key={hs.id} className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-slate-900">{hs.title}</p>
@@ -757,7 +762,8 @@ export function HRDashboardView() {
                     {hs.badgeText}
                   </span>
                 </ListRow>
-              ))}
+                ))
+              )}
             </div>
           </PanelCard>
         </div>

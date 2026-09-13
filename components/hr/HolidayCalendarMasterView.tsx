@@ -25,6 +25,17 @@ import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { hrHolidayService } from "@/services/human-resources";
 import { mapHolidayFromApi, mapHolidayToApi } from "@/lib/hr/api-mappers";
+import { normalizeToIsoDate } from "@/lib/hr/report-export";
+
+function dayNameFromIso(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  if (!year || !month || !day) return "";
+  return new Date(year, month - 1, day).toLocaleDateString("en-GB", { weekday: "long" });
+}
+
+function todayIsoDate(): string {
+  return new Date().toLocaleDateString("en-CA");
+}
 
 export type HolidayStatus = "Active" | "Inactive";
 export type HolidayCategory = "National" | "Festival" | "Regional" | "Company Optional";
@@ -70,15 +81,19 @@ export function computeDayOfWeek(dateStr: string): string {
 
 export function HolidayCalendarMasterView() {
   const [holidays, setHolidays] = useState<HolidayMaster[]>([]);
+  const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const loadHolidays = async () => {
+    setLoading(true);
     try {
       const rows = await hrHolidayService.list();
       setHolidays(rows.map(mapHolidayFromApi));
     } catch (e) {
       setToastMessage(e instanceof Error ? e.message : "Failed to load holidays");
       setHolidays([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -89,7 +104,8 @@ export function HolidayCalendarMasterView() {
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
-  const [yearFilter, setYearFilter] = useState("2026");
+  const currentYear = String(new Date().getFullYear());
+  const [yearFilter, setYearFilter] = useState(currentYear);
   const [statusFilter, setStatusFilter] = useState<"ALL" | "Active" | "Inactive">("ALL");
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
@@ -101,26 +117,42 @@ export function HolidayCalendarMasterView() {
   // Form Fields
   const [formCode, setFormCode] = useState("");
   const [formName, setFormName] = useState("");
-  const [formDate, setFormDate] = useState("15/08/2026");
-  const [formDay, setFormDay] = useState("Saturday");
+  const [formDateIso, setFormDateIso] = useState(todayIsoDate());
+  const [formDay, setFormDay] = useState(() => dayNameFromIso(todayIsoDate()));
   const [formCategory, setFormCategory] = useState<HolidayCategory>("National");
   const [formIsMandatory, setFormIsMandatory] = useState(true);
   const [formMultiplier, setFormMultiplier] = useState(2.0);
   const [formDepts, setFormDepts] = useState("All Departments");
   const [formDescription, setFormDescription] = useState("");
   const [formStatus, setFormStatus] = useState<HolidayStatus>("Active");
-  const [formYear, setFormYear] = useState("2026");
+  const [formYear, setFormYear] = useState(currentYear);
   const [nameError, setNameError] = useState("");
   const [codeError, setCodeError] = useState("");
 
-  // Statistics KPI
+  const yearOptions = useMemo(() => {
+    const years = new Set(holidays.map((h) => h.year));
+    years.add(currentYear);
+    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+  }, [holidays, currentYear]);
+
+  const handleDateChange = (iso: string) => {
+    setFormDateIso(iso);
+    setFormDay(dayNameFromIso(iso));
+    if (iso.length >= 4) {
+      setFormYear(iso.slice(0, 4));
+    }
+  };
+
+  // Statistics KPI (scoped to selected year filter)
   const stats = useMemo(() => {
-    const total = holidays.length;
-    const national = holidays.filter((h) => h.category === "National").length;
-    const festival = holidays.filter((h) => h.category === "Festival").length;
-    const doublePayHolidays = holidays.filter((h) => h.extraPayMultiplier >= 2.0).length;
+    const scoped =
+      yearFilter === "ALL" ? holidays : holidays.filter((h) => h.year === yearFilter);
+    const total = scoped.length;
+    const national = scoped.filter((h) => h.category === "National").length;
+    const festival = scoped.filter((h) => h.category === "Festival").length;
+    const doublePayHolidays = scoped.filter((h) => h.extraPayMultiplier >= 2.0).length;
     return { total, national, festival, doublePayHolidays };
-  }, [holidays]);
+  }, [holidays, yearFilter]);
 
   // Filtered List
   const filteredHolidays = useMemo(() => {
@@ -140,18 +172,19 @@ export function HolidayCalendarMasterView() {
 
   // Open Create Modal
   const handleOpenCreateModal = () => {
+    const defaultIso = todayIsoDate();
     setEditingHoliday(null);
-    setFormCode(`HOL-${formYear}-${Math.floor(10 + Math.random() * 90)}`);
+    setFormCode(`HOL-${defaultIso.slice(0, 4)}-${Math.floor(10 + Math.random() * 90)}`);
     setFormName("");
-    setFormDate("15/08/2026");
-    setFormDay("Saturday");
+    setFormDateIso(defaultIso);
+    setFormDay(dayNameFromIso(defaultIso));
     setFormCategory("National");
     setFormIsMandatory(true);
     setFormMultiplier(2.0);
     setFormDepts("All Departments");
     setFormDescription("");
     setFormStatus("Active");
-    setFormYear("2026");
+    setFormYear(defaultIso.slice(0, 4));
     setNameError("");
     setCodeError("");
     setIsModalOpen(true);
@@ -160,10 +193,11 @@ export function HolidayCalendarMasterView() {
   // Open Edit Modal
   const handleOpenEditModal = (h: HolidayMaster) => {
     setEditingHoliday(h);
+    const iso = normalizeToIsoDate(h.holidayDate) ?? todayIsoDate();
     setFormCode(h.holidayCode);
     setFormName(h.holidayName);
-    setFormDate(h.holidayDate);
-    setFormDay(h.dayOfWeek);
+    setFormDateIso(iso);
+    setFormDay(h.dayOfWeek || dayNameFromIso(iso));
     setFormCategory(h.category);
     setFormIsMandatory(h.isMandatory);
     setFormMultiplier(h.extraPayMultiplier);
@@ -211,7 +245,7 @@ export function HolidayCalendarMasterView() {
     const payload = mapHolidayToApi({
       holidayCode: trimmedCode,
       holidayName: trimmedName,
-      holidayDate: formDate,
+      holidayDate: formDateIso,
       dayOfWeek: formDay,
       category: formCategory,
       isMandatory: formIsMandatory,
@@ -292,7 +326,7 @@ export function HolidayCalendarMasterView() {
         <HRKPICard
           label="Total Holidays"
           value={`${stats.total}`}
-          subtitle="Calendar Year 2026"
+          subtitle={yearFilter === "ALL" ? "All calendar years" : `Calendar Year ${yearFilter}`}
           tone="blue"
           icon={<CalendarRange className="h-5 w-5" />}
         />
@@ -352,8 +386,11 @@ export function HolidayCalendarMasterView() {
                 onChange={(e) => setYearFilter(e.target.value)}
                 className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-extrabold text-slate-800"
               >
-                <option value="2026">2026 Calendar</option>
-                <option value="2025">2025 Calendar</option>
+                {yearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year} Calendar
+                  </option>
+                ))}
                 <option value="ALL">All Years</option>
               </select>
 
@@ -384,7 +421,7 @@ export function HolidayCalendarMasterView() {
                 onClick={() => {
                   setSearchTerm("");
                   setCategoryFilter("ALL");
-                  setYearFilter("2026");
+                  setYearFilter(currentYear);
                   setStatusFilter("ALL");
                 }}
                 className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl hover:bg-slate-50 transition"
@@ -425,7 +462,13 @@ export function HolidayCalendarMasterView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredHolidays.length > 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-slate-500 text-xs">
+                    Loading holidays…
+                  </td>
+                </tr>
+              ) : filteredHolidays.length > 0 ? (
                 filteredHolidays.map((h) => (
                   <tr
                     key={h.id}
@@ -674,7 +717,7 @@ export function HolidayCalendarMasterView() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Monday"
+                  readOnly
                   value={formDay}
                   onChange={(e) => setFormDay(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-slate-50/70"
@@ -714,9 +757,9 @@ export function HolidayCalendarMasterView() {
                 <label className="block font-bold text-slate-700 mb-1">Calendar Year</label>
                 <input
                   type="text"
+                  readOnly
                   value={formYear}
-                  onChange={(e) => setFormYear(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900"
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-600 bg-slate-50"
                 />
               </div>
             </div>
@@ -848,8 +891,11 @@ export function HolidayCalendarMasterView() {
               onChange={(e) => setYearFilter(e.target.value)}
               className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-800 bg-white"
             >
-              <option value="2026">2026 Calendar</option>
-              <option value="2025">2025 Calendar</option>
+              {yearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year} Calendar
+                </option>
+              ))}
               <option value="ALL">All Years</option>
             </select>
           </div>

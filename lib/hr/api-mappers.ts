@@ -20,8 +20,15 @@ import type { ComplaintCategory } from "@/components/hr/ComplaintCategoriesView"
 import type { ComplaintRecord } from "@/components/hr/ComplaintListView";
 import type { GrievanceComplaint } from "@/components/hr/RaiseComplaintView";
 import type { ComplaintStatusTicket } from "@/components/hr/ComplaintStatusView";
-import type { HRKpiSummary, GrievanceSummary, DepartmentHeadcount } from "@/app/data/hr/hrDashboardData";
+import type {
+  HRKpiSummary,
+  GrievanceSummary,
+  DepartmentHeadcount,
+  EmployeeEventItem,
+  HolidayShiftItem,
+} from "@/app/data/hr/hrDashboardData";
 import { formatApiDate } from "./useHrList";
+import { normalizeToIsoDate } from "./report-export";
 
 export function mapPayrollFromApi(row: Record<string, unknown>): EmployeePayrollRecord {
   return {
@@ -353,6 +360,12 @@ export function mapHolidayFromApi(row: Record<string, unknown>): HolidayMaster {
   };
 }
 
+function dayNameFromIsoDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  if (!year || !month || !day) return "";
+  return new Date(year, month - 1, day).toLocaleDateString("en-GB", { weekday: "long" });
+}
+
 export function mapHolidayToApi(form: Omit<HolidayMaster, "id">) {
   const applicableDepartments =
     form.applicableDepartments === "All Departments"
@@ -362,30 +375,49 @@ export function mapHolidayToApi(form: Omit<HolidayMaster, "id">) {
           .map((item) => item.trim())
           .filter(Boolean);
 
-  let formattedDate = form.holidayDate.trim();
-  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(formattedDate)) {
-    const [d, m, y] = formattedDate.split("/");
-    formattedDate = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  } else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(formattedDate)) {
-    const [d, m, y] = formattedDate.split("-");
-    formattedDate = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
+  const isoDate = normalizeToIsoDate(form.holidayDate) ?? form.holidayDate;
+  const parsedYear = isoDate.slice(0, 4);
 
   return {
     holidayCode: form.holidayCode,
     holidayName: form.holidayName,
-    holidayDate: formattedDate,
-    dayOfWeek: form.dayOfWeek,
+    holidayDate: isoDate,
+    dayOfWeek: form.dayOfWeek || dayNameFromIsoDate(isoDate),
     category: form.category,
     isMandatory: form.isMandatory,
     extraPayMultiplier: form.extraPayMultiplier,
     applicableDepartments,
     description: form.description,
     status: form.status,
-    year: Number(form.year) || new Date().getFullYear(),
+    year: Number(form.year) || Number(parsedYear) || new Date().getFullYear(),
   };
 }
 
+export function mapTaxRuleToApi(form: Omit<ConfigurableTaxRule, "id" | "createdDate" | "history">) {
+  return {
+    ruleName: form.ruleName,
+    taxCode: form.taxCode,
+    taxType: form.taxType,
+    description: form.description,
+    calcMethod: form.calcMethod,
+    ratePercentage: form.ratePercentage,
+    taxableBase: form.taxableBase,
+    fixedAmount: form.fixedAmount,
+    applicableFrequency: form.applicableFrequency,
+    slabs: form.slabs,
+    applicableOn: form.applicableOn,
+    department: form.department,
+    employmentType: form.employmentType,
+    employeeCategory: form.employeeCategory,
+    taxRegime: form.taxRegime,
+    financialYear: form.financialYear,
+    effectiveFrom: form.effectiveFrom,
+    effectiveTo: form.effectiveTo,
+    status: form.status,
+    version: form.version,
+    createdBy: form.createdBy,
+  };
+}
 
 export function mapComplaintCategoryToApi(form: Omit<ComplaintCategory, "id" | "createdDate" | "complaintsCount">) {
   return {
@@ -723,6 +755,9 @@ export function mapAttendanceFromApi(
   const dateRaw = (row.attendanceDate ?? row.recordDate) as string | undefined;
   const apiStatus = String(row.attendanceStatus ?? row.status ?? "PRESENT");
   let status = ATTENDANCE_STATUS_FROM_API[apiStatus.toUpperCase()] ?? "Present";
+  const dayType = String(row.dayType ?? "").toUpperCase();
+  if (dayType === "HOLIDAY") status = "Holiday";
+  if (dayType === "WEEKLY_OFF") status = "Weekly Off";
   const remarks = String(row.remarks ?? row.manualReason ?? "");
   if (remarks.toLowerCase().includes("late") && status === "Present") {
     status = "Late";
@@ -886,8 +921,8 @@ export function mapLeaveApplicationFromApi(
     priority: (row.priority as LeaveApplication["priority"]) ?? "Normal",
     fromDate: formatApiDate(row.fromDate as string),
     toDate: formatApiDate(row.toDate as string),
-    fromDateIso: String(row.fromDate ?? "").slice(0, 10),
-    toDateIso: String(row.toDate ?? "").slice(0, 10),
+    fromDateIso: normalizeToIsoDate(String(row.fromDate ?? "")) ?? undefined,
+    toDateIso: normalizeToIsoDate(String(row.toDate ?? "")) ?? undefined,
     totalDays: Number(row.totalDays ?? 0),
     effectiveDays: row.effectiveDays != null ? Number(row.effectiveDays) : undefined,
     calendarDays: row.calendarDays != null ? Number(row.calendarDays) : undefined,
@@ -1309,36 +1344,42 @@ export function mapDashboardFromApi(data: Record<string, unknown>) {
   const genderTotal = Number(genderRaw.total ?? (sumGender > 0 ? sumGender : kpiSummary.totalEmployees));
 
   const genderDistribution = {
-    male: sumGender > 0 ? rawMale : genderTotal,
-    female: rawFemale,
-    other: rawOther,
-    total: genderTotal,
+    male: Number(genderRaw.male ?? 0),
+    female: Number(genderRaw.female ?? 0),
+    other: Number(genderRaw.other ?? 0),
+    total: Number(genderRaw.total ?? 0),
   };
 
-  const events = ((data.events as Record<string, unknown>[]) ?? []).map((e) => ({
-    id: String(e.id ?? ""),
-    name: String(e.name ?? ""),
-    avatar: String(e.avatar ?? "??"),
-    department: String(e.department ?? ""),
-    type: (e.type as "birthday" | "anniversary") ?? "birthday",
-    date: String(e.date ?? ""),
-    years: e.years != null ? Number(e.years) : undefined,
-  }));
+  const upcomingBirthdays = (data.upcomingBirthdays as Record<string, unknown>[]) ?? [];
+  const upcomingAnniversaries = (data.upcomingAnniversaries as Record<string, unknown>[]) ?? [];
+  const upcomingHolidays = (data.upcomingHolidays as Record<string, unknown>[]) ?? [];
 
-  const holidaysAndShifts = ((data.holidaysAndShifts as Record<string, unknown>[]) ?? []).map((h) => ({
-    id: String(h.id ?? ""),
-    title: String(h.title ?? ""),
-    date: String(h.date ?? ""),
-    type: (h.type as "holiday" | "shift_exception") ?? "holiday",
-    badgeText: String(h.badgeText ?? "Holiday"),
-  }));
+  const events: EmployeeEventItem[] = [
+    ...upcomingBirthdays.map((row) => ({
+      id: String(row.id),
+      name: String(row.name ?? ""),
+      avatar: String(row.avatar ?? "??"),
+      department: String(row.department ?? "—"),
+      type: "birthday" as const,
+      date: String(row.displayDate ?? row.eventDate ?? ""),
+    })),
+    ...upcomingAnniversaries.map((row) => ({
+      id: String(row.id),
+      name: String(row.name ?? ""),
+      avatar: String(row.avatar ?? "??"),
+      department: String(row.department ?? "—"),
+      type: "anniversary" as const,
+      date: String(row.displayDate ?? row.eventDate ?? ""),
+      years: row.years != null ? Number(row.years) : undefined,
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
 
-  const activities = ((data.activities as Record<string, unknown>[]) ?? []).map((a) => ({
-    id: String(a.id ?? ""),
-    type: (a.type as "join" | "leave" | "attendance" | "payroll" | "grievance") ?? "join",
-    title: String(a.title ?? ""),
-    description: String(a.description ?? ""),
-    timeAgo: String(a.timeAgo ?? ""),
+  const holidaysAndShifts: HolidayShiftItem[] = upcomingHolidays.map((row) => ({
+    id: String(row.id),
+    title: String(row.title ?? ""),
+    date: String(row.displayDate ?? row.eventDate ?? ""),
+    type: "holiday" as const,
+    badgeText: String(row.category ?? "Holiday"),
   }));
 
   return {
@@ -1351,6 +1392,5 @@ export function mapDashboardFromApi(data: Record<string, unknown>) {
     genderDistribution,
     events,
     holidaysAndShifts,
-    activities,
   };
 }
