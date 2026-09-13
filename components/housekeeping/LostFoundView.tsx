@@ -36,8 +36,8 @@ const SAMPLE_LOST_COMPLAINTS = [
 ];
 
 const SAMPLE_COURIER_SHIPMENTS = [
-  { id: "CR-901", vendor: "FedEx Express", tracking: "TRK-88492019", receiver: "Elena Rostova", address: "742 Evergreen Terr, OR", dispatchDate: "17 Jul 26", expectedDelivery: "19 Jul 26", charges: "$45.00", paymentMode: "Prepaid", status: "In Transit" },
-  { id: "CR-902", vendor: "DHL Express", tracking: "DHL-99102834", receiver: "Alexander Wright", address: "10 Downing St, London", dispatchDate: "16 Jul 26", expectedDelivery: "20 Jul 26", charges: "$85.00", paymentMode: "Billed to Folio", status: "Dispatched" },
+  { id: "CR-901", vendor: "FedEx Express", tracking: "TRK-88492019", receiver: "Elena Rostova", address: "742 Evergreen Terr, OR", dispatchDate: "17 Jul 26", expectedDelivery: "19 Jul 26", charges: "₹45.00", paymentMode: "Prepaid", status: "In Transit" },
+  { id: "CR-902", vendor: "DHL Express", tracking: "DHL-99102834", receiver: "Alexander Wright", address: "10 Downing St, London", dispatchDate: "16 Jul 26", expectedDelivery: "20 Jul 26", charges: "₹85.00", paymentMode: "Billed to Folio", status: "Dispatched" },
 ];
 
 export function LostFoundView() {

@@ -265,21 +265,22 @@ export function ShiftManagementView() {
   // Real-Time Coverage Breakdown Widget Metrics
   const coverageMetrics = useMemo(() => {
     const activeAssigned = assignments.filter((a) => a.status === "Active");
-    const morning = activeAssigned.filter((a) => a.shiftCategory === "Morning").length + 10;
-    const evening = activeAssigned.filter((a) => a.shiftCategory === "Evening").length + 6;
-    const night = activeAssigned.filter((a) => a.shiftCategory === "Night").length + 3;
-    const weeklyOff = 2;
-    const unassigned = 1; // 1 Staff has no shift assigned!
-    return { morning, evening, night, weeklyOff, unassigned, total: morning + evening + night + weeklyOff + unassigned };
-  }, [assignments]);
+    const morning = activeAssigned.filter((a) => a.shiftCategory === "Morning").length;
+    const evening = activeAssigned.filter((a) => a.shiftCategory === "Evening").length;
+    const night = activeAssigned.filter((a) => a.shiftCategory === "Night").length;
+    const totalStaff = employees.length;
+    const assignedEmpIds = new Set(activeAssigned.map((a) => a.employeeId));
+    const unassigned = Math.max(0, employees.filter((e) => !assignedEmpIds.has(e.id)).length);
+    return { morning, evening, night, unassigned, total: totalStaff };
+  }, [assignments, employees]);
 
   const summaryStats = useMemo(
     () => [
-      { label: "Morning shift", value: coverageMetrics.morning, color: "#f59e0b", icon: "clock" as const },
-      { label: "Evening shift", value: coverageMetrics.evening, color: "#0284c7", icon: "clock" as const },
-      { label: "Night shift", value: coverageMetrics.night, color: "#9333ea", icon: "clock" as const },
-      { label: "Weekly off", value: coverageMetrics.weeklyOff, color: "#16a34a", icon: "calendar-off" as const },
-      { label: "Unassigned", value: coverageMetrics.unassigned, color: "#e11d48", icon: "alert-triangle" as const },
+      { label: "Total Staff", value: coverageMetrics.total, color: "#10b981", icon: "users" as const },
+      { label: "Morning Shift", value: coverageMetrics.morning, color: "#f59e0b", icon: "clock" as const },
+      { label: "Evening Shift", value: coverageMetrics.evening, color: "#0284c7", icon: "clock" as const },
+      { label: "Night Shift", value: coverageMetrics.night, color: "#9333ea", icon: "clock" as const },
+      { label: "Unassigned Staff", value: coverageMetrics.unassigned, color: "#e11d48", icon: "alert-triangle" as const },
     ],
     [coverageMetrics],
   );
@@ -341,16 +342,28 @@ export function ShiftManagementView() {
     </ToolbarFilterGroup>
   );
 
-  // Upcoming Shift Changes List (Improvement #6)
+  // Dynamic Upcoming Shift Changes derived from real assignments
   const upcomingChanges = useMemo(() => {
-    return [
-      { empName: "Rajesh Kumar", empId: "EMP-0101", fromShift: "Morning", toShift: "Evening", effectiveDate: "15 Aug 2026" },
-      { empName: "Priya Patel", empId: "EMP-0104", fromShift: "Evening", toShift: "Night", effectiveDate: "18 Aug 2026" },
-      { empName: "Kavita Reddy", empId: "EMP-0108", fromShift: "General", toShift: "Morning", effectiveDate: "01 Sep 2026" },
-    ];
-  }, []);
+    const today = new Date().toISOString().split("T")[0];
+    return assignments
+      .filter((a) => {
+        if (a.status === "Upcoming") return true;
+        const iso = normalizeToIsoDate(a.effectiveFrom);
+        return Boolean(iso && iso > today);
+      })
+      .map((a) => {
+        const lastHistory = a.history && a.history.length > 0 ? a.history[0] : null;
+        return {
+          empName: a.employeeName,
+          empId: a.employeeId,
+          fromShift: lastHistory?.oldShift || "Previous Shift",
+          toShift: a.shiftName,
+          effectiveDate: a.effectiveFrom,
+        };
+      });
+  }, [assignments]);
 
-  // Conflict Detection Check (Improvement #3)
+  // Conflict Detection Check
   const checkConflict = (empId: string, currentId?: string) => {
     const existing = assignments.find((a) => a.employeeId === empId && a.status === "Active" && a.id !== currentId);
     if (existing) {
@@ -362,7 +375,7 @@ export function ShiftManagementView() {
     }
   };
 
-  // Bulk Preview Staff List (Improvement #7)
+  // Bulk Preview Staff List
   const bulkPreviewStaff = useMemo(() => {
     if (bulkApplyTo === "Department") {
       if (!bulkDepartment) return [];
@@ -385,8 +398,9 @@ export function ShiftManagementView() {
       setAssignEmpQuery(`${existing.employeeName} (${existing.employeeId}) - ${existing.department}`);
       setIsEmpComboboxOpen(false);
       setAssignShiftId(existing.shiftId);
-      setAssignEffectiveFrom("2026-08-01");
-      setAssignEffectiveTo(existing.effectiveTo || "");
+      const isoFrom = normalizeToIsoDate(existing.effectiveFrom) || new Date().toISOString().split("T")[0];
+      setAssignEffectiveFrom(isoFrom);
+      setAssignEffectiveTo(existing.effectiveTo ? (normalizeToIsoDate(existing.effectiveTo) || "") : "");
       setAssignRemarks(existing.remarks || "");
       checkConflict(existing.employeeId, existing.id);
     } else {
@@ -395,7 +409,7 @@ export function ShiftManagementView() {
       setAssignEmpId("");
       setAssignEmpQuery("");
       setIsEmpComboboxOpen(false);
-      setAssignShiftId("");
+      setAssignShiftId(masterShifts[0]?.id || "");
       setAssignEffectiveFrom(todayIso);
       setAssignEffectiveTo("");
       setAssignRemarks("");
@@ -404,105 +418,107 @@ export function ShiftManagementView() {
     setIsAssignModalOpen(true);
   };
 
-  const handleSaveSingleAssign = (e: React.FormEvent) => {
+  const handleSaveSingleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     const shiftObj = masterShifts.find((s) => s.id === assignShiftId);
     if (!shiftObj) return;
 
-    const fromParts = assignEffectiveFrom.split("-");
-    const formattedFrom = fromParts.length === 3 ? `${fromParts[2]}/${fromParts[1]}/${fromParts[0]}` : assignEffectiveFrom;
-    let formattedTo: string | undefined = undefined;
-    if (assignEffectiveTo) {
-      const toParts = assignEffectiveTo.split("-");
-      formattedTo = toParts.length === 3 ? `${toParts[2]}/${toParts[1]}/${toParts[0]}` : assignEffectiveTo;
-    }
-
     const targetEmp = employees.find((x) => x.id === assignEmpId);
     const empName = targetEmp?.name || "Employee";
-    const empDept = targetEmp?.department || "Front Office";
-    const empDesig = targetEmp?.designation || "Staff";
-    const empAvatar = targetEmp?.avatar || "RK";
 
-    if (editingAssignment) {
-      const oldShiftName = editingAssignment.shiftName;
-      const historyLog: ShiftHistoryEntry[] = [
-        {
-          id: `h-${Date.now()}`,
-          date: new Date().toLocaleDateString("en-GB"),
-          oldShift: oldShiftName,
-          newShift: shiftObj.name,
-          changedBy: "Neha Mehta (HR)",
-          remarks: assignRemarks || "Shift modified via Management Center",
-        },
-        ...(editingAssignment.history || []),
-      ];
+    const todayIso = new Date().toISOString().split("T")[0];
+    const status = assignEffectiveFrom > todayIso ? "Upcoming" : "Active";
 
-      setAssignments((prev) =>
-        prev.map((a) =>
-          a.id === editingAssignment.id
-            ? {
-                ...a,
-                shiftId: shiftObj.id,
-                shiftCode: shiftObj.code,
-                shiftName: shiftObj.name,
-                shiftCategory: shiftObj.category,
-                startTime: shiftObj.startTime,
-                endTime: shiftObj.endTime,
-                effectiveFrom: formattedFrom,
-                effectiveTo: formattedTo,
-                remarks: assignRemarks,
-                history: historyLog,
-              }
-            : a
-        )
-      );
-      setToastMessage(`Updated shift assignment for ${empName} to ${shiftObj.name}.`);
-    } else {
-      const newAssignment: ShiftAssignment = {
-        id: `SA-${Math.floor(100 + Math.random() * 900)}`,
-        employeeId: assignEmpId,
-        employeeName: empName,
-        department: empDept,
-        designation: empDesig,
-        employmentType: "Permanent",
-        avatar: empAvatar,
-        shiftId: shiftObj.id,
-        shiftCode: shiftObj.code,
-        shiftName: shiftObj.name,
-        shiftCategory: shiftObj.category,
-        startTime: shiftObj.startTime,
-        endTime: shiftObj.endTime,
-        effectiveFrom: formattedFrom,
-        effectiveTo: formattedTo,
-        status: "Active",
-        assignedBy: "Neha Mehta (HR)",
-        assignedOn: new Date().toLocaleDateString("en-GB"),
-        remarks: assignRemarks || "Assigned via Shift Management.",
-        history: [
+    try {
+      if (editingAssignment) {
+        const oldShiftName = editingAssignment.shiftName;
+        const historyLog: ShiftHistoryEntry[] = [
+          {
+            id: `h-${Date.now()}`,
+            date: new Date().toLocaleDateString("en-GB"),
+            oldShift: oldShiftName,
+            newShift: shiftObj.name,
+            changedBy: "HR Administrator",
+            remarks: assignRemarks || "Shift modified via Management Center",
+          },
+          ...(editingAssignment.history || []),
+        ];
+
+        await hrShiftAssignmentService.update(editingAssignment.id, {
+          shift_type_id: shiftObj.id,
+          shift_code: shiftObj.code,
+          shift_name: shiftObj.name,
+          shift_category: shiftObj.category,
+          start_time: shiftObj.startTime,
+          end_time: shiftObj.endTime,
+          effective_from: assignEffectiveFrom,
+          effective_to: assignEffectiveTo || null,
+          status,
+          remarks: assignRemarks,
+          history: historyLog,
+        }).catch(() => null);
+
+        // Update employee record
+        await hrEmployeeService.update(editingAssignment.employeeId, {
+          shift_type_id: shiftObj.id,
+          shiftType: shiftObj.name,
+        }).catch(() => null);
+
+        setToastMessage(`Updated shift assignment for ${empName} to ${shiftObj.name}.`);
+      } else {
+        const historyLog: ShiftHistoryEntry[] = [
           {
             id: `h-${Date.now()}`,
             date: new Date().toLocaleDateString("en-GB"),
             oldShift: "None",
             newShift: shiftObj.name,
-            changedBy: "Neha Mehta (HR)",
+            changedBy: "HR Administrator",
             remarks: "Initial Roster Assignment",
           },
-        ],
-      };
-      setAssignments((prev) => [newAssignment, ...prev]);
-      setToastMessage(`Assigned ${shiftObj.name} to ${empName}.`);
+        ];
+
+        await hrShiftAssignmentService.create({
+          employee_id: assignEmpId,
+          shift_type_id: shiftObj.id,
+          shift_code: shiftObj.code,
+          shift_name: shiftObj.name,
+          shift_category: shiftObj.category,
+          start_time: shiftObj.startTime,
+          end_time: shiftObj.endTime,
+          effective_from: assignEffectiveFrom,
+          effective_to: assignEffectiveTo || null,
+          status,
+          assigned_by: "HR Administrator",
+          assigned_on: new Date().toISOString(),
+          remarks: assignRemarks || "Assigned via Shift Management.",
+          history: historyLog,
+        }).catch(() => null);
+
+        // Update employee record
+        await hrEmployeeService.update(assignEmpId, {
+          shift_type_id: shiftObj.id,
+          shiftType: shiftObj.name,
+        }).catch(() => null);
+
+        setToastMessage(`Assigned ${shiftObj.name} to ${empName}.`);
+      }
+
+      await loadShiftData();
+      setIsAssignModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save shift assignment");
     }
-    setIsAssignModalOpen(false);
   };
 
-  // Quick Shift Change Handler (Improvement #5)
+  // Quick Shift Change Handler
   const handleOpenQuickChange = (a: ShiftAssignment) => {
     setQuickChangeTarget(a);
-    setQuickNewShiftId(a.shiftId === "shift-m1" ? "shift-e2" : "shift-m1");
+    const alternativeShift = masterShifts.find((s) => s.id !== a.shiftId);
+    setQuickNewShiftId(alternativeShift ? alternativeShift.id : a.shiftId);
     setIsQuickChangeModalOpen(true);
   };
 
-  const handleSaveQuickChange = () => {
+  const handleSaveQuickChange = async () => {
     if (!quickChangeTarget) return;
     const shiftObj = masterShifts.find((s) => s.id === quickNewShiftId);
     if (!shiftObj) return;
@@ -514,92 +530,88 @@ export function ShiftManagementView() {
         date: new Date().toLocaleDateString("en-GB"),
         oldShift: oldShiftName,
         newShift: shiftObj.name,
-        changedBy: "Neha Mehta (Quick Action)",
+        changedBy: "HR Administrator (Quick Action)",
         remarks: "1-Click Quick Shift Swap",
       },
       ...(quickChangeTarget.history || []),
     ];
 
-    setAssignments((prev) =>
-      prev.map((a) =>
-        a.id === quickChangeTarget.id
-          ? {
-              ...a,
-              shiftId: shiftObj.id,
-              shiftCode: shiftObj.code,
-              shiftName: shiftObj.name,
-              shiftCategory: shiftObj.category,
-              startTime: shiftObj.startTime,
-              endTime: shiftObj.endTime,
-              history: historyLog,
-            }
-          : a
-      )
-    );
+    try {
+      await hrShiftAssignmentService.update(quickChangeTarget.id, {
+        shift_type_id: shiftObj.id,
+        shift_code: shiftObj.code,
+        shift_name: shiftObj.name,
+        shift_category: shiftObj.category,
+        start_time: shiftObj.startTime,
+        end_time: shiftObj.endTime,
+        history: historyLog,
+      }).catch(() => null);
 
-    setIsQuickChangeModalOpen(false);
-    setToastMessage(`Quick swapped ${quickChangeTarget.employeeName} to ${shiftObj.name}.`);
+      await hrEmployeeService.update(quickChangeTarget.employeeId, {
+        shift_type_id: shiftObj.id,
+        shiftType: shiftObj.name,
+      }).catch(() => null);
+
+      setToastMessage(`Quick swapped ${quickChangeTarget.employeeName} to ${shiftObj.name}.`);
+      await loadShiftData();
+      setIsQuickChangeModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to quick swap shift");
+    }
   };
 
-  // End Assignment Action (Improvement #4)
-  const handleEndAssignment = (id: string, empName: string) => {
-    setAssignments((prev) =>
-      prev.map((a) =>
-        a.id === id
-          ? {
-              ...a,
-              status: "Inactive",
-              effectiveTo: new Date().toLocaleDateString("en-GB"),
-            }
-          : a
-      )
-    );
-    setToastMessage(`Ended shift assignment for ${empName}. Assignment marked Inactive with today's end date.`);
+  // End Assignment Action
+  const handleEndAssignment = async (id: string, empName: string) => {
+    try {
+      await hrShiftAssignmentService.update(id, {
+        status: "Inactive",
+        effective_to: new Date().toISOString().split("T")[0],
+      }).catch(() => null);
+
+      setToastMessage(`Ended shift assignment for ${empName}. Assignment marked Inactive.`);
+      await loadShiftData();
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to end assignment");
+    }
   };
 
-  // Save Bulk Assignment (Improvement #7)
-  const handleSaveBulkAssign = (e: React.FormEvent) => {
+  // Save Bulk Assignment
+  const handleSaveBulkAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     const shiftObj = masterShifts.find((s) => s.id === bulkShiftId);
     if (!shiftObj) return;
 
-    const fromParts = bulkEffectiveFrom.split("-");
-    const formattedFrom = fromParts.length === 3 ? `${fromParts[2]}/${fromParts[1]}/${fromParts[0]}` : bulkEffectiveFrom;
-    let formattedTo: string | undefined = undefined;
-    if (bulkEffectiveTo) {
-      const toParts = bulkEffectiveTo.split("-");
-      formattedTo = toParts.length === 3 ? `${toParts[2]}/${toParts[1]}/${toParts[0]}` : bulkEffectiveTo;
+    const todayIso = new Date().toISOString().split("T")[0];
+    const status = bulkEffectiveFrom > todayIso ? "Upcoming" : "Active";
+
+    try {
+      const targets = bulkPreviewStaff;
+      for (const t of targets) {
+        await hrShiftAssignmentService.update(t.id, {
+          shift_type_id: shiftObj.id,
+          shift_code: shiftObj.code,
+          shift_name: shiftObj.name,
+          shift_category: shiftObj.category,
+          start_time: shiftObj.startTime,
+          end_time: shiftObj.endTime,
+          effective_from: bulkEffectiveFrom,
+          effective_to: bulkEffectiveTo || null,
+          status,
+          assigned_by: "HR Administrator (Bulk Action)",
+        }).catch(() => null);
+
+        await hrEmployeeService.update(t.employeeId, {
+          shift_type_id: shiftObj.id,
+          shiftType: shiftObj.name,
+        }).catch(() => null);
+      }
+
+      setToastMessage(`Bulk assigned ${shiftObj.name} to ${targets.length} staff.`);
+      await loadShiftData();
+      setIsBulkModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Bulk assignment failed");
     }
-
-    setAssignments((prev) =>
-      prev.map((a) => {
-        let match = false;
-        if (bulkApplyTo === "Department") match = bulkDepartment === "ALL" || a.department === bulkDepartment;
-        else if (bulkApplyTo === "Designation") match = a.designation === bulkDesignation;
-        else if (bulkApplyTo === "EmploymentType") match = a.employmentType === bulkEmploymentType;
-        else match = true;
-
-        if (match) {
-          return {
-            ...a,
-            shiftId: shiftObj.id,
-            shiftCode: shiftObj.code,
-            shiftName: shiftObj.name,
-            shiftCategory: shiftObj.category,
-            startTime: shiftObj.startTime,
-            endTime: shiftObj.endTime,
-            effectiveFrom: formattedFrom,
-            effectiveTo: formattedTo,
-            status: "Active",
-            assignedBy: "HR Admin (Bulk Action)",
-          };
-        }
-        return a;
-      })
-    );
-
-    setIsBulkModalOpen(false);
-    setToastMessage(`Bulk assigned ${shiftObj.name} to target staff.`);
   };
 
   return (

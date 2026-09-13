@@ -144,9 +144,9 @@ export function HRDashboardView() {
     other: 0,
     total: 0,
   });
-  const [activities] = useState<HRActivityItem[]>([]);
-  const [events] = useState<EmployeeEventItem[]>([]);
-  const [holidaysAndShifts] = useState<HolidayShiftItem[]>([]);
+  const [activities, setActivities] = useState<HRActivityItem[]>([]);
+  const [events, setEvents] = useState<EmployeeEventItem[]>([]);
+  const [holidaysAndShifts, setHolidaysAndShifts] = useState<HolidayShiftItem[]>([]);
   const [leavesList, setLeavesList] = useState<PendingLeaveItem[]>([]);
   const [selectedDesigDept, setSelectedDesigDept] = useState<string>("All");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -171,6 +171,9 @@ export function HRDashboardView() {
         setWeeklyTrend(mapped.weeklyTrend);
         setDesignationHeadcounts(mapped.designationHeadcounts);
         setGenderDistribution(mapped.genderDistribution);
+        setEvents(mapped.events);
+        setHolidaysAndShifts(mapped.holidaysAndShifts);
+        setActivities(mapped.activities);
         const pendingLeaves = leaveRows
           .filter((row) => String(row.status) === "Pending")
           .map((row) => {
@@ -235,15 +238,35 @@ export function HRDashboardView() {
     [kpiSummary, grievanceSummary],
   );
 
-  const departmentChartData = useMemo(
-    () =>
-      departmentHeadcounts.map((dept) => ({
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const chartWeeklyTrend = useMemo(() => {
+    if (weeklyTrend && weeklyTrend.length > 0) return weeklyTrend;
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    return days.map((day) => ({
+      day,
+      present: kpiSummary.presentCount || 0,
+    }));
+  }, [weeklyTrend, kpiSummary.presentCount]);
+
+  const departmentChartData = useMemo(() => {
+    if (departmentHeadcounts && departmentHeadcounts.length > 0) {
+      return departmentHeadcounts.map((dept) => ({
         name: dept.department,
         count: dept.count,
-        fill: dept.color || (departmentChartColors[dept.department] ?? "#64748b"),
-      })),
-    [departmentHeadcounts],
-  );
+        fill: dept.color || (departmentChartColors[dept.department] ?? "#16a34a"),
+      }));
+    }
+    return [
+      { name: "Front Office", count: 0, fill: "#2563eb" },
+      { name: "Housekeeping", count: 0, fill: "#16a34a" },
+      { name: "Food & Beverage", count: 0, fill: "#ea580c" },
+      { name: "Human Resources", count: 0, fill: "#8b5cf6" },
+    ];
+  }, [departmentHeadcounts]);
 
   const filteredDesignations = useMemo(
     () =>
@@ -326,35 +349,39 @@ export function HRDashboardView() {
                 <MetricTile label="Late arrivals" value={attendanceBreakdown.lateArrivals} detail="Within grace" />
               </div>
 
-              <div className="mt-4 h-44 sm:h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={weeklyTrend} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="hrAttendanceFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#16a34a" stopOpacity={0.18} />
-                        <stop offset="100%" stopColor="#16a34a" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} width={28} />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: "8px",
-                        border: "1px solid #e2e8f0",
-                        fontSize: "12px",
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="present"
-                      stroke="#16a34a"
-                      strokeWidth={2}
-                      fill="url(#hrAttendanceFill)"
-                      dot={{ fill: "#16a34a", r: 2.5 }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <div className="mt-4 h-44 sm:h-48 min-h-[176px] w-full min-w-0">
+                {mounted ? (
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160}>
+                    <AreaChart data={chartWeeklyTrend} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="hrAttendanceFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#16a34a" stopOpacity={0.18} />
+                          <stop offset="100%" stopColor="#16a34a" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} width={28} />
+                      <Tooltip
+                        contentStyle={{
+                          borderRadius: "8px",
+                          border: "1px solid #e2e8f0",
+                          fontSize: "12px",
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="present"
+                        stroke="#16a34a"
+                        strokeWidth={2}
+                        fill="url(#hrAttendanceFill)"
+                        dot={{ fill: "#16a34a", r: 2.5 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full w-full rounded-xl bg-slate-50 animate-pulse" />
+                )}
               </div>
 
               <div className="mt-4 space-y-1.5">
@@ -390,34 +417,38 @@ export function HRDashboardView() {
 
           <div className="min-w-0 lg:col-span-5">
             <PanelCard title="Department headcount" subtitle="Staff allocation by department">
-              <div className="h-52 sm:h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={departmentChartData} layout="vertical" margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
-                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: "#64748b", fontSize: 11 }}
-                      width={92}
-                    />
-                    <Tooltip
-                      cursor={{ fill: "#f8fafc" }}
-                      contentStyle={{
-                        borderRadius: "8px",
-                        border: "1px solid #e2e8f0",
-                        fontSize: "12px",
-                      }}
-                    />
-                    <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={14}>
-                      {departmentChartData.map((entry) => (
-                        <Cell key={entry.name} fill={entry.fill} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="h-52 sm:h-56 min-h-[208px] w-full min-w-0">
+                {mounted ? (
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+                    <BarChart data={departmentChartData} layout="vertical" margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: "#64748b", fontSize: 11 }}
+                        width={92}
+                      />
+                      <Tooltip
+                        cursor={{ fill: "#f8fafc" }}
+                        contentStyle={{
+                          borderRadius: "8px",
+                          border: "1px solid #e2e8f0",
+                          fontSize: "12px",
+                        }}
+                      />
+                      <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={14}>
+                        {departmentChartData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.fill} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full w-full rounded-xl bg-slate-50 animate-pulse" />
+                )}
               </div>
             </PanelCard>
           </div>
@@ -506,59 +537,67 @@ export function HRDashboardView() {
           </div>
 
           <div className="min-w-0 lg:col-span-5">
-            <PanelCard
-              title="Gender distribution"
-              subtitle="Active workforce diversity breakdown"
-              action={
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                  {genderDistribution.total || 1} total
-                </span>
-              }
-            >
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-[11px] font-medium text-slate-500">
-                    <span>Gender ratio</span>
-                    <span>
-                      {Math.round((genderDistribution.male / genderDistribution.total || 1) * 100)}% male ·{" "}
-                      {Math.round((genderDistribution.female / genderDistribution.total || 1) * 100)}% female
-                    </span>
-                  </div>
-                  <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="bg-slate-700"
-                      style={{ width: `${(genderDistribution.male / genderDistribution.total || 1) * 100}%` }}
-                    />
-                    <div
-                      className="bg-slate-400"
-                      style={{ width: `${(genderDistribution.female / genderDistribution.total || 1) * 100}%` }}
-                    />
-                    <div
-                      className="bg-slate-300"
-                      style={{ width: `${(genderDistribution.other / genderDistribution.total || 1) * 100}%` }}
-                    />
-                  </div>
-                </div>
+            {(() => {
+              const genderTotal = genderDistribution.total || 0;
+              const malePct = genderTotal > 0 ? Math.round((genderDistribution.male / genderTotal) * 100) : 0;
+              const femalePct = genderTotal > 0 ? Math.round((genderDistribution.female / genderTotal) * 100) : 0;
+              const otherPct = genderTotal > 0 ? Math.round((genderDistribution.other / genderTotal) * 100) : 0;
 
-                <div className="grid grid-cols-3 gap-2.5">
-                  <MetricTile
-                    label="Male"
-                    value={genderDistribution.male}
-                    detail={`${Math.round((genderDistribution.male / genderDistribution.total || 1) * 100)}%`}
-                  />
-                  <MetricTile
-                    label="Female"
-                    value={genderDistribution.female}
-                    detail={`${Math.round((genderDistribution.female / genderDistribution.total || 1) * 100)}%`}
-                  />
-                  <MetricTile
-                    label="Other"
-                    value={genderDistribution.other}
-                    detail={`${Math.round((genderDistribution.other / genderDistribution.total || 1) * 100)}%`}
-                  />
-                </div>
-              </div>
-            </PanelCard>
+              return (
+                <PanelCard
+                  title="Gender distribution"
+                  subtitle="Active workforce diversity breakdown"
+                  action={
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                      {genderTotal} total
+                    </span>
+                  }
+                >
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-[11px] font-medium text-slate-500">
+                        <span>Gender ratio</span>
+                        <span>
+                          {malePct}% male · {femalePct}% female{otherPct > 0 ? ` · ${otherPct}% other` : ""}
+                        </span>
+                      </div>
+                      <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className="bg-slate-700"
+                          style={{ width: `${genderTotal > 0 ? (genderDistribution.male / genderTotal) * 100 : 0}%` }}
+                        />
+                        <div
+                          className="bg-slate-400"
+                          style={{ width: `${genderTotal > 0 ? (genderDistribution.female / genderTotal) * 100 : 0}%` }}
+                        />
+                        <div
+                          className="bg-slate-300"
+                          style={{ width: `${genderTotal > 0 ? (genderDistribution.other / genderTotal) * 100 : 0}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2.5">
+                      <MetricTile
+                        label="Male"
+                        value={genderDistribution.male}
+                        detail={`${malePct}%`}
+                      />
+                      <MetricTile
+                        label="Female"
+                        value={genderDistribution.female}
+                        detail={`${femalePct}%`}
+                      />
+                      <MetricTile
+                        label="Other"
+                        value={genderDistribution.other}
+                        detail={`${otherPct}%`}
+                      />
+                    </div>
+                  </div>
+                </PanelCard>
+              );
+            })()}
           </div>
         </div>
 
@@ -651,25 +690,51 @@ export function HRDashboardView() {
         <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
           <PanelCard title="Birthdays & work anniversaries" subtitle="Upcoming celebrations">
             <div className="space-y-2.5">
-              {events.map((ev) => (
-                <ListRow key={ev.id} className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-700">
-                      {ev.avatar}
+              {events.length === 0 ? (
+                <p className="py-6 text-center text-xs text-slate-400">No upcoming celebrations.</p>
+              ) : (
+                events.map((ev) => (
+                  <ListRow key={ev.id} className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold shadow-xs",
+                          ev.type === "birthday"
+                            ? "bg-pink-100/90 text-pink-700 border border-pink-200/60"
+                            : "bg-indigo-100/90 text-indigo-700 border border-indigo-200/60",
+                        )}
+                      >
+                        {ev.type === "birthday" ? (
+                          <Gift className="h-4 w-4 text-pink-600" />
+                        ) : (
+                          <Award className="h-4 w-4 text-indigo-600" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-semibold text-slate-900">{ev.name}</p>
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                              ev.type === "birthday"
+                                ? "bg-pink-50 text-pink-700 border border-pink-200/70"
+                                : "bg-indigo-50 text-indigo-700 border border-indigo-200/70",
+                            )}
+                          >
+                            {ev.type === "birthday"
+                              ? "🎂 Birthday"
+                              : `🎉 ${ev.years === 1 ? "1st" : `${ev.years}th`} Work Anniversary`}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500">{ev.department}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900">{ev.name}</p>
-                      <p className="text-xs text-slate-500">
-                        {ev.department}
-                        {ev.years ? ` · ${ev.years} years` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="shrink-0 rounded-md bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600">
-                    {ev.date}
-                  </span>
-                </ListRow>
-              ))}
+                    <span className="shrink-0 rounded-lg bg-slate-100/80 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                      {ev.date}
+                    </span>
+                  </ListRow>
+                ))
+              )}
             </div>
           </PanelCard>
 

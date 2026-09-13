@@ -15,7 +15,7 @@ export const activityLog: ActivityItem[] = [
   },
   {
     id: "3",
-    message: "Payment received for BK-1038 ($450)",
+    message: "Payment received for BK-1038 (₹450)",
     timestamp: "1 hr ago",
     type: "payment",
   },
