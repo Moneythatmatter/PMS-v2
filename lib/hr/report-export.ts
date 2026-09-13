@@ -90,11 +90,16 @@ export function resolveReportExportRange(
 /** Parse DD/MM/YYYY or YYYY-MM-DD to YYYY-MM-DD for range compare. */
 export function normalizeToIsoDate(value?: string | null): string | null {
   if (!value) return null;
-  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
-  const parts = value.split("/");
-  if (parts.length === 3) {
-    const [day, month, year] = parts;
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
+  const slashParts = trimmed.split("/");
+  if (slashParts.length === 3) {
+    const [day, month, year] = slashParts;
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString("en-CA");
   }
   return null;
 }

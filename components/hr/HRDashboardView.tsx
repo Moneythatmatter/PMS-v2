@@ -145,8 +145,8 @@ export function HRDashboardView() {
     total: 0,
   });
   const [activities] = useState<HRActivityItem[]>([]);
-  const [events] = useState<EmployeeEventItem[]>([]);
-  const [holidaysAndShifts] = useState<HolidayShiftItem[]>([]);
+  const [events, setEvents] = useState<EmployeeEventItem[]>([]);
+  const [holidaysAndShifts, setHolidaysAndShifts] = useState<HolidayShiftItem[]>([]);
   const [leavesList, setLeavesList] = useState<PendingLeaveItem[]>([]);
   const [selectedDesigDept, setSelectedDesigDept] = useState<string>("All");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -171,6 +171,8 @@ export function HRDashboardView() {
         setWeeklyTrend(mapped.weeklyTrend);
         setDesignationHeadcounts(mapped.designationHeadcounts);
         setGenderDistribution(mapped.genderDistribution);
+        setEvents(mapped.events);
+        setHolidaysAndShifts(mapped.holidaysAndShifts);
         const pendingLeaves = leaveRows
           .filter((row) => String(row.status) === "Pending")
           .map((row) => {
@@ -649,33 +651,57 @@ export function HRDashboardView() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
-          <PanelCard title="Birthdays & work anniversaries" subtitle="Upcoming celebrations">
+          <PanelCard title="Upcoming events" subtitle="Birthdays and work anniversaries">
             <div className="space-y-2.5">
-              {events.map((ev) => (
-                <ListRow key={ev.id} className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-700">
-                      {ev.avatar}
+              {events.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-400">
+                  No upcoming birthdays or anniversaries in the next 60 days.
+                </p>
+              ) : (
+                events.map((ev) => (
+                  <ListRow key={ev.id} className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div
+                        className={cn(
+                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold",
+                          ev.type === "birthday"
+                            ? "bg-amber-50 text-amber-800"
+                            : "bg-violet-50 text-violet-800",
+                        )}
+                      >
+                        {ev.type === "birthday" ? (
+                          <Gift className="h-4 w-4" />
+                        ) : (
+                          <Award className="h-4 w-4" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900">{ev.name}</p>
+                        <p className="text-xs text-slate-500">
+                          {ev.type === "birthday" ? "Birthday" : "Work anniversary"}
+                          {" · "}
+                          {ev.department}
+                          {ev.years ? ` · ${ev.years} years` : ""}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900">{ev.name}</p>
-                      <p className="text-xs text-slate-500">
-                        {ev.department}
-                        {ev.years ? ` · ${ev.years} years` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="shrink-0 rounded-md bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600">
-                    {ev.date}
-                  </span>
-                </ListRow>
-              ))}
+                    <span className="shrink-0 rounded-md bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600">
+                      {ev.date}
+                    </span>
+                  </ListRow>
+                ))
+              )}
             </div>
           </PanelCard>
 
-          <PanelCard title="Holidays & shift exceptions" subtitle="Upcoming schedule changes">
+          <PanelCard title="Upcoming holidays" subtitle="Public and festival holidays">
             <div className="space-y-2.5">
-              {holidaysAndShifts.map((hs) => (
+              {holidaysAndShifts.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-400">
+                  No upcoming holidays scheduled.
+                </p>
+              ) : (
+                holidaysAndShifts.map((hs) => (
                 <ListRow key={hs.id} className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-slate-900">{hs.title}</p>
@@ -692,7 +718,8 @@ export function HRDashboardView() {
                     {hs.badgeText}
                   </span>
                 </ListRow>
-              ))}
+                ))
+              )}
             </div>
           </PanelCard>
         </div>

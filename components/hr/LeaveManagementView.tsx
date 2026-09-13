@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
   Calendar,
   Search,
@@ -386,54 +386,76 @@ export function LeaveManagementView() {
     [applications],
   );
 
-  // Filtered Applications
-  const filteredApplications = useMemo(() => {
-    return sortedApplications.filter((a) => {
+  const matchesLeaveBaseFilters = useCallback(
+    (a: LeaveApplication) => {
       const empCode = employeeLookup.get(a.employeeId)?.empCode ?? "";
       const matchSearch =
+        !searchTerm ||
         a.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         empCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
         a.leaveTypeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         a.leaveTypeCode.toLowerCase().includes(searchTerm.toLowerCase());
-
       const matchDept = selectedDepartment === "ALL" || a.department === selectedDepartment;
       const matchType =
         selectedLeaveType === "ALL" ||
         a.leaveTypeId === selectedLeaveType ||
         a.leaveTypeCode === selectedLeaveType;
       const matchStatus = selectedStatus === "ALL" || a.status === selectedStatus;
-      const matchDate = leaveCoversDate(a, selectedDate);
+      return matchSearch && matchDept && matchType && matchStatus;
+    },
+    [employeeLookup, searchTerm, selectedDepartment, selectedLeaveType, selectedStatus],
+  );
 
-      return matchSearch && matchDept && matchType && matchStatus && matchDate;
+  // Applied leave list — show all matching requests (not limited to selected calendar day).
+  const filteredApplications = useMemo(
+    () => sortedApplications.filter(matchesLeaveBaseFilters),
+    [sortedApplications, matchesLeaveBaseFilters],
+  );
+
+  const baseFilteredApplications = useMemo(() => {
+    return sortedApplications.filter((a) => {
+      const empCode = employeeLookup.get(a.employeeId)?.empCode ?? "";
+      const matchSearch =
+        !searchTerm ||
+        a.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        empCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        a.leaveTypeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        a.leaveTypeCode.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchDept = selectedDepartment === "ALL" || a.department === selectedDepartment;
+      const matchType =
+        selectedLeaveType === "ALL" ||
+        a.leaveTypeId === selectedLeaveType ||
+        a.leaveTypeCode === selectedLeaveType;
+      return matchSearch && matchDept && matchType;
     });
-  }, [
-    sortedApplications,
-    employeeLookup,
-    searchTerm,
-    selectedDepartment,
-    selectedLeaveType,
-    selectedStatus,
-    selectedDate,
-  ]);
-
-  // Metrics Dashboard
-  const metrics = useMemo(() => {
-    const pending = applications.filter((a) => a.status === "Pending").length;
-    const approvedMonth = applications.filter((a) => a.status === "Approved").length;
-    const rejectedMonth = applications.filter((a) => a.status === "Rejected").length;
-    const cancelled = applications.filter((a) => a.status === "Cancelled").length;
-    return { pending, approvedMonth, rejectedMonth, cancelled };
-  }, [applications]);
+  }, [sortedApplications, employeeLookup, searchTerm, selectedDepartment, selectedLeaveType]);
 
   const leaveFilterPills = useMemo(
     () => [
-      { id: "ALL", label: `All ${applications.length}` },
-      { id: "Pending", label: `Pending ${metrics.pending}` },
-      { id: "Approved", label: `Approved ${metrics.approvedMonth}` },
-      { id: "Rejected", label: `Rejected ${metrics.rejectedMonth}` },
-      { id: "Cancelled", label: `Cancelled ${metrics.cancelled}` },
+      { id: "ALL", label: `All ${baseFilteredApplications.length}` },
+      {
+        id: "Pending",
+        label: `Pending ${baseFilteredApplications.filter((a) => a.status === "Pending").length}`,
+      },
+      {
+        id: "Approved",
+        label: `Approved ${baseFilteredApplications.filter((a) => a.status === "Approved").length}`,
+      },
+      {
+        id: "Rejected",
+        label: `Rejected ${baseFilteredApplications.filter((a) => a.status === "Rejected").length}`,
+      },
+      {
+        id: "Cancelled",
+        label: `Cancelled ${baseFilteredApplications.filter((a) => a.status === "Cancelled").length}`,
+      },
     ],
-    [applications.length, metrics],
+    [baseFilteredApplications],
+  );
+
+  const pendingCount = useMemo(
+    () => filteredApplications.filter((a) => a.status === "Pending").length,
+    [filteredApplications],
   );
 
   const today = todayIsoDate();
@@ -441,8 +463,7 @@ export function LeaveManagementView() {
     searchTerm !== "" ||
     selectedDepartment !== "ALL" ||
     selectedLeaveType !== "ALL" ||
-    selectedStatus !== "ALL" ||
-    selectedDate !== today;
+    selectedStatus !== "ALL";
 
   const resetFilters = () => {
     setSearchTerm("");
@@ -459,22 +480,6 @@ export function LeaveManagementView() {
     ],
     [leaveTypes],
   );
-
-  const matchesLeaveBaseFilters = (a: LeaveApplication) => {
-    const empCode = employeeLookup.get(a.employeeId)?.empCode ?? "";
-    const matchSearch =
-      !searchTerm ||
-      a.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      empCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      a.leaveTypeName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchDept = selectedDepartment === "ALL" || a.department === selectedDepartment;
-    const matchType =
-      selectedLeaveType === "ALL" ||
-      a.leaveTypeId === selectedLeaveType ||
-      a.leaveTypeCode === selectedLeaveType;
-    const matchStatus = selectedStatus === "ALL" || a.status === selectedStatus;
-    return matchSearch && matchDept && matchType && matchStatus;
-  };
 
   const handleLeaveExport = async (options: ReportExportOptions) => {
     setExporting(true);
@@ -790,7 +795,7 @@ export function LeaveManagementView() {
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
         maxDate={today}
-        showDatePicker
+        showDatePicker={viewMode === "calendar"}
         showFilterPanel={showFilterPanel}
         onToggleFilterPanel={() => setShowFilterPanel((v) => !v)}
         hasActiveFilters={hasActiveFilters}
@@ -816,7 +821,7 @@ export function LeaveManagementView() {
                 <h3 className="text-sm font-bold text-slate-900">Applied Leave Requests</h3>
                 <p className="text-[11px] text-slate-500">
                   {filteredApplications.length} record{filteredApplications.length === 1 ? "" : "s"}
-                  {metrics.pending > 0 ? ` · ${metrics.pending} pending approval` : ""}
+                  {pendingCount > 0 ? ` · ${pendingCount} pending approval` : ""}
                 </p>
               </div>
             </div>
