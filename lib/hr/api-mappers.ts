@@ -26,9 +26,37 @@ import type {
   DepartmentHeadcount,
   EmployeeEventItem,
   HolidayShiftItem,
+  HRActivityItem,
 } from "@/app/data/hr/hrDashboardData";
 import { formatApiDate } from "./useHrList";
 import { normalizeToIsoDate } from "./report-export";
+
+export interface ConfigurableTaxRule {
+  id?: string;
+  ruleName?: string;
+  taxCode?: string;
+  taxType?: string;
+  description?: string;
+  calcMethod?: string;
+  ratePercentage?: number;
+  taxableBase?: string;
+  fixedAmount?: number;
+  applicableFrequency?: string;
+  slabs?: unknown;
+  applicableOn?: string;
+  department?: string;
+  employmentType?: string;
+  employeeCategory?: string;
+  taxRegime?: string;
+  financialYear?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  status?: string;
+  version?: string | number;
+  createdBy?: string;
+  createdDate?: string;
+  history?: unknown;
+}
 
 export function mapPayrollFromApi(row: Record<string, unknown>): EmployeePayrollRecord {
   return {
@@ -1353,6 +1381,15 @@ export function mapDashboardFromApi(data: Record<string, unknown>) {
   const upcomingBirthdays = (data.upcomingBirthdays as Record<string, unknown>[]) ?? [];
   const upcomingAnniversaries = (data.upcomingAnniversaries as Record<string, unknown>[]) ?? [];
   const upcomingHolidays = (data.upcomingHolidays as Record<string, unknown>[]) ?? [];
+  const activitiesRaw = (data.activities as Record<string, unknown>[]) ?? [];
+
+  const activities: HRActivityItem[] = activitiesRaw.map((row) => ({
+    id: String(row.id ?? Math.random().toString(36).slice(2, 9)),
+    type: (row.type as HRActivityItem["type"]) ?? "attendance",
+    title: String(row.title ?? ""),
+    description: String(row.description ?? ""),
+    timeAgo: String(row.timeAgo ?? row.created_at ?? "Just now"),
+  }));
 
   const events: EmployeeEventItem[] = [
     ...upcomingBirthdays.map((row) => ({
@@ -1392,5 +1429,6 @@ export function mapDashboardFromApi(data: Record<string, unknown>) {
     genderDistribution,
     events,
     holidaysAndShifts,
+    activities,
   };
 }

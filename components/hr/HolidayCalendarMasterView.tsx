@@ -698,16 +698,11 @@ export function HolidayCalendarMasterView() {
                   Holiday Date <span className="text-rose-500">*</span>
                 </label>
                 <input
-                  type="text"
-                  placeholder="DD/MM/YYYY"
-                  value={formDate}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setFormDate(val);
-                    const autoDay = computeDayOfWeek(val);
-                    if (autoDay) setFormDay(autoDay);
-                  }}
-                  className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  type="date"
+                  required
+                  value={formDateIso}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
                 />
               </div>
 
@@ -719,8 +714,7 @@ export function HolidayCalendarMasterView() {
                   type="text"
                   readOnly
                   value={formDay}
-                  onChange={(e) => setFormDay(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-slate-50/70"
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-600 bg-slate-50"
                 />
               </div>
 

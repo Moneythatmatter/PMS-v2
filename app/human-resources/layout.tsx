@@ -3,6 +3,7 @@ import { humanResourcesNavItems } from "@/app/data/navigation/humanResources";
 import { AppShell } from "@/components/layout/AppShell";
 import { ModuleSidebar } from "@/components/layout/ModuleSidebar";
 import { HumanResourcesSubNav } from "@/components/hr/HumanResourcesSubNav";
+import { TopNav } from "@/components/layout";
 
 export default function HumanResourcesLayout({
   children,
@@ -11,7 +12,7 @@ export default function HumanResourcesLayout({
 }) {
   return (
     <AppShell
-      hideTopNav
+      navItems={navItems}
       user={currentUser}
       subNav={<HumanResourcesSubNav />}
       moduleSidebar={

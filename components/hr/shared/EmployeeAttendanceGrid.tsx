@@ -31,7 +31,12 @@ import {
   type EmployeeAttendanceDay,
   type EmployeeAttendanceStatus,
 } from "@/lib/hr/employee-attendance";
-import { hrAttendanceService, hrHolidayService } from "@/services/human-resources";
+import {
+  hrAttendanceService,
+  hrHolidayService,
+  hrShiftAssignmentService,
+  hrLeaveApplicationService,
+} from "@/services/human-resources";
 import { mapAttendanceFromApi } from "@/lib/hr/api-mappers";
 import { normalizeToIsoDate } from "@/lib/hr/report-export";
 
@@ -110,9 +115,11 @@ export function EmployeeAttendanceGrid({
     let cancelled = false;
     void (async () => {
       try {
-        const [rows, holidayRows] = await Promise.all([
+        const [rows, holidays, shiftAssigns, leaveApps] = await Promise.all([
           hrAttendanceService.getForEmployee(employeeId),
-          hrHolidayService.list(),
+          hrHolidayService.list().catch(() => []),
+          hrShiftAssignmentService.list().catch(() => []),
+          hrLeaveApplicationService.list().catch(() => []),
         ]);
         if (cancelled) return;
 
@@ -239,7 +246,7 @@ export function EmployeeAttendanceGrid({
         setRecordsByDate(map);
 
         const holidayMap = new Map<string, CalendarHolidayOverlay>();
-        for (const row of holidayRows) {
+        for (const row of holidays) {
           if (String(row.status ?? "Active") !== "Active") continue;
           const iso =
             normalizeToIsoDate(String(row.holidayDate ?? "")) ??
