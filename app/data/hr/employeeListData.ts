@@ -19,7 +19,7 @@ export interface EmployeeItem {
   gender: "Male" | "Female";
   emergencyContact: string;
   lastUpdated: string;
-
+  
   // Extended Details for Tabbed Drawer
   dob?: string;
   address?: string;

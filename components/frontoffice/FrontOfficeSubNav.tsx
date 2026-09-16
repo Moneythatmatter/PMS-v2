@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   CalendarPlus,
   DoorOpen,
+  LayoutGrid,
   List,
   LogIn,
   LogOut,
@@ -13,6 +14,7 @@ import { reservationNavItems } from "@/app/data/navigation/reservation";
 import { cn } from "@/lib/utils";
 
 const iconMap = {
+  "layout-grid": LayoutGrid,
   "calendar-plus": CalendarPlus,
   "door-open": DoorOpen,
   list: List,
@@ -32,6 +34,10 @@ function isNavActive(pathname: string, href: string) {
 
   if (href === "/frontoffice/reservation/new") {
     return pathname.startsWith("/frontoffice/reservation/new");
+  }
+
+  if (href === "/frontoffice/dashboard") {
+    return pathname === href || pathname.startsWith(`${href}/`);
   }
 
   return pathname === href || pathname.startsWith(`${href}/`);

@@ -308,7 +308,7 @@ export function HRDashboardView() {
           {kpiStats.map((stat) => (
             <StatCard key={stat.title} stat={stat} />
           ))}
-        </div>
+      </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:gap-8">
           <div className="min-w-0 lg:col-span-7">
@@ -318,7 +318,7 @@ export function HRDashboardView() {
               action={
                 <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
                   {kpiSummary.presentCount} / {totalStaff} active
-                </span>
+            </span>
               }
             >
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -326,7 +326,7 @@ export function HRDashboardView() {
                 <MetricTile label="Absent" value={attendanceBreakdown.absent} detail={`${pct(attendanceBreakdown.absent)} unexcused`} />
                 <MetricTile label="On leave" value={attendanceBreakdown.onLeave} detail={`${pct(attendanceBreakdown.onLeave)} approved`} />
                 <MetricTile label="Late arrivals" value={attendanceBreakdown.lateArrivals} detail="Within grace" />
-              </div>
+          </div>
 
               <div className="mt-4 h-44 sm:h-48">
                 <ResponsiveContainer width="100%" height="100%">
@@ -357,13 +357,13 @@ export function HRDashboardView() {
                     />
                   </AreaChart>
                 </ResponsiveContainer>
-              </div>
+            </div>
 
               <div className="mt-4 space-y-1.5">
                 <div className="flex justify-between text-[11px] font-medium text-slate-500">
                   <span>Shift distribution</span>
                   <span>{kpiSummary.presentCount} on duty</span>
-                </div>
+            </div>
                 <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100">
                   {onShiftTotal > 0 ? (
                     <>
@@ -385,8 +385,8 @@ export function HRDashboardView() {
                       />
                     </>
                   ) : null}
-                </div>
-              </div>
+            </div>
+          </div>
             </PanelCard>
           </div>
 
@@ -420,10 +420,10 @@ export function HRDashboardView() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+                  </div>
             </PanelCard>
-          </div>
         </div>
+      </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:gap-8">
           <div className="min-w-0 lg:col-span-7">
@@ -441,28 +441,28 @@ export function HRDashboardView() {
               }
             >
               <div className="mb-4 flex flex-wrap items-center gap-1.5">
-                <button
+              <button
                   type="button"
-                  onClick={() => setSelectedDesigDept("All")}
-                  className={cn(
+                onClick={() => setSelectedDesigDept("All")}
+                className={cn(
                     "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
-                    selectedDesigDept === "All"
+                  selectedDesigDept === "All"
                       ? "bg-slate-900 text-white"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200",
-                  )}
-                >
+                )}
+              >
                   All ({totalStaff})
-                </button>
+              </button>
                 {Array.from(new Set(designationHeadcounts.map((d) => d.department))).map((dept) => {
                   const deptCount = designationHeadcounts
-                    .filter((d) => d.department === dept)
-                    .reduce((acc, curr) => acc + curr.count, 0);
-                  return (
-                    <button
-                      key={dept}
+                  .filter((d) => d.department === dept)
+                  .reduce((acc, curr) => acc + curr.count, 0);
+                return (
+                  <button
+                    key={dept}
                       type="button"
-                      onClick={() => setSelectedDesigDept(dept)}
-                      className={cn(
+                    onClick={() => setSelectedDesigDept(dept)}
+                    className={cn(
                         "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
                         selectedDesigDept === dept
                           ? "bg-slate-900 text-white"
@@ -470,10 +470,10 @@ export function HRDashboardView() {
                       )}
                     >
                       {dept} ({deptCount})
-                    </button>
-                  );
-                })}
-              </div>
+                  </button>
+                );
+              })}
+            </div>
 
               <div className="space-y-3">
                 {filteredDesignations.length === 0 ? (
@@ -503,9 +503,9 @@ export function HRDashboardView() {
                   );
                   })
                 )}
-              </div>
+            </div>
             </PanelCard>
-          </div>
+        </div>
 
           <div className="min-w-0 lg:col-span-5">
             <PanelCard
@@ -524,25 +524,25 @@ export function HRDashboardView() {
                     <span>
                       {Math.round((genderDistribution.male / genderDistribution.total || 1) * 100)}% male ·{" "}
                       {Math.round((genderDistribution.female / genderDistribution.total || 1) * 100)}% female
-                    </span>
-                  </div>
+            </span>
+          </div>
                   <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100">
                     <div
                       className="bg-slate-700"
                       style={{ width: `${(genderDistribution.male / genderDistribution.total || 1) * 100}%` }}
-                    />
-                    <div
+                />
+                <div
                       className="bg-slate-400"
                       style={{ width: `${(genderDistribution.female / genderDistribution.total || 1) * 100}%` }}
-                    />
-                    <div
+                />
+                <div
                       className="bg-slate-300"
                       style={{ width: `${(genderDistribution.other / genderDistribution.total || 1) * 100}%` }}
-                    />
-                  </div>
-                </div>
+                />
+              </div>
+            </div>
 
-                <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-3 gap-2.5">
                   <MetricTile
                     label="Male"
                     value={genderDistribution.male}
@@ -558,11 +558,11 @@ export function HRDashboardView() {
                     value={genderDistribution.other}
                     detail={`${Math.round((genderDistribution.other / genderDistribution.total || 1) * 100)}%`}
                   />
-                </div>
+              </div>
               </div>
             </PanelCard>
-          </div>
         </div>
+      </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:gap-8">
           <div className="min-w-0 lg:col-span-7">
@@ -579,54 +579,54 @@ export function HRDashboardView() {
                 </a>
               }
             >
-              <div className="space-y-2.5">
-                {leavesList.length === 0 ? (
+          <div className="space-y-2.5">
+            {leavesList.length === 0 ? (
                   <p className="py-8 text-center text-sm text-slate-400">No pending leave requests.</p>
-                ) : (
-                  leavesList.map((leave) => (
+            ) : (
+              leavesList.map((leave) => (
                     <ListRow key={leave.id} className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-700">
-                          {leave.avatar}
-                        </div>
+                      {leave.avatar}
+                    </div>
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-slate-900">{leave.employeeName}</p>
                           <p className="text-xs text-slate-500">
                             {leave.department} · {leave.leaveType}
                           </p>
-                        </div>
-                      </div>
+                    </div>
+                  </div>
 
-                      <div className="text-right">
+                  <div className="text-right">
                         <p className="text-xs font-medium text-slate-700">
                           {leave.fromDate} – {leave.toDate} ({leave.days}d)
                         </p>
                         <p className="text-[11px] text-slate-400">{leave.reason}</p>
-                      </div>
+                  </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => handleApproveLeave(leave.id, leave.employeeName)}
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleApproveLeave(leave.id, leave.employeeName)}
                           className="h-7 rounded-lg bg-emerald-700 px-2.5 text-[11px] font-semibold hover:bg-emerald-800"
-                        >
+                    >
                           <Check className="mr-0.5 h-3 w-3" /> Approve
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRejectLeave(leave.id, leave.employeeName)}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRejectLeave(leave.id, leave.employeeName)}
                           className="h-7 rounded-lg border-slate-200 px-2.5 text-[11px] font-medium"
-                        >
+                    >
                           <X className="mr-0.5 h-3 w-3" /> Reject
-                        </Button>
-                      </div>
+                    </Button>
+                  </div>
                     </ListRow>
-                  ))
-                )}
-              </div>
+              ))
+            )}
+          </div>
             </PanelCard>
           </div>
 
@@ -640,19 +640,19 @@ export function HRDashboardView() {
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-medium text-slate-900">{act.title}</p>
                         <span className="shrink-0 text-[11px] text-slate-400">{act.timeAgo}</span>
-                      </div>
+                </div>
                       <p className="mt-0.5 text-xs text-slate-500">{act.description}</p>
-                    </div>
+                  </div>
                   </li>
-                ))}
+            ))}
               </ul>
             </PanelCard>
-          </div>
         </div>
+      </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
           <PanelCard title="Upcoming events" subtitle="Birthdays and work anniversaries">
-            <div className="space-y-2.5">
+          <div className="space-y-2.5">
               {events.length === 0 ? (
                 <p className="py-8 text-center text-sm text-slate-400">
                   No upcoming birthdays or anniversaries in the next 60 days.
@@ -661,15 +661,15 @@ export function HRDashboardView() {
                 events.map((ev) => (
                   <ListRow key={ev.id} className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2.5">
-                      <div
-                        className={cn(
+                  <div
+                    className={cn(
                           "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold",
                           ev.type === "birthday"
                             ? "bg-amber-50 text-amber-800"
                             : "bg-violet-50 text-violet-800",
                         )}
                       >
-                        {ev.type === "birthday" ? (
+                      {ev.type === "birthday" ? (
                           <Gift className="h-4 w-4" />
                         ) : (
                           <Award className="h-4 w-4" />
@@ -683,19 +683,19 @@ export function HRDashboardView() {
                           {ev.department}
                           {ev.years ? ` · ${ev.years} years` : ""}
                         </p>
-                      </div>
-                    </div>
+                  </div>
+                </div>
                     <span className="shrink-0 rounded-md bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600">
-                      {ev.date}
-                    </span>
+                  {ev.date}
+                </span>
                   </ListRow>
                 ))
               )}
-            </div>
+              </div>
           </PanelCard>
 
           <PanelCard title="Upcoming holidays" subtitle="Public and festival holidays">
-            <div className="space-y-2.5">
+          <div className="space-y-2.5">
               {holidaysAndShifts.length === 0 ? (
                 <p className="py-8 text-center text-sm text-slate-400">
                   No upcoming holidays scheduled.
@@ -703,24 +703,24 @@ export function HRDashboardView() {
               ) : (
                 holidaysAndShifts.map((hs) => (
                 <ListRow key={hs.id} className="flex items-center justify-between gap-3">
-                  <div>
+                <div>
                     <p className="text-sm font-medium text-slate-900">{hs.title}</p>
                     <p className="text-xs text-slate-500">{hs.date}</p>
-                  </div>
-                  <span
-                    className={cn(
+                </div>
+                <span
+                  className={cn(
                       "shrink-0 rounded-md px-2 py-1 text-[10px] font-medium uppercase tracking-wide",
                       hs.type === "holiday"
                         ? "bg-emerald-50 text-emerald-700"
                         : "bg-violet-50 text-violet-700",
-                    )}
-                  >
-                    {hs.badgeText}
-                  </span>
+                  )}
+                >
+                  {hs.badgeText}
+                </span>
                 </ListRow>
                 ))
               )}
-            </div>
+              </div>
           </PanelCard>
         </div>
 
@@ -737,14 +737,14 @@ export function HRDashboardView() {
             </a>
           }
         >
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <MetricTile label="Open" value={grievanceSummary.open} detail="Needs HR review" />
             <MetricTile label="In progress" value={grievanceSummary.inProgress} detail="Under investigation" />
             <MetricTile label="Escalated" value={grievanceSummary.escalated} detail="Management review" />
             <MetricTile label="Resolved" value={grievanceSummary.resolved} detail="Closed this year" />
           </div>
         </PanelCard>
-      </div>
+        </div>
     </ModulePageShell>
   );
 }

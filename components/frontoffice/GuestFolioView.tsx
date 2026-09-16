@@ -1,12 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  CalendarCheck,
+  ExternalLink,
   FileText,
   ListOrdered,
+  LogOut,
+  Mail,
+  Phone,
   Receipt,
+  User,
   Wallet,
 } from "lucide-react";
 import type { FolioListItem, LedgerTransaction } from "@/app/data/types/billing";
@@ -28,6 +35,11 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import {
+  allBookingsDetailHref,
+  checkOutHref,
+  guestProfileHref,
+} from "@/lib/check-in-navigation";
 import { CollectPaymentDrawer } from "@/components/frontoffice/CollectPaymentDrawer";
 
 function formatFolioDate(value?: string | null): string {
@@ -51,6 +63,44 @@ const statusStyles: Record<string, string> = {
   CLOSED: "bg-slate-100 text-slate-700",
   VOID: "bg-red-50 text-red-700",
 };
+
+function stopRowClick(e: MouseEvent) {
+  e.stopPropagation();
+}
+
+function isCheckoutEligible(folio: FolioListItem) {
+  if (!folio.bookingId) return false;
+  const status = String(folio.reservationStatus ?? "").trim();
+  return status === "Checked In" || status === "In-House";
+}
+
+function GuestContactLines({
+  phone,
+  email,
+  className,
+}: {
+  phone?: string | null;
+  email?: string | null;
+  className?: string;
+}) {
+  if (!phone?.trim() && !email?.trim()) return null;
+  return (
+    <div className={cn("mt-0.5 space-y-0.5 text-[11px] text-slate-500", className)}>
+      {phone?.trim() && (
+        <p className="flex items-center gap-1">
+          <Phone className="h-3 w-3 shrink-0 text-slate-400" />
+          {phone}
+        </p>
+      )}
+      {email?.trim() && (
+        <p className="flex items-center gap-1 truncate">
+          <Mail className="h-3 w-3 shrink-0 text-slate-400" />
+          {email}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function GuestFolioView() {
   const [folios, setFolios] = useState<FolioListItem[]>([]);
@@ -152,6 +202,8 @@ export function GuestFolioView() {
           f.bookingNo,
           f.bookingId,
           f.guestNo,
+          f.guestPhone,
+          f.guestEmail,
         ]
           .filter(Boolean)
           .join(" ")
@@ -219,6 +271,25 @@ export function GuestFolioView() {
   const paymentCount = useMemo(
     () => transactions.filter((t) => t.transactionType === "PAYMENT").length,
     [transactions],
+  );
+
+  const paidFromTransactions = useMemo(() => {
+    return transactions.reduce((sum, txn) => {
+      if (String(txn.status).toUpperCase() !== "COMPLETED") return sum;
+      if (txn.transactionType === "PAYMENT") return sum + Number(txn.amount ?? 0);
+      if (txn.transactionType === "REFUND") return sum - Number(txn.amount ?? 0);
+      return sum;
+    }, 0);
+  }, [transactions]);
+
+  const drawerPaidAmount =
+    folioDrawerOpen && transactions.length > 0
+      ? paidFromTransactions
+      : Number(selected?.paidAmount ?? 0);
+
+  const drawerBalanceAmount = Math.max(
+    0,
+    Number(selected?.totalAmount ?? 0) - drawerPaidAmount,
   );
 
   const openFolio = (folio: FolioListItem) => {
@@ -369,7 +440,7 @@ export function GuestFolioView() {
 
           {filteredFolios.length > 0 ? (
             <div className="max-h-[min(480px,calc(100vh-420px))] overflow-auto rounded-lg border border-slate-100">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[940px] text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_rgb(241,245,249)]">
                   <tr className="text-xs font-medium uppercase tracking-wide text-slate-500">
                     {[
@@ -383,10 +454,11 @@ export function GuestFolioView() {
                     ].map((h) => (
                       <th key={h} className="px-4 py-3 text-left first:pl-4">
                         {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
+                      </th>
+                    ))}
+                    <th className="w-[7.5rem] shrink-0 px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
                   <tbody>
                   {filteredFolios.map((folio) => {
                     const isActive = selected?.id === folio.id && folioDrawerOpen;
@@ -401,16 +473,40 @@ export function GuestFolioView() {
                             : "hover:bg-slate-50/80",
                         )}
                       >
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3" onClick={stopRowClick}>
                           <p className="font-medium text-slate-900">
                             {folio.folioNumber ?? folio.id.slice(0, 8)}
                           </p>
-                          <p className="text-[10px] text-slate-400">
-                            {folio.bookingNo ?? folio.bookingId?.slice(0, 8) ?? "—"}
-                          </p>
+                          {folio.bookingId ? (
+                            <Link
+                              href={allBookingsDetailHref({ id: folio.bookingId })}
+                              className="text-[10px] font-medium text-emerald-700 hover:text-emerald-900 hover:underline"
+                            >
+                              {folio.bookingNo ?? folio.bookingId.slice(0, 8)}
+                            </Link>
+                          ) : (
+                            <p className="text-[10px] text-slate-400">
+                              {folio.bookingNo ?? "—"}
+                            </p>
+                          )}
                         </td>
-                        <td className="px-4 py-3 font-medium text-slate-800">
-                          {folio.guestName ?? "—"}
+                        <td className="px-4 py-3" onClick={stopRowClick}>
+                          {folio.guestId ? (
+                            <Link
+                              href={guestProfileHref({ id: folio.guestId })}
+                              className="font-medium text-slate-800 hover:text-emerald-700 hover:underline"
+                            >
+                              {folio.guestName ?? "Guest"}
+                            </Link>
+                          ) : (
+                            <p className="font-medium text-slate-800">
+                              {folio.guestName ?? "—"}
+                            </p>
+                          )}
+                          <GuestContactLines
+                            phone={folio.guestPhone}
+                            email={folio.guestEmail}
+                          />
                         </td>
                         <td className="px-4 py-3 text-slate-600">
                           {folio.room ? `Room ${folio.room}` : "—"}
@@ -438,7 +534,23 @@ export function GuestFolioView() {
                           )}
                         >
                           {formatINR(folio.balanceAmount)}
-                          </td>
+                        </td>
+                        <td className="px-4 py-3" onClick={stopRowClick}>
+                          <div className="flex items-center justify-end">
+                            {isCheckoutEligible(folio) ? (
+                              <Link
+                                href={checkOutHref({ id: folio.bookingId! })}
+                                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-semibold leading-none text-orange-800 transition-colors hover:bg-orange-100"
+                                title="Check out guest"
+                              >
+                                <LogOut className="h-3.5 w-3.5 shrink-0" />
+                                Check out
+                              </Link>
+                            ) : (
+                              <span className="text-xs text-slate-300">—</span>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -470,6 +582,22 @@ export function GuestFolioView() {
               <Button variant="outline" onClick={closeFolioDrawer}>
                 Close
               </Button>
+              {selected.guestId && (
+                <Link href={guestProfileHref({ id: selected.guestId })}>
+                  <Button size="sm" variant="outline" className="gap-1.5">
+                    <User className="h-3.5 w-3.5" />
+                    Guest Profile
+                  </Button>
+                </Link>
+              )}
+              {selected.bookingId && (
+                <Link href={allBookingsDetailHref({ id: selected.bookingId })}>
+                  <Button size="sm" variant="outline" className="gap-1.5">
+                    <CalendarCheck className="h-3.5 w-3.5" />
+                    Booking Detail
+                  </Button>
+                </Link>
+              )}
               <Button size="sm" variant="outline">
                 <FileText className="mr-1.5 h-3.5 w-3.5" />
                 Print Folio
@@ -477,7 +605,7 @@ export function GuestFolioView() {
               <Button
                 size="sm"
                 className="bg-emerald-700 hover:bg-emerald-800"
-                disabled={Number(selected.balanceAmount ?? 0) <= 0}
+                disabled={drawerBalanceAmount <= 0}
                 onClick={() => setPaymentDrawerOpen(true)}
               >
                 Collect Payment
@@ -489,10 +617,65 @@ export function GuestFolioView() {
         {selected && (
           <div className="space-y-6">
             <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Receipt className="h-4 w-4 text-emerald-600" />
-                <h3 className="text-sm font-semibold text-slate-900">Folio Summary</h3>
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Receipt className="h-4 w-4 text-emerald-600" />
+                  <h3 className="text-sm font-semibold text-slate-900">Folio Summary</h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {selected.guestId && (
+                    <Link href={guestProfileHref({ id: selected.guestId })}>
+                      <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs">
+                        <User className="h-3.5 w-3.5" />
+                        Guest Profile
+                        <ExternalLink className="h-3 w-3 opacity-60" />
+                      </Button>
+                    </Link>
+                  )}
+                  {selected.bookingId && (
+                    <Link href={allBookingsDetailHref({ id: selected.bookingId })}>
+                      <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs">
+                        <CalendarCheck className="h-3.5 w-3.5" />
+                        Booking Detail
+                        <ExternalLink className="h-3 w-3 opacity-60" />
+                      </Button>
+                    </Link>
+                  )}
+                </div>
               </div>
+
+              <div className="mb-3 rounded-lg border border-slate-100 bg-white px-3 py-2.5">
+                {selected.guestId ? (
+                  <Link
+                    href={guestProfileHref({ id: selected.guestId })}
+                    className="text-sm font-semibold text-slate-900 hover:text-emerald-700 hover:underline"
+                  >
+                    {selected.guestName ?? "Guest"}
+                  </Link>
+                ) : (
+                  <p className="text-sm font-semibold text-slate-900">
+                    {selected.guestName ?? "Guest"}
+                  </p>
+                )}
+                <GuestContactLines
+                  phone={selected.guestPhone}
+                  email={selected.guestEmail}
+                  className="mt-1"
+                />
+                {selected.bookingId && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Booking{" "}
+                    <Link
+                      href={allBookingsDetailHref({ id: selected.bookingId })}
+                      className="font-medium text-emerald-700 hover:underline"
+                    >
+                      {selected.bookingNo ?? selected.bookingId.slice(0, 8)}
+                    </Link>
+                    {selected.guestNo ? ` · Guest ${selected.guestNo}` : ""}
+                  </p>
+                )}
+              </div>
+
               {(selected.checkIn || selected.checkOut) && (
                 <p className="mb-3 text-xs text-slate-500">
                   Stay: {selected.checkIn ?? "—"} → {selected.checkOut ?? "—"}
@@ -503,10 +686,10 @@ export function GuestFolioView() {
                 <SummaryRow label="Tax" value={formatINR(selected.taxTotal)} />
                 <SummaryRow label="Discount" value={formatINR(selected.discountTotal)} />
                 <SummaryRow label="Folio total" value={formatINR(selected.totalAmount)} />
-                <SummaryRow label="Paid" value={formatINR(selected.paidAmount)} />
+                <SummaryRow label="Paid" value={formatINR(drawerPaidAmount)} />
                 <SummaryRow
                   label="Outstanding"
-                  value={formatINR(selected.balanceAmount)}
+                  value={formatINR(drawerBalanceAmount)}
                   highlight
                 />
               </div>
@@ -564,7 +747,15 @@ export function GuestFolioView() {
       </Drawer>
 
       <CollectPaymentDrawer
-        folio={selected}
+        folio={
+          selected
+            ? {
+                ...selected,
+                paidAmount: drawerPaidAmount,
+                balanceAmount: drawerBalanceAmount,
+              }
+            : null
+        }
         open={paymentDrawerOpen && !!selected}
         onClose={() => setPaymentDrawerOpen(false)}
         onSuccess={handlePaymentSuccess}

@@ -525,7 +525,7 @@ export function EmployeeListView() {
             <FormField label="Showing">
               <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700">
                 {filteredEmployees.length} of {employees.length} employees
-              </div>
+      </div>
             </FormField>
           </div>
         }
@@ -536,34 +536,34 @@ export function EmployeeListView() {
                 {selectedIds.size} employee{selectedIds.size !== 1 ? "s" : ""} selected
               </span>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
                   className="gap-1.5 bg-white"
                   onClick={() => handleBulkAction("Export Selected")}
                 >
                   <Download className="h-3.5 w-3.5" />
                   Export selected
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
                   className="gap-1.5 bg-white text-rose-700 hover:bg-rose-50"
                   onClick={() => handleBulkAction("Delete")}
-                >
+          >
                   <Trash2 className="h-3.5 w-3.5" />
                   Delete selected
-                </Button>
+          </Button>
                 <button
-                  type="button"
+                type="button"
                   className="text-xs font-medium text-emerald-700 hover:underline"
                   onClick={() => setSelectedIds(new Set())}
                 >
                   Clear
-                </button>
-              </div>
+                  </button>
+                </div>
             </div>
           ) : undefined
         }
@@ -578,7 +578,7 @@ export function EmployeeListView() {
             action={
               <Button type="button" variant="outline" size="sm" onClick={clearAllFilters}>
                 Clear filters
-              </Button>
+            </Button>
             }
           />
         ) : (
@@ -604,45 +604,45 @@ export function EmployeeListView() {
                         src={emp.photoUrl}
                         alt={emp.name}
                         className="h-11 w-11 shrink-0 rounded-xl object-cover border border-slate-200"
-                      />
-                    ) : (
+                              />
+                            ) : (
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-sm font-bold text-white">
                         {getListTableInitials(emp.name)}
-                      </div>
-                    )}
+                              </div>
+                            )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
-                        <div>
+                            <div>
                           <p className="font-semibold text-slate-900">{emp.name}</p>
                           <p className="text-xs text-slate-500">{formatEmployeeMetaLine(emp)}</p>
-                        </div>
+                              </div>
                         <EmployeeStatusBadge status={emp.status} />
-                      </div>
+                            </div>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
                         <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5">
                           <Briefcase className="h-3 w-3" />
                           {emp.designation}
-                        </span>
+                          </span>
                         <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5">
                           <Building2 className="h-3 w-3" />
                           {emp.department}
-                        </span>
+                          </span>
                         <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5">
                           <Clock className="h-3 w-3" />
                           {emp.shiftType}
-                        </span>
-                      </div>
+                                      </span>
+                                  </div>
                       <div className="mt-3 flex items-center justify-between">
                         <p className="text-sm font-semibold text-slate-900">
                           {emp.salaryStructureName || "No salary structure"}
                         </p>
                         <span className="text-xs text-slate-500">{emp.employmentType}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                                </div>
+                                </div>
+                              </div>
+                            </div>
               ))}
-            </div>
+        </div>
 
             <ListTable>
               <ListTableHead>
@@ -708,7 +708,7 @@ export function EmployeeListView() {
                           items={getEmployeeRowMenuItems(emp)}
                           ariaLabel={`More actions for ${emp.name}`}
                         />
-                      </div>
+            </div>
                     </ListTableCell>
                   </ListTableRow>
                 ))}

@@ -60,6 +60,18 @@ export interface DeskActivity {
   timestamp: string;
 }
 
+export interface RecentBooking {
+  id: string;
+  guestName: string;
+  bookingId: string;
+  roomNo: string;
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  status: ReservationStatus;
+  createdAt?: string;
+}
+
 export type ReservationStatus =
   | "Confirmed"
   | "Checked In"

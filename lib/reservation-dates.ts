@@ -60,6 +60,38 @@ function matchesToday(dateValue?: string) {
   return matchesDate(dateValue, todayIso());
 }
 
+function normalizeCreatedTimestamp(value: string) {
+  return value.replace(/\bSept\b/gi, "Sep").trim();
+}
+
+export function isCreatedToday(value?: string) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return false;
+  if (matchesToday(trimmed)) return true;
+  return matchesToday(normalizeCreatedTimestamp(trimmed));
+}
+
+export function bookingCreatedMs(value?: string): number {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return 0;
+  const parsed = Date.parse(normalizeCreatedTimestamp(trimmed));
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+export function formatBookingCreatedAt(value?: string): string {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "—";
+  const parsed = new Date(normalizeCreatedTimestamp(trimmed));
+  if (Number.isNaN(parsed.getTime())) return trimmed;
+  return parsed.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function isArrivingToday(booking: {
   checkIn?: string;
   arrivingToday?: boolean;

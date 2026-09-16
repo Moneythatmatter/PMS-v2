@@ -39,6 +39,11 @@ import {
   type KotPrintLine,
   type KotSlipParams,
 } from "@/lib/food-beverages/print-slips";
+import {
+  FbSettleBillPanel,
+  ROOM_CHARGE_MODE,
+  type BillBreakdown,
+} from "@/components/foodbeverages/FbSettleBillPanel";
 
 const ORDER_TABS = ["Dine In", "Takeaway", "Room Service"] as const;
 export type OrderTab = (typeof ORDER_TABS)[number];
@@ -112,9 +117,6 @@ async function saveWalkInGuestProfile(
     return undefined;
   }
 }
-const BASE_PAYMENT_MODES = ["Cash", "Card", "UPI"] as const;
-const ROOM_CHARGE_MODE = "Room Charge";
-
 const RUNNING_KOT_STATUSES = new Set(["PENDING", "PREPARING", "READY"]);
 
 type RunningKot = {
@@ -148,6 +150,7 @@ type Props = {
   className?: string;
   initialTableNo?: string;
   initialGuest?: string;
+  initialReservationId?: string;
   initialOrderType?: OrderTab | "Online";
   lockTable?: boolean;
   liveTableId?: string;
@@ -170,6 +173,7 @@ export function FbOrderEntryPanel({
   className,
   initialTableNo = "",
   initialGuest = "",
+  initialReservationId = "",
   initialOrderType = "Dine In",
   lockTable = false,
   liveTableId,
@@ -186,6 +190,12 @@ export function FbOrderEntryPanel({
   const [loadingOrder, setLoadingOrder] = useState(false);
   const [paymentMode, setPaymentMode] = useState<string>("Cash");
   const [amountPaid, setAmountPaid] = useState("");
+  const [billBreakdown, setBillBreakdown] = useState<BillBreakdown>({
+    subtotal: 0,
+    tax: 0,
+    discount: 0,
+    total: 0,
+  });
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
   const [itemSearch, setItemSearch] = useState("");
   const [shortCode, setShortCode] = useState("");
@@ -200,7 +210,9 @@ export function FbOrderEntryPanel({
   const [showGuestDetails, setShowGuestDetails] = useState(false);
   const [pax, setPax] = useState("");
   const [inHouseGuests, setInHouseGuests] = useState<InHouseGuestDto[]>([]);
-  const [selectedReservationId, setSelectedReservationId] = useState("");
+  const [selectedReservationId, setSelectedReservationId] = useState(
+    initialReservationId,
+  );
   const [linkedGuestId, setLinkedGuestId] = useState("");
   const [linkedGuestNo, setLinkedGuestNo] = useState("");
   const [formLines, setFormLines] = useState<CartLine[]>([]);
@@ -250,6 +262,15 @@ export function FbOrderEntryPanel({
           name: String(data.order.guest ?? g.name),
         }));
       }
+      if (data.order.reservationId) {
+        setSelectedReservationId(String(data.order.reservationId));
+      }
+      if (data.order.guestId) {
+        setLinkedGuestId(String(data.order.guestId));
+      }
+      if (data.order.guestNo) {
+        setLinkedGuestNo(String(data.order.guestNo));
+      }
       const itemsMap = new Map<string, CartLine>();
       (data.items as Record<string, unknown>[])
         .filter((row) => String(row.status ?? "ACTIVE").toUpperCase() === "ACTIVE")
@@ -271,10 +292,17 @@ export function FbOrderEntryPanel({
       const bills = data.bills as Record<string, unknown>[];
       const bill = bills?.[0];
       let total = Number(data.order.amount ?? 0);
+      let subtotal = total;
+      let tax = 0;
+      let discount = 0;
       if (bill?.id) {
         setActiveBillId(String(bill.id));
-        total = Number(bill.total ?? total);
+        subtotal = Number(bill.subtotal ?? total);
+        tax = Number(bill.tax ?? 0);
+        discount = Number(bill.discount ?? 0);
+        total = Number(bill.total ?? subtotal + tax - discount);
       }
+      setBillBreakdown({ subtotal, tax, discount, total });
       setAmountPaid(String(total));
       return { items, total, order: data.order, bill };
     } catch (e) {
@@ -346,19 +374,14 @@ export function FbOrderEntryPanel({
     () => [...savedLines, ...formLines],
     [savedLines, formLines],
   );
-  const paymentModes = useMemo(
-    () =>
-      formType === "Room Service"
-        ? [...BASE_PAYMENT_MODES, ROOM_CHARGE_MODE]
-        : [...BASE_PAYMENT_MODES],
-    [formType],
-  );
-
   useEffect(() => {
     if (formType !== "Room Service" && paymentMode === ROOM_CHARGE_MODE) {
       setPaymentMode("Cash");
     }
-  }, [formType, paymentMode]);
+    if (formType === "Room Service" && !selectedReservationId && paymentMode === ROOM_CHARGE_MODE) {
+      setPaymentMode("Cash");
+    }
+  }, [formType, paymentMode, selectedReservationId]);
   const hasGuestDetails =
     !!guestDetails.name.trim() ||
     !!guestDetails.phone.trim() ||
@@ -713,22 +736,29 @@ export function FbOrderEntryPanel({
       setFormError("No bill found for this order.");
       return;
     }
-    const amount = Number(amountPaid);
-    if (!Number.isFinite(amount) || amount <= 0) {
+    const isRoomCharge = paymentMode === ROOM_CHARGE_MODE;
+    const grandTotal = billBreakdown.total > 0 ? billBreakdown.total : orderTotal;
+    const amount = isRoomCharge ? grandTotal : Number(amountPaid);
+    if (!isRoomCharge && (!Number.isFinite(amount) || amount <= 0)) {
       setFormError("Enter a valid amount paid.");
+      return;
+    }
+    if (isRoomCharge && formType === "Room Service" && !selectedReservationId) {
+      setFormError("Select an in-house guest for Room Charge.");
       return;
     }
     try {
       setIsSettleLoading(true);
       setFormError(null);
-      const remaining = orderTotal;
       await posService.payBill(activeBillId, {
         amount,
         paymentMode,
-        fullPay: amount >= remaining,
+        fullPay: isRoomCharge || amount >= grandTotal,
       });
       onToast(
-        `Settled · ${formatINR(amount)} via ${paymentMode}${amount < remaining ? " (partial)" : ""}`,
+        isRoomCharge
+          ? `Settled · ${formatINR(grandTotal)} transferred to guest folio (Room Charge)`
+          : `Settled · ${formatINR(amount)} via ${paymentMode}${amount < grandTotal ? " (partial)" : ""}`,
       );
       onOrderCreated();
     } catch (e) {
@@ -743,14 +773,41 @@ export function FbOrderEntryPanel({
       ? "All Items"
       : categories.find((c) => c.id === selectedCategoryId)?.name ?? "Items";
 
+  const categoryNavButton = (catId: string, label: string, compact?: boolean) => (
+    <button
+      type="button"
+      onClick={() => setSelectedCategoryId(catId)}
+      className={cn(
+        compact
+          ? "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition"
+          : "flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium transition",
+        selectedCategoryId === catId
+          ? compact
+            ? "bg-emerald-600 text-white"
+            : "bg-emerald-600 text-white"
+          : compact
+            ? "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+            : "text-slate-300 hover:bg-slate-800 hover:text-white",
+      )}
+    >
+      {!compact && catId !== "all" && (
+        <span className="h-4 w-1 shrink-0 rounded-full bg-current opacity-60" />
+      )}
+      {!compact && catId === "all" && (
+        <UtensilsCrossed className="h-4 w-4 shrink-0 opacity-80" />
+      )}
+      <span className={compact ? "whitespace-nowrap" : "truncate"}>{label}</span>
+    </button>
+  );
+
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 flex-1 overflow-hidden bg-white",
+        "flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white lg:flex-row",
         className,
       )}
     >
-      <aside className="flex h-full min-h-0 w-52 shrink-0 flex-col border-r border-slate-200 bg-slate-900 text-white">
+      <aside className="hidden h-full min-h-0 w-52 shrink-0 flex-col border-r border-slate-200 bg-slate-900 text-white lg:flex">
         {!isSettle && (
           <>
         <div className="border-b border-slate-700 px-4 py-3">
@@ -762,34 +819,11 @@ export function FbOrderEntryPanel({
           </p>
         </div>
         <nav className="flex-1 overflow-y-auto py-2">
-          <button
-            type="button"
-            onClick={() => setSelectedCategoryId("all")}
-            className={cn(
-              "flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium transition",
-              selectedCategoryId === "all"
-                ? "bg-emerald-600 text-white"
-                : "text-slate-300 hover:bg-slate-800 hover:text-white",
-            )}
-          >
-            <UtensilsCrossed className="h-4 w-4 shrink-0 opacity-80" />
-            All Items
-          </button>
+          {categoryNavButton("all", "All Items")}
           {categories.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => setSelectedCategoryId(cat.id)}
-              className={cn(
-                "flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium transition",
-                selectedCategoryId === cat.id
-                  ? "bg-emerald-600 text-white"
-                  : "text-slate-300 hover:bg-slate-800 hover:text-white",
-              )}
-            >
-              <span className="h-4 w-1 shrink-0 rounded-full bg-current opacity-60" />
-              <span className="truncate">{cat.name}</span>
-            </button>
+            <span key={cat.id} className="contents">
+              {categoryNavButton(cat.id, cat.name)}
+            </span>
           ))}
           {categories.length === 0 && (
             <p className="px-4 py-6 text-xs text-slate-500">No categories yet</p>
@@ -806,63 +840,85 @@ export function FbOrderEntryPanel({
         )}
       </aside>
 
-      <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-slate-50/60">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50/60 lg:h-full">
         {isSettle ? (
-          <div className="flex flex-1 flex-col overflow-y-auto p-6">
-            <div className="mx-auto w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">
-                {loadedOrderNo ? `Order ${loadedOrderNo}` : "Order summary"}
-              </h2>
-              {runningKots.length > 0 && (
-                <p className="mt-1 text-xs font-medium text-emerald-700">
-                  Running KOT{runningKots.length > 1 ? "s" : ""}:{" "}
-                  {runningKots.map((kot) => formatKotNumber(kot.kotNo)).join(", ")}
-                </p>
-              )}
-              <p className="mt-1 text-sm text-slate-500">
-                Table {formRef || "—"} · {outletLabel(activeOutletId)}
-              </p>
-              {loadingOrder ? (
-                <p className="mt-6 text-sm text-slate-500">Loading order…</p>
-              ) : (
-                <ul className="mt-4 divide-y divide-slate-100">
-                  {allDisplayLines.map((line, idx) => (
-                    <li
-                      key={`settle-${line.id}-${line.name}-${idx}`}
-                      className="flex items-center justify-between py-3 text-base font-semibold"
-                    >
-                      <span className="text-slate-900">
-                        <span className="font-mono font-bold text-emerald-800 mr-2">{line.qty}×</span>
-                        {line.name}
-                      </span>
-                      <span className="font-mono font-bold text-slate-900">
-                        {formatINR(line.qty * line.price)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4">
-                <span className="text-base font-bold text-slate-700">Bill total</span>
-                <span className="text-2xl font-black text-emerald-800 font-mono">
-                  {formatINR(orderTotal)}
-                </span>
-              </div>
-            </div>
+          <div className="flex flex-1 flex-col overflow-y-auto p-4 sm:p-6">
+            {loadingOrder ? (
+              <p className="text-center text-sm text-slate-500">Loading order…</p>
+            ) : (
+              <>
+                {allDisplayLines.length > 0 && (
+                  <div className="mx-auto mb-4 w-full max-w-md rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Bill items
+                    </p>
+                    <ul className="divide-y divide-slate-100">
+                      {allDisplayLines.map((line, idx) => (
+                        <li
+                          key={`settle-line-${line.id}-${idx}`}
+                          className="flex justify-between py-2 text-sm"
+                        >
+                          <span>
+                            {line.qty}× {line.name}
+                          </span>
+                          <span className="font-mono font-semibold">
+                            {formatINR(line.qty * line.price)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <FbSettleBillPanel
+                  orderLabel={loadedOrderNo ? `Order ${loadedOrderNo}` : undefined}
+                  tableRef={formRef}
+                  outletLabel={outletLabel(activeOutletId)}
+                  breakdown={
+                    billBreakdown.total > 0
+                      ? billBreakdown
+                      : {
+                          subtotal: orderTotal,
+                          tax: 0,
+                          discount: 0,
+                          total: orderTotal,
+                        }
+                  }
+                  formType={formType}
+                  hasInHouseGuest={Boolean(selectedReservationId)}
+                  paymentMode={paymentMode}
+                  onPaymentModeChange={setPaymentMode}
+                  amountPaid={amountPaid}
+                  onAmountPaidChange={setAmountPaid}
+                  onConfirm={() => void handleSettle()}
+                  loading={isSettleLoading}
+                  disabled={isAnyActionRunning || !activeBillId}
+                />
+              </>
+            )}
           </div>
         ) : (
           <>
-        <div className="border-b border-slate-200 bg-white px-4 py-3">
+        {!isSettle && (
+          <div className="flex gap-2 overflow-x-auto border-b border-slate-800 bg-slate-900 px-3 py-2 lg:hidden">
+            {categoryNavButton("all", "All", true)}
+            {categories.map((cat) => (
+              <span key={cat.id} className="contents">
+                {categoryNavButton(cat.id, cat.name, true)}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="border-b border-slate-200 bg-white px-3 py-3 sm:px-4">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900">
+            <h2 className="truncate text-sm font-semibold text-slate-900">
               {selectedCategoryName}
             </h2>
-            <span className="text-xs text-slate-500">
+            <span className="shrink-0 text-xs text-slate-500">
               {filteredItems.length} item{filteredItems.length === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="search"
@@ -877,18 +933,18 @@ export function FbOrderEntryPanel({
               value={shortCode}
               onChange={(e) => setShortCode(e.target.value)}
               placeholder="Short code"
-              className="h-9 w-28 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none ring-emerald-500/30 focus:border-emerald-500 focus:ring-2"
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none ring-emerald-500/30 focus:border-emerald-500 focus:ring-2 sm:w-28"
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="min-h-[140px] flex-1 overflow-y-auto p-3 sm:p-4">
           {filteredItems.length === 0 ? (
             <div className="flex h-full min-h-[200px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white text-sm text-slate-500">
               No items in this category
             </div>
           ) : (
-            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3 xl:grid-cols-4">
               {filteredItems.map((item) => (
                 <button
                   key={item.id}
@@ -925,7 +981,7 @@ export function FbOrderEntryPanel({
         )}
       </section>
 
-      <aside className="flex h-full min-h-0 w-[420px] shrink-0 flex-col border-l border-slate-200 bg-white">
+      <aside className="flex max-h-[46vh] min-h-[220px] w-full shrink-0 flex-col border-t border-slate-200 bg-white lg:h-full lg:max-h-none lg:w-[420px] lg:border-l lg:border-t-0">
         <div className="shrink-0 border-b border-slate-200">
           <div className="flex items-center gap-1.5 px-3 py-2">
             {onBack && (
@@ -1050,7 +1106,7 @@ export function FbOrderEntryPanel({
               {formError}
             </p>
           )}
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
             <FormField label="Outlet" required>
               <FbOutletSelect
                 outlets={outlets}
@@ -1121,7 +1177,7 @@ export function FbOrderEntryPanel({
                 value={pax}
                 onChange={(e) => setPax(e.target.value)}
                 placeholder="Covers"
-                className="w-20"
+                className="w-full sm:w-20"
               />
             </FormField>
           </div>
@@ -1241,51 +1297,17 @@ export function FbOrderEntryPanel({
           ) : null}
         </div>
 
+        {!isSettle && (
         <div className="border-t border-slate-200 p-3">
-          {isSettle && (
-            <div className="mb-3 space-y-2">
-              <FormField label="Payment mode">
-                <SelectInput
-                  value={paymentMode}
-                  onChange={(e) => setPaymentMode(e.target.value)}
-                >
-                  {paymentModes.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </SelectInput>
-              </FormField>
-              <FormField label="Amount paid">
-                <TextInput
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={amountPaid}
-                  onChange={(e) => setAmountPaid(e.target.value)}
-                  placeholder="0.00"
-                />
-              </FormField>
-            </div>
-          )}
           <div className="mb-3 flex items-center justify-between">
             <span className="text-[15px] font-bold text-slate-700">
-              {isManage || isSettle ? "Bill total" : "Total"}
+              {isManage ? "Bill total" : "Total"}
             </span>
             <span className="text-2xl font-black text-emerald-800 font-mono">
-              {formatINR(isManage || isSettle ? orderTotal : formTotal)}
+              {formatINR(isManage ? orderTotal : formTotal)}
             </span>
           </div>
-          {isSettle ? (
-            <Button
-              type="button"
-              className="w-full bg-emerald-700 hover:bg-emerald-800 cursor-pointer"
-              disabled={isAnyActionRunning || !activeBillId}
-              onClick={() => void handleSettle()}
-            >
-              {isSettleLoading ? "Settling…" : "Settle"}
-            </Button>
-          ) : isManage ? (
+          {isManage ? (
             <div className="space-y-2">
               {formLines.length > 0 && (
                 <div className="flex gap-2">
@@ -1365,6 +1387,7 @@ export function FbOrderEntryPanel({
             </div>
           )}
         </div>
+        )}
       </aside>
     </div>
   );
@@ -1393,7 +1416,7 @@ function HeaderAction({
       )}
     >
       <Icon className="h-3 w-3 shrink-0" />
-      {label}
+      <span className="hidden min-[380px]:inline">{label}</span>
     </button>
   );
 }

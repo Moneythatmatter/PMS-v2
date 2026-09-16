@@ -276,7 +276,7 @@ export default function StockTransfersPage() {
 
       <FOPageHeader
         eyebrow="Purchase & Stores · Inventory"
-        title="Transfers"
+      title="Transfers"
         description="Move stock between warehouses, stores, and locations within the property."
         action={
           <div className="flex flex-wrap items-center gap-2">

@@ -32,8 +32,11 @@ type Props = {
   orderType: OrderTab;
   onOrderTypeChange: (type: OrderTab) => void;
   tables: LiveTable[];
+  roomServiceOrders?: LiveTable[];
   onSelectTable: (table: LiveTable) => void;
+  onSelectRoomOrder?: (room: LiveTable) => void;
   onBillTable?: (table: LiveTable) => void;
+  onBillRoomOrder?: (room: LiveTable) => void;
   onCleanTable?: (table: LiveTable) => void;
   onContinue: () => void;
   className?: string;
@@ -46,8 +49,11 @@ export function FbTableSelectPanel({
   orderType,
   onOrderTypeChange,
   tables,
+  roomServiceOrders = [],
   onSelectTable,
+  onSelectRoomOrder,
   onBillTable,
+  onBillRoomOrder,
   onCleanTable,
   onContinue,
   className,
@@ -126,35 +132,108 @@ export function FbTableSelectPanel({
   }, [visible, outlets]);
 
   const isDineIn = orderType === "Dine In";
+  const isRoomService = orderType === "Room Service";
   const showOutletHeaders = !outletId || outletGroups.length > 1;
+
+  const outletRoomOrders = useMemo(() => {
+    if (!outletId) return roomServiceOrders;
+    return roomServiceOrders.filter(
+      (room) => !room.outletId || room.outletId === outletId,
+    );
+  }, [roomServiceOrders, outletId]);
+
+  const visibleRoomOrders = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return outletRoomOrders.filter((room) => {
+      if (filter !== "all" && room.status !== filter) return false;
+      if (!q) return true;
+      const outletLabel = outletName(room.outletId).toLowerCase();
+      return (
+        room.tableNo.toLowerCase().includes(q) ||
+        room.guest.toLowerCase().includes(q) ||
+        outletLabel.includes(q)
+      );
+    });
+  }, [outletRoomOrders, filter, search, outlets]);
+
+  const roomOutletGroups = useMemo(() => {
+    const map = new Map<string, LiveTable[]>();
+    for (const room of visibleRoomOrders) {
+      const oid = room.outletId || "unknown";
+      const list = map.get(oid) ?? [];
+      list.push(room);
+      map.set(oid, list);
+    }
+    return [...map.entries()]
+      .map(([oid, rooms]) => ({
+        outletId: oid,
+        outletName: outletName(oid === "unknown" ? undefined : oid),
+        rooms: rooms.sort((a, b) =>
+          a.tableNo.localeCompare(b.tableNo, undefined, { numeric: true }),
+        ),
+      }))
+      .sort((a, b) => a.outletName.localeCompare(b.outletName));
+  }, [visibleRoomOrders, outlets]);
+
+  const roomSearchFiltered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return outletRoomOrders;
+    return outletRoomOrders.filter((room) => {
+      const outletLabel = outletName(room.outletId).toLowerCase();
+      return (
+        room.tableNo.toLowerCase().includes(q) ||
+        room.guest.toLowerCase().includes(q) ||
+        outletLabel.includes(q)
+      );
+    });
+  }, [outletRoomOrders, search, outlets]);
+
+  const roomStatusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: roomSearchFiltered.length,
+      Available: 0,
+      Occupied: 0,
+      Reserved: 0,
+      Billing: 0,
+    };
+    for (const room of roomSearchFiltered) {
+      counts[room.status] = (counts[room.status] ?? 0) + 1;
+    }
+    return counts;
+  }, [roomSearchFiltered]);
 
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-slate-50/80", className)}>
       <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <FbOutletSelect
             outlets={outlets}
             value={outletId}
             onChange={onOutletChange}
             allowAll
+            className="w-full sm:w-auto"
           />
-          {isDineIn ? (
+          {isDineIn || isRoomService ? (
             <div className="relative min-w-[12rem] flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search table, outlet, or section…"
+                placeholder={
+                  isRoomService
+                    ? "Search room, guest, or outlet…"
+                    : "Search table, outlet, or section…"
+                }
                 className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none ring-emerald-500/30 focus:border-emerald-500 focus:ring-2"
               />
             </div>
           ) : (
             <div className="min-w-0 flex-1" aria-hidden />
           )}
-          <div className="ml-auto flex shrink-0 items-center gap-3">
+          <div className="ml-auto flex w-full min-w-0 shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
             <div
-              className="flex min-w-[22rem] overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-0.5 sm:min-w-[26rem]"
+              className="flex w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-0.5 sm:max-w-md"
               role="tablist"
               aria-label="Order type"
             >
@@ -166,7 +245,7 @@ export function FbTableSelectPanel({
                   aria-selected={orderType === tab}
                   onClick={() => onOrderTypeChange(tab)}
                   className={cn(
-                    "min-w-0 flex-1 whitespace-nowrap rounded-md px-4 py-2 text-xs font-semibold transition sm:px-5 sm:text-sm",
+                    "min-w-0 flex-1 truncate rounded-md px-2 py-2 text-[11px] font-semibold transition sm:px-4 sm:text-sm",
                     orderType === tab
                       ? "bg-emerald-700 text-white shadow-sm"
                       : "text-slate-600 hover:bg-white hover:text-slate-900",
@@ -183,14 +262,14 @@ export function FbTableSelectPanel({
                 className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
                 onClick={onContinue}
               >
-                Continue
+                {isRoomService ? "New order" : "Continue"}
                 <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             )}
           </div>
         </div>
 
-        {isDineIn && (
+        {(isDineIn || isRoomService) && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
               {STATUS_FILTERS.map((opt) => (
@@ -212,7 +291,7 @@ export function FbTableSelectPanel({
                     filter === opt.id ? "text-white/85" : "text-slate-400",
                   )}
                 >
-                  {statusCounts[opt.id] ?? 0}
+                  {(isRoomService ? roomStatusCounts : statusCounts)[opt.id] ?? 0}
                 </span>
               </button>
               ))}
@@ -268,14 +347,60 @@ export function FbTableSelectPanel({
             )}
           </div>
         </>
+      ) : isRoomService ? (
+        <div className="min-h-0 flex-1 overflow-y-auto border-b border-slate-200 bg-white">
+          {roomOutletGroups.length === 0 ? (
+            <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-4 px-4 text-center">
+              <p className="text-sm text-slate-500">
+                No open room service orders{outletId ? " for this outlet" : ""}.
+              </p>
+              <Button
+                type="button"
+                className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
+                onClick={onContinue}
+              >
+                Start room service order
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {roomOutletGroups.map((group) => (
+                <section key={group.outletId} className="py-3">
+                  {(!outletId || roomOutletGroups.length > 1) && (
+                    <div className="mb-2 flex items-center gap-2 px-4">
+                      <h2 className="text-sm font-semibold text-slate-900">
+                        {group.outletName}
+                      </h2>
+                      <span className="text-[11px] text-slate-500">
+                        {group.rooms.length} room
+                        {group.rooms.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-3 px-4 pb-1">
+                    {group.rooms.map((room) => (
+                      <RoomServiceTile
+                        key={room.id}
+                        room={room}
+                        onSelect={() => onSelectRoomOrder?.(room)}
+                        onBill={
+                          onBillRoomOrder ? () => onBillRoomOrder(room) : undefined
+                        }
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-8">
           <div className="max-w-sm rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
             <p className="text-lg font-semibold text-slate-900">{orderType} order</p>
             <p className="mt-2 text-sm text-slate-500">
-              {orderType === "Takeaway"
-                ? "Start a counter pickup order — no table needed."
-                : "Start a room service order — enter room number on the next screen."}
+              Start a counter pickup order — no table needed.
             </p>
             <Button
               type="button"
@@ -307,6 +432,86 @@ function TableStatusLegend() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function RoomServiceTile({
+  room,
+  onSelect,
+  onBill,
+}: {
+  room: LiveTable;
+  onSelect: () => void;
+  onBill?: () => void;
+}) {
+  const status = (room.status as LiveTableStatus) ?? "Occupied";
+  const style = tableStatusStyles[status] ?? tableStatusStyles.Occupied;
+  const isPrinted = status === "Billing";
+  const isActive = status !== "Available";
+
+  return (
+    <div
+      className={cn(
+        "relative flex h-[7.25rem] w-[6.25rem] shrink-0 flex-col rounded-sm border-2 p-2 transition hover:-translate-y-0.5 hover:shadow-md",
+        style.bg,
+        style.border,
+      )}
+    >
+      {isActive && (
+        <p className="absolute right-1.5 top-1 text-[10px] font-semibold text-slate-800">
+          {formatTableDuration(room.durationMin)}
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex flex-1 cursor-pointer flex-col items-center justify-center text-center"
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+          Room
+        </p>
+        <p className="text-2xl font-bold leading-none text-slate-900">
+          {room.tableNo.replace(/^R-?/i, "")}
+        </p>
+        {room.checkAmount > 0 && (
+          <p className="mt-2 text-[11px] font-bold text-slate-900">
+            {formatTableAmount(room.checkAmount)}
+          </p>
+        )}
+        {room.checkAmount <= 0 && room.guest && room.guest !== "—" && (
+          <p className="mt-2 line-clamp-2 text-[10px] font-medium text-slate-700">
+            {room.guest}
+          </p>
+        )}
+      </button>
+
+      {isPrinted && onBill ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onBill();
+          }}
+          className="mx-auto flex h-6 w-8 items-center justify-center rounded-sm border border-emerald-800 bg-white text-emerald-900 shadow-sm transition hover:bg-emerald-50"
+          aria-label={`Settle room ${room.tableNo}`}
+        >
+          <Receipt className="h-3.5 w-3.5" />
+        </button>
+      ) : isActive ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+          className="mx-auto flex h-6 w-8 items-center justify-center rounded-sm border border-slate-700 bg-white text-slate-800 shadow-sm transition hover:bg-slate-50"
+          aria-label={`View room ${room.tableNo} order`}
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
     </div>
   );
 }

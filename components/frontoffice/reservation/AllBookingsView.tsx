@@ -37,7 +37,11 @@ import { usePropertyOptional } from "@/components/platform/PropertyProvider";
 import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
 import { formatBookingGuestLine } from "@/lib/reservation-display";
-import { isArrivingToday, isNoShowEligible } from "@/lib/reservation-dates";
+import {
+  formatBookingCreatedAt,
+  isArrivingToday,
+  isNoShowEligible,
+} from "@/lib/reservation-dates";
 import { checkInHref, checkOutHref } from "@/lib/check-in-navigation";
 import { BookingDetailDrawer } from "./BookingDetailDrawer";
 import { printBookingDetail } from "./bookingPrintUtils";
@@ -92,6 +96,19 @@ function primaryAction(booking: ReservationBooking) {
     };
   }
   return null;
+}
+
+/** Newest bookings first — prefer createdAt, then check-in date. */
+function bookingRecencyMs(booking: ReservationBooking): number {
+  if (booking.createdAt) {
+    const created = Date.parse(booking.createdAt);
+    if (!Number.isNaN(created)) return created;
+  }
+  if (booking.checkIn) {
+    const checkIn = Date.parse(booking.checkIn);
+    if (!Number.isNaN(checkIn)) return checkIn;
+  }
+  return 0;
 }
 
 function matchesFilter(booking: ReservationBooking, filter: ReservationFilter) {
@@ -277,26 +294,28 @@ export function AllBookingsView() {
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return scopedBookings.filter((booking) => {
-      const matchesSearch =
-        !query ||
-        booking.guestName?.toLowerCase().includes(query) ||
-        displayBookingNo(booking).toLowerCase().includes(query) ||
-        (booking.guestNo ?? "").toLowerCase().includes(query) ||
-        booking.phone?.toLowerCase().includes(query) ||
-        booking.roomNo?.toLowerCase().includes(query) ||
-        booking.roomType?.toLowerCase().includes(query) ||
-        booking.source?.toLowerCase().includes(query);
-      const matchesSource = sourceFilter === "all" || booking.source === sourceFilter;
-      const matchesRoomType =
-        roomTypeFilter === "all" || booking.roomType === roomTypeFilter;
-      return (
-        matchesSearch &&
-        matchesSource &&
-        matchesRoomType &&
-        matchesFilter(booking, activeFilter)
-      );
-    });
+    return scopedBookings
+      .filter((booking) => {
+        const matchesSearch =
+          !query ||
+          booking.guestName?.toLowerCase().includes(query) ||
+          displayBookingNo(booking).toLowerCase().includes(query) ||
+          (booking.guestNo ?? "").toLowerCase().includes(query) ||
+          booking.phone?.toLowerCase().includes(query) ||
+          booking.roomNo?.toLowerCase().includes(query) ||
+          booking.roomType?.toLowerCase().includes(query) ||
+          booking.source?.toLowerCase().includes(query);
+        const matchesSource = sourceFilter === "all" || booking.source === sourceFilter;
+        const matchesRoomType =
+          roomTypeFilter === "all" || booking.roomType === roomTypeFilter;
+        return (
+          matchesSearch &&
+          matchesSource &&
+          matchesRoomType &&
+          matchesFilter(booking, activeFilter)
+        );
+      })
+      .sort((a, b) => bookingRecencyMs(b) - bookingRecencyMs(a));
   }, [scopedBookings, search, activeFilter, sourceFilter, roomTypeFilter]);
 
   const hasActiveAdvancedFilters = sourceFilter !== "all" || roomTypeFilter !== "all";
@@ -595,6 +614,11 @@ export function AllBookingsView() {
                           <Calendar className="h-3 w-3" />
                           {booking.checkIn}
                         </span>
+                        {booking.createdAt && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5">
+                            Created {formatBookingCreatedAt(booking.createdAt)}
+                          </span>
+                        )}
                       </div>
                       <div className="mt-3 flex items-center justify-between">
                         <p className="font-bold text-slate-900">
@@ -624,7 +648,7 @@ export function AllBookingsView() {
             </div>
 
             <div className="hidden min-h-[280px] overflow-x-auto md:block">
-              <table className="w-full min-w-[860px] text-left text-sm">
+              <table className="w-full min-w-[980px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/80">
                     <th className="w-10 px-4 py-3">
@@ -641,6 +665,9 @@ export function AllBookingsView() {
                     </th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Stay
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Created
                     </th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Balance
@@ -692,6 +719,11 @@ export function AllBookingsView() {
                         </p>
                         <p className="text-xs text-slate-500">
                           {booking.checkIn} – {booking.checkOut}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <p className="text-sm text-slate-800">
+                          {formatBookingCreatedAt(booking.createdAt)}
                         </p>
                       </td>
                       <td className="px-4 py-3.5">
@@ -748,7 +780,10 @@ export function AllBookingsView() {
                                   {
                                     icon: Pencil,
                                     label: "Edit",
-                                    onClick: () => setToast(`Edit ${displayBookingNo(booking)} coming soon.`),
+                                    onClick: () =>
+                                      router.push(
+                                        `/frontoffice/reservation/new?bookingId=${encodeURIComponent(booking.id)}`,
+                                      ),
                                   },
                                   {
                                     icon: Printer,

@@ -22,22 +22,51 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { WeeklyFlowChart } from "@/components/frontoffice/WeeklyFlowChart";
 import { BookingSourcesChart } from "@/components/frontoffice/BookingSourcesChart";
 import { DeskActivityFeed } from "@/components/frontoffice/DeskActivityFeed";
+import { ReservationStatusBadge } from "@/components/frontoffice/reservation/ReservationStatusBadge";
 import { StatusBadge } from "@/components/frontoffice/StatusBadge";
+import { allBookingsDetailHref } from "@/lib/check-in-navigation";
 import { getPendingWakeUpCalls } from "@/components/frontoffice/WakeUpCallsAlert";
 import { cn } from "@/lib/utils";
-import { dashboardService, wakeUpCallService } from "@/services/front-office";
+import {
+  dashboardService,
+  reservationService,
+  wakeUpCallService,
+} from "@/services/front-office";
+import { displayBookingNo } from "@/lib/booking-display";
+import {
+  bookingCreatedMs,
+  formatBookingCreatedAt,
+  isCreatedToday,
+} from "@/lib/reservation-dates";
 import type {
   ArrivalGuest,
   BookingSource,
   DepartureGuest,
   DeskActivity,
   FrontOfficeStat,
+  RecentBooking,
+  ReservationStatus,
   RoomInventoryData,
   WeeklyFlowPoint,
 } from "@/app/data/types";
 import type { WakeUpCall } from "@/app/data/frontoffice/modules";
 
-const BUSINESS_DATE = "23 Jun 2026";
+function getTodayDisplayDate() {
+  return new Date().toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatStayDates(checkIn: string, checkOut: string) {
+  const trim = (d: string) => (d.length >= 10 ? d.slice(0, 10) : d);
+  const inDate = trim(checkIn);
+  const outDate = trim(checkOut);
+  if (!inDate && !outDate) return "—";
+  if (inDate && outDate) return `${inDate} → ${outDate}`;
+  return inDate || outDate;
+}
 
 const quickLinks = [
   {
@@ -110,6 +139,7 @@ const emptyInventory: RoomInventoryData = {
 export function FrontOfficeDashboardView() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [wakeUpCalls, setWakeUpCalls] = useState<WakeUpCall[]>([]);
+  const [todayCreatedBookings, setTodayCreatedBookings] = useState<RecentBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -118,13 +148,32 @@ export function FrontOfficeDashboardView() {
     (async () => {
       try {
         setLoading(true);
-        const [dashboard, calls] = await Promise.all([
+        const [dashboard, calls, reservations] = await Promise.all([
           dashboardService.get() as Promise<DashboardData>,
           wakeUpCallService.list(),
+          reservationService.list().catch(() => []),
         ]);
         if (!cancelled) {
           setData(dashboard);
           setWakeUpCalls(calls);
+          setTodayCreatedBookings(
+            reservations
+              .filter((r) => isCreatedToday(r.createdAt))
+              .sort(
+                (a, b) => bookingCreatedMs(b.createdAt) - bookingCreatedMs(a.createdAt),
+              )
+              .map((r) => ({
+                id: r.id,
+                guestName: r.guestName ?? "Guest",
+                bookingId: displayBookingNo(r),
+                roomNo: r.roomNo ?? "TBA",
+                roomType: r.roomType ?? "",
+                checkIn: r.checkIn,
+                checkOut: r.checkOut,
+                status: r.status,
+                createdAt: r.createdAt,
+              })),
+          );
           setError(null);
         }
       } catch (e) {
@@ -176,8 +225,11 @@ export function FrontOfficeDashboardView() {
     deskActivity,
   } = data;
 
+  const todayDisplayDate = getTodayDisplayDate();
   const pendingWakeUps = getPendingWakeUpCalls(wakeUpCalls);
-  const todayWakeUps = pendingWakeUps.filter((c) => c.date === BUSINESS_DATE);
+  const todayWakeUps = pendingWakeUps.filter(
+    (c) => c.date.trim().toLowerCase() === todayDisplayDate.trim().toLowerCase(),
+  );
   const pendingArrivals = todaysArrivals.filter((g) => g.status === "Pending");
   const pendingDepartures = todaysDepartures.filter((g) => g.status === "Checked In");
   const dirtyRooms =
@@ -391,6 +443,75 @@ export function FrontOfficeDashboardView() {
             </ul>
           </Card>
         </div>
+
+        <Card className="min-w-0">
+          <CardHeader
+            title="Today's bookings"
+            subtitle={`${todayCreatedBookings.length} created today`}
+            action={
+              <Link
+                href="/frontoffice/reservation/all-bookings"
+                className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline"
+              >
+                View all
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            }
+          />
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+                  <th className="pb-2 pr-3 font-semibold">Guest</th>
+                  <th className="pb-2 pr-3 font-semibold">Booking</th>
+                  <th className="pb-2 pr-3 font-semibold">Stay</th>
+                  <th className="pb-2 pr-3 font-semibold">Room</th>
+                  <th className="pb-2 pr-3 font-semibold">Status</th>
+                  <th className="pb-2 font-semibold">Created</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {todayCreatedBookings.map((booking) => (
+                  <tr key={booking.id} className="hover:bg-emerald-50/30">
+                    <td className="py-3 pr-3">
+                      <Link
+                        href={allBookingsDetailHref(booking)}
+                        className="font-medium text-slate-900 hover:text-emerald-700"
+                      >
+                        {booking.guestName}
+                      </Link>
+                    </td>
+                    <td className="py-3 pr-3 text-slate-700">{booking.bookingId}</td>
+                    <td className="py-3 pr-3 text-slate-600">
+                      {formatStayDates(booking.checkIn, booking.checkOut)}
+                    </td>
+                    <td className="py-3 pr-3 text-slate-700">
+                      {booking.roomNo}
+                      {booking.roomType ? (
+                        <span className="text-slate-400"> · {booking.roomType}</span>
+                      ) : null}
+                    </td>
+                    <td className="py-3 pr-3">
+                      <ReservationStatusBadge
+                        status={booking.status as ReservationStatus}
+                      />
+                    </td>
+                    <td className="py-3 text-xs text-slate-500">
+                      {formatBookingCreatedAt(booking.createdAt)}
+                    </td>
+                  </tr>
+                ))}
+                {todayCreatedBookings.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
+                      No bookings created today
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
 
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 lg:gap-8">
           <Card className="flex h-full min-w-0 flex-col border-amber-200/80 bg-amber-50/40">

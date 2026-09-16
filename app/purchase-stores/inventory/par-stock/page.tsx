@@ -205,7 +205,7 @@ export default function ParStockPage() {
 
       <FOPageHeader
         eyebrow="Purchase & Stores · Inventory"
-        title="Par Stock"
+      title="Par Stock"
         description="Monitor and maintain minimum stock levels by item, warehouse, and store location."
         action={
           <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100">

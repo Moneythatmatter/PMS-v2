@@ -16,7 +16,10 @@ import {
 import type { Booking } from "@/app/data/types";
 import type { ReservationBooking } from "@/app/data/types";
 import { displayBookingNo } from "@/lib/booking-display";
-import { isArrivingToday } from "@/lib/reservation-dates";
+import {
+  bookingCreatedMs,
+  isCreatedToday,
+} from "@/lib/reservation-dates";
 import { reservationService } from "@/services/front-office";
 import { AppShell } from "@/components/layout/AppShell";
 import { StatCard } from "@/components/ui/StatCard";
@@ -61,6 +64,8 @@ function mapReservationToBooking(reservation: ReservationBooking): Booking {
     checkIn: reservation.checkIn,
     checkOut: reservation.checkOut,
     status: mapReservationStatus(reservation.status),
+    createdAt: reservation.createdAt,
+    reservationId: reservation.id,
   };
 }
 
@@ -110,13 +115,8 @@ export function MainDashboardView() {
         const reservations = await reservationService.list();
         if (cancelled) return;
         const rows = reservations
-          .filter(
-            (r) =>
-              isArrivingToday(r) &&
-              r.status !== "Cancelled" &&
-              r.status !== "No Show" &&
-              r.status !== "Checked Out",
-          )
+          .filter((r) => isCreatedToday(r.createdAt))
+          .sort((a, b) => bookingCreatedMs(b.createdAt) - bookingCreatedMs(a.createdAt))
           .map(mapReservationToBooking);
         setTodayBookings(rows);
       } catch {

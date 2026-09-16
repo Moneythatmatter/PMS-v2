@@ -161,8 +161,7 @@ export default function PurchaseRequisitionsPage() {
 
   const openCreateRequisition = () => {
     setEditPR(null);
-    const first = inventoryCatalog[0];
-    setNewItems(first ? [prItemFromCatalog(first, 1)] : []);
+    setNewItems([]);
     revokeAttachmentUrls(formAttachments);
     setFormAttachments([]);
     setCreateModalOpen(true);
@@ -507,12 +506,7 @@ export default function PurchaseRequisitionsPage() {
     });
   };
 
-  // DELETE ITEM HANDLER (Keeps at least 1 row)
   const handleRemoveItemRow = (id: string) => {
-    if (newItems.length <= 1) {
-      setToast({ message: "Requisition must contain at least one item.", variant: "info" });
-      return;
-    }
     setNewItems((prev) => prev.filter((i) => i.id !== id));
   };
 
@@ -536,6 +530,10 @@ export default function PurchaseRequisitionsPage() {
 
   // SAVE / SUBMIT REQUISITION
   const handleSaveRequisition = async (isDraft: boolean) => {
+    if (newItems.length === 0) {
+      setToast({ message: "Add at least one item before saving the requisition.", variant: "info" });
+      return;
+    }
     const totalAmt = newItems.reduce((acc, i) => acc + i.quantity * i.estimatedPrice, 0);
     const payload: Partial<PurchaseRequisition> = {
       department: newDept,
@@ -1323,6 +1321,14 @@ export default function PurchaseRequisitionsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
+                    {newItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
+                          No items added yet. Click &quot;+ Add Item&quot; to select products from the
+                          catalog.
+                        </td>
+                      </tr>
+                    ) : null}
                     {newItems.map((item) => {
                       const estTotal = item.quantity * item.estimatedPrice;
 
@@ -1368,14 +1374,8 @@ export default function PurchaseRequisitionsPage() {
                             <button
                               type="button"
                               onClick={() => handleRemoveItemRow(item.id)}
-                              disabled={newItems.length <= 1}
-                              className={cn(
-                                "p-1 rounded transition-colors cursor-pointer",
-                                newItems.length <= 1
-                                  ? "text-slate-300 cursor-not-allowed"
-                                  : "text-slate-400 hover:text-red-600"
-                              )}
-                              title={newItems.length <= 1 ? "At least 1 item required" : "Delete row"}
+                              className="p-1 rounded text-slate-400 transition-colors cursor-pointer hover:text-red-600"
+                              title="Delete row"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
@@ -1390,6 +1390,11 @@ export default function PurchaseRequisitionsPage() {
 
             {/* MOBILE STACKED CARDS */}
             <div className="block sm:hidden space-y-2.5">
+              {newItems.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-8 text-center text-xs text-slate-500">
+                  No items added yet. Tap &quot;+ Add Item&quot; to select products.
+                </div>
+              ) : null}
               {newItems.map((item) => {
                 const estTotal = item.quantity * item.estimatedPrice;
                 return (
@@ -1399,8 +1404,7 @@ export default function PurchaseRequisitionsPage() {
                       <button
                         type="button"
                         onClick={() => handleRemoveItemRow(item.id)}
-                        disabled={newItems.length <= 1}
-                        className={cn("text-slate-400 hover:text-red-600", newItems.length <= 1 && "opacity-30")}
+                        className="text-slate-400 hover:text-red-600"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>

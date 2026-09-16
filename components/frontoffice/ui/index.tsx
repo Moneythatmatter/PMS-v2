@@ -70,7 +70,7 @@ export function FOPageHeader({
           )
         ) : null}
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto">
         {badge}
         {action}
       </div>

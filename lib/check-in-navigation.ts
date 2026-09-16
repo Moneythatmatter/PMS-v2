@@ -15,3 +15,12 @@ export function allBookingsDetailHref(booking: Pick<ReservationBooking, "id">): 
 export function allBookingsGuestHref(guest: { id: string }): string {
   return `/frontoffice/reservation/all-bookings?guestId=${encodeURIComponent(guest.id)}`;
 }
+
+export function guestProfileHref(
+  guest: { id: string },
+  options?: { edit?: boolean },
+): string {
+  const params = new URLSearchParams({ guestId: guest.id });
+  if (options?.edit) params.set("edit", "1");
+  return `/frontoffice/guest-profiles?${params.toString()}`;
+}

@@ -220,14 +220,14 @@ export function FbBillsView() {
         },
       ]}
     >
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
         {PAYMENT_TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setPaymentTab(tab.id)}
             className={cn(
-              "rounded-full px-3 py-1 text-xs font-medium transition",
+              "shrink-0 rounded-full px-3 py-1 text-xs font-medium transition",
               paymentTab === tab.id
                 ? "bg-emerald-700 text-white"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200",
@@ -238,7 +238,54 @@ export function FbBillsView() {
         ))}
       </div>
 
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="space-y-3 md:hidden">
+        {filteredBills.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-12 text-center text-slate-400">
+            <Receipt className="mx-auto mb-2 h-8 w-8 opacity-40" />
+            No bills found
+          </div>
+        ) : (
+          filteredBills.map((bill) => (
+            <article
+              key={bill.id}
+              className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-900">{bill.billNo}</p>
+                  <Link
+                    href={orderDetailHref(bill.orderId)}
+                    className="text-xs font-medium text-emerald-700 hover:underline"
+                  >
+                    {bill.orderNo}
+                  </Link>
+                </div>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
+                    paymentBadge(bill.paymentStatus),
+                  )}
+                >
+                  {bill.paymentStatus}
+                </span>
+              </div>
+              <div className="mt-3 flex items-end justify-between gap-2 text-sm">
+                <div className="min-w-0 text-slate-600">
+                  <p className="truncate">{bill.guest || "—"}</p>
+                  <p className="text-xs text-slate-400">
+                    {bill.ref || "—"} · {formatBillDate(bill.billPrintedAt)}
+                  </p>
+                </div>
+                <p className="shrink-0 font-bold text-slate-900">
+                  {formatINR(bill.total)}
+                </p>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+
+      <section className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="border-b border-slate-200 bg-slate-50/80 text-left text-[11px] uppercase tracking-wide text-slate-500">

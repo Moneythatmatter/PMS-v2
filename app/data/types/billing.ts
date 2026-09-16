@@ -17,6 +17,8 @@ export interface FolioListItem {
   closedAt?: string | null;
   guestName?: string;
   guestNo?: string | null;
+  guestPhone?: string | null;
+  guestEmail?: string | null;
   room?: string | null;
   roomType?: string | null;
   bookingNo?: string | null;

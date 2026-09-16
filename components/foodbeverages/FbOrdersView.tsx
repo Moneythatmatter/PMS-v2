@@ -63,6 +63,7 @@ export function FbOrdersView() {
   const [menuItems, setMenuItems] = useState<RawMenuItem[]>([]);
   const [categories, setCategories] = useState<FbPosCategory[]>([]);
   const [tables, setTables] = useState<LiveTable[]>([]);
+  const [roomServiceOrders, setRoomServiceOrders] = useState<LiveTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -70,12 +71,24 @@ export function FbOrdersView() {
   const [openOrderId, setOpenOrderId] = useState("");
   const [openBillId, setOpenBillId] = useState("");
   const [entryMode, setEntryMode] = useState<PosEntryMode>("new");
+  const [selectedRoomOrder, setSelectedRoomOrder] = useState<LiveTable | null>(
+    null,
+  );
   const reloadTables = async () => {
     try {
       const tableData = await floorPlanService.list();
       setTables(tableData);
     } catch {
       setTables([]);
+    }
+  };
+
+  const reloadRoomServiceOrders = async (outletId?: string) => {
+    try {
+      const rows = await floorPlanService.listRoomServiceOpen(outletId);
+      setRoomServiceOrders(rows);
+    } catch {
+      setRoomServiceOrders([]);
     }
   };
 
@@ -90,10 +103,11 @@ export function FbOrdersView() {
     (async () => {
       try {
         setLoading(true);
-        const [menuData, categoryData, tableData] = await Promise.all([
+        const [menuData, categoryData, tableData, roomOrders] = await Promise.all([
           menuItemService.list().catch(() => []),
           menuCategoryService.list().catch(() => []),
           floorPlanService.list().catch(() => []),
+          floorPlanService.listRoomServiceOpen().catch(() => []),
         ]);
         if (cancelled) return;
         setMenuItems((menuData as RawMenuItem[]).filter(isActiveRecord));
@@ -107,6 +121,7 @@ export function FbOrdersView() {
             .map((c) => ({ id: c.id, name: c.name, code: c.code })),
         );
         setTables(tableData);
+        setRoomServiceOrders(roomOrders);
         setError(null);
       } catch (e) {
         if (!cancelled) {
@@ -121,6 +136,11 @@ export function FbOrdersView() {
     };
   }, [outletsLoading]);
 
+  useEffect(() => {
+    if (entryStep !== "tables" || entryOrderType !== "Room Service") return;
+    void reloadRoomServiceOrders(filterOutletId || undefined);
+  }, [entryStep, entryOrderType, filterOutletId]);
+
   const posMenuItems = useMemo((): FbPosMenuItem[] => {
     return menuItems.map((item) => ({
       id: item.id,
@@ -134,24 +154,41 @@ export function FbOrdersView() {
   }, [menuItems]);
 
   const handleOrderCreated = async () => {
-    await reloadTables();
+    const activeTab = entryOrderType;
+    await Promise.all([
+      reloadTables(),
+      reloadRoomServiceOrders(filterOutletId || undefined),
+    ]);
     setSelectedTable(null);
+    setSelectedRoomOrder(null);
     setOpenOrderId("");
     setOpenBillId("");
     setEntryMode("new");
     setEntryStep("tables");
-    setEntryOrderType("Dine In");
+    setEntryOrderType(activeTab);
     setOrderOutletId("");
     setToast("Done");
   };
 
   const openTableEntry = (table: LiveTable, mode: PosEntryMode) => {
     setSelectedTable(table);
+    setSelectedRoomOrder(null);
     setOpenOrderId(table.openOrderId ?? "");
     setOpenBillId(table.openBillId ?? "");
     setEntryMode(mode);
     setEntryOrderType("Dine In");
     setOrderOutletId(table.outletId || "");
+    setEntryStep("order");
+  };
+
+  const openRoomServiceEntry = (room: LiveTable, mode: PosEntryMode) => {
+    setSelectedRoomOrder(room);
+    setSelectedTable(null);
+    setOpenOrderId(room.openOrderId ?? room.id);
+    setOpenBillId(room.openBillId ?? "");
+    setEntryMode(mode);
+    setEntryOrderType("Room Service");
+    setOrderOutletId(room.outletId || filterOutletId);
     setEntryStep("order");
   };
 
@@ -179,11 +216,29 @@ export function FbOrdersView() {
 
   const handleContinueWithoutTable = () => {
     setSelectedTable(null);
+    setSelectedRoomOrder(null);
     setOpenOrderId("");
     setOpenBillId("");
     setEntryMode("new");
     setOrderOutletId(filterOutletId);
     setEntryStep("order");
+  };
+
+  const handleSelectRoomOrder = (room: LiveTable) => {
+    if (room.status === "Billing") {
+      openRoomServiceEntry(room, "settle");
+      return;
+    }
+    if (room.openOrderId || room.status !== "Available") {
+      openRoomServiceEntry(room, "manage");
+      return;
+    }
+    openRoomServiceEntry(room, "new");
+  };
+
+  const handleBillRoomOrder = (room: LiveTable) => {
+    if (room.status !== "Billing") return;
+    openRoomServiceEntry(room, "settle");
   };
 
   const handleCleanTable = async (table: LiveTable) => {
@@ -231,15 +286,18 @@ export function FbOrdersView() {
           orderType={entryOrderType}
           onOrderTypeChange={setEntryOrderType}
           tables={tables}
+          roomServiceOrders={roomServiceOrders}
           onSelectTable={handleSelectTable}
+          onSelectRoomOrder={handleSelectRoomOrder}
           onBillTable={handleBillTable}
+          onBillRoomOrder={handleBillRoomOrder}
           onCleanTable={(table) => void handleCleanTable(table)}
           onContinue={handleContinueWithoutTable}
           className="min-h-0 flex-1"
         />
       ) : (
         <FbOrderEntryPanel
-          key={`${selectedTable?.id ?? entryOrderType}-${entryMode}-${openOrderId}`}
+          key={`${selectedTable?.id ?? selectedRoomOrder?.id ?? entryOrderType}-${entryMode}-${openOrderId}`}
           outlets={outlets}
           outletId={orderOutletId}
           onOutletChange={setOrderOutletId}
@@ -247,24 +305,43 @@ export function FbOrdersView() {
           menuItems={posMenuItems}
           tables={tables}
           onOrderCreated={() => void handleOrderCreated()}
-          onTablesRefresh={() => void reloadTables()}
+          onTablesRefresh={() => {
+            void reloadTables();
+            void reloadRoomServiceOrders(filterOutletId || undefined);
+          }}
           onToast={setToast}
           className="min-h-0 flex-1"
-          initialTableNo={selectedTable?.tableNo ?? ""}
+          initialTableNo={
+            selectedTable?.tableNo ?? selectedRoomOrder?.tableNo ?? ""
+          }
           initialGuest={
             selectedTable?.guest && selectedTable.guest !== "—"
               ? selectedTable.guest
-              : ""
+              : selectedRoomOrder?.guest && selectedRoomOrder.guest !== "—"
+                ? selectedRoomOrder.guest
+                : ""
           }
+          initialReservationId={selectedRoomOrder?.reservationId ?? ""}
           initialOrderType={entryOrderType}
           lockTable={!!selectedTable && entryOrderType === "Dine In"}
           liveTableId={selectedTable?.id}
-          openOrderId={openOrderId || selectedTable?.openOrderId || undefined}
-          openBillId={openBillId || selectedTable?.openBillId || undefined}
+          openOrderId={
+            openOrderId ||
+            selectedTable?.openOrderId ||
+            selectedRoomOrder?.openOrderId ||
+            undefined
+          }
+          openBillId={
+            openBillId ||
+            selectedTable?.openBillId ||
+            selectedRoomOrder?.openBillId ||
+            undefined
+          }
           entryMode={entryMode}
           onBack={() => {
             setEntryStep("tables");
             setSelectedTable(null);
+            setSelectedRoomOrder(null);
             setOpenOrderId("");
             setOpenBillId("");
             setEntryMode("new");
