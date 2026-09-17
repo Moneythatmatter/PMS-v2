@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   TrendingUp,
@@ -25,20 +25,70 @@ import { ModulePageShell } from "@/components/pms";
 import { Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
-// ─────────────────────────────────────────────────────────────
-// IMPORT SOURCE OPERATIONAL ENTITIES
-// ─────────────────────────────────────────────────────────────
-import { INITIAL_LEADS } from "./LeadsInquiriesView";
-import { INITIAL_HOTEL_DEALS, HotelDealStage } from "./DealsPipelineView";
-import { INITIAL_CENTRAL_BOOKINGS } from "./EventBookingsView";
-import { INITIAL_CAMPAIGNS } from "./CampaignsView";
-import { INITIAL_LEAD_SOURCES } from "./masters/SalesMarketingMastersView";
-import { INITIAL_ACTIVITIES } from "./ActivitiesView";
+import { LeadRecordItem } from "./LeadsInquiriesView";
+import { HotelDealItem, HotelDealStage } from "./DealsPipelineView";
+import { CentralBookingItem } from "./EventBookingsView";
+import { HotelCampaign } from "./CampaignsView";
+import { LeadSourceMasterItem } from "./masters/SalesMarketingMastersView";
+import { HotelActivityItem } from "./ActivitiesView";
+import {
+  smLeadService,
+  smDealService,
+  smBookingService,
+  smCampaignService,
+  smLeadSourceService,
+  smActivityService,
+} from "@/services/sales-marketing";
+import {
+  mapLeadFromApi,
+  mapDealFromApi,
+  mapBookingFromApi,
+  mapCampaignFromApi,
+  mapLeadSourceFromApi,
+  mapActivityFromApi,
+} from "@/lib/sales-marketing/api-mappers";
 
 type DateRangePreset = "ALL" | "TODAY" | "WEEK" | "MONTH" | "QUARTER" | "YEAR";
 
 export function ReportsAnalyticsView() {
   const router = useRouter();
+
+  const [leads, setLeads] = useState<LeadRecordItem[]>([]);
+  const [deals, setDeals] = useState<HotelDealItem[]>([]);
+  const [bookings, setBookings] = useState<CentralBookingItem[]>([]);
+  const [campaigns, setCampaigns] = useState<HotelCampaign[]>([]);
+  const [leadSources, setLeadSources] = useState<LeadSourceMasterItem[]>([]);
+  const [activities, setActivities] = useState<HotelActivityItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const loadReportData = async () => {
+    setLoading(true);
+    try {
+      const [leadRows, dealRows, bookingRows, campaignRows, sourceRows, activityRows] = await Promise.all([
+        smLeadService.list(),
+        smDealService.list(),
+        smBookingService.list(),
+        smCampaignService.list(),
+        smLeadSourceService.list(),
+        smActivityService.list(),
+      ]);
+      setLeads(leadRows.map(mapLeadFromApi));
+      setDeals(dealRows.map(mapDealFromApi));
+      setBookings(bookingRows.map(mapBookingFromApi));
+      setCampaigns(campaignRows.map(mapCampaignFromApi));
+      setLeadSources(sourceRows.map(mapLeadSourceFromApi));
+      setActivities(activityRows.map(mapActivityFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load report data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadReportData();
+  }, []);
 
   // ─────────────────────────────────────────────────────────────
   // FILTER STATES
@@ -59,30 +109,30 @@ export function ReportsAnalyticsView() {
   // FILTERED DATA STREAMS
   // ─────────────────────────────────────────────────────────────
   const filteredLeads = useMemo(() => {
-    return INITIAL_LEADS.filter((lead) => {
+    return leads.filter((lead) => {
       const matchSource = selectedLeadSource === "ALL" || lead.leadSource === selectedLeadSource;
       const matchExec = selectedExecutive === "ALL" || lead.assignedExecutive === selectedExecutive;
       const matchBookingType = selectedBookingType === "ALL" || lead.bookingType === selectedBookingType;
       return matchSource && matchExec && matchBookingType;
     });
-  }, [selectedLeadSource, selectedExecutive, selectedBookingType]);
+  }, [leads, selectedLeadSource, selectedExecutive, selectedBookingType]);
 
   const filteredDeals = useMemo(() => {
-    return INITIAL_HOTEL_DEALS.filter((deal) => {
+    return deals.filter((deal) => {
       const matchSource = selectedLeadSource === "ALL" || deal.leadSource === selectedLeadSource;
       const matchExec = selectedExecutive === "ALL" || deal.assignedExecutive === selectedExecutive;
       const matchBookingType = selectedBookingType === "ALL" || deal.leadType === selectedBookingType;
       return matchSource && matchExec && matchBookingType;
     });
-  }, [selectedLeadSource, selectedExecutive, selectedBookingType]);
+  }, [deals, selectedLeadSource, selectedExecutive, selectedBookingType]);
 
   const filteredBookings = useMemo(() => {
-    return INITIAL_CENTRAL_BOOKINGS.filter((b) => {
+    return bookings.filter((b) => {
       const matchBookingType = selectedBookingType === "ALL" || b.bookingType.includes(selectedBookingType) || b.bookingType === selectedBookingType;
       const matchExec = selectedExecutive === "ALL" || b.coordinatorName === selectedExecutive;
       return matchBookingType && matchExec;
     });
-  }, [selectedBookingType, selectedExecutive]);
+  }, [bookings, selectedBookingType, selectedExecutive]);
 
   // ─────────────────────────────────────────────────────────────
   // EXECUTIVE KPIS
@@ -129,12 +179,12 @@ export function ReportsAnalyticsView() {
   // LEAD SOURCE PERFORMANCE
   // ─────────────────────────────────────────────────────────────
   const leadSourcePerformance = useMemo(() => {
-    return INITIAL_LEAD_SOURCES.map((source) => {
-      const srcLeads = INITIAL_LEADS.filter((l) => l.leadSource === source.sourceName || (source.sourceId === "SRC-001" && l.leadSource === "Google Ads"));
-      const srcDeals = INITIAL_HOTEL_DEALS.filter((d) => d.leadSource === source.sourceName || (source.sourceId === "SRC-001" && d.leadSource === "Google Ads"));
+    return leadSources.map((source) => {
+      const srcLeads = leads.filter((l) => l.leadSource === source.sourceName || (source.sourceId === "SRC-001" && l.leadSource === "Google Ads"));
+      const srcDeals = deals.filter((d) => d.leadSource === source.sourceName || (source.sourceId === "SRC-001" && d.leadSource === "Google Ads"));
       const srcWon = srcDeals.filter((d) => d.status === "Won" || d.stage === "Won");
-      const srcBookings = INITIAL_CENTRAL_BOOKINGS.filter((b) => {
-        const linkedDeal = INITIAL_HOTEL_DEALS.find((d) => d.id === b.dealId);
+      const srcBookings = bookings.filter((b) => {
+        const linkedDeal = deals.find((d) => d.id === b.dealId);
         return linkedDeal?.leadSource === source.sourceName;
       });
 
@@ -154,7 +204,7 @@ export function ReportsAnalyticsView() {
         conversionRate: convPct,
       };
     }).filter((s) => selectedLeadSource === "ALL" || s.sourceName === selectedLeadSource);
-  }, [selectedLeadSource]);
+  }, [leadSources, leads, deals, bookings, selectedLeadSource]);
 
   // ─────────────────────────────────────────────────────────────
   // PIPELINE STAGES
@@ -173,12 +223,12 @@ export function ReportsAnalyticsView() {
   // CAMPAIGN ROI
   // ─────────────────────────────────────────────────────────────
   const campaignROI = useMemo(() => {
-    return INITIAL_CAMPAIGNS.map((camp) => {
-      const campLeads = INITIAL_LEADS.filter((l) => l.campaignId === camp.campaignCode || l.campaignName?.includes(camp.campaignName));
-      const campDeals = INITIAL_HOTEL_DEALS.filter((d) => d.campaignId === camp.campaignCode || d.campaignName?.includes(camp.campaignName));
+    return campaigns.map((camp) => {
+      const campLeads = leads.filter((l) => l.campaignId === camp.campaignCode || l.campaignName?.includes(camp.campaignName));
+      const campDeals = deals.filter((d) => d.campaignId === camp.campaignCode || d.campaignName?.includes(camp.campaignName));
       const campWon = campDeals.filter((d) => d.status === "Won" || d.stage === "Won");
 
-      const campBookings = INITIAL_CENTRAL_BOOKINGS.filter((b) => b.campaignId === camp.campaignCode);
+      const campBookings = bookings.filter((b) => b.campaignId === camp.campaignCode);
       const contractVal = campBookings.reduce((sum, b) => sum + (b.contractValue || 0), 0) || (campWon.length * 600000);
       const realizedRev = campBookings.reduce((sum, b) => sum + (b.advanceReceived || 0), 0) || (contractVal * 0.75);
 
@@ -201,7 +251,7 @@ export function ReportsAnalyticsView() {
         roiText,
       };
     });
-  }, []);
+  }, [campaigns, leads, deals, bookings]);
 
   // ─────────────────────────────────────────────────────────────
   // BOOKINGS BY TYPE
@@ -209,7 +259,7 @@ export function ReportsAnalyticsView() {
   const bookingTypeStats = useMemo(() => {
     const types = ["Banquet / Event", "Room Booking", "Conference", "Restaurant"];
     return types.map((type) => {
-      const bList = INITIAL_CENTRAL_BOOKINGS.filter((b) => b.bookingType.includes(type) || b.bookingType === type);
+      const bList = bookings.filter((b) => b.bookingType.includes(type) || b.bookingType === type);
       const contractVal = bList.reduce((sum, b) => sum + (b.contractValue || 0), 0);
       const realizedRev = bList.reduce((sum, b) => sum + (b.advanceReceived || 0), 0);
 
@@ -220,22 +270,22 @@ export function ReportsAnalyticsView() {
         realizedRevenue: realizedRev,
       };
     });
-  }, []);
+  }, [bookings]);
 
   // ─────────────────────────────────────────────────────────────
   // OPERATIONAL ACTION ALERTS
   // ─────────────────────────────────────────────────────────────
   const overdueActivities = useMemo(() => {
-    return INITIAL_ACTIVITIES.filter((a) => a.status === "Overdue");
-  }, []);
+    return activities.filter((a) => a.status === "Overdue");
+  }, [activities]);
 
   const expiringHolds = useMemo(() => {
-    return INITIAL_HOTEL_DEALS.filter((d) => d.stage === "Tentative Hold" && d.tentativeHold);
-  }, []);
+    return deals.filter((d) => d.stage === "Tentative Hold" && d.tentativeHold);
+  }, [deals]);
 
   const highValueNegotiations = useMemo(() => {
-    return INITIAL_HOTEL_DEALS.filter((d) => d.stage === "Negotiation" && (d.dealValue || 0) >= 400000);
-  }, []);
+    return deals.filter((d) => d.stage === "Negotiation" && (d.dealValue || 0) >= 400000);
+  }, [deals]);
 
   // ─────────────────────────────────────────────────────────────
   // CSV EXPORT HANDLER (CLEAN, RFC-COMPLIANT & EXCEL-READY)
@@ -356,6 +406,8 @@ export function ReportsAnalyticsView() {
         { label: "Sales & Marketing", href: "/sales-marketing/dashboard" },
         { label: "Reports & Insights" },
       ]}
+      toast={toastMessage}
+      onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex items-center gap-2">
           <Button
@@ -379,6 +431,12 @@ export function ReportsAnalyticsView() {
         </div>
       }
     >
+      {loading && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          Loading report data from database…
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────────────
           1. CLEAN TOP FILTER BAR
       ───────────────────────────────────────────────────────────── */}
@@ -420,7 +478,7 @@ export function ReportsAnalyticsView() {
             className="p-1.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 text-xs focus:outline-none focus:ring-1 focus:ring-slate-900"
           >
             <option value="ALL">All Lead Sources</option>
-            {INITIAL_LEAD_SOURCES.map((s) => (
+            {leadSources.map((s) => (
               <option key={s.sourceId} value={s.sourceName}>
                 {s.sourceName}
               </option>

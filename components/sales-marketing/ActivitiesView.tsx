@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useMemo, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   PhoneCall,
   MapPin,
@@ -34,12 +34,15 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { INITIAL_HOTEL_DEALS, HotelDealItem } from "./DealsPipelineView";
+import { HotelDealItem } from "./DealsPipelineView";
 import {
   AddActivityModal,
   ActivityPayload,
   SharedActivityType,
 } from "./shared/AddActivityModal";
+import { smActivityService, smDealService } from "@/services/sales-marketing";
+import { mapActivityFromApi, mapActivityToApi, mapDealFromApi } from "@/lib/sales-marketing/api-mappers";
+import { nowTimelineStamp, todayIsoDate } from "@/lib/sales-marketing/useSmList";
 
 // ─────────────────────────────────────────────────────────────
 // 1. DATA TYPES & SCHEMAS (HOTEL PMS V1 ACTIVITIES)
@@ -75,6 +78,9 @@ export interface ActivityTimelineEntry {
 }
 
 export interface HotelActivityItem {
+  dbId?: string;
+  dealDbId?: string;
+  leadDbId?: string;
   id: string;
   activityType: ActivityType;
   priority: ActivityPriority;
@@ -124,239 +130,50 @@ export interface HotelActivityItem {
 // 2. INITIAL CENTRAL ACTIVITIES SEED DATA
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_ACTIVITIES: HotelActivityItem[] = [
-  {
-    id: "ACT-1001",
-    activityType: "Call",
-    callType: "Outgoing",
-    priority: "High",
-    dealId: "OPP-301",
-    dealName: "Reddy & Sharma Wedding Reception",
-    leadId: "LD-502",
-    leadName: "Pooja Reddy",
-    customerName: "Pooja Reddy",
-    companyName: "Reddy Family",
-    contactPerson: "Pooja Reddy",
-    mobileNumber: "+91 99001 22334",
-    email: "pooja.reddy@gmail.com",
-    pipelineStage: "Quotation / Proposal",
-    expectedRevenue: 2400000,
-    campaignName: "Grand Wedding Season Early Bird",
-    activityDate: "2026-08-29",
-    activityTime: "03:00 PM",
-    assignedExecutive: "Vikram Malhotra",
-    status: "Scheduled",
-    purpose: "Discuss revised banquet menu package and 30 deluxe rooms tariff.",
-    nextAction: "Site visit walkthrough catalogue presentation",
-    nextActionDate: "2026-08-30",
-    timelineLog: [
-      { id: "LOG-01", timestamp: "15 Aug 2026 02:15 PM", action: "Lead Record Linked (#LD-502)", actor: "Front Desk" },
-      { id: "LOG-02", timestamp: "17 Aug 2026 05:00 PM", action: "Proposal Sent (₹24.00L)", actor: "Vikram Malhotra", notes: "Sent formal quotation for Grand Ballroom" },
-      { id: "LOG-03", timestamp: "28 Aug 2026 10:00 AM", action: "Call Scheduled", actor: "Vikram Malhotra", notes: "Follow up call booked for 29 Aug" },
-    ],
-  },
-  {
-    id: "ACT-1002",
-    activityType: "Site Visit",
-    priority: "High",
-    dealId: "OPP-301",
-    dealName: "Reddy & Sharma Wedding Reception",
-    leadId: "LD-502",
-    leadName: "Pooja Reddy",
-    customerName: "Pooja Reddy",
-    companyName: "Reddy Family",
-    contactPerson: "Pooja Reddy",
-    mobileNumber: "+91 99001 22334",
-    email: "pooja.reddy@gmail.com",
-    pipelineStage: "Quotation / Proposal",
-    expectedRevenue: 2400000,
-    campaignName: "Grand Wedding Season Early Bird",
-    venueRequired: "Grand Ballroom & Royal Lawn",
-    visitorCount: 4,
-    activityDate: "2026-08-30",
-    activityTime: "02:00 PM",
-    assignedExecutive: "Vikram Malhotra",
-    status: "Scheduled",
-    purpose: "Walkthrough of Grand Ballroom stage layout & bridal suite inspection.",
-    nextAction: "Finalize Grand Ballroom stage decor contract",
-    nextActionDate: "2026-09-02",
-    timelineLog: [
-      { id: "LOG-04", timestamp: "28 Aug 2026 02:00 PM", action: "Site Visit Scheduled", actor: "Vikram Malhotra", notes: "Family requested Grand Ballroom walkthrough" },
-    ],
-  },
-  {
-    id: "ACT-1003",
-    activityType: "Call",
-    callType: "Outgoing",
-    priority: "High",
-    dealId: "OPP-302",
-    dealName: "TCS Q4 Executive Leadership Meet",
-    leadId: "LD-501",
-    leadName: "Sunil V",
-    customerName: "Sunil V",
-    companyName: "TCS India Ltd",
-    contactPerson: "Sunil V (Admin Lead)",
-    mobileNumber: "+91 97110 44556",
-    email: "sunil.v@tcs.com",
-    pipelineStage: "Negotiation",
-    expectedRevenue: 890000,
-    campaignName: "Corporate Annual Partner Saver",
-    activityDate: "2026-08-29",
-    activityTime: "03:00 PM",
-    assignedExecutive: "Jay Kumar",
-    status: "Scheduled",
-    purpose: "Negotiate corporate room rate from ₹6,500 to ₹5,800/night and confirm airport transfers.",
-    nextAction: "Issue negotiated SLA quotation QTN-004",
-    nextActionDate: "2026-08-30",
-    timelineLog: [
-      { id: "LOG-05", timestamp: "16 Aug 2026 09:30 AM", action: "Deal Created from Lead #LD-501", actor: "System" },
-      { id: "LOG-06", timestamp: "17 Aug 2026 11:00 AM", action: "Negotiation Started", actor: "Jay Kumar", notes: "Discussing corporate room rate inclusions" },
-    ],
-  },
-  {
-    id: "ACT-1004",
-    activityType: "Follow Up",
-    priority: "High",
-    dealId: "OPP-303",
-    dealName: "IMA Annual Medical Conference",
-    leadId: "LD-503",
-    leadName: "Dr. K.S. Rao",
-    customerName: "Dr. K.S. Rao",
-    companyName: "Indian Medical Association",
-    contactPerson: "Dr. K.S. Rao",
-    mobileNumber: "+91 98450 11223",
-    email: "drksrao@ima.org",
-    pipelineStage: "Tentative Hold",
-    expectedRevenue: 1850000,
-    activityDate: "2026-08-26",
-    activityTime: "11:30 AM",
-    assignedExecutive: "Jay Kumar",
-    status: "Overdue",
-    purpose: "Hold expires on 30 Aug 2026. Urgent follow up on 25% advance cheque from committee.",
-    nextAction: "Urgent call to confirm deposit payment or release hold",
-    nextActionDate: "2026-08-29",
-    timelineLog: [
-      { id: "LOG-07", timestamp: "17 Aug 2026 11:00 AM", action: "Lead Linked (#LD-503)", actor: "System" },
-      { id: "LOG-08", timestamp: "22 Aug 2026 10:00 AM", action: "Tentative Hold Locked", actor: "Jay Kumar", notes: "Convention Center reserved until 30 Aug" },
-    ],
-  },
-  {
-    id: "ACT-1005",
-    activityType: "Meeting",
-    priority: "Medium",
-    dealId: "OPP-304",
-    dealName: "Thomas Cook UK Inbound Group",
-    leadId: "LD-504",
-    leadName: "Vikram Rathi",
-    customerName: "Vikram Rathi",
-    companyName: "Thomas Cook India Ltd",
-    contactPerson: "Vikram Rathi (Key Account Mgr)",
-    mobileNumber: "+91 98334 55667",
-    email: "vikram.r@thomascook.in",
-    pipelineStage: "Final Decision",
-    expectedRevenue: 1560000,
-    activityDate: "2026-08-30",
-    activityTime: "11:00 AM",
-    assignedExecutive: "Vikram Malhotra",
-    status: "Scheduled",
-    purpose: "Final contract signature meeting with Thomas Cook Key Account Manager.",
-    nextAction: "Collect VCC pre-payment and transfer to Booking Queue",
-    nextActionDate: "2026-08-31",
-    timelineLog: [
-      { id: "LOG-09", timestamp: "20 Aug 2026 04:30 PM", action: "Group Contract Sent", actor: "Vikram Malhotra", notes: "10% agent commission agreed" },
-      { id: "LOG-10", timestamp: "26 Aug 2026 12:00 PM", action: "Stage Moved to Final Decision", actor: "Vikram Malhotra" },
-    ],
-  },
-  {
-    id: "ACT-1006",
-    activityType: "Call",
-    callType: "Outgoing",
-    priority: "Medium",
-    dealId: "OPP-306",
-    dealName: "Infosys Q3 Tech Innovation Summit",
-    leadId: "LD-506",
-    leadName: "Priya Menon",
-    customerName: "Priya Menon",
-    companyName: "Infosys Ltd",
-    contactPerson: "Priya Menon (HR Lead)",
-    mobileNumber: "+91 98112 88990",
-    email: "priya.m@infosys.com",
-    pipelineStage: "Requirement Analysis",
-    expectedRevenue: 720000,
-    activityDate: "2026-08-29",
-    activityTime: "04:00 PM",
-    assignedExecutive: "Jay Kumar",
-    status: "Scheduled",
-    purpose: "Discover tech summit requirements: hackathon seating, dedicated 200 Mbps leased line & AV.",
-    nextAction: "Draft initial proposal QTN-008",
-    nextActionDate: "2026-09-01",
-    timelineLog: [
-      { id: "LOG-11", timestamp: "19 Aug 2026 03:00 PM", action: "Introductory Call Completed", actor: "Jay Kumar" },
-    ],
-  },
-  {
-    id: "ACT-1007",
-    activityType: "Task",
-    priority: "Low",
-    dealId: "OPP-307",
-    dealName: "Apex Events Annual Fashion Awards",
-    leadId: "LD-507",
-    leadName: "Dr. Alok Nath",
-    customerName: "Dr. Alok Nath",
-    companyName: "Apex Event Management Co.",
-    contactPerson: "Dr. Alok Nath",
-    mobileNumber: "+91 98221 66778",
-    email: "alok@apexevents.in",
-    pipelineStage: "Qualification",
-    expectedRevenue: 650000,
-    activityDate: "2026-08-30",
-    activityTime: "10:00 AM",
-    assignedExecutive: "Jay Kumar",
-    status: "Scheduled",
-    purpose: "Prepare customized cocktail catering menu options for 120 guests.",
-    nextAction: "Discovery call with Dr. Alok Nath",
-    nextActionDate: "2026-08-30",
-    timelineLog: [
-      { id: "LOG-12", timestamp: "19 Aug 2026 11:30 AM", action: "Qualification Call Completed", actor: "Jay Kumar" },
-    ],
-  },
-  {
-    id: "ACT-1008",
-    activityType: "WhatsApp",
-    priority: "Medium",
-    dealId: "OPP-305",
-    dealName: "Singhania Destination 3-Day Wedding",
-    leadId: "LD-505",
-    leadName: "Rakesh Singhania",
-    customerName: "Rakesh Singhania",
-    companyName: "Singhania Group",
-    contactPerson: "Rakesh Singhania",
-    mobileNumber: "+91 98220 11990",
-    email: "rakesh@singhaniagroup.com",
-    pipelineStage: "Won",
-    expectedRevenue: 4200000,
-    activityDate: "2026-08-25",
-    activityTime: "02:00 PM",
-    assignedExecutive: "Vikram Malhotra",
-    status: "Completed",
-    purpose: "Sent advance receipt voucher & confirmed booking queue handover.",
-    outcome: "Interested",
-    outcomeNotes: "Advance payment of ₹21.00 Lakhs verified in accounts. Client thrilled with wedding contract.",
-    completedAt: "25 Aug 2026, 02:30 PM",
-    nextAction: "Banquet Operations handover meeting",
-    nextActionDate: "2026-09-05",
-    timelineLog: [
-      { id: "LOG-13", timestamp: "10 Aug 2026 10:00 AM", action: "Lead Linked (#LD-505)", actor: "System" },
-      { id: "LOG-14", timestamp: "25 Aug 2026 02:00 PM", action: "Advance Payment Verified", actor: "Vikram Malhotra", notes: "50% token advance received" },
-      { id: "LOG-15", timestamp: "25 Aug 2026 02:30 PM", action: "Activity Marked Completed", actor: "Vikram Malhotra", notes: "Advance receipt voucher sent via WhatsApp" },
-    ],
-  },
-];
+export const INITIAL_ACTIVITIES: HotelActivityItem[] = [];
 
 export function ActivitiesView() {
   const router = useRouter();
-  const [activitiesList, setActivitiesList] = useState<HotelActivityItem[]>(INITIAL_ACTIVITIES);
-  const [deals] = useState<HotelDealItem[]>(INITIAL_HOTEL_DEALS);
+  const searchParams = useSearchParams();
+  const [activitiesList, setActivitiesList] = useState<HotelActivityItem[]>([]);
+  const [deals, setDeals] = useState<HotelDealItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadActivitiesAndDeals = async () => {
+    setLoading(true);
+    try {
+      const [activityRows, dealRows] = await Promise.all([smActivityService.list(), smDealService.list()]);
+      setActivitiesList(activityRows.map(mapActivityFromApi));
+      setDeals(dealRows.map(mapDealFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load activities");
+      setActivitiesList([]);
+      setDeals([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadActivitiesAndDeals();
+  }, []);
+
+  const persistActivity = async (activity: HotelActivityItem): Promise<HotelActivityItem | null> => {
+    try {
+      const linkedDeal = deals.find((d) => d.id === activity.dealId);
+      const payload = mapActivityToApi({
+        ...activity,
+        dealDbId: linkedDeal?.dbId,
+      });
+      const row = activity.dbId
+        ? await smActivityService.update(activity.dbId, payload)
+        : await smActivityService.create(payload);
+      return mapActivityFromApi(row);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to save activity");
+      return null;
+    }
+  };
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState("");
@@ -380,8 +197,7 @@ export function ActivitiesView() {
   const [completeNextAction, setCompleteNextAction] = useState("");
   const [completeNextActionDate, setCompleteNextActionDate] = useState("2026-09-02");
 
-  // Constant Today String for V1 Mock Environment
-  const todayStr = "2026-08-29";
+  const todayStr = todayIsoDate();
 
   // ─────────────────────────────────────────────────────────────
   // AUTOMATIC OVERDUE CALCULATION & KPI METRICS
@@ -478,11 +294,11 @@ export function ActivitiesView() {
     setCompleteNextActionDate(act.nextActionDate || "2026-09-02");
   };
 
-  const handleSaveCompletion = (e: React.FormEvent) => {
+  const handleSaveCompletion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!completingActivity) return;
 
-    const timestamp = "Today 03:30 PM";
+    const timestamp = nowTimelineStamp();
     const auditEntry: ActivityTimelineEntry = {
       id: `LOG-${Date.now()}`,
       timestamp,
@@ -493,26 +309,23 @@ export function ActivitiesView() {
       }`,
     };
 
-    const updatedList = activitiesList.map((a) => {
-      if (a.id === completingActivity.id) {
-        return {
-          ...a,
-          status: "Completed" as ActivityStatus,
-          outcome: completeOutcome,
-          outcomeNotes: completeNotes.trim() || undefined,
-          completedAt: timestamp,
-          nextAction: completeNextAction.trim() || undefined,
-          nextActionDate: completeNextAction ? completeNextActionDate : undefined,
-          timelineLog: [auditEntry, ...a.timelineLog],
-        };
-      }
-      return a;
-    });
+    const updatedActivity: HotelActivityItem = {
+      ...completingActivity,
+      status: "Completed" as ActivityStatus,
+      outcome: completeOutcome,
+      outcomeNotes: completeNotes.trim() || undefined,
+      completedAt: timestamp,
+      nextAction: completeNextAction.trim() || undefined,
+      nextActionDate: completeNextAction ? completeNextActionDate : undefined,
+      timelineLog: [auditEntry, ...completingActivity.timelineLog],
+    };
 
-    setActivitiesList(updatedList);
+    const saved = await persistActivity(updatedActivity);
+    if (!saved) return;
+
+    setActivitiesList((prev) => prev.map((a) => (a.id === completingActivity.id ? saved : a)));
     if (selectedDrawerActivity?.id === completingActivity.id) {
-      const updatedItem = updatedList.find((a) => a.id === completingActivity.id);
-      if (updatedItem) setSelectedDrawerActivity(updatedItem);
+      setSelectedDrawerActivity(saved);
     }
 
     setToastMessage(`✓ Activity #${completingActivity.id} completed! Outcome: "${completeOutcome}".`);
@@ -528,10 +341,18 @@ export function ActivitiesView() {
     setIsScheduleModalOpen(true);
   };
 
-  const handleSaveSharedActivity = (payload: ActivityPayload) => {
+  useEffect(() => {
+    if (searchParams.get("create") !== "1") return;
+
+    const activityType =
+      searchParams.get("type") === "visit" ? "Site Visit" : "Phone Call";
+    handleOpenScheduleModal(activityType);
+    router.replace("/sales-marketing/crm/activities-calls", { scroll: false });
+  }, [searchParams, router]);
+
+  const handleSaveSharedActivity = async (payload: ActivityPayload) => {
     const linkedDeal = deals.find((d) => d.id === payload.relatedEntityId) || deals[0];
-    const newActivityId = `ACT-${1000 + activitiesList.length + 1}`;
-    const timestamp = "Today 03:00 PM";
+    const timestamp = nowTimelineStamp();
 
     let mappedType: ActivityType = "Call";
     if (payload.activityType === "Phone Call") mappedType = "Call";
@@ -543,7 +364,7 @@ export function ActivitiesView() {
     else if (payload.activityType === "Task / Note") mappedType = "Task";
 
     const newActivity: HotelActivityItem = {
-      id: newActivityId,
+      id: `ACT-${Date.now()}`,
       activityType: mappedType,
       priority: payload.priority as ActivityPriority,
       dealId: payload.relatedEntityId !== "NONE" && linkedDeal ? linkedDeal.id : "OPP-301",
@@ -580,9 +401,12 @@ export function ActivitiesView() {
       ],
     };
 
-    setActivitiesList([newActivity, ...activitiesList]);
+    const saved = await persistActivity(newActivity);
+    if (!saved) return;
+
+    setActivitiesList((prev) => [saved, ...prev]);
     setIsScheduleModalOpen(false);
-    setToastMessage(`✓ ${newActivity.activityType} #${newActivity.id} ${payload.status === "Completed" ? "logged as completed" : "scheduled"} for ${newActivity.contactPerson}!`);
+    setToastMessage(`✓ ${saved.activityType} #${saved.id} ${payload.status === "Completed" ? "logged as completed" : "scheduled"} for ${saved.contactPerson}!`);
   };
 
   return (
@@ -608,6 +432,12 @@ export function ActivitiesView() {
         </Button>
       }
     >
+      {loading && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          Loading activities and deals from database…
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: TOP KPI CARDS (F&B DASHBOARD STYLE)
       ───────────────────────────────────────────────────────────── */}

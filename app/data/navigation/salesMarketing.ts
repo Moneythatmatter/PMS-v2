@@ -40,11 +40,10 @@ export const salesMarketingNavItems: ModuleNavItem[] = [
     icon: "database",
     children: [
       { label: "Venues & Spaces", href: "/sales-marketing/masters/venues-spaces", icon: "landmark" },
-      { label: "Rates & Commissions", href: "/sales-marketing/masters/rates-commissions", icon: "receipt" },
       { label: "Lead Sources", href: "/sales-marketing/masters/lead-sources", icon: "share-2" },
       { label: "Activity Types", href: "/sales-marketing/masters/activity-types", icon: "check-square" },
       { label: "Deal Stages", href: "/sales-marketing/masters/deal-stages", icon: "git-commit" },
-      { label: "Booking Categories", href: "/sales-marketing/masters/booking-categories", icon: "tag" },
+      { label: "Booking Types", href: "/sales-marketing/masters/booking-types", icon: "layers" },
       { label: "Contact Types", href: "/sales-marketing/masters/contact-types", icon: "users" },
     ],
   },

@@ -61,6 +61,13 @@ export function LoyaltyPointsSettingsView() {
       toast={toastMessage}
       onDismissToast={() => setToastMessage(null)}
     >
+      <div className="mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center">
+        <p className="text-sm font-semibold text-slate-700">No loyalty data yet</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Earning and redemption rules below are local defaults only — no loyalty backend table is connected yet.
+        </p>
+      </div>
+
       <form onSubmit={handleSaveSettings} className="space-y-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">

@@ -15,7 +15,10 @@ import {
 } from "lucide-react";
 import { Modal, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { INITIAL_ACTIVITY_TYPES } from "../masters/SalesMarketingMastersView";
+import type { ActivityTypeMasterItem } from "../masters/SalesMarketingMastersView";
+import { smActivityTypeService } from "@/services/sales-marketing";
+import { mapActivityTypeFromApi } from "@/lib/sales-marketing/api-mappers";
+import { todayIsoDate } from "@/lib/sales-marketing/useSmList";
 
 export type SharedActivityType = string;
 
@@ -122,6 +125,21 @@ export function AddActivityModal({
   availableDeals = [],
   availableLeads = [],
 }: AddActivityModalProps) {
+  const [activityTypes, setActivityTypes] = useState<ActivityTypeMasterItem[]>([]);
+  const [loadingTypes, setLoadingTypes] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setLoadingTypes(true);
+    void smActivityTypeService
+      .list()
+      .then((rows) => setActivityTypes(rows.map(mapActivityTypeFromApi)))
+      .catch(() => setActivityTypes([]))
+      .finally(() => setLoadingTypes(false));
+  }, [isOpen]);
+
+  const activeActivityTypes = activityTypes.filter((item) => item.status === "Active");
+
   // Form States
   const [activityType, setActivityType] = useState<SharedActivityType>(initialActivityType);
   const [priority, setPriority] = useState<SharedActivityPriority>("Medium");
@@ -156,7 +174,7 @@ export function AddActivityModal({
     if (initialStatus) {
       setStatus(initialStatus);
     }
-    setActivityDate("2026-08-29");
+    setActivityDate(todayIsoDate());
 
     if (dealContext) {
       setSelectedDealId(dealContext.id);
@@ -338,8 +356,11 @@ export function AddActivityModal({
           <label className="block font-bold text-slate-700 text-[11px]">
             Activity Type *
           </label>
+          {loadingTypes && (
+            <p className="text-[11px] text-slate-500 mb-2">Loading activity types…</p>
+          )}
           <div className="flex flex-wrap gap-1.5">
-            {INITIAL_ACTIVITY_TYPES.filter((item) => item.status === "Active").map((opt) => {
+            {activeActivityTypes.map((opt) => {
               const Icon = getActivityIcon(opt.typeName);
               const isSelected =
                 activityType === opt.typeName ||

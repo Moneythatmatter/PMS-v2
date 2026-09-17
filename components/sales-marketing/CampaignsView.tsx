@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Target,
   Plus,
@@ -33,13 +33,22 @@ import {
   Share2,
   X,
 } from "lucide-react";
-import { INITIAL_PROMOTIONS, HotelPromotion } from "./PromosDiscountsView";
-import { CentralLeadItem, INITIAL_CENTRAL_LEADS } from "@/app/data/centralLeadData";
+import { HotelPromotion } from "./PromosDiscountsView";
+import { CentralLeadItem } from "@/app/data/centralLeadData";
 import { LeadType, LeadSource, LeadPriority, LeadStatus } from "./LeadsInquiriesView";
 import { ModulePageShell } from "@/components/pms";
 import { Button, Card, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { CsvLeadImportModal } from "./shared/CsvLeadImportModal";
+import { smCampaignService, smPromotionService, smLeadService } from "@/services/sales-marketing";
+import {
+  mapCampaignFromApi,
+  mapCampaignToApi,
+  mapPromotionFromApi,
+  mapCentralLeadFromApi,
+  mapLeadToApi,
+} from "@/lib/sales-marketing/api-mappers";
+import { todayIsoDate } from "@/lib/sales-marketing/useSmList";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES & SCHEMAS FOR HOTEL PMS CAMPAIGN V1 ARCHITECTURE
@@ -83,6 +92,7 @@ export interface CampaignBooking {
 }
 
 export interface HotelCampaign {
+  dbId?: string;
   id: string;
   campaignCode: string; // Internal PMS Campaign ID e.g. CMP-MON-01, CMP-WED-02
   campaignName: string;
@@ -114,113 +124,7 @@ export interface HotelCampaign {
 // INITIAL SEED CAMPAIGNS DATA (VERSION 1 SPEC)
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_CAMPAIGNS: HotelCampaign[] = [
-  {
-    id: "CMP-101",
-    campaignCode: "CMP-MON-01",
-    campaignName: "Monsoon Weekend Escape 2026",
-    description: "Targeting weekend staycationers with 15% room discount on Deluxe & Executive stays.",
-    campaignType: "Room Promotion",
-    linkedPromoCode: "Monsoon Room Retreat",
-    targetAudience: "Past Guests",
-    goal: "Room Bookings",
-    startDate: "2026-06-01",
-    endDate: "2026-09-25",
-    budget: 25000,
-    status: "Active",
-    externalPlatform: "Google Ads",
-    externalCampaignId: "GADS-99102",
-    externalCampaignName: "Monsoon_Room_Search_IN",
-    expectedLeads: 80,
-    expectedBookings: 50,
-    expectedRevenue: 750000,
-    bookingsList: [
-      { id: "BK-101", bookingId: "RES-99401", guestName: "Rajesh Verma", promotionUsed: "Monsoon Room Retreat", revenueGenerated: 15000, bookingDate: "2026-08-18" },
-    ],
-  },
-  {
-    id: "CMP-102",
-    campaignCode: "CMP-WDG-02",
-    campaignName: "Grand Wedding Season Early Bird",
-    description: "Free bridal suite & complimentary welcome drinks for wedding hall bookings above 300 Pax.",
-    campaignType: "Banquet Promotion",
-    linkedPromoCode: "WEDDING2026",
-    targetAudience: "Wedding Leads",
-    goal: "Banquet Bookings",
-    startDate: "2026-08-01",
-    endDate: "2026-11-30",
-    budget: 75000,
-    status: "Active",
-    externalPlatform: "Meta Ads",
-    externalCampaignId: "FB-WDG-5544",
-    externalCampaignName: "Wedding_Banquet_FB_Ig_LeadForm",
-    expectedLeads: 40,
-    expectedBookings: 15,
-    expectedRevenue: 9000000,
-    bookingsList: [
-      { id: "BK-201", bookingId: "BKT-2026-081", guestName: "Sharma Family Wedding", promotionUsed: "WEDDING2026", revenueGenerated: 850000, bookingDate: "2026-08-15" },
-    ],
-  },
-  {
-    id: "CMP-103",
-    campaignCode: "CMP-CRP-03",
-    campaignName: "Corporate Annual Partner Saver",
-    description: "Flat ₹1,500 discount for verified corporate accounts on executive stays & conferences.",
-    campaignType: "Corporate Promotion",
-    linkedPromoCode: "CORP2026",
-    targetAudience: "Corporate Clients",
-    goal: "Lead Generation",
-    startDate: "2026-01-01",
-    endDate: "2026-12-31",
-    budget: 40000,
-    status: "Active",
-    externalPlatform: "Google Ads",
-    externalCampaignId: "987654321",
-    externalCampaignName: "Corporate_B2B_Search",
-    expectedLeads: 100,
-    expectedBookings: 70,
-    expectedRevenue: 1500000,
-    bookingsList: [
-      { id: "BK-301", bookingId: "RES-99422", guestName: "TCS Corporate Guest", promotionUsed: "CORP2026", revenueGenerated: 13500, bookingDate: "2026-08-19" },
-    ],
-  },
-  {
-    id: "CMP-104",
-    campaignCode: "CMP-DWL-04",
-    campaignName: "Diwali Festival Family Special",
-    description: "Complimentary lavish buffet breakfast & luxury airport pickup during Diwali week.",
-    campaignType: "Seasonal Promotion",
-    linkedPromoCode: "Diwali Festival Family Special",
-    targetAudience: "All Guests",
-    goal: "Room Bookings",
-    startDate: "2026-09-01",
-    endDate: "2026-10-20",
-    budget: 15000,
-    status: "Scheduled",
-    expectedLeads: 50,
-    expectedBookings: 30,
-    expectedRevenue: 500000,
-    bookingsList: [],
-  },
-  {
-    id: "CMP-105",
-    campaignCode: "CMP-LOY-05",
-    campaignName: "Gold Member VIP Rebate Campaign",
-    description: "Exclusive 20% discount on rooms & venues for Gold & Platinum members.",
-    campaignType: "Loyalty Promotion",
-    linkedPromoCode: "GOLDLOYALTY",
-    targetAudience: "VIP Guests",
-    goal: "Room Bookings",
-    startDate: "2026-01-01",
-    endDate: "2026-12-31",
-    budget: 20000,
-    status: "Active",
-    expectedLeads: 50,
-    expectedBookings: 30,
-    expectedRevenue: 1000000,
-    bookingsList: [],
-  },
-];
+export const INITIAL_CAMPAIGNS: HotelCampaign[] = [];
 
 /** Dynamic Client-Side CSV Parser */
 function parseCsvContent(text: string) {
@@ -276,8 +180,10 @@ const SAMPLE_CSV_ROWS: Record<string, string>[] = [
 ];
 
 export function CampaignsView() {
-  const [campaignsList, setCampaignsList] = useState<HotelCampaign[]>(INITIAL_CAMPAIGNS);
-  const [centralLeads, setCentralLeads] = useState<CentralLeadItem[]>(INITIAL_CENTRAL_LEADS);
+  const [campaignsList, setCampaignsList] = useState<HotelCampaign[]>([]);
+  const [centralLeads, setCentralLeads] = useState<CentralLeadItem[]>([]);
+  const [promotionsList, setPromotionsList] = useState<HotelPromotion[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("ALL");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL");
@@ -339,7 +245,7 @@ export function CampaignsView() {
     campaignName: "",
     description: "",
     campaignType: "Room Promotion" as CampaignType,
-    linkedPromoCode: INITIAL_PROMOTIONS[0]?.name || "Monsoon Room Retreat",
+    linkedPromoCode: "",
     targetAudience: "Past Guests" as TargetAudience,
     goal: "Room Bookings" as CampaignGoal,
     startDate: "2026-09-01",
@@ -353,6 +259,31 @@ export function CampaignsView() {
     externalCampaignName: "",
     status: "Active" as CampaignStatus,
   });
+
+  const loadCampaignData = async () => {
+    setLoading(true);
+    try {
+      const [campaignRows, leadRows, promoRows] = await Promise.all([
+        smCampaignService.list(),
+        smLeadService.list(),
+        smPromotionService.list(),
+      ]);
+      setCampaignsList(campaignRows.map(mapCampaignFromApi));
+      setCentralLeads(leadRows.map(mapCentralLeadFromApi));
+      setPromotionsList(promoRows.map(mapPromotionFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load campaigns");
+      setCampaignsList([]);
+      setCentralLeads([]);
+      setPromotionsList([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCampaignData();
+  }, []);
 
   // Calculate High Level Metrics for top KPI cards
   const metrics = useMemo(() => {
@@ -418,17 +349,15 @@ export function CampaignsView() {
   };
 
   // Handle Create Campaign Submission
-  const handleCreateCampaign = (e: React.FormEvent) => {
+  const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newForm.campaignName.trim()) return;
 
-    // Automatically generate internal PMS Campaign ID e.g. CMP-WED-02
     const typePrefix = newForm.campaignType.substring(0, 3).toUpperCase();
     const countIndex = campaignsList.length + 1;
     const campaignCode = `CMP-${typePrefix}-0${countIndex}`;
 
-    const createdCampaign: HotelCampaign = {
-      id: `CMP-${Math.floor(100 + Math.random() * 900)}`,
+    const payload = mapCampaignToApi({
       campaignCode,
       campaignName: newForm.campaignName,
       description: newForm.description,
@@ -447,74 +376,75 @@ export function CampaignsView() {
       externalCampaignName: newForm.externalCampaignName || undefined,
       status: newForm.status,
       bookingsList: [],
-    };
-
-    setCampaignsList((prev) => [createdCampaign, ...prev]);
-    setToastMessage(`✓ PMS Campaign "${createdCampaign.campaignName}" (${createdCampaign.campaignCode}) created successfully!`);
-    setIsCreateModalOpen(false);
-    setNewForm({
-      campaignName: "",
-      description: "",
-      campaignType: "Room Promotion",
-      linkedPromoCode: INITIAL_PROMOTIONS[0]?.name || "Monsoon Room Retreat",
-      targetAudience: "Past Guests",
-      goal: "Room Bookings",
-      startDate: "2026-09-01",
-      endDate: "2026-10-31",
-      budget: 25000,
-      expectedLeads: 50,
-      expectedBookings: 25,
-      expectedRevenue: 350000,
-      externalPlatform: "Google Ads",
-      externalCampaignId: "",
-      externalCampaignName: "",
-      status: "Active",
     });
+
+    try {
+      const row = await smCampaignService.create(payload);
+      const saved = mapCampaignFromApi(row);
+      setCampaignsList((prev) => [saved, ...prev]);
+      setToastMessage(`✓ PMS Campaign "${saved.campaignName}" (${saved.campaignCode}) created successfully!`);
+      setIsCreateModalOpen(false);
+      setNewForm({
+        campaignName: "",
+        description: "",
+        campaignType: "Room Promotion",
+        linkedPromoCode: promotionsList[0]?.name || "",
+        targetAudience: "Past Guests",
+        goal: "Room Bookings",
+        startDate: todayIsoDate(),
+        endDate: todayIsoDate(),
+        budget: 25000,
+        expectedLeads: 50,
+        expectedBookings: 25,
+        expectedRevenue: 350000,
+        externalPlatform: "Google Ads",
+        externalCampaignId: "",
+        externalCampaignName: "",
+        status: "Active",
+      });
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to create campaign");
+    }
   };
 
   // Handle Manual Save Lead inside Campaign Drawer
-  const handleSaveManualLead = (e: React.FormEvent) => {
+  const handleSaveManualLead = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCampaignDetail || !leadForm.leadName.trim() || !leadForm.mobile.trim()) return;
 
     const numRevenue = Number(leadForm.expectedRevenue) || 0;
-    const formattedRevenue = numRevenue > 0 ? `₹${numRevenue.toLocaleString("en-IN")}` : "₹0";
 
-    const newLead: CentralLeadItem = {
-      id: `LD-${Math.floor(500 + Math.random() * 500)}`,
-      leadName: leadForm.leadName.trim(),
-      companyName: leadForm.companyName.trim() || undefined,
-      mobile: leadForm.mobile.trim(),
-      email: leadForm.email.trim() || undefined,
-      preferredContactMethod: leadForm.preferredContactMethod,
-      leadType: leadForm.leadType,
-      leadSource: leadForm.leadSource,
-      inquiryDate: leadForm.inquiryDate || "2026-08-26",
-      expectedEventDate: leadForm.expectedEventDate || undefined,
-      guestCount: Number(leadForm.guestCount) || undefined,
-      expectedRevenue: formattedRevenue,
-      rawRevenue: numRevenue,
-      assignedExecutive: leadForm.assignedExecutive,
-      priority: leadForm.priority,
-      status: "New", // Default status = New
-      pipelineStage: "Qualification",
-      customerRequirement: leadForm.customerRequirement.trim() || "Campaign inquiry",
-      additionalNotes: leadForm.additionalNotes.trim() || undefined,
-      createdDate: "26 Aug 2026",
-      campaignId: selectedCampaignDetail.campaignCode,
-      campaignName: selectedCampaignDetail.campaignName,
-      externalPlatform: selectedCampaignDetail.externalPlatform,
-      externalCampaignId: selectedCampaignDetail.externalCampaignId,
-      activityTimeline: [
-        { action: "Lead Created (Manual Campaign Entry)", user: leadForm.assignedExecutive, date: "26 Aug 2026, Just now" },
-      ],
-    };
-
-    // Stored in central Lead dataset (automatically visible in both Leads & Inquiries and Campaign Tracked Leads)
-    setCentralLeads((prev) => [newLead, ...prev]);
-    setToastMessage(`✓ Lead "${newLead.leadName}" saved in central Leads database & auto-linked to ${selectedCampaignDetail.campaignCode}!`);
-    setIsAddLeadModalOpen(false);
-    resetLeadForm();
+    try {
+      const row = await smLeadService.create(
+        mapLeadToApi({
+          leadName: leadForm.leadName.trim(),
+          companyName: leadForm.companyName.trim() || undefined,
+          mobileNumber: leadForm.mobile.trim(),
+          email: leadForm.email.trim() || undefined,
+          preferredContactMethod: leadForm.preferredContactMethod,
+          bookingType: leadForm.leadType,
+          leadSource: leadForm.leadSource,
+          eventDate: leadForm.expectedEventDate || undefined,
+          guestCount: Number(leadForm.guestCount) || 0,
+          estimatedRevenue: numRevenue,
+          assignedExecutive: leadForm.assignedExecutive,
+          priority: leadForm.priority,
+          status: "New",
+          pipelineStage: "Qualification",
+          customerRequirements: leadForm.customerRequirement.trim() || "Campaign inquiry",
+          campaignId: selectedCampaignDetail.campaignCode,
+          campaignName: selectedCampaignDetail.campaignName,
+          importedVia: "Manual Entry",
+        }),
+      );
+      const saved = mapCentralLeadFromApi(row);
+      setCentralLeads((prev) => [saved, ...prev]);
+      setToastMessage(`✓ Lead "${saved.leadName}" saved in central Leads database & auto-linked to ${selectedCampaignDetail.campaignCode}!`);
+      setIsAddLeadModalOpen(false);
+      resetLeadForm();
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save lead");
+    }
   };
 
 
@@ -542,6 +472,12 @@ export function CampaignsView() {
         </Button>
       }
     >
+      {loading && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          Loading campaigns, leads, and promotions from database…
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: KPI CARDS (FRONT OFFICE & F&B HARMONIZED THEME)
       ───────────────────────────────────────────────────────────── */}
@@ -889,7 +825,7 @@ export function CampaignsView() {
                   onChange={(e) => setNewForm({ ...newForm, linkedPromoCode: e.target.value })}
                   className="w-full rounded-lg border border-slate-200 p-2.5 font-semibold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer"
                 >
-                  {INITIAL_PROMOTIONS.map((p) => (
+                  {promotionsList.map((p) => (
                     <option key={p.id} value={p.name}>
                       {p.name} ({p.promoCode})
                     </option>

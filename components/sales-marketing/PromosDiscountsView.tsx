@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Ticket,
   Percent,
@@ -31,6 +31,9 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Card, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { smPromotionService } from "@/services/sales-marketing";
+import { mapPromotionFromApi, mapPromotionToApi } from "@/lib/sales-marketing/api-mappers";
+import { todayIsoDate } from "@/lib/sales-marketing/useSmList";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES & SCHEMAS FOR HOTEL PMS PROMOTIONS (VERSION 1)
@@ -41,6 +44,7 @@ export type DiscountType = "Percentage" | "Fixed Amount";
 export type PromoStatus = "Active" | "Inactive";
 
 export interface HotelPromotion {
+  dbId?: string;
   id: string;
   uniquePromoId: string; // Unique Promo / Discount Scheme ID for Front Office / PMS schema integration (e.g. PRM-101)
   name: string;
@@ -69,94 +73,11 @@ export interface PromoValidationResult {
 // INITIAL MOCK DATA
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_PROMOTIONS: HotelPromotion[] = [
-  {
-    id: "PROMO-001",
-    uniquePromoId: "PRM-101",
-    name: "Monsoon Room Retreat",
-    promoCode: "MONSOON20",
-    description: "20% discount on room bookings during monsoon season.",
-    applicableTo: "Rooms",
-    discountType: "Percentage",
-    discountValue: "20%",
-    rawDiscountNumber: 20,
-    minSpend: 8000,
-    minNights: 2,
-    startDate: "2026-06-01",
-    endDate: "2026-09-30",
-    status: "Active",
-    usageCount: 42,
-  },
-  {
-    id: "PROMO-002",
-    uniquePromoId: "PRM-102",
-    name: "Grand Wedding Hall Special",
-    promoCode: "WEDDING2026",
-    description: "Flat ₹50,000 discount on banquet hall bookings for weddings.",
-    applicableTo: "Banquet",
-    discountType: "Fixed Amount",
-    discountValue: "₹50,000",
-    rawDiscountNumber: 50000,
-    minSpend: 300000,
-    startDate: "2026-08-01",
-    endDate: "2026-11-30",
-    status: "Active",
-    usageCount: 14,
-  },
-  {
-    id: "PROMO-003",
-    uniquePromoId: "PRM-103",
-    name: "Birthday Dining Treat",
-    promoCode: "BIRTHDAY10",
-    description: "10% off restaurant dining bills.",
-    applicableTo: "Restaurant",
-    discountType: "Percentage",
-    discountValue: "10%",
-    rawDiscountNumber: 10,
-    minSpend: 2500,
-    startDate: "2026-01-01",
-    endDate: "2026-12-31",
-    status: "Active",
-    usageCount: 68,
-  },
-  {
-    id: "PROMO-004",
-    uniquePromoId: "PRM-104",
-    name: "Summer Staycation Saver",
-    promoCode: "SUMMER15",
-    description: "15% off room staycation packages.",
-    applicableTo: "Rooms",
-    discountType: "Percentage",
-    discountValue: "15%",
-    rawDiscountNumber: 15,
-    minSpend: 5000,
-    minNights: 1,
-    startDate: "2026-05-01",
-    endDate: "2026-07-31",
-    status: "Inactive",
-    usageCount: 25,
-  },
-  {
-    id: "PROMO-005",
-    uniquePromoId: "PRM-105",
-    name: "Corporate Executive Saver",
-    promoCode: "CORP1500",
-    description: "Flat ₹1,500 discount for corporate room bookings.",
-    applicableTo: "Rooms",
-    discountType: "Fixed Amount",
-    discountValue: "₹1,500",
-    rawDiscountNumber: 1500,
-    minSpend: 10000,
-    minNights: 2,
-    startDate: "2026-01-01",
-    endDate: "2026-12-31",
-    status: "Active",
-    usageCount: 52,
-  },
-];
+export const INITIAL_PROMOTIONS = [];
 
 export function PromosDiscountsView() {
-  const [promotionsList, setPromotionsList] = useState<HotelPromotion[]>(INITIAL_PROMOTIONS);
+  const [promotionsList, setPromotionsList] = useState<HotelPromotion[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedServiceFilter, setSelectedServiceFilter] = useState<string>("ALL");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL");
@@ -191,6 +112,23 @@ export function PromosDiscountsView() {
     appliedByStaffRole: "Front Desk Staff",
   });
   const [applyValidationResult, setApplyValidationResult] = useState<PromoValidationResult | null>(null);
+
+  const loadPromotions = async () => {
+    setLoading(true);
+    try {
+      const rows = await smPromotionService.list();
+      setPromotionsList(rows.map(mapPromotionFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load promotions");
+      setPromotionsList([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadPromotions();
+  }, []);
 
   // High level summary metrics
   const metrics = useMemo(() => {
@@ -232,78 +170,58 @@ export function PromosDiscountsView() {
   };
 
   // Handle Save / Edit Promotion
-  const handleSavePromotion = (e: React.FormEvent) => {
+  const handleSavePromotion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!promoForm.name.trim() || !promoForm.promoCode.trim()) return;
 
-    const discountValueStr =
-      promoForm.discountType === "Percentage"
-        ? `${promoForm.rawDiscountNumber}%`
-        : `₹${promoForm.rawDiscountNumber.toLocaleString()}`;
-
     const finalUniqueId = promoForm.uniquePromoId.trim().toUpperCase() || `PRM-${Math.floor(100 + Math.random() * 900)}`;
+    const payload = mapPromotionToApi({
+      uniquePromoId: finalUniqueId,
+      name: promoForm.name.trim(),
+      promoCode: promoForm.promoCode.toUpperCase(),
+      description: promoForm.description,
+      applicableTo: promoForm.applicableTo,
+      discountType: promoForm.discountType,
+      rawDiscountNumber: promoForm.rawDiscountNumber,
+      minSpend: promoForm.minSpend ? Number(promoForm.minSpend) : undefined,
+      minNights: promoForm.minNights ? Number(promoForm.minNights) : undefined,
+      startDate: promoForm.startDate,
+      endDate: promoForm.endDate,
+      status: promoForm.status,
+      usageCount: editingPromotion?.usageCount ?? 0,
+    });
 
-    if (editingPromotion) {
-      // Edit existing promotion
+    try {
+      const row = editingPromotion?.dbId
+        ? await smPromotionService.update(editingPromotion.dbId, payload)
+        : await smPromotionService.create(payload);
+      const saved = mapPromotionFromApi(row);
       setPromotionsList((prev) =>
-        prev.map((p) =>
-          p.id === editingPromotion.id
-            ? {
-                ...p,
-                uniquePromoId: finalUniqueId,
-                name: promoForm.name,
-                promoCode: promoForm.promoCode.toUpperCase(),
-                description: promoForm.description,
-                applicableTo: promoForm.applicableTo,
-                discountType: promoForm.discountType,
-                discountValue: discountValueStr,
-                rawDiscountNumber: promoForm.rawDiscountNumber,
-                minSpend: promoForm.minSpend ? Number(promoForm.minSpend) : undefined,
-                minNights: promoForm.minNights ? Number(promoForm.minNights) : undefined,
-                startDate: promoForm.startDate,
-                endDate: promoForm.endDate,
-                status: promoForm.status,
-              }
-            : p
-        )
+        editingPromotion?.dbId
+          ? prev.map((p) => (p.dbId === saved.dbId ? saved : p))
+          : [saved, ...prev],
       );
-      setToastMessage(`Promotion "${promoForm.name}" [ID: ${finalUniqueId}] updated successfully!`);
-    } else {
-      // Create new promotion
-      const newPromo: HotelPromotion = {
-        id: `PROMO-${Math.floor(100 + Math.random() * 900)}`,
-        uniquePromoId: finalUniqueId,
-        name: promoForm.name,
-        promoCode: promoForm.promoCode.toUpperCase(),
-        description: promoForm.description,
-        applicableTo: promoForm.applicableTo,
-        discountType: promoForm.discountType,
-        discountValue: discountValueStr,
-        rawDiscountNumber: promoForm.rawDiscountNumber,
-        minSpend: promoForm.minSpend ? Number(promoForm.minSpend) : undefined,
-        minNights: promoForm.minNights ? Number(promoForm.minNights) : undefined,
-        startDate: promoForm.startDate,
-        endDate: promoForm.endDate,
-        status: promoForm.status,
-        usageCount: 0,
-      };
-
-      setPromotionsList([newPromo, ...promotionsList]);
-      setToastMessage(`Promotion "${newPromo.name}" [ID: ${finalUniqueId}] created successfully!`);
+      setToastMessage(`Promotion "${saved.name}" [ID: ${saved.uniquePromoId}] saved successfully!`);
+      setIsCreateModalOpen(false);
+      setEditingPromotion(null);
+      resetForm();
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save promotion");
     }
-
-    setIsCreateModalOpen(false);
-    setEditingPromotion(null);
-    resetForm();
   };
 
   // Toggle Active / Inactive Status
-  const handleToggleStatus = (promo: HotelPromotion) => {
+  const handleToggleStatus = async (promo: HotelPromotion) => {
+    if (!promo.dbId) return;
     const newStatus: PromoStatus = promo.status === "Active" ? "Inactive" : "Active";
-    setPromotionsList((prev) =>
-      prev.map((p) => (p.id === promo.id ? { ...p, status: newStatus } : p))
-    );
-    setToastMessage(`Promotion "${promo.name}" is now ${newStatus}.`);
+    try {
+      const row = await smPromotionService.update(promo.dbId, mapPromotionToApi({ ...promo, status: newStatus }));
+      const saved = mapPromotionFromApi(row);
+      setPromotionsList((prev) => prev.map((p) => (p.dbId === saved.dbId ? saved : p)));
+      setToastMessage(`Promotion "${promo.name}" is now ${newStatus}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update promotion status");
+    }
   };
 
   // Reset Form
@@ -318,8 +236,8 @@ export function PromosDiscountsView() {
       rawDiscountNumber: 10,
       minSpend: 5000,
       minNights: 1,
-      startDate: "2026-09-01",
-      endDate: "2026-12-31",
+      startDate: todayIsoDate(),
+      endDate: todayIsoDate(),
       status: "Active",
     });
   };
@@ -372,7 +290,7 @@ export function PromosDiscountsView() {
     }
 
     // Check validity date
-    const todayStr = "2026-08-24";
+    const todayStr = todayIsoDate();
     if (todayStr < matchedPromo.startDate || todayStr > matchedPromo.endDate) {
       setApplyValidationResult({
         isValid: false,
@@ -415,10 +333,14 @@ export function PromosDiscountsView() {
       calculatedDiscountAmount: calcDiscount,
     });
 
-    // Increment Usage Count
-    setPromotionsList((prev) =>
-      prev.map((p) => (p.id === matchedPromo.id ? { ...p, usageCount: p.usageCount + 1 } : p))
-    );
+    if (matchedPromo.dbId) {
+      void smPromotionService
+        .update(matchedPromo.dbId, mapPromotionToApi({ ...matchedPromo, usageCount: matchedPromo.usageCount + 1 }))
+        .then((row) => {
+          const saved = mapPromotionFromApi(row);
+          setPromotionsList((prev) => prev.map((p) => (p.dbId === saved.dbId ? saved : p)));
+        });
+    }
   };
 
   return (
@@ -448,6 +370,12 @@ export function PromosDiscountsView() {
       toast={toastMessage}
       onDismissToast={() => setToastMessage(null)}
     >
+      {loading && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          Loading promotions from database…
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: KPI CARDS (FRONT OFFICE / F&B COHESIVE THEME)
          ───────────────────────────────────────────────────────────── */}

@@ -166,306 +166,13 @@ export interface RetentionCampaignRule {
 // INITIAL MOCK DATA
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_MEMBERSHIP_TIERS: MembershipTierConfig[] = [
-  {
-    name: "Club Member",
-    code: "TIER-CLB",
-    colorBadge: "bg-slate-100 text-slate-800 border-slate-300",
-    description: "Entry-level tier granted automatically upon first hotel stay or registration.",
-    status: "Active",
-    priorityRank: 1,
-    qualification: { minStays: 1, minSpend: 0, minNights: 1, minPoints: 0 },
-    benefits: ["5% Room Discount", "Welcome Beverage on Arrival", "Priority Check-in Queue"],
-    customBenefitNotes: "Welcome beverage served at lobby lounge during check-in.",
-    discounts: { roomDiscountPercent: 5, restaurantDiscountPercent: 5, banquetDiscountPercent: 0, spaDiscountPercent: 0 },
-    upgradeRules: { autoUpgradeEnabled: true, manualApprovalRequired: false, upgradeTiming: "Immediately" },
-    downgradeRules: { downgradeEnabled: false, inactivityMonths: 12, minSpendRequirement: 0, minStayRequirement: 0 },
-    pointMultiplier: 1.0,
-    expiryRules: "Never Expire",
-    audit: { createdBy: "Admin", lastUpdatedBy: "Ananya Roy", lastModifiedDate: "2026-08-15" },
-  },
-  {
-    name: "Silver Member",
-    code: "TIER-SLV",
-    colorBadge: "bg-slate-200 text-slate-900 border-slate-400",
-    description: "Frequent guest tier unlocked after 5 stays or ₹50,000 lifetime spend.",
-    status: "Active",
-    priorityRank: 2,
-    qualification: { minStays: 5, minSpend: 50000, minNights: 8, minPoints: 5000 },
-    benefits: ["10% Room Discount", "Late Check-Out (2 PM)", "Free Buffet Breakfast", "10% Restaurant Discount"],
-    customBenefitNotes: "Late checkout Subject to availability during peak dates.",
-    discounts: { roomDiscountPercent: 10, restaurantDiscountPercent: 10, banquetDiscountPercent: 5, spaDiscountPercent: 5 },
-    upgradeRules: { autoUpgradeEnabled: true, manualApprovalRequired: false, upgradeTiming: "At Checkout" },
-    downgradeRules: { downgradeEnabled: true, inactivityMonths: 12, minSpendRequirement: 25000, minStayRequirement: 2 },
-    pointMultiplier: 1.25,
-    expiryRules: "Expire After 12 Months",
-    audit: { createdBy: "Admin", lastUpdatedBy: "Ananya Roy", lastModifiedDate: "2026-08-18" },
-  },
-  {
-    name: "Gold Preferred",
-    code: "TIER-GLD",
-    colorBadge: "bg-amber-100 text-amber-900 border-amber-300",
-    description: "High-value regular guest tier unlocked after 10 stays or ₹1.5L spend.",
-    status: "Active",
-    priorityRank: 3,
-    qualification: { minStays: 10, minSpend: 150000, minNights: 15, minPoints: 15000 },
-    benefits: ["15% Room & Food Discount", "Priority Room Upgrade", "Early Check-in (10 AM)", "Free Airport Pickup"],
-    customBenefitNotes: "Complimentary room upgrade to next category automatically allocated upon availability.",
-    discounts: { roomDiscountPercent: 15, restaurantDiscountPercent: 15, banquetDiscountPercent: 10, spaDiscountPercent: 15 },
-    upgradeRules: { autoUpgradeEnabled: true, manualApprovalRequired: false, upgradeTiming: "At Checkout" },
-    downgradeRules: { downgradeEnabled: true, inactivityMonths: 12, minSpendRequirement: 75000, minStayRequirement: 5 },
-    pointMultiplier: 1.5,
-    expiryRules: "Annual Review",
-    audit: { createdBy: "Admin", lastUpdatedBy: "Kavita Nair", lastModifiedDate: "2026-08-20" },
-  },
-  {
-    name: "Platinum VIP",
-    code: "TIER-PLT",
-    colorBadge: "bg-purple-100 text-purple-900 border-purple-300",
-    description: "Top VIP tier for corporate heads, high spenders & ambassador guests.",
-    status: "Active",
-    priorityRank: 4,
-    qualification: { minStays: 20, minSpend: 350000, minNights: 30, minPoints: 35000 },
-    benefits: ["20% All Hotel Outlets Discount", "Guaranteed Suite Upgrade", "24/7 VIP Concierge Support", "Free Airport Pick & Drop", "Spa & Wellness Complimentary Pass"],
-    customBenefitNotes: "Guaranteed suite upgrade & 24/7 dedicated GM Concierge hotline access.",
-    discounts: { roomDiscountPercent: 20, restaurantDiscountPercent: 20, banquetDiscountPercent: 15, spaDiscountPercent: 20 },
-    upgradeRules: { autoUpgradeEnabled: true, manualApprovalRequired: true, upgradeTiming: "Immediately" },
-    downgradeRules: { downgradeEnabled: true, inactivityMonths: 18, minSpendRequirement: 200000, minStayRequirement: 10 },
-    pointMultiplier: 2.0,
-    expiryRules: "Never Expire",
-    audit: { createdBy: "Admin", lastUpdatedBy: "Kavita Nair", lastModifiedDate: "2026-08-22" },
-  },
-];
+export const INITIAL_MEMBERSHIP_TIERS: MembershipTierConfig[] = [];
 
-export const INITIAL_REWARD_CATALOG: RewardCatalogItem[] = [
-  {
-    id: "RWD-01",
-    rewardName: "Complimentary Chef's Special Gourmet Dinner",
-    category: "Dining",
-    pointsRequired: 3000,
-    monetaryValue: 2500,
-    status: "Active",
-    iconName: "Utensils",
-  },
-  {
-    id: "RWD-02",
-    rewardName: "Luxury Mercedes Airport Pick & Drop",
-    category: "Transport",
-    pointsRequired: 4500,
-    monetaryValue: 4000,
-    status: "Active",
-    iconName: "Car",
-  },
-  {
-    id: "RWD-03",
-    rewardName: "Suite Room Night Stay Voucher",
-    category: "Stay Upgrade",
-    pointsRequired: 8000,
-    monetaryValue: 12000,
-    status: "Active",
-    iconName: "Bed",
-  },
-  {
-    id: "RWD-04",
-    rewardName: "Full Body Rejuvenation Spa Massage (60 Min)",
-    category: "Spa & Wellness",
-    pointsRequired: 3500,
-    monetaryValue: 3000,
-    status: "Active",
-    iconName: "Coffee",
-  },
-];
+export const INITIAL_REWARD_CATALOG: RewardCatalogItem[] = [];
 
-export const INITIAL_AUTOMATION_RULES: RetentionCampaignRule[] = [
-  {
-    id: "AUT-01",
-    ruleName: "At-Risk Re-engagement Offer",
-    triggerEvent: "No Stay 90 Days (At Risk)",
-    targetSegment: "Guests inactive for 90+ Days",
-    rewardOffer: "Free Dinner Voucher + 15% Off Return Stay",
-    status: "Active Automation",
-    convertedCount: 28,
-  },
-  {
-    id: "AUT-02",
-    ruleName: "VIP Birthday Celebration Special",
-    triggerEvent: "Birthday This Month",
-    targetSegment: "All Members with Birthday in current month",
-    rewardOffer: "Complimentary Cake & 2,000 Bonus Loyalty Points",
-    status: "Active Automation",
-    convertedCount: 45,
-  },
-  {
-    id: "AUT-03",
-    ruleName: "Tier Advancement Congratulatory Gift",
-    triggerEvent: "Tier Upgrade",
-    targetSegment: "Guests upgraded to Gold or Platinum",
-    rewardOffer: "Free Suite Upgrade on Next Stay",
-    status: "Active Automation",
-    convertedCount: 19,
-  },
-];
+export const INITIAL_AUTOMATION_RULES: RetentionCampaignRule[] = [];
 
-export const INITIAL_LOYALTY_GUESTS: GuestLoyaltyMember[] = [
-  {
-    id: "LOY-101",
-    guestName: "Dr. Vikram Sethi",
-    email: "vikram.sethi@healthcorp.com",
-    phone: "+91 98112 33445",
-    tier: "Platinum VIP",
-    retentionStatus: "Active",
-    totalStays: 24,
-    totalSpend: 485000,
-    rewardPointsBalance: 14200,
-    lastStayDate: "2026-08-10",
-    lastVisitAgeDays: 12,
-    nextTierProgressPercent: 100,
-    staysNeededForNextTier: 0,
-    favoriteRoomType: "Royal Heritage Suite",
-    favoriteMealPref: "North Indian / Jain Gourmet",
-    stayHistory: [
-      { resNo: "RES-99401", checkIn: "2026-08-08", checkOut: "2026-08-10", roomType: "Royal Heritage Suite", amount: 45000 },
-      { resNo: "RES-98210", checkIn: "2026-06-12", checkOut: "2026-06-15", roomType: "Royal Heritage Suite", amount: 62000 },
-    ],
-    pointsLedger: [
-      { id: "TX-901", type: "Earned", points: 4500, description: "Stay Completed #RES-99401", date: "2026-08-10" },
-      { id: "TX-842", type: "Redeemed", points: -3000, description: "Redeemed Gourmet Dinner Voucher", date: "2026-06-14" },
-    ],
-    campaignHistory: [
-      { campaignName: "Platinum VIP Welcome Special", sentDate: "2026-08-01", status: "Converted" },
-    ],
-  },
-  {
-    id: "LOY-102",
-    guestName: "Meera Kapoor",
-    email: "meera.k@designstudio.in",
-    phone: "+91 98200 99881",
-    tier: "Gold Preferred",
-    retentionStatus: "Active",
-    totalStays: 14,
-    totalSpend: 245000,
-    rewardPointsBalance: 6800,
-    lastStayDate: "2026-07-28",
-    lastVisitAgeDays: 25,
-    nextTierProgressPercent: 70,
-    staysNeededForNextTier: 6,
-    favoriteRoomType: "Deluxe King Room",
-    favoriteMealPref: "Continental / Vegan",
-    stayHistory: [
-      { resNo: "RES-99102", checkIn: "2026-07-26", checkOut: "2026-07-28", roomType: "Deluxe King Room", amount: 18000 },
-    ],
-    pointsLedger: [
-      { id: "TX-880", type: "Earned", points: 1800, description: "Stay Completed #RES-99102", date: "2026-07-28" },
-    ],
-    campaignHistory: [
-      { campaignName: "Gold Tier Perks Upgrade Notice", sentDate: "2026-07-01", status: "Opened" },
-    ],
-  },
-  {
-    id: "LOY-103",
-    guestName: "Anand Singhania",
-    email: "anand@singhania.com",
-    phone: "+91 99301 22110",
-    tier: "Platinum VIP",
-    retentionStatus: "Active",
-    totalStays: 38,
-    totalSpend: 890000,
-    rewardPointsBalance: 29500,
-    lastStayDate: "2026-08-18",
-    lastVisitAgeDays: 4,
-    nextTierProgressPercent: 100,
-    staysNeededForNextTier: 0,
-    favoriteRoomType: "Presidential Villa",
-    favoriteMealPref: "Asian Fine Dining",
-    stayHistory: [
-      { resNo: "RES-99550", checkIn: "2026-08-15", checkOut: "2026-08-18", roomType: "Presidential Villa", amount: 120000 },
-    ],
-    pointsLedger: [
-      { id: "TX-940", type: "Earned", points: 12000, description: "Stay Completed #RES-99550", date: "2026-08-18" },
-    ],
-    campaignHistory: [
-      { campaignName: "Independence Weekend VIP Retreat", sentDate: "2026-08-05", status: "Converted" },
-    ],
-  },
-  {
-    id: "LOY-104",
-    guestName: "Rohan & Sneha Joshi",
-    email: "rohan.joshi@gmail.com",
-    phone: "+91 97690 11223",
-    tier: "Silver Member",
-    retentionStatus: "At Risk",
-    totalStays: 6,
-    totalSpend: 95000,
-    rewardPointsBalance: 2400,
-    lastStayDate: "2026-05-10",
-    lastVisitAgeDays: 104, // > 90 Days -> At Risk!
-    nextTierProgressPercent: 60,
-    staysNeededForNextTier: 4,
-    favoriteRoomType: "Executive Twin Room",
-    favoriteMealPref: "Indian Buffet",
-    stayHistory: [
-      { resNo: "RES-95200", checkIn: "2026-05-08", checkOut: "2026-05-10", roomType: "Executive Twin Room", amount: 14000 },
-    ],
-    pointsLedger: [
-      { id: "TX-701", type: "Earned", points: 1400, description: "Stay Completed #RES-95200", date: "2026-05-10" },
-    ],
-    campaignHistory: [
-      { campaignName: "We Miss You - 15% Off Return Stay", sentDate: "2026-08-01", status: "Sent" },
-    ],
-  },
-  {
-    id: "LOY-105",
-    guestName: "Tanya Oberoi",
-    email: "tanya.oberoi@fashion.in",
-    phone: "+91 98199 44556",
-    tier: "Gold Preferred",
-    retentionStatus: "Active",
-    totalStays: 11,
-    totalSpend: 198000,
-    rewardPointsBalance: 5100,
-    lastStayDate: "2026-08-02",
-    lastVisitAgeDays: 20,
-    nextTierProgressPercent: 55,
-    staysNeededForNextTier: 9,
-    favoriteRoomType: "Deluxe King Room",
-    favoriteMealPref: "Italian / Wine Pairing",
-    stayHistory: [
-      { resNo: "RES-99200", checkIn: "2026-07-31", checkOut: "2026-08-02", roomType: "Deluxe King Room", amount: 22000 },
-    ],
-    pointsLedger: [
-      { id: "TX-890", type: "Earned", points: 2200, description: "Stay Completed #RES-99200", date: "2026-08-02" },
-    ],
-    campaignHistory: [
-      { campaignName: "Monsoon Spa & Dining Special", sentDate: "2026-07-20", status: "Clicked" },
-    ],
-  },
-  {
-    id: "LOY-106",
-    guestName: "Amitabh Choudhury",
-    email: "amitabh.c@techcorp.io",
-    phone: "+91 98330 77661",
-    tier: "Club Member",
-    retentionStatus: "Lost",
-    totalStays: 2,
-    totalSpend: 28000,
-    rewardPointsBalance: 1200,
-    lastStayDate: "2025-11-14",
-    lastVisitAgeDays: 283, // > 180 Days -> Lost!
-    nextTierProgressPercent: 40,
-    staysNeededForNextTier: 3,
-    favoriteRoomType: "Standard Room",
-    favoriteMealPref: "South Indian Breakfast",
-    stayHistory: [
-      { resNo: "RES-88120", checkIn: "2025-11-12", checkOut: "2025-11-14", roomType: "Standard Room", amount: 12000 },
-    ],
-    pointsLedger: [
-      { id: "TX-410", type: "Earned", points: 1200, description: "Stay Completed #RES-88120", date: "2025-11-14" },
-    ],
-    campaignHistory: [
-      { campaignName: "Win-Back Special - Free Upgrade", sentDate: "2026-06-01", status: "Opened" },
-    ],
-  },
-];
+export const INITIAL_LOYALTY_GUESTS: GuestLoyaltyMember[] = [];
 
 // ─────────────────────────────────────────────────────────────
 // COMPONENT IMPLEMENTATION
@@ -480,6 +187,7 @@ export function GuestRetentionLoyaltyView() {
   const [drawerActiveTab, setDrawerActiveTab] = useState<"overview" | "history" | "ledger">("overview");
 
   const guests = INITIAL_LOYALTY_GUESTS;
+  const hasLoyaltyData = guests.length > 0;
 
   // Aggregate Metrics
   const metrics = useMemo(() => {
@@ -534,6 +242,15 @@ export function GuestRetentionLoyaltyView() {
       toast={toastMessage}
       onDismissToast={() => setToastMessage(null)}
     >
+      {!hasLoyaltyData && (
+        <div className="mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
+          <p className="text-sm font-semibold text-slate-700">No loyalty data yet</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Loyalty program backend is not configured. Member tiers, rewards, and points will appear here once available.
+          </p>
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────────────
           1. TOP SUMMARY CARDS (RETENTION KPI METRICS - F&B DASHBOARD STYLE)
          ───────────────────────────────────────────────────────────── */}
@@ -759,7 +476,7 @@ export function GuestRetentionLoyaltyView() {
                 ) : (
                   <tr>
                     <td colSpan={7} className="py-8 text-center text-slate-500 text-xs">
-                      No loyalty members found matching your search filters.
+                      {hasLoyaltyData ? "No loyalty members found matching your search filters." : "No loyalty data yet."}
                     </td>
                   </tr>
                 )}

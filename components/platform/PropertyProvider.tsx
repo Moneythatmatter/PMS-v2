@@ -65,7 +65,6 @@ export function PropertyProvider({ children }: { children: React.ReactNode }) {
             "human_resources",
             "accounts",
             "sales_marketing",
-            "system_settings",
           ].map((k) => [k, "admin" as const]),
         );
         setPermissions(all);

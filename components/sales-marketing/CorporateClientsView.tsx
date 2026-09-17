@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Users,
@@ -35,6 +35,33 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { smContactService } from "@/services/sales-marketing";
+import { mapContactFromApi, mapContactToApi } from "@/lib/sales-marketing/api-mappers";
+function apiContactToCustomer(row: Record<string, unknown>): CustomerMasterContact {
+  const c = mapContactFromApi(row);
+  return {
+    dbId: c.dbId,
+    contactId: c.contactId,
+    contactName: c.contactName,
+    contactType: (c.contactType as ContactType) || "Individual",
+    category: (c.category as ContactCategory) || "Regular Customer",
+    mobileNumber: c.mobileNumber,
+    mobile: c.mobile,
+    emailAddress: c.emailAddress,
+    email: c.email,
+    companyName: c.companyName,
+    city: c.city,
+    createdDate: c.createdDate,
+    createdBy: c.createdBy,
+    createdFrom: (c.createdFrom as CreatedFromSource) || "Manual Entry",
+    status: (c.status as ContactStatus) || "Active",
+    notes: c.notes,
+    leads: c.leads,
+    deals: c.deals,
+    bookings: c.bookings,
+    activities: c.activities,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────
 // 1. DATA TYPES & SCHEMAS: HOTEL PMS V1 CUSTOMER MASTER DATABASE
@@ -106,6 +133,7 @@ export interface LinkedActivityRef {
 }
 
 export interface CustomerMasterContact {
+  dbId?: string;
   contactId: string; // e.g. "CONT-1001"
   contactName: string;
   contactType: ContactType;
@@ -144,237 +172,7 @@ export interface CustomerMasterContact {
 // 2. INITIAL SEED DATA (CUSTOMER MASTER DIRECTORY)
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_CUSTOMER_MASTER: CustomerMasterContact[] = [
-  {
-    contactId: "CONT-1001",
-    contactName: "Raj Sharma",
-    firstName: "Raj",
-    lastName: "Sharma",
-    contactType: "Individual",
-    category: "Wedding Client",
-    customerCategory: "Wedding Client",
-    mobileNumber: "+91 98765 43210",
-    mobile: "+91 98765 43210",
-    emailAddress: "raj.sharma@gmail.com",
-    email: "raj.sharma@gmail.com",
-    companyName: "Sharma Family Enterprise",
-    designation: "Managing Director",
-    address: "Plot 42, Road No. 36, Jubilee Hills",
-    city: "Hyderabad",
-    state: "Telangana",
-    country: "India",
-    gstNumber: "36AAACS1234F1Z5",
-    website: "www.sharmagroup.in",
-    createdDate: "15 Jan 2025",
-    createdBy: "Vikram Malhotra",
-    createdFrom: "Deal Won",
-    status: "VIP",
-    notes: "VIP Client. Family strictly prefers pure vegetarian menu for all gatherings. Requires dedicated valet parking for 50 cars.",
-    leads: [
-      { id: "LEAD-1001", inquiryDate: "10 Jan 2025", leadSource: "Google Ads", bookingType: "Banquet Event", status: "Converted", expectedRevenue: 850000 },
-      { id: "LEAD-1032", inquiryDate: "02 Aug 2026", leadSource: "Website", bookingType: "Swimming Pool", status: "Converted", expectedRevenue: 150000 },
-    ],
-    deals: [
-      { id: "DEAL-1001", dealName: "Sharma Wedding Reception", bookingType: "Banquet Event", expectedValue: 850000, currentStage: "Won", assignedExecutive: "Vikram Malhotra", createdDate: "12 Jan 2025", status: "Won" },
-      { id: "DEAL-1030", dealName: "Poolside Sundowner Party", bookingType: "Swimming Pool", expectedValue: 150000, currentStage: "Won", assignedExecutive: "Jay Kumar", createdDate: "05 Aug 2026", status: "Won" },
-      { id: "DEAL-1050", dealName: "Silver Jubilee Celebration Banquet", bookingType: "Banquet Event", expectedValue: 500000, currentStage: "Negotiation", assignedExecutive: "Vikram Malhotra", createdDate: "20 Aug 2026", status: "Open" },
-    ],
-    bookings: [
-      { id: "BOOK-1001", bookingType: "Banquet Event", venue: "Grand Ballroom & Royal Lawn", eventDate: "15 Feb 2025", bookingStatus: "Completed", contractValue: 850000 },
-      { id: "BOOK-1015", bookingType: "Swimming Pool", venue: "Azure Poolside Deck", eventDate: "15 Aug 2026", bookingStatus: "Completed", contractValue: 150000 },
-      { id: "BOOK-1020", bookingType: "Banquet Event", venue: "Grand Ballroom", eventDate: "10 Nov 2026", bookingStatus: "Confirmed", contractValue: 500000 },
-    ],
-    activities: [
-      { id: "ACT-101", activityType: "Phone Call", activityDate: "20 Aug 2026", assignedExecutive: "Vikram Malhotra", outcome: "Discussed Silver Jubilee Banquet dates & package", nextAction: "Send revised banquet menu proposal" },
-      { id: "ACT-102", activityType: "Meeting", activityDate: "24 Aug 2026", assignedExecutive: "Vikram Malhotra", outcome: "Agreed on menu customization and sound curfew limits", nextAction: "Await final contract sign-off" },
-    ],
-  },
-  {
-    contactId: "CONT-1002",
-    contactName: "Sunil Varma",
-    firstName: "Sunil",
-    lastName: "Varma",
-    contactType: "Corporate",
-    category: "Corporate Client",
-    customerCategory: "Corporate Client",
-    mobileNumber: "+91 97110 44556",
-    mobile: "+91 97110 44556",
-    emailAddress: "sunil.v@tcs.com",
-    email: "sunil.v@tcs.com",
-    companyName: "TCS India Ltd",
-    designation: "Head of Corporate Administration",
-    address: "TCS Campus, Whitefield, Bengaluru",
-    city: "Bengaluru",
-    state: "Karnataka",
-    country: "India",
-    gstNumber: "29AABCT2234G1Z8",
-    website: "www.tcs.com",
-    createdDate: "16 Aug 2026",
-    createdBy: "Jay Kumar",
-    createdFrom: "Corporate Sales",
-    status: "Active",
-    notes: "Corporate partner. Prefers quarterly consolidated invoice billing. Requires high-speed leased line Wi-Fi for all attendees.",
-    leads: [
-      { id: "LEAD-1002", inquiryDate: "16 Aug 2026", leadSource: "Email", bookingType: "Conference", status: "Converted", expectedRevenue: 890000 },
-    ],
-    deals: [
-      { id: "DEAL-1002", dealName: "TCS Q4 Leadership Summit", bookingType: "Conference", expectedValue: 890000, currentStage: "Won", assignedExecutive: "Jay Kumar", createdDate: "17 Aug 2026", status: "Won" },
-      { id: "DEAL-1052", dealName: "TCS Annual IT Hackathon (2 Days)", bookingType: "Conference", expectedValue: 1200000, currentStage: "Quotation / Proposal", assignedExecutive: "Jay Kumar", createdDate: "25 Aug 2026", status: "Open" },
-    ],
-    bookings: [
-      { id: "BOOK-1002", bookingType: "Conference", venue: "Convention Hall A & B", eventDate: "15 Sep 2026", bookingStatus: "Confirmed", contractValue: 890000 },
-    ],
-    activities: [
-      { id: "ACT-201", activityType: "Phone Call", activityDate: "26 Aug 2026", assignedExecutive: "Jay Kumar", outcome: "Negotiated discounted day delegate rate", nextAction: "Send formal proposal for Hackathon" },
-    ],
-  },
-  {
-    contactId: "CONT-1003",
-    contactName: "Pooja Reddy",
-    firstName: "Pooja",
-    lastName: "Reddy",
-    contactType: "Individual",
-    category: "VIP Customer",
-    customerCategory: "VIP Customer",
-    mobileNumber: "+91 99001 22334",
-    mobile: "+91 99001 22334",
-    emailAddress: "pooja.reddy@gmail.com",
-    email: "pooja.reddy@gmail.com",
-    companyName: "Reddy Family",
-    designation: "Bride / Organizer",
-    address: "Banjara Hills Road No. 12",
-    city: "Hyderabad",
-    state: "Telangana",
-    country: "India",
-    createdDate: "15 Aug 2026",
-    createdBy: "Vikram Malhotra",
-    createdFrom: "Direct Walk-In",
-    status: "VIP",
-    notes: "Reddy family wedding reception. Bride requested specific stage flower setup with orchids. Complimentary bridal suite requested.",
-    leads: [
-      { id: "LEAD-1003", inquiryDate: "15 Aug 2026", leadSource: "Walk-In", bookingType: "Banquet Event", status: "Converted", expectedRevenue: 2400000 },
-    ],
-    deals: [
-      { id: "DEAL-1003", dealName: "Reddy & Sharma Wedding Reception", bookingType: "Banquet Event", expectedValue: 2400000, currentStage: "Won", assignedExecutive: "Vikram Malhotra", createdDate: "17 Aug 2026", status: "Won" },
-    ],
-    bookings: [
-      { id: "BOOK-1003", bookingType: "Banquet Event", venue: "Grand Ballroom & Royal Lawn", eventDate: "12 Nov 2026", bookingStatus: "Confirmed", contractValue: 2400000 },
-    ],
-    activities: [
-      { id: "ACT-301", activityType: "Site Visit", activityDate: "28 Aug 2026", assignedExecutive: "Vikram Malhotra", outcome: "Family walked through Grand Ballroom and bridal suite", nextAction: "Finalize stage lighting specs" },
-    ],
-  },
-  {
-    contactId: "CONT-1004",
-    contactName: "Vikram Rathi",
-    firstName: "Vikram",
-    lastName: "Rathi",
-    contactType: "Travel Agent",
-    category: "Travel Partner",
-    customerCategory: "Travel Partner",
-    mobileNumber: "+91 98334 55667",
-    mobile: "+91 98334 55667",
-    emailAddress: "vikram.r@thomascook.in",
-    email: "vikram.r@thomascook.in",
-    companyName: "Thomas Cook India Ltd",
-    designation: "Key Account Manager",
-    address: "Dr. D.N. Road, Fort",
-    city: "Mumbai",
-    state: "Maharashtra",
-    country: "India",
-    gstNumber: "27AABCT9988H1Z1",
-    website: "www.thomascook.in",
-    createdDate: "18 Aug 2026",
-    createdBy: "Ananya Roy",
-    createdFrom: "Corporate Sales",
-    status: "Active",
-    notes: "Contracted travel agent. Standard 10% B2B room commission applicable on published corporate tariff.",
-    leads: [
-      { id: "LEAD-1004", inquiryDate: "18 Aug 2026", leadSource: "Corporate Reference", bookingType: "Room Booking", status: "Converted", expectedRevenue: 1560000 },
-    ],
-    deals: [
-      { id: "DEAL-1004", dealName: "Thomas Cook UK Inbound Group", bookingType: "Room Booking", expectedValue: 1560000, currentStage: "Final Decision", assignedExecutive: "Ananya Roy", createdDate: "20 Aug 2026", status: "Open" },
-    ],
-    bookings: [
-      { id: "BOOK-1004", bookingType: "Room Booking", venue: "60 Deluxe Rooms Wing A", eventDate: "20 Oct 2026", bookingStatus: "Confirmed", contractValue: 1560000 },
-    ],
-    activities: [
-      { id: "ACT-401", activityType: "Meeting", activityDate: "26 Aug 2026", assignedExecutive: "Ananya Roy", outcome: "Discussed group check-in luggage handling protocol", nextAction: "Send rooming list template" },
-    ],
-  },
-  {
-    contactId: "CONT-1005",
-    contactName: "Dr. K.S. Rao",
-    firstName: "Dr. K.S.",
-    lastName: "Rao",
-    contactType: "Corporate",
-    category: "Conference Client",
-    customerCategory: "Conference Client",
-    mobileNumber: "+91 98450 11223",
-    mobile: "+91 98450 11223",
-    emailAddress: "drksrao@ima.org",
-    email: "drksrao@ima.org",
-    companyName: "Indian Medical Association",
-    designation: "Conference Secretary",
-    address: "IMA Hall, Egmore",
-    city: "Chennai",
-    state: "Tamil Nadu",
-    country: "India",
-    createdDate: "17 Aug 2026",
-    createdBy: "Jay Kumar",
-    createdFrom: "Direct Walk-In",
-    status: "Active",
-    notes: "Doctor conference client. Requires dual stage podiums, hybrid audio-visual livestreaming, and doctor registration counter at porch.",
-    leads: [
-      { id: "LEAD-1005", inquiryDate: "17 Aug 2026", leadSource: "Website", bookingType: "Conference", status: "Converted", expectedRevenue: 1850000 },
-    ],
-    deals: [
-      { id: "DEAL-1005", dealName: "IMA Annual Medical Conference", bookingType: "Conference", expectedValue: 1850000, currentStage: "Tentative Hold", assignedExecutive: "Jay Kumar", createdDate: "18 Aug 2026", status: "Open" },
-    ],
-    bookings: [
-      { id: "BOOK-1005", bookingType: "Conference", venue: "Convention Center Main Hall", eventDate: "05 Oct 2026", bookingStatus: "Tentative", contractValue: 1850000 },
-    ],
-    activities: [
-      { id: "ACT-501", activityType: "Phone Call", activityDate: "18 Aug 2026", assignedExecutive: "Jay Kumar", outcome: "Confirmed tentative hold on Convention Center", nextAction: "Follow up for advance deposit" },
-    ],
-  },
-  {
-    contactId: "CONT-1006",
-    contactName: "Rakesh Singhania",
-    firstName: "Rakesh",
-    lastName: "Singhania",
-    contactType: "Individual",
-    category: "Preferred Partner",
-    customerCategory: "Preferred Partner",
-    mobileNumber: "+91 98220 11990",
-    mobile: "+91 98220 11990",
-    emailAddress: "rakesh@singhaniagroup.com",
-    email: "rakesh@singhaniagroup.com",
-    companyName: "Singhania Group",
-    designation: "Chairman",
-    address: "Singhania Towers, Worli",
-    city: "Mumbai",
-    state: "Maharashtra",
-    country: "India",
-    createdDate: "10 Aug 2026",
-    createdBy: "Vikram Malhotra",
-    createdFrom: "Deal Won",
-    status: "VIP",
-    notes: "High net worth individual. Resort buyout for 3-day luxury family wedding. Dedicated guest relations manager assigned.",
-    leads: [
-      { id: "LEAD-1006", inquiryDate: "10 Aug 2026", leadSource: "Walk-In", bookingType: "Banquet Event", status: "Converted", expectedRevenue: 4200000 },
-    ],
-    deals: [
-      { id: "DEAL-1006", dealName: "Singhania Destination 3-Day Wedding", bookingType: "Banquet Event", expectedValue: 4200000, currentStage: "Won", assignedExecutive: "Vikram Malhotra", createdDate: "15 Aug 2026", status: "Won" },
-    ],
-    bookings: [
-      { id: "BOOK-1006", bookingType: "Banquet Event", venue: "Full Resort Buyout & Grand Ballroom", eventDate: "10 Dec 2026", bookingStatus: "Confirmed", contractValue: 4200000 },
-    ],
-    activities: [
-      { id: "ACT-601", activityType: "Meeting", activityDate: "25 Aug 2026", assignedExecutive: "Vikram Malhotra", outcome: "Contract signed and 50% advance wire received", nextAction: "Conduct chef tasting session" },
-    ],
-  },
-];
+export const INITIAL_CUSTOMER_MASTER: CustomerMasterContact[] = [];
 
 // ─────────────────────────────────────────────────────────────
 // 3. MAIN COMPONENT: CONTACTS MASTER DATABASE
@@ -382,7 +180,8 @@ export const INITIAL_CUSTOMER_MASTER: CustomerMasterContact[] = [
 
 export function CorporateClientsView() {
   const router = useRouter();
-  const [contacts, setContacts] = useState<CustomerMasterContact[]>(INITIAL_CUSTOMER_MASTER);
+  const [contacts, setContacts] = useState<CustomerMasterContact[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("ALL");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL");
@@ -421,6 +220,23 @@ export function CorporateClientsView() {
     status: "Active" as ContactStatus,
     notes: "",
   });
+
+  const loadContacts = async () => {
+    setLoading(true);
+    try {
+      const rows = await smContactService.list();
+      setContacts(rows.map(apiContactToCustomer));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load contacts");
+      setContacts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadContacts();
+  }, []);
 
   // ─────────────────────────────────────────────────────────────
   // HELPER CALCULATIONS
@@ -546,102 +362,55 @@ export function CorporateClientsView() {
     }
   };
 
-  const handleSaveContact = (e: React.FormEvent) => {
+  const handleSaveContact = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.contactName.trim() || !formData.mobileNumber.trim()) return;
 
-    if (editingContact) {
-      // Update existing master record
-      const updatedList = contacts.map((c) => {
-        if (c.contactId === editingContact.contactId) {
-          return {
-            ...c,
-            contactName: formData.contactName.trim(),
-            contactType: formData.contactType,
-            category: formData.category,
-            mobileNumber: formData.mobileNumber.trim(),
-            emailAddress: formData.emailAddress.trim() || undefined,
-            companyName: formData.companyName.trim() || undefined,
-            designation: formData.designation.trim() || undefined,
-            address: formData.address.trim() || undefined,
-            city: formData.city.trim() || undefined,
-            state: formData.state.trim() || undefined,
-            country: formData.country.trim() || "India",
-            gstNumber: formData.gstNumber.trim() || undefined,
-            website: formData.website.trim() || undefined,
-            status: formData.status,
-            notes: formData.notes.trim() || undefined,
-          };
-        }
-        return c;
-      });
+    const normalizedMobile = formData.mobileNumber.replace(/\s+/g, "").replace(/[^0-9]/g, "");
+    const existingMatch = !editingContact
+      ? contacts.find((c) => {
+          const existingNorm = c.mobileNumber.replace(/\s+/g, "").replace(/[^0-9]/g, "");
+          return existingNorm.endsWith(normalizedMobile.slice(-10));
+        })
+      : null;
 
-      setContacts(updatedList);
-      if (selectedContact?.contactId === editingContact.contactId) {
-        const updatedItem = updatedList.find((c) => c.contactId === editingContact.contactId);
-        if (updatedItem) setSelectedContact(updatedItem);
+    const target = editingContact ?? existingMatch ?? null;
+    const payload = mapContactToApi({
+      contactId: target?.contactId,
+      contactName: formData.contactName.trim(),
+      contactType: formData.contactType,
+      category: formData.category,
+      mobileNumber: formData.mobileNumber.trim(),
+      emailAddress: formData.emailAddress.trim() || undefined,
+      companyName: formData.companyName.trim() || undefined,
+      city: formData.city.trim() || undefined,
+      status: formData.status,
+      createdFrom: formData.createdFrom || "Manual Entry",
+      notes: formData.notes.trim() || undefined,
+    });
+
+    try {
+      const row = target?.dbId
+        ? await smContactService.update(target.dbId, payload)
+        : await smContactService.create(payload);
+      const saved = apiContactToCustomer(row);
+      setContacts((prev) =>
+        target?.dbId
+          ? prev.map((c) => (c.dbId === saved.dbId ? { ...saved, designation: formData.designation.trim() || c.designation, address: formData.address.trim() || c.address, state: formData.state.trim() || c.state, country: formData.country.trim() || c.country, gstNumber: formData.gstNumber.trim() || c.gstNumber, website: formData.website.trim() || c.website } : c))
+          : [{ ...saved, designation: formData.designation.trim() || undefined, address: formData.address.trim() || undefined, state: formData.state.trim() || undefined, country: formData.country.trim() || "India", gstNumber: formData.gstNumber.trim() || undefined, website: formData.website.trim() || undefined, createdBy: formData.createdBy || "System" }, ...prev],
+      );
+      if (selectedContact && (selectedContact.dbId === saved.dbId || selectedContact.contactId === saved.contactId)) {
+        setSelectedContact(saved);
       }
-      setToastMessage(`✓ Updated Customer Master record #${editingContact.contactId}!`);
-    } else {
-      // Duplicate detection check on submit
-      const normalizedMobile = formData.mobileNumber.replace(/\s+/g, "").replace(/[^0-9]/g, "");
-      const existingMatch = contacts.find((c) => {
-        const existingNorm = c.mobileNumber.replace(/\s+/g, "").replace(/[^0-9]/g, "");
-        return existingNorm.endsWith(normalizedMobile.slice(-10));
-      });
-
-      if (existingMatch) {
-        // Update existing record
-        const updatedList = contacts.map((c) => {
-          if (c.contactId === existingMatch.contactId) {
-            return {
-              ...c,
-              companyName: formData.companyName.trim() || c.companyName,
-              emailAddress: formData.emailAddress.trim() || c.emailAddress,
-              status: formData.status,
-              notes: formData.notes.trim() || c.notes,
-            };
-          }
-          return c;
-        });
-
-        setContacts(updatedList);
-        setToastMessage(`✓ Linked and updated existing Customer Master #${existingMatch.contactId}!`);
-      } else {
-        // Create new contact master
-        const newContactId = `CONT-${1000 + contacts.length + 1}`;
-        const newContact: CustomerMasterContact = {
-          contactId: newContactId,
-          contactName: formData.contactName.trim(),
-          contactType: formData.contactType,
-          category: formData.category,
-          mobileNumber: formData.mobileNumber.trim(),
-          emailAddress: formData.emailAddress.trim() || undefined,
-          companyName: formData.companyName.trim() || undefined,
-          designation: formData.designation.trim() || undefined,
-          address: formData.address.trim() || undefined,
-          city: formData.city.trim() || undefined,
-          state: formData.state.trim() || undefined,
-          country: formData.country.trim() || "India",
-          gstNumber: formData.gstNumber.trim() || undefined,
-          website: formData.website.trim() || undefined,
-          createdDate: "29 Aug 2026",
-          createdBy: formData.createdBy || "Vikram Malhotra",
-          createdFrom: formData.createdFrom || "Direct Walk-In",
-          status: formData.status,
-          notes: formData.notes.trim() || undefined,
-          leads: [],
-          deals: [],
-          bookings: [],
-          activities: [],
-        };
-
-        setContacts([newContact, ...contacts]);
-        setToastMessage(`✓ Created Customer Master record #${newContactId} for ${newContact.contactName}!`);
-      }
+      setToastMessage(
+        target
+          ? `✓ Updated Customer Master record #${saved.contactId}!`
+          : `✓ Created Customer Master record #${saved.contactId} for ${saved.contactName}!`,
+      );
+      setIsAddModalOpen(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save contact");
     }
-
-    setIsAddModalOpen(false);
   };
 
   return (
@@ -667,6 +436,12 @@ export function CorporateClientsView() {
         </Button>
       }
     >
+      {loading && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          Loading contacts from database…
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: TOP KPI CARDS (CUSTOMER MASTER METRICS)
       ───────────────────────────────────────────────────────────── */}
