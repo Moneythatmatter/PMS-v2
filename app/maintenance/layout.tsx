@@ -1,11 +1,9 @@
 import { navItems, currentUser } from "@/app/data";
-import { humanResourcesNavItems } from "@/app/data/navigation/humanResources";
+import { maintenanceNavItems } from "@/app/data/navigation/maintenance";
 import { AppShell } from "@/components/layout/AppShell";
 import { ModuleSidebar } from "@/components/layout/ModuleSidebar";
-import { HumanResourcesSubNav } from "@/components/hr/HumanResourcesSubNav";
-import { TopNav } from "@/components/layout";
 
-export default function HumanResourcesLayout({
+export default function MaintenanceLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -16,9 +14,9 @@ export default function HumanResourcesLayout({
       user={currentUser}
       moduleSidebar={
         <ModuleSidebar
-          title="Human Resource"
-          subtitle="Staff & Workforce Management"
-          items={humanResourcesNavItems}
+          title="Maintenance"
+          subtitle="Engineering & Work Orders"
+          items={maintenanceNavItems}
         />
       }
     >
