@@ -14,7 +14,11 @@ import { DealsPipelineView } from "@/components/sales-marketing/DealsPipelineVie
 import { LoyaltyPointsSettingsView } from "@/components/sales-marketing/LoyaltyPointsSettingsView";
 import { ActivitiesView } from "@/components/sales-marketing/ActivitiesView";
 import { ReportsAnalyticsView } from "@/components/sales-marketing/ReportsAnalyticsView";
-import { SalesMarketingMastersView, MasterTabKey } from "@/components/sales-marketing/masters/SalesMarketingMastersView";
+import {
+  SalesMarketingMastersView,
+  type MasterTabKey,
+} from "@/components/sales-marketing/masters/SalesMarketingMastersView";
+import { BookingTypesMasterView } from "@/components/sales-marketing/masters/BookingTypesMasterView";
 
 export default async function SalesMarketingPage({
   params,
@@ -96,39 +100,34 @@ export default async function SalesMarketingPage({
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 7 APPROVED PMS V1 MASTERS ROUTES
+  // SALES & MARKETING MASTERS ROUTES
   // ─────────────────────────────────────────────────────────────
-  if (
-    slugPath === "masters" ||
-    slugPath === "masters/venues-spaces" ||
-    slugPath === "masters/venues-halls" ||
-    slugPath === "masters/venue-hall-master"
-  ) {
-    return <SalesMarketingMastersView initialTab="venues-halls" />;
-  }
+  if (slugPath.startsWith("masters")) {
+    if (slugPath === "masters/booking-categories") {
+      redirect("/sales-marketing/masters/booking-types");
+    }
 
-  if (slugPath === "masters/rates-commissions" || slugPath === "masters/tariff-commission-rules") {
-    return <SalesMarketingMastersView initialTab="rates-commissions" />;
-  }
+    if (slugPath === "masters/booking-types") {
+      return <BookingTypesMasterView />;
+    }
 
-  if (slugPath === "masters/lead-sources") {
-    return <SalesMarketingMastersView initialTab="lead-sources" />;
-  }
+    const masterTabRoutes: Record<string, MasterTabKey> = {
+      masters: "venues-halls",
+      "masters/venues-spaces": "venues-halls",
+      "masters/venues-halls": "venues-halls",
+      "masters/venue-hall-master": "venues-halls",
+      "masters/lead-sources": "lead-sources",
+      "masters/activity-types": "activity-types",
+      "masters/deal-stages": "deal-stages",
+      "masters/contact-types": "contact-types",
+    };
 
-  if (slugPath === "masters/activity-types") {
-    return <SalesMarketingMastersView initialTab="activity-types" />;
-  }
+    const tab = masterTabRoutes[slugPath];
+    if (tab) {
+      return <SalesMarketingMastersView initialTab={tab} />;
+    }
 
-  if (slugPath === "masters/deal-stages") {
-    return <SalesMarketingMastersView initialTab="deal-stages" />;
-  }
-
-  if (slugPath === "masters/booking-categories") {
-    return <SalesMarketingMastersView initialTab="booking-categories" />;
-  }
-
-  if (slugPath === "masters/contact-types") {
-    return <SalesMarketingMastersView initialTab="contact-types" />;
+    redirect("/sales-marketing/masters/venues-spaces");
   }
 
   return <SalesMarketingBlankView slugPath={slugPath} />;

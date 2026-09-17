@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useMemo, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   Search,
@@ -46,20 +46,37 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { INITIAL_CUSTOMER_MASTER, CustomerMasterContact } from "./CorporateClientsView";
-import { INITIAL_VENUES_MASTER, VenueSpaceMasterItem } from "./masters/SalesMarketingMastersView";
+import { CustomerMasterContact } from "./CorporateClientsView";
+import { VenueSpaceMasterItem } from "./masters/SalesMarketingMastersView";
+import {
+  smBookingService,
+  smContactService,
+  smDealService,
+  smVenueService,
+} from "@/services/sales-marketing";
+import {
+  mapBookingFromApi,
+  mapBookingToApi,
+  mapContactFromApi,
+  mapContactToApi,
+  mapDealToApi,
+  mapDealToQueueItem,
+  mapVenueFromApi,
+} from "@/lib/sales-marketing/api-mappers";
+import { nowTimelineStamp, todayIsoDate } from "@/lib/sales-marketing/useSmList";
+import {
+  type CentralBookingType,
+  type BookingTypeCode,
+  type BookingTypeIconKey,
+  getBookingTypeByCentralType,
+} from "@/lib/sales-marketing/booking-types";
+import { usePropertyBookingTypes } from "@/lib/sales-marketing/property-booking-types";
 
 // ─────────────────────────────────────────────────────────────
 // 1. DATA SCHEMA: CENTRAL BOOKINGS MANAGEMENT (HOTEL PMS V1)
 // ─────────────────────────────────────────────────────────────
 
-export type CentralBookingType =
-  | "Room Booking"
-  | "Banquet / Event Booking"
-  | "Conference Booking"
-  | "Restaurant Booking"
-  | "Swimming Pool Booking"
-  | "Private Event / Other";
+export type { CentralBookingType };
 
 export type BookingCategory =
   | "Wedding"
@@ -100,6 +117,7 @@ export type HandoverStatus =
   | "Handed Over";
 
 export interface BookingQueueItem {
+  dbId?: string;
   dealId: string;
   dealName: string;
   contactId: string;
@@ -125,6 +143,7 @@ export interface BookingTimelineEntry {
 }
 
 export interface CentralBookingItem {
+  dbId?: string;
   bookingId: string; // e.g. "BOOK-1001"
   bookingType: CentralBookingType;
   bookingCategory: BookingCategory;
@@ -201,261 +220,44 @@ export interface CentralBookingItem {
 // 2. INITIAL SEED DATA: BOOKING QUEUE (WON DEALS) & BOOKINGS
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_BOOKING_QUEUE: BookingQueueItem[] = [
-  {
-    dealId: "DEAL-801",
-    dealName: "Singhania Destination 3-Day Wedding",
-    contactId: "CONT-1006",
-    customerName: "Rakesh Singhania",
-    companyName: "Singhania Group",
-    mobile: "+91 98220 11990",
-    email: "rakesh@singhaniagroup.com",
-    bookingType: "Banquet / Event Booking",
-    bookingCategory: "Wedding",
-    proposedDate: "2026-12-10",
-    contractValue: 4200000,
-    campaignId: "CMP-WDG-02",
-    leadId: "LD-505",
-    wonDate: "25 Aug 2026",
-  },
-  {
-    dealId: "DEAL-802",
-    dealName: "TechCorp Annual Leadership Summit",
-    contactId: "CONT-1002",
-    customerName: "Sunil Varma",
-    companyName: "TCS India Ltd",
-    mobile: "+91 97110 44556",
-    email: "sunil.v@tcs.com",
-    bookingType: "Conference Booking",
-    bookingCategory: "Corporate",
-    proposedDate: "2026-09-15",
-    contractValue: 890000,
-    campaignId: "CMP-CRP-03",
-    leadId: "LD-501",
-    wonDate: "27 Aug 2026",
-  },
-];
+export const INITIAL_BOOKING_QUEUE = [];
 
-export const INITIAL_CENTRAL_BOOKINGS: CentralBookingItem[] = [
-  {
-    bookingId: "BOOK-1001",
-    bookingType: "Banquet / Event Booking",
-    bookingCategory: "Wedding",
-    bookingName: "Sharma Royal Wedding Reception",
-    contactId: "CONT-1001",
-    customerName: "Raj Sharma",
-    companyName: "Sharma Family Enterprise",
-    mobile: "+91 98765 43210",
-    email: "raj.sharma@gmail.com",
-    dealId: "DEAL-1001",
-    leadId: "LEAD-1001",
-    campaignId: "CMP-WDG-2025",
-    createdFrom: "Booking Queue",
-    startDate: "2026-11-15",
-    endDate: "2026-11-15",
-    startTime: "06:00 PM",
-    endTime: "11:30 PM",
-    venueId: "VEN-001",
-    venueOrRoom: "Grand Ballroom",
-    guestCount: 400,
-    contractValue: 850000,
-    advanceReceived: 300000,
-    balanceDue: 550000,
-    paymentStatus: "Partial Advance",
-    status: "Confirmed",
-    operationalStatus: "Ready For Event",
-    beoRequired: true,
-    beoId: "BEO-801",
-    beoStatus: "Approved",
-    destinationDepartment: "Banquet Operations",
-    handoverStatus: "Not Required",
-    coordinatorName: "Vikram Malhotra",
-    coordinatorMobile: "+91 98111 22334",
-    setupLayout: "Round Banquet Tables with Center Stage",
-    menuRequirement: "North & South Indian Live Buffet + Mocktail Bar",
-    specialRequests: "Bridal suite access from 02:00 PM; floral mandap setup.",
-    notes: "Token advance received; venue availability locked on calendar.",
-    createdAt: "15 Jan 2025",
-    updatedAt: "28 Aug 2026",
-    timeline: [
-      { id: "LOG-01", timestamp: "15 Jan 2025 04:00 PM", action: "Booking Created from Won Deal #DEAL-1001", actor: "Sales Pipeline" },
-      { id: "LOG-02", timestamp: "15 Jan 2025 04:15 PM", action: "BEO Required for Operational Execution", actor: "System" },
-      { id: "LOG-03", timestamp: "20 Jan 2025 11:00 AM", action: "Advance Payment Received (₹3,00,000)", actor: "Accounts" },
-      { id: "LOG-04", timestamp: "10 Aug 2026 02:00 PM", action: "Function Sheet (BEO-801) Generated & Approved", actor: "Vikram Malhotra" },
-    ],
-  },
-  {
-    bookingId: "BOOK-1002",
-    bookingType: "Room Booking",
-    bookingCategory: "Business Stay",
-    bookingName: "Amit Business Delegation Stay",
-    contactId: "CONT-1002",
-    customerName: "Sunil Varma",
-    companyName: "TCS India Ltd",
-    mobile: "+91 97110 44556",
-    email: "sunil.v@tcs.com",
-    dealId: "DEAL-1002",
-    createdFrom: "Corporate Client",
-    startDate: "2026-09-15",
-    endDate: "2026-09-18",
-    startTime: "02:00 PM",
-    endTime: "12:00 PM",
-    venueOrRoom: "12 Deluxe King Rooms (Wing B)",
-    roomCount: 12,
-    guestCount: 20,
-    roomType: "Deluxe King Room",
-    ratePlan: "Corporate SLA Bed & Breakfast",
-    adults: 20,
-    children: 0,
-    contractValue: 120000,
-    advanceReceived: 120000,
-    balanceDue: 0,
-    paymentStatus: "Fully Settled",
-    status: "Confirmed",
-    operationalStatus: "Reservation Created",
-    beoRequired: false,
-    destinationDepartment: "Front Office",
-    handoverStatus: "Handed Over",
-    coordinatorName: "Jay Kumar",
-    specialRequests: "Airport shuttle pickup for 12 delegates at 01:00 PM on 15 Sep.",
-    notes: "Direct company billing approved under 15-day credit SLA.",
-    createdAt: "16 Aug 2026",
-    updatedAt: "28 Aug 2026",
-    timeline: [
-      { id: "LOG-05", timestamp: "16 Aug 2026 02:00 PM", action: "Room Block Reservation Created", actor: "Jay Kumar" },
-      { id: "LOG-06", timestamp: "16 Aug 2026 02:05 PM", action: "BEO Not Required — Handed over to Front Office", actor: "Jay Kumar" },
-    ],
-  },
-  {
-    bookingId: "BOOK-1003",
-    bookingType: "Conference Booking",
-    bookingCategory: "Conference",
-    bookingName: "IMA Annual Medical Conference",
-    contactId: "CONT-1005",
-    customerName: "Dr. K.S. Rao",
-    companyName: "Indian Medical Association",
-    mobile: "+91 98450 11223",
-    email: "drksrao@ima.org",
-    dealId: "OPP-303",
-    createdFrom: "Booking Queue",
-    startDate: "2026-10-05",
-    endDate: "2026-10-07",
-    startTime: "08:30 AM",
-    endTime: "06:00 PM",
-    venueId: "VEN-003",
-    venueOrRoom: "Executive Boardroom A",
-    guestCount: 30,
-    roomCount: 10,
-    contractValue: 1850000,
-    advanceReceived: 0,
-    balanceDue: 1850000,
-    paymentStatus: "Pending Advance",
-    status: "Tentative",
-    operationalStatus: "BEO Draft",
-    beoRequired: true,
-    beoId: "BEO-803",
-    beoStatus: "Draft",
-    handoverStatus: "Not Required",
-    holdExpiryDate: "2026-08-30",
-    coordinatorName: "Jay Kumar",
-    setupLayout: "Boardroom Layout + 2 Breakout Pods",
-    menuRequirement: "Morning Coffee & High Tea, Buffet Lunch (Veg & Non-Veg)",
-    notes: "Tentative hold active until 30 Aug 2026 pending 25% advance token.",
-    createdAt: "18 Aug 2026",
-    updatedAt: "28 Aug 2026",
-    timeline: [
-      { id: "LOG-07", timestamp: "18 Aug 2026 11:00 AM", action: "Tentative Booking Created", actor: "Jay Kumar", notes: "Hold placed on Executive Boardroom A" },
-      { id: "LOG-08", timestamp: "18 Aug 2026 11:05 AM", action: "BEO Created (Draft: BEO-803)", actor: "Jay Kumar" },
-    ],
-  },
-  {
-    bookingId: "BOOK-1004",
-    bookingType: "Restaurant Booking",
-    bookingCategory: "Restaurant Event",
-    bookingName: "Apex Corporate Private Dinner",
-    contactId: "CONT-1001",
-    customerName: "Raj Sharma",
-    companyName: "Sharma Family Enterprise",
-    mobile: "+91 98765 43210",
-    email: "raj.sharma@gmail.com",
-    createdFrom: "Existing Contact",
-    startDate: "2026-08-29",
-    endDate: "2026-08-29",
-    startTime: "07:30 PM",
-    endTime: "11:00 PM",
-    venueOrRoom: "Saffron Fine Dining (Private Lounge)",
-    guestCount: 35,
-    tableCount: 4,
-    contractValue: 75000,
-    advanceReceived: 75000,
-    balanceDue: 0,
-    paymentStatus: "Fully Settled",
-    status: "Confirmed",
-    operationalStatus: "Ready For Event",
-    beoRequired: false,
-    destinationDepartment: "Food & Beverage",
-    handoverStatus: "Handed Over",
-    coordinatorName: "Ananya Roy",
-    specialRequests: "Chef's 5-course degustation menu + vintage wine pairing.",
-    notes: "VIP recurring guest dinner.",
-    createdAt: "22 Aug 2026",
-    updatedAt: "28 Aug 2026",
-    timeline: [
-      { id: "LOG-09", timestamp: "22 Aug 2026 03:00 PM", action: "Restaurant Reservation Confirmed", actor: "Ananya Roy" },
-      { id: "LOG-10", timestamp: "22 Aug 2026 03:05 PM", action: "Booking handed over to Food & Beverage", actor: "Ananya Roy" },
-    ],
-  },
-  {
-    bookingId: "BOOK-1005",
-    bookingType: "Swimming Pool Booking",
-    bookingCategory: "Pool Party",
-    bookingName: "Monsoon Sunset Sundowner Pool Party",
-    contactId: "CONT-1003",
-    customerName: "Pooja Reddy",
-    companyName: "Reddy Family",
-    mobile: "+91 99001 22334",
-    email: "pooja.reddy@gmail.com",
-    createdFrom: "Existing Contact",
-    startDate: "2026-09-05",
-    endDate: "2026-09-05",
-    startTime: "04:00 PM",
-    endTime: "09:00 PM",
-    venueId: "VEN-004",
-    venueOrRoom: "Azure Poolside Deck",
-    guestCount: 60,
-    contractValue: 150000,
-    advanceReceived: 50000,
-    balanceDue: 100000,
-    paymentStatus: "Partial Advance",
-    status: "Confirmed",
-    operationalStatus: "BEO Draft",
-    beoRequired: true,
-    beoId: "BEO-805",
-    beoStatus: "Draft",
-    handoverStatus: "Not Required",
-    destinationDepartment: "Banquet Operations",
-    coordinatorName: "Vikram Malhotra",
-    specialRequests: "DJ sound setup at poolside cabana; mocktail live station.",
-    notes: "Private pool deck buyout.",
-    createdAt: "20 Aug 2026",
-    updatedAt: "28 Aug 2026",
-    timeline: [
-      { id: "LOG-11", timestamp: "20 Aug 2026 05:00 PM", action: "Pool Booking Created", actor: "Vikram Malhotra" },
-      { id: "LOG-12", timestamp: "20 Aug 2026 05:05 PM", action: "BEO Created (Draft: BEO-805)", actor: "Vikram Malhotra" },
-    ],
-  },
-];
+export const INITIAL_CENTRAL_BOOKINGS = [];
 
 // ─────────────────────────────────────────────────────────────
 // 3. MAIN COMPONENT: CENTRAL BOOKINGS MANAGEMENT
 // ─────────────────────────────────────────────────────────────
 
+const BOOKING_TYPE_ICON_MAP: Record<
+  BookingTypeIconKey,
+  React.ComponentType<{ className?: string }>
+> = {
+  sparkles: Sparkles,
+  building2: Building2,
+  bed: Bed,
+  utensils: UtensilsCrossed,
+  waves: Waves,
+  calendar: CalendarDays,
+};
+
+const BOOKING_TYPE_COLOR_MAP: Partial<Record<BookingTypeCode, string>> = {
+  BANQUET: "text-purple-700 bg-purple-50 border-purple-200",
+  CONFERENCE: "text-blue-700 bg-blue-50 border-blue-200",
+  ROOM: "text-amber-700 bg-amber-50 border-amber-200",
+  RESTAURANT: "text-rose-700 bg-rose-50 border-rose-200",
+  POOL: "text-cyan-700 bg-cyan-50 border-cyan-200",
+  PRIVATE: "text-slate-700 bg-slate-100 border-slate-200",
+};
+
 export function EventBookingsView() {
   const router = useRouter();
-  const [bookings, setBookings] = useState<CentralBookingItem[]>(INITIAL_CENTRAL_BOOKINGS);
-  const [bookingQueue, setBookingQueue] = useState<BookingQueueItem[]>(INITIAL_BOOKING_QUEUE);
-  const [contacts, setContacts] = useState<CustomerMasterContact[]>(INITIAL_CUSTOMER_MASTER);
-  const [venues] = useState<VenueSpaceMasterItem[]>(INITIAL_VENUES_MASTER);
+  const searchParams = useSearchParams();
+  const { enabledTypes, enabledCount, fullCatalog } = usePropertyBookingTypes();
+  const [bookings, setBookings] = useState<CentralBookingItem[]>([]);
+  const [bookingQueue, setBookingQueue] = useState<BookingQueueItem[]>([]);
+  const [contacts, setContacts] = useState<CustomerMasterContact[]>([]);
+  const [venues, setVenues] = useState<VenueSpaceMasterItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Search & Filter States
   const [searchTerm, setSearchTerm] = useState("");
@@ -488,8 +290,8 @@ export function EventBookingsView() {
   const [formLeadId, setFormLeadId] = useState<string | undefined>(undefined);
 
   // Dates & Venue
-  const [formStartDate, setFormStartDate] = useState("2026-11-20");
-  const [formEndDate, setFormEndDate] = useState("2026-11-20");
+  const [formStartDate, setFormStartDate] = useState(todayIsoDate());
+  const [formEndDate, setFormEndDate] = useState(todayIsoDate());
   const [formStartTime, setFormStartTime] = useState("06:00 PM");
   const [formEndTime, setFormEndTime] = useState("11:30 PM");
   const [formVenueId, setFormVenueId] = useState<string>("VEN-001");
@@ -535,21 +337,21 @@ export function EventBookingsView() {
 
   // Helper to get booking type display configuration
   const getBookingTypeConfig = (type: CentralBookingType) => {
-    switch (type) {
-      case "Banquet / Event Booking":
-        return { icon: Sparkles, label: "Banquet / Wedding Event", color: "text-purple-700 bg-purple-50 border-purple-200" };
-      case "Conference Booking":
-        return { icon: Building2, label: "Conference / Meeting", color: "text-blue-700 bg-blue-50 border-blue-200" };
-      case "Room Booking":
-        return { icon: Bed, label: "Room Booking Stay", color: "text-amber-700 bg-amber-50 border-amber-200" };
-      case "Restaurant Booking":
-        return { icon: UtensilsCrossed, label: "Restaurant Booking", color: "text-rose-700 bg-rose-50 border-rose-200" };
-      case "Swimming Pool Booking":
-        return { icon: Waves, label: "Swimming Pool Booking", color: "text-cyan-700 bg-cyan-50 border-cyan-200" };
-      case "Private Event / Other":
-      default:
-        return { icon: CalendarDays, label: "Private / Other Event", color: "text-slate-700 bg-slate-100 border-slate-200" };
+    const def = getBookingTypeByCentralType(type, fullCatalog);
+    if (!def) {
+      return {
+        icon: CalendarDays,
+        label: type,
+        color: "text-slate-700 bg-slate-100 border-slate-200",
+      };
     }
+    return {
+      icon: BOOKING_TYPE_ICON_MAP[def.iconKey],
+      label: def.cardLabel,
+      color:
+        BOOKING_TYPE_COLOR_MAP[def.code] ??
+        "text-indigo-700 bg-indigo-50 border-indigo-200",
+    };
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -654,9 +456,62 @@ export function EventBookingsView() {
   // HANDLERS: CREATE BOOKING & POST-SAVE WORKFLOW
   // ─────────────────────────────────────────────────────────────
 
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [bookingRows, dealRows, contactRows, venueRows] = await Promise.all([
+        smBookingService.list(),
+        smDealService.list(),
+        smContactService.list(),
+        smVenueService.list(),
+      ]);
+      setBookings(bookingRows.map(mapBookingFromApi));
+      setContacts(contactRows.map(mapContactFromApi) as CustomerMasterContact[]);
+      setVenues(venueRows.map(mapVenueFromApi));
+      setBookingQueue(
+        dealRows
+          .filter((row) => {
+            const stage = String(row.stage ?? "");
+            const status = String(row.status ?? "");
+            const created = row.bookingCreated === true;
+            return !created && (stage === "Won" || status === "Won");
+          })
+          .map(mapDealToQueueItem),
+      );
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load bookings");
+      setBookings([]);
+      setBookingQueue([]);
+      setContacts([]);
+      setVenues([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  const persistBooking = async (booking: CentralBookingItem): Promise<CentralBookingItem | null> => {
+    try {
+      const row = booking.dbId
+        ? await smBookingService.update(booking.dbId, mapBookingToApi(booking))
+        : await smBookingService.create(mapBookingToApi(booking));
+      return mapBookingFromApi(row);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to save booking");
+      return null;
+    }
+  };
+
   // Open Create Modal (Clean Start)
-  const handleOpenCreateModal = (type: CentralBookingType = "Banquet / Event Booking") => {
-    setFormBookingType(type);
+  const handleOpenCreateModal = (type?: CentralBookingType) => {
+    const defaultType =
+      type ??
+      enabledTypes[0]?.centralType ??
+      ("Banquet / Event Booking" as CentralBookingType);
+    setFormBookingType(defaultType);
     setCreateStep(1);
     setFormContactId("");
     setFormCustomerName("");
@@ -669,12 +524,12 @@ export function EventBookingsView() {
     setFormDealId(undefined);
     setFormCampaignId(undefined);
     setFormLeadId(undefined);
-    setFormStartDate("2026-11-20");
-    setFormEndDate("2026-11-20");
+    setFormStartDate(todayIsoDate());
+    setFormEndDate(todayIsoDate());
     setFormStartTime("06:00 PM");
     setFormEndTime("11:30 PM");
-    setFormVenueId("VEN-001");
-    setFormVenueOrRoom("Grand Ballroom");
+    setFormVenueId(venues[0]?.venueId ?? "");
+    setFormVenueOrRoom(venues[0]?.venueName ?? "");
     setFormGuestCount(250);
     setFormRoomCount(1);
     setFormContractValue(500000);
@@ -684,6 +539,27 @@ export function EventBookingsView() {
     setCreatedBookingResult(null);
     setShowHandoverDialog(false);
   };
+
+  useEffect(() => {
+    if (searchParams.get("create") !== "1") return;
+    if (enabledTypes.length === 0) return;
+
+    const typeParam = searchParams.get("type");
+    const banquetType = enabledTypes.find(
+      (item) => item.centralType === "Banquet / Event Booking",
+    )?.centralType;
+
+    const bookingType =
+      typeParam === "banquet"
+        ? banquetType ?? enabledTypes[0]?.centralType
+        : enabledTypes[0]?.centralType;
+
+    if (bookingType) {
+      handleOpenCreateModal(bookingType as CentralBookingType);
+    }
+
+    router.replace("/sales-marketing/banquets/bookings-enquiries", { scroll: false });
+  }, [searchParams, router, enabledTypes]);
 
   // Convert from Booking Queue (Won Deal)
   const handleConvertFromQueue = (item: BookingQueueItem) => {
@@ -734,50 +610,42 @@ export function EventBookingsView() {
   };
 
   // Create Quick Contact Inline
-  const handleCreateQuickContact = (e: React.FormEvent) => {
+  const handleCreateQuickContact = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickContactName || !quickContactMobile) return;
 
-    const newContactId = `CONT-10${contacts.length + 10}`;
-    const newContact: CustomerMasterContact = {
-      contactId: newContactId,
-      contactName: quickContactName,
-      firstName: quickContactName.split(" ")[0] || quickContactName,
-      lastName: quickContactName.split(" ").slice(1).join(" ") || "",
-      contactType: "Individual",
-      category: "Regular Customer",
-      mobileNumber: quickContactMobile,
-      mobile: quickContactMobile,
-      emailAddress: quickContactEmail,
-      email: quickContactEmail,
-      companyName: quickContactCompany,
-      createdDate: "Today",
-      createdBy: "System",
-      createdFrom: "Direct Walk-In",
-      status: "Active",
-      leads: [],
-      deals: [],
-      bookings: [],
-      activities: [],
-    };
-
-    setContacts([newContact, ...contacts]);
-    handleSelectContact(newContact);
-    setIsQuickContactOpen(false);
-    setToastMessage(`✓ Customer "${quickContactName}" created and linked!`);
+    try {
+      const row = await smContactService.create(
+        mapContactToApi({
+          contactName: quickContactName,
+          contactType: "Individual",
+          category: "Regular Customer",
+          mobileNumber: quickContactMobile,
+          emailAddress: quickContactEmail,
+          companyName: quickContactCompany,
+          createdFrom: "Direct Walk-In",
+          status: "Active",
+        }),
+      );
+      const newContact = mapContactFromApi(row) as CustomerMasterContact;
+      setContacts((prev) => [newContact, ...prev]);
+      handleSelectContact(newContact);
+      setIsQuickContactOpen(false);
+      setToastMessage(`✓ Customer "${quickContactName}" created and linked!`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to create contact");
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
   // SAVE BOOKING (CREATES RECORD & SHOWS POST-SAVE WORKFLOW)
   // ─────────────────────────────────────────────────────────────
-  const handleSaveBooking = () => {
+  const handleSaveBooking = async () => {
     if (venueAvailabilityCheck.status === "MAINTENANCE" || venueAvailabilityCheck.status === "CONFLICT") {
       alert("Cannot save booking: Selected venue has a hard conflict or is under maintenance.");
       return;
     }
 
-    const newBookingId = `BOOK-10${bookings.length + 15}`;
-    
     // Exact BEO Required Rule:
     const isBeoRequired =
       formBookingType === "Banquet / Event Booking" ||
@@ -804,6 +672,8 @@ export function EventBookingsView() {
         : "Pending Advance";
 
     const venueObj = venues.find((v) => v.venueId === formVenueId);
+    const contactObj = contacts.find((c) => c.contactId === formContactId);
+    const queueItem = formDealId ? bookingQueue.find((q) => q.dealId === formDealId) : undefined;
     const finalVenueOrRoom =
       formBookingType === "Room Booking"
         ? `${formRoomCount} ${formRoomType}`
@@ -812,11 +682,11 @@ export function EventBookingsView() {
         : venueObj?.venueName || formVenueOrRoom;
 
     const newBooking: CentralBookingItem = {
-      bookingId: newBookingId,
+      bookingId: "",
       bookingType: formBookingType,
       bookingCategory: formCategory,
       bookingName: formBookingName || `${formCustomerName} ${formBookingType}`,
-      contactId: formContactId || "CONT-1001",
+      contactId: formContactId || contactObj?.contactId || "",
       customerName: formCustomerName,
       companyName: formCompany,
       mobile: formMobile,
@@ -829,7 +699,7 @@ export function EventBookingsView() {
       endDate: formEndDate,
       startTime: formStartTime,
       endTime: formEndTime,
-      venueId: formBookingType !== "Room Booking" ? formVenueId : undefined,
+      venueId: formBookingType !== "Room Booking" ? venueObj?.dbId : undefined,
       venueOrRoom: finalVenueOrRoom,
       guestCount: formGuestCount,
       roomCount: formRoomCount,
@@ -855,15 +725,15 @@ export function EventBookingsView() {
       tableCount: formTableCount,
       diningPackage: formDiningPackage,
       poolPackageType: formPoolPackage,
-      createdAt: "Today",
-      updatedAt: "Today",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       timeline: [
         {
           id: `LOG-${Date.now()}-1`,
-          timestamp: "Just now",
+          timestamp: nowTimelineStamp(),
           action: "Booking Created",
           actor: formCoordinatorName,
-          notes: `Booking #${newBookingId} created with status: ${formBookingStatus}`,
+          notes: `Booking created with status: ${formBookingStatus}`,
         },
         {
           id: `LOG-${Date.now()}-2`,
@@ -885,26 +755,36 @@ export function EventBookingsView() {
       ],
     };
 
-    // Save to master booking state
-    setBookings([newBooking, ...bookings]);
+    const apiPayload = {
+      ...mapBookingToApi(newBooking),
+      venueId: venueObj?.dbId ?? null,
+      dealId: queueItem?.dbId ?? null,
+      contactId: contactObj?.dbId ?? null,
+    };
 
-    // If created from queue, remove from queue
-    if (formDealId) {
-      setBookingQueue((prev) => prev.filter((q) => q.dealId !== formDealId));
+    try {
+      const row = await smBookingService.create(apiPayload);
+      const saved = mapBookingFromApi(row);
+
+      if (queueItem?.dbId) {
+        await smDealService.update(queueItem.dbId, mapDealToApi({ bookingCreated: true }));
+        setBookingQueue((prev) => prev.filter((q) => q.dealId !== formDealId));
+      }
+
+      setBookings((prev) => [saved, ...prev]);
+      setCreatedBookingResult(saved);
+      setShowHandoverDialog(false);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to create booking");
     }
-
-    // Immediately show post-save next-step screen
-    setCreatedBookingResult(newBooking);
-    setShowHandoverDialog(false);
   };
 
   // ─────────────────────────────────────────────────────────────
   // PATH A: CREATE BEO HANDLER
   // ─────────────────────────────────────────────────────────────
-  const handleCreateBeoForBooking = (booking: CentralBookingItem) => {
+  const handleCreateBeoForBooking = async (booking: CentralBookingItem) => {
     const generatedBeoId = `BEO-${booking.bookingId.replace("BOOK-", "")}`;
-    
-    // Update booking with BEO ID, Draft status & timeline entry
+
     const updated: CentralBookingItem = {
       ...booking,
       beoId: generatedBeoId,
@@ -913,7 +793,7 @@ export function EventBookingsView() {
         ...booking.timeline,
         {
           id: `LOG-${Date.now()}`,
-          timestamp: "Just now",
+          timestamp: nowTimelineStamp(),
           action: `BEO Created (${generatedBeoId})`,
           actor: booking.coordinatorName || "Sales Executive",
           notes: "Initial Draft created linked to booking",
@@ -921,7 +801,9 @@ export function EventBookingsView() {
       ],
     };
 
-    setBookings((prev) => prev.map((b) => (b.bookingId === updated.bookingId ? updated : b)));
+    const saved = await persistBooking(updated);
+    if (!saved) return;
+    setBookings((prev) => prev.map((b) => (b.bookingId === saved.bookingId ? saved : b)));
     setIsCreateModalOpen(false);
     setCreatedBookingResult(null);
     setToastMessage(`✓ Function Sheet #${generatedBeoId} created in Draft! Opening BEO list...`);
@@ -933,10 +815,10 @@ export function EventBookingsView() {
   // ─────────────────────────────────────────────────────────────
   // PATH B: DEPARTMENT HANDOVER HANDLER
   // ─────────────────────────────────────────────────────────────
-  const handleConfirmDepartmentHandover = () => {
+  const handleConfirmDepartmentHandover = async () => {
     if (!createdBookingResult) return;
     const dept = selectedDepartment;
-    
+
     const updated: CentralBookingItem = {
       ...createdBookingResult,
       destinationDepartment: dept,
@@ -945,7 +827,7 @@ export function EventBookingsView() {
         ...createdBookingResult.timeline,
         {
           id: `LOG-${Date.now()}`,
-          timestamp: "Just now",
+          timestamp: nowTimelineStamp(),
           action: `Booking handed over to ${dept}`,
           actor: "Booking Coordinator",
           notes: `Operational execution routed to ${dept}`,
@@ -953,15 +835,17 @@ export function EventBookingsView() {
       ],
     };
 
-    setBookings((prev) => prev.map((b) => (b.bookingId === updated.bookingId ? updated : b)));
+    const saved = await persistBooking(updated);
+    if (!saved) return;
+    setBookings((prev) => prev.map((b) => (b.bookingId === saved.bookingId ? saved : b)));
     setIsCreateModalOpen(false);
     setCreatedBookingResult(null);
     setShowHandoverDialog(false);
-    setToastMessage(`✓ Booking ${updated.bookingId} has been handed over to ${dept}.`);
+    setToastMessage(`✓ Booking ${saved.bookingId} has been handed over to ${dept}.`);
   };
 
   // Record Payment Quick Action
-  const handleRecordPayment = (e: React.FormEvent) => {
+  const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBooking || paymentAmount <= 0) return;
 
@@ -979,15 +863,17 @@ export function EventBookingsView() {
         ...selectedBooking.timeline,
         {
           id: `LOG-${Date.now()}`,
-          timestamp: "Just now",
+          timestamp: nowTimelineStamp(),
           action: `Payment Recorded: ₹${Number(paymentAmount).toLocaleString("en-IN")} via ${paymentMode}`,
           actor: "Accounts Desk",
         },
       ],
     };
 
-    setBookings((prev) => prev.map((b) => (b.bookingId === selectedBooking.bookingId ? updatedBooking : b)));
-    setSelectedBooking(updatedBooking);
+    const saved = await persistBooking(updatedBooking);
+    if (!saved) return;
+    setBookings((prev) => prev.map((b) => (b.bookingId === saved.bookingId ? saved : b)));
+    setSelectedBooking(saved);
     setIsPaymentModalOpen(false);
     setToastMessage(`✓ Recorded payment of ₹${Number(paymentAmount).toLocaleString("en-IN")}!`);
   };
@@ -1015,9 +901,12 @@ export function EventBookingsView() {
         </Button>
       }
     >
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: 4 CLEAN V1 KPI CARDS
-      ───────────────────────────────────────────────────────────── */}
+      {loading && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          Loading bookings from database…
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: 4 CLEAN V1 KPI CARDS (F&B STYLE)
       ───────────────────────────────────────────────────────────── */}
@@ -1171,13 +1060,12 @@ export function EventBookingsView() {
               onChange={(e) => setSelectedTypeFilter(e.target.value)}
               className="text-xs rounded-lg border border-slate-200 py-2 px-2.5 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
             >
-              <option value="ALL">All 6 Booking Types</option>
-              <option value="Room Booking">Room Booking</option>
-              <option value="Banquet / Event Booking">Banquet / Event</option>
-              <option value="Conference Booking">Conference</option>
-              <option value="Restaurant Booking">Restaurant</option>
-              <option value="Swimming Pool Booking">Swimming Pool</option>
-              <option value="Private Event / Other">Private Event / Other</option>
+              <option value="ALL">All {enabledCount} Booking Types</option>
+              {enabledTypes.map((item) => (
+                <option key={item.code} value={item.centralType}>
+                  {item.shortLabel}
+                </option>
+              ))}
             </select>
 
             {/* Status Filter */}
@@ -1792,73 +1680,46 @@ export function EventBookingsView() {
                   <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide block">
                     Select Booking Classification
                   </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {[
-                      {
-                        type: "Banquet / Event Booking",
-                        label: "Banquet / Wedding Event",
-                        icon: Sparkles,
-                        desc: "Weddings, receptions, parties, gala dinners (BEO required)",
-                      },
-                      {
-                        type: "Conference Booking",
-                        label: "Conference / Meeting",
-                        icon: Building2,
-                        desc: "Corporate seminars, boardroom meets (BEO required)",
-                      },
-                      {
-                        type: "Room Booking",
-                        label: "Room Booking Stay",
-                        icon: Bed,
-                        desc: "Individual or delegation room stays (Front Office handover)",
-                      },
-                      {
-                        type: "Restaurant Booking",
-                        label: "Restaurant Booking",
-                        icon: UtensilsCrossed,
-                        desc: "Dining tables & group dinners (F&B handover)",
-                      },
-                      {
-                        type: "Swimming Pool Booking",
-                        label: "Swimming Pool Booking",
-                        icon: Waves,
-                        desc: "Pool deck buyouts & socials (Configurable BEO)",
-                      },
-                      {
-                        type: "Private Event / Other",
-                        label: "Private / Other Event",
-                        icon: CalendarDays,
-                        desc: "Custom private gatherings & special occasions",
-                      },
-                    ].map((item) => {
-                      const Icon = item.icon;
-                      const isSelected = formBookingType === item.type;
-                      return (
-                        <button
-                          key={item.type}
-                          type="button"
-                          onClick={() => {
-                            setFormBookingType(item.type as CentralBookingType);
-                            setCreateStep(2);
-                          }}
-                          className={cn(
-                            "p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between h-28",
-                            isSelected
-                              ? "bg-emerald-50 border-emerald-500 shadow-2xs ring-1 ring-emerald-500"
-                              : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/70"
-                          )}
-                        >
-                          <Icon className={cn("h-5 w-5", isSelected ? "text-emerald-700" : "text-slate-500")} />
-                          <div>
-                            <strong className="text-xs font-bold text-slate-900 block leading-tight">
-                              {item.label}
-                            </strong>
-                            <span className="text-[10px] text-slate-500 line-clamp-1">{item.desc}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {enabledTypes.length === 0 ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-center text-xs text-amber-900">
+                      No booking types are enabled for this property. Enable them under{" "}
+                      <strong>Sales & Marketing → Masters → Booking Types</strong>.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      {enabledTypes.map((item) => {
+                        const Icon = BOOKING_TYPE_ICON_MAP[item.iconKey];
+                        const isSelected = formBookingType === item.centralType;
+                        const desc = item.handoverNote
+                          ? `${item.description} (${item.handoverNote})`
+                          : item.description;
+                        return (
+                          <button
+                            key={item.code}
+                            type="button"
+                            onClick={() => {
+                              setFormBookingType(item.centralType);
+                              setCreateStep(2);
+                            }}
+                            className={cn(
+                              "p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between h-28",
+                              isSelected
+                                ? "bg-emerald-50 border-emerald-500 shadow-2xs ring-1 ring-emerald-500"
+                                : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/70"
+                            )}
+                          >
+                            <Icon className={cn("h-5 w-5", isSelected ? "text-emerald-700" : "text-slate-500")} />
+                            <div>
+                              <strong className="text-xs font-bold text-slate-900 block leading-tight">
+                                {item.cardLabel}
+                              </strong>
+                              <span className="text-[10px] text-slate-500 line-clamp-1">{desc}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 

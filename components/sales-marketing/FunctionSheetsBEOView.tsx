@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileSpreadsheet,
@@ -44,8 +44,9 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { INITIAL_CENTRAL_BOOKINGS, CentralBookingItem } from "./EventBookingsView";
-import { INITIAL_CUSTOMER_MASTER } from "./CorporateClientsView";
+import { CentralBookingItem } from "./EventBookingsView";
+import { smBookingService } from "@/services/sales-marketing";
+import { mapBookingFromApi, mapBookingToApi } from "@/lib/sales-marketing/api-mappers";
 
 // ─────────────────────────────────────────────────────────────
 // 1. DATA TYPES & SCHEMAS FOR BEO (PMS V1 MASTER SPEC)
@@ -188,240 +189,67 @@ export interface BEOItem {
 // 2. INITIAL SEED DATA (BEO FUNCTION SHEETS)
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_BEOS: BEOItem[] = [
-  {
-    beoId: "BEO-1001",
-    bookingId: "BOOK-1001",
+export const INITIAL_BEOS: BEOItem[] = [];
+
+function bookingToBeo(booking: CentralBookingItem): BEOItem {
+  return {
+    beoId: booking.beoId || `BEO-${booking.bookingId.replace("BOOK-", "")}`,
+    bookingId: booking.bookingId,
     version: 1,
-    status: "Approved",
-    eventName: "Sharma Royal Wedding Reception",
-    eventCategory: "Wedding",
-    bookingType: "Banquet / Event Booking",
-    startDate: "2026-11-15",
-    endDate: "2026-11-15",
-    startTime: "06:00 PM",
-    endTime: "11:30 PM",
-    venueId: "VEN-001",
-    venueName: "Grand Ballroom",
-    expectedPax: 400,
-    guaranteedPax: 380,
-    coordinatorName: "Vikram Malhotra",
-    coordinatorMobile: "+91 98111 22334",
-    contactId: "CONT-1001",
-    contactName: "Raj Sharma",
-    companyName: "Sharma Family Enterprise",
-    mobile: "+91 98765 43210",
-    email: "raj.sharma@gmail.com",
-    dealId: "DEAL-1001",
-    leadId: "LEAD-1001",
-    campaignId: "CMP-WDG-2025",
+    status: (booking.beoStatus as BEOStatus) || "Draft",
+    contactId: booking.contactId,
+    venueId: booking.venueId,
+    dealId: booking.dealId,
+    leadId: booking.leadId,
+    campaignId: booking.campaignId,
+    eventName: booking.bookingName,
+    eventCategory: booking.bookingCategory,
+    bookingType: booking.bookingType,
+    startDate: booking.startDate,
+    endDate: booking.endDate || booking.startDate,
+    startTime: booking.startTime || "06:00 PM",
+    endTime: booking.endTime || "11:00 PM",
+    venueName: booking.venueOrRoom,
+    expectedPax: booking.guestCount || 100,
+    guaranteedPax: booking.guestCount || 100,
+    coordinatorName: booking.coordinatorName || "Sales Executive",
+    coordinatorMobile: booking.coordinatorMobile || "",
+    contactName: booking.customerName,
+    companyName: booking.companyName,
+    mobile: booking.mobile,
+    email: booking.email,
     setupLayout: "Round Banquet",
-    stageRequirement: "30ft x 16ft Elevated Mandap Stage with Royal Sofa Backdrop",
     danceFloor: true,
     registrationDesk: true,
-    backdropSize: "40ft Custom Marigold Floral LED Wall",
     signageBoard: true,
-    tableSetupNotes: "40 round tables of 10 covers with gold satin runners and crystal stemware.",
-    seatingNotes: "VIP Family table placed center front with 12 covers. 40 round tables of 10 covers each.",
-    brandingNotes: "Welcome arch with 'Raj & Simran Wedding Reception' at foyer entrance.",
-    mealServiceTypes: ["Dinner", "Snacks", "Cocktail"],
-    menuSelection: "Royal Indian Buffet (4 Starters, 8 Main Courses, Live Chaat Counter, 4 Desserts)",
-    dietaryRequirements: "30 Pure Jain Meals & 15 Kids Meal Trays required.",
-    fbNotes: "Dinner service live counter start time sharp 08:00 PM. Continuous hot food refills maintained.",
-    projector: false,
-    ledScreen: true,
-    soundSystem: true,
-    microphone: true,
-    podium: false,
-    lighting: true,
-    wifiRequired: true,
-    powerBackup: true,
-    microphonesNotes: "4 Cordless Handheld Mics + 2 Collar Mics for Bride/Groom Entry",
-    lightingNotes: "Stage Moving Head Spotlights + Warm Ambient Mood Uplighting throughout Ballroom",
-    avNotes: "Dedicated AV sound engineer on console from 05:00 PM onwards.",
-    theme: "Royal Marigold & Gold Velvet Luxury",
-    stageDecoration: "Carved gold pillars with crystal chandeliers",
-    floralSetup: "Fresh Yellow Marigold Canopy Entrance & Fragrant Rose Mandap Pillars",
-    tableDecoration: "Crystal Glass Candelabras with Gold Satin Table Runners",
-    backdrop: "Royal palace digital backdrop on LED wall",
-    branding: "Custom monograms on menu cards and photo booth",
-    specialSetupInstructions: "Bridal suite access from 02:00 PM; separate VIP gift table near stage.",
-    hasRoomBlock: true,
-    roomCount: 10,
-    roomNights: 10,
-    roomType: "Deluxe King Rooms",
-    roomCheckIn: "2026-11-15 12:00 PM",
-    roomCheckOut: "2026-11-16 11:00 AM",
-    banquetNotes: "Ensure 2 dedicated banquet captains and 24 service associates on floor.",
-    kitchenNotes: "Chef Special Rabdi Jalebi live counter. Jain food prepared in separate satellite kitchen.",
-    fnbNotes: "Mocktail live bar on East Foyer with 3 flair bartenders.",
-    housekeepingNotes: "Extra washroom attendant stationed at Ballroom Restrooms from 06:00 PM onwards.",
-    engineeringNotes: "Backup generator on hot standby from 05:30 PM to 12:00 AM. AC set to 22°C.",
-    avitNotes: "Test bride entry music track on main PA system at 04:30 PM.",
-    securityNotes: "VIP valet parking management for 80 cars; VIP entrance gate security check.",
-    frontOfficeNotes: "10 Deluxe rooms keycards pre-printed in Welcome Folders for family check-in.",
-    accountsNotes: "Contract value ₹8,50,000; advance ₹3,00,000 received. Balance billable on checkout.",
-    vipNotes: "Cabinet Minister attending at 08:30 PM; escort through VIP portico.",
-    customerSpecialRequests: "Grandparents require wheelchair assistance at entrance.",
-    operationalAlerts: "No pyrotechnics allowed indoors; cold sparklers approved for stage only.",
-    specialGuestNotes: "Dedicated steward for VIP head table.",
-    contractValue: 850000,
-    advanceStatus: "Partial Advance Received (₹3,00,000)",
-    createdAt: "10 Aug 2026",
-    updatedAt: "28 Aug 2026",
-    timeline: [
-      { id: "LOG-01", timestamp: "10 Aug 2026 02:00 PM", action: "BEO Draft Created from Confirmed Booking #BOOK-1001", actor: "Vikram Malhotra" },
-      { id: "LOG-02", timestamp: "12 Aug 2026 11:00 AM", action: "Submitted for Banquet Manager Approval", actor: "Vikram Malhotra" },
-      { id: "LOG-03", timestamp: "12 Aug 2026 04:30 PM", action: "BEO Approved by General Manager", actor: "Suresh Menon (GM)" },
-    ],
-  },
-  {
-    beoId: "BEO-1002",
-    bookingId: "BOOK-1003",
-    version: 1,
-    status: "Pending Approval",
-    eventName: "IMA Annual Medical Conference",
-    eventCategory: "Conference",
-    bookingType: "Conference Booking",
-    startDate: "2026-10-05",
-    endDate: "2026-10-07",
-    startTime: "08:30 AM",
-    endTime: "06:00 PM",
-    venueId: "VEN-003",
-    venueName: "Executive Boardroom A",
-    expectedPax: 30,
-    guaranteedPax: 30,
-    coordinatorName: "Jay Kumar",
-    coordinatorMobile: "+91 98220 33445",
-    contactId: "CONT-1005",
-    contactName: "Dr. K.S. Rao",
-    companyName: "Indian Medical Association",
-    mobile: "+91 98450 11223",
-    email: "drksrao@ima.org",
-    dealId: "OPP-303",
-    setupLayout: "Boardroom",
-    stageRequirement: "Small presentation podium at head of boardroom table",
-    danceFloor: false,
-    registrationDesk: true,
-    backdropSize: "Standard IMA Medical Summit Display",
-    signageBoard: true,
-    tableSetupNotes: "Executive leather chairs with pads, branded pens, and mineral water bottles.",
-    seatingNotes: "30 executive delegates around master boardroom table with 2 breakout pods.",
-    brandingNotes: "IMA Digital Backdrop on interactive 85-inch touch panel.",
-    mealServiceTypes: ["Breakfast", "Lunch", "High Tea"],
-    menuSelection: "Executive Continental & Indian Lunch Buffet + Mid-morning Cookies & Tea",
-    dietaryRequirements: "5 Diabetic Friendly Sugar-Free desserts & low-sodium options.",
-    fbNotes: "Coffee & High Tea service outside boardroom during 11:00 AM and 04:00 PM session breaks.",
+    mealServiceTypes: ["Dinner"],
+    menuSelection: "Standard Buffet Menu Plan",
     projector: true,
-    ledScreen: true,
-    soundSystem: true,
-    microphone: true,
-    podium: true,
-    lighting: false,
-    wifiRequired: true,
-    powerBackup: true,
-    microphonesNotes: "2 Podium Mics, 4 Q&A Aisle Cordless Mics, 2 Lapel Mics for Keynote Speakers",
-    avNotes: "Dedicated 100 Mbps leased line Wi-Fi SSID: IMA_Conference_2026.",
-    theme: "Corporate Medical Clean Blue & White",
-    floralSetup: "Fresh Orchid Podium Arrangements & Registration Desk Vases",
-    tableDecoration: "Not Applicable",
-    hasRoomBlock: true,
-    roomCount: 10,
-    roomNights: 20,
-    roomType: "Executive Suites",
-    roomCheckIn: "2026-10-05 10:00 AM",
-    roomCheckOut: "2026-10-07 02:00 PM",
-    banquetNotes: "Ensure session water bottles replenished every 2 hours.",
-    kitchenNotes: "Hot buffet lunch service from 01:00 PM to 02:30 PM sharp.",
-    fnbNotes: "Continuous hot tea/coffee station running from 08:30 AM to 05:30 PM.",
-    housekeepingNotes: "Boardroom trash bins cleared after each session break.",
-    engineeringNotes: "Maintain 21°C throughout day in Boardroom A.",
-    avitNotes: "Pre-load speaker PPT presentations on master console laptop at 07:30 AM.",
-    securityNotes: "Delegate badge verification at main Boardroom foyer entry.",
-    frontOfficeNotes: "10 Guest room arrivals on 05 Oct morning.",
-    accountsNotes: "Direct bill to IMA Org. 25% token hold.",
-    vipNotes: "Keynote speaker Dr. V. Sen arrives by executive car at 08:15 AM.",
-    contractValue: 1850000,
-    advanceStatus: "Pending Token Advance",
-    createdAt: "18 Aug 2026",
-    updatedAt: "28 Aug 2026",
-    timeline: [
-      { id: "LOG-04", timestamp: "18 Aug 2026 11:00 AM", action: "BEO Draft Created from Confirmed Booking #BOOK-1003", actor: "Jay Kumar" },
-      { id: "LOG-05", timestamp: "20 Aug 2026 03:00 PM", action: "Submitted for Operations Review", actor: "Jay Kumar" },
-    ],
-  },
-  {
-    beoId: "BEO-1003",
-    bookingId: "BOOK-1005",
-    version: 1,
-    status: "Draft",
-    eventName: "Monsoon Sunset Sundowner Pool Party",
-    eventCategory: "Pool Party",
-    bookingType: "Swimming Pool Booking",
-    startDate: "2026-09-05",
-    endDate: "2026-09-05",
-    startTime: "04:00 PM",
-    endTime: "09:00 PM",
-    venueId: "VEN-004",
-    venueName: "Azure Poolside Deck",
-    expectedPax: 60,
-    guaranteedPax: 50,
-    coordinatorName: "Vikram Malhotra",
-    coordinatorMobile: "+91 98111 22334",
-    contactId: "CONT-1003",
-    contactName: "Pooja Reddy",
-    companyName: "Reddy Family",
-    mobile: "+91 99001 22334",
-    email: "pooja.reddy@gmail.com",
-    setupLayout: "Cocktail",
-    stageRequirement: "DJ Console Setup near Pool Deck Cabana 4",
-    danceFloor: false,
-    registrationDesk: false,
-    signageBoard: true,
-    tableSetupNotes: "6 Poolside Cabanas with cushioned daybeds + 8 high cocktail tables.",
-    seatingNotes: "Cabanas and lounge chairs.",
-    mealServiceTypes: ["Snacks", "Cocktail", "Dinner"],
-    menuSelection: "Live BBQ Grill & Tapas + Exotic Fruit Mocktail Bar",
-    dietaryRequirements: "Finger foods suitable for poolside dining.",
-    fbNotes: "Live cocktail & mocktail flair bartending counter stationed near deck.",
-    projector: false,
     ledScreen: false,
     soundSystem: true,
     microphone: true,
-    podium: false,
+    podium: true,
     lighting: true,
     wifiRequired: true,
     powerBackup: true,
-    microphonesNotes: "1 Cordless Mic for DJ announcements",
-    lightingNotes: "Underwater Pool LED Color Changing Lights + Fairy Light Canopy over Cabanas",
-    avNotes: "Waterproof cabling and power connection to DJ booth.",
-    theme: "Boho Tropical Sunset Vibe",
-    floralSetup: "Tropical Palm Leaves & Hibiscus Table Vases",
-    tableDecoration: "Floating LED Candle Lanterns in Swimming Pool",
-    hasRoomBlock: false,
-    banquetNotes: "Lifeguard on duty at pool edge throughout the event duration.",
-    kitchenNotes: "Live skewers & sliders grill from 05:00 PM to 08:30 PM.",
-    fnbNotes: "Beverage bar to cease serving at 08:45 PM.",
-    housekeepingNotes: "Provide 100 dry pool towels in woven wicker baskets near cabanas.",
-    engineeringNotes: "Inspect pool filtration and temperature at 02:00 PM.",
-    avitNotes: "DJ setup sound test at 03:00 PM.",
-    securityNotes: "Strict wristband access control to private pool deck area.",
-    frontOfficeNotes: "No rooms associated with this event.",
-    accountsNotes: "Contract value ₹1,50,000; advance ₹50,000 received.",
-    contractValue: 150000,
-    advanceStatus: "Partial Advance Received (₹50,000)",
-    createdAt: "20 Aug 2026",
-    updatedAt: "28 Aug 2026",
-    timeline: [
-      { id: "LOG-06", timestamp: "20 Aug 2026 05:00 PM", action: "BEO Draft Created", actor: "Vikram Malhotra" },
-    ],
-  },
-];
+    theme: "Standard Elegant Setup",
+    floralSetup: "Fresh floral arrangements",
+    tableDecoration: "Standard Banquet centerpieces",
+    hasRoomBlock: Boolean(booking.roomCount && booking.roomCount > 0),
+    roomCount: booking.roomCount,
+    contractValue: booking.contractValue,
+    advanceStatus: `₹${booking.advanceReceived.toLocaleString("en-IN")} Received`,
+    createdAt: booking.createdAt,
+    updatedAt: booking.updatedAt,
+    timeline: [],
+  };
+}
 
 export function FunctionSheetsBEOView() {
   const router = useRouter();
-  const [beoList, setBeoList] = useState<BEOItem[]>(INITIAL_BEOS);
-  const [masterBookings] = useState<CentralBookingItem[]>(INITIAL_CENTRAL_BOOKINGS);
+  const [beoList, setBeoList] = useState<BEOItem[]>([]);
+  const [masterBookings, setMasterBookings] = useState<CentralBookingItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Search & Filter States
   const [searchTerm, setSearchTerm] = useState("");
@@ -450,6 +278,26 @@ export function FunctionSheetsBEOView() {
     "Engineering",
     "AV / IT",
   ]);
+
+  const loadBookings = async () => {
+    setLoading(true);
+    try {
+      const rows = await smBookingService.list();
+      const beoBookings = rows.map(mapBookingFromApi).filter((b) => b.beoRequired);
+      setMasterBookings(beoBookings);
+      setBeoList(beoBookings.filter((b) => b.beoId).map(bookingToBeo));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load bookings");
+      setMasterBookings([]);
+      setBeoList([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadBookings();
+  }, []);
 
   // ─────────────────────────────────────────────────────────────
   // PENDING BEO BOOKINGS INGESTION COMPUTATION
@@ -508,7 +356,7 @@ export function FunctionSheetsBEOView() {
   // ─────────────────────────────────────────────────────────────
 
   // Ingest & Create BEO from Booking
-  const handleCreateBEOFromBooking = (booking: CentralBookingItem) => {
+  const handleCreateBEOFromBooking = async (booking: CentralBookingItem) => {
     const newBeoId = `BEO-${booking.bookingId.replace("BOOK-", "")}`;
     const newBEO: BEOItem = {
       beoId: newBeoId,
@@ -578,12 +426,25 @@ export function FunctionSheetsBEOView() {
       ],
     };
 
-    setBeoList([newBEO, ...beoList]);
-    setFormData(newBEO);
-    setSelectedBEO(newBEO);
-    setIsEditDrawerOpen(true);
-    setViewScope("ALL");
-    setToastMessage(`✓ Created BEO #${newBeoId} (Draft) for Booking #${booking.bookingId}!`);
+    try {
+      if (booking.dbId) {
+        await smBookingService.update(
+          booking.dbId,
+          mapBookingToApi({ ...booking, beoId: newBeoId, beoStatus: "Draft" }),
+        );
+      }
+      setMasterBookings((prev) =>
+        prev.map((b) => (b.bookingId === booking.bookingId ? { ...b, beoId: newBeoId, beoStatus: "Draft" } : b)),
+      );
+      setBeoList((prev) => [newBEO, ...prev]);
+      setFormData(newBEO);
+      setSelectedBEO(newBEO);
+      setIsEditDrawerOpen(true);
+      setViewScope("ALL");
+      setToastMessage(`✓ Created BEO #${newBeoId} (Draft) for Booking #${booking.bookingId}!`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to create BEO");
+    }
   };
 
   // Open BEO Drawer for Viewing / Editing
@@ -772,6 +633,12 @@ export function FunctionSheetsBEOView() {
         </div>
       }
     >
+      {loading && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          Loading bookings and function sheets from database…
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: 5 CRISP V1 BEO KPI CARDS (F&B DASHBOARD STYLE)
       ───────────────────────────────────────────────────────────── */}

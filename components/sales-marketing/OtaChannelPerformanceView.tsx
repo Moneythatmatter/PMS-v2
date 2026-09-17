@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Globe,
   TrendingUp,
@@ -38,12 +38,15 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Card, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { smOtaChannelService } from "@/services/sales-marketing";
+import { mapOtaChannelFromApi } from "@/lib/sales-marketing/api-mappers";
 
 // ─────────────────────────────────────────────────────────────
 // ENHANCED SCHEMAS & INTERFACES FOR HOTEL CHANNEL MANAGER
 // ─────────────────────────────────────────────────────────────
 
 export interface OtaChannel {
+  dbId?: string;
   id: string;
   name: string;
   code: string; // e.g. MMT, BKG, AGD, EXPD
@@ -83,157 +86,47 @@ export interface OtaChannel {
   }[];
 }
 
+const EMPTY_OTA_CHANNEL: OtaChannel = {
+  id: "",
+  name: "No data",
+  code: "—",
+  logoBadge: "—",
+  status: "Paused",
+  monthlyRevenue: 0,
+  monthlyBookings: 0,
+  roomNightsSold: 0,
+  commissionRate: 0,
+  commissionCost: 0,
+  netPayout: 0,
+  adr: 0,
+  profitabilityScore: "Medium",
+  occupancyContribution: 0,
+  cancellationRate: 0,
+  avgStayNights: 0,
+  avgLeadTimeDays: 0,
+  growthRatePercent: 0,
+  lastSyncTime: "—",
+  inventoryPushStatus: "Success",
+  ratePushStatus: "Success",
+  restrictionPushStatus: "Success",
+  syncWarnings: [],
+  roomMappings: [],
+};
+
+function pickTopChannel(list: OtaChannel[], sortFn: (a: OtaChannel, b: OtaChannel) => number): OtaChannel {
+  if (list.length === 0) return EMPTY_OTA_CHANNEL;
+  return [...list].sort(sortFn)[0];
+}
+
 // ─────────────────────────────────────────────────────────────
 // INITIAL ENRICHED CHANNEL MANAGER MOCK DATA
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_OTA_CHANNELS: OtaChannel[] = [
-  {
-    id: "OTA-01",
-    name: "Booking.com",
-    code: "BKG",
-    logoBadge: "BKG",
-    status: "Active Sync",
-    monthlyRevenue: 1820000,
-    monthlyBookings: 285,
-    roomNightsSold: 420,
-    commissionRate: 15.0,
-    commissionCost: 273000,
-    netPayout: 1547000,
-    adr: 4333,
-    profitabilityScore: "High",
-    occupancyContribution: 34.2,
-    cancellationRate: 5.8,
-    avgStayNights: 2.5,
-    avgLeadTimeDays: 18,
-    growthRatePercent: 14.5,
-    lastSyncTime: "Just now",
-    inventoryPushStatus: "Success",
-    ratePushStatus: "Success",
-    restrictionPushStatus: "Success",
-    roomMappings: [
-      { pmsRoomCategory: "Standard Room", otaMappedRoomName: "Standard Double", inventoryAllocated: 10, syncState: "Mapped" },
-      { pmsRoomCategory: "Deluxe King Room", otaMappedRoomName: "Deluxe King Room with City View", inventoryAllocated: 15, syncState: "Mapped" },
-      { pmsRoomCategory: "Royal Heritage Suite", otaMappedRoomName: "Heritage Executive Suite", inventoryAllocated: 5, syncState: "Mapped" },
-    ],
-  },
-  {
-    id: "OTA-02",
-    name: "MakeMyTrip / Goibibo",
-    code: "MMT",
-    logoBadge: "MMT",
-    status: "Active Sync",
-    monthlyRevenue: 1450000,
-    monthlyBookings: 240,
-    roomNightsSold: 350,
-    commissionRate: 16.5,
-    commissionCost: 239250,
-    netPayout: 1210750,
-    adr: 4142,
-    profitabilityScore: "High",
-    occupancyContribution: 28.5,
-    cancellationRate: 6.4,
-    avgStayNights: 2.1,
-    avgLeadTimeDays: 12,
-    growthRatePercent: 9.8,
-    lastSyncTime: "2 mins ago",
-    inventoryPushStatus: "Success",
-    ratePushStatus: "Success",
-    restrictionPushStatus: "Success",
-    roomMappings: [
-      { pmsRoomCategory: "Standard Room", otaMappedRoomName: "MMT Standard Queen", inventoryAllocated: 8, syncState: "Mapped" },
-      { pmsRoomCategory: "Deluxe King Room", otaMappedRoomName: "MMT Premium Deluxe", inventoryAllocated: 12, syncState: "Mapped" },
-      { pmsRoomCategory: "Executive Twin Room", otaMappedRoomName: "MMT Executive Twin", inventoryAllocated: 10, syncState: "Mapped" },
-    ],
-  },
-  {
-    id: "OTA-03",
-    name: "Agoda",
-    code: "AGD",
-    logoBadge: "AGD",
-    status: "Active Sync",
-    monthlyRevenue: 680000,
-    monthlyBookings: 110,
-    roomNightsSold: 165,
-    commissionRate: 14.0,
-    commissionCost: 95200,
-    netPayout: 584800,
-    adr: 4121,
-    profitabilityScore: "Medium",
-    occupancyContribution: 13.4,
-    cancellationRate: 14.2,
-    avgStayNights: 1.8,
-    avgLeadTimeDays: 8,
-    growthRatePercent: 4.2,
-    lastSyncTime: "12 mins ago",
-    inventoryPushStatus: "Success",
-    ratePushStatus: "Rate Mismatch",
-    restrictionPushStatus: "Success",
-    syncWarnings: ["Rate Mismatch: Deluxe King ARI discrepancy ₹200 lower on Agoda."],
-    roomMappings: [
-      { pmsRoomCategory: "Standard Room", otaMappedRoomName: "Agoda Standard Room", inventoryAllocated: 5, syncState: "Mapped" },
-      { pmsRoomCategory: "Deluxe King Room", otaMappedRoomName: "Agoda Super Deluxe", inventoryAllocated: 8, syncState: "Mapped" },
-    ],
-  },
-  {
-    id: "OTA-04",
-    name: "Expedia Group",
-    code: "EXPD",
-    logoBadge: "EXPD",
-    status: "Sync Delayed",
-    monthlyRevenue: 520000,
-    monthlyBookings: 78,
-    roomNightsSold: 110,
-    commissionRate: 18.0,
-    commissionCost: 93600,
-    netPayout: 426400,
-    adr: 4727,
-    profitabilityScore: "Low",
-    occupancyContribution: 9.0,
-    cancellationRate: 11.5,
-    avgStayNights: 2.8,
-    avgLeadTimeDays: 24,
-    growthRatePercent: -2.1,
-    lastSyncTime: "45 mins ago",
-    inventoryPushStatus: "Syncing",
-    ratePushStatus: "Success",
-    restrictionPushStatus: "Pending",
-    syncWarnings: ["Sync Delayed: ARI update buffer pending acknowledgment."],
-    roomMappings: [
-      { pmsRoomCategory: "Deluxe King Room", otaMappedRoomName: "Expedia Deluxe Suite", inventoryAllocated: 6, syncState: "Mapped" },
-      { pmsRoomCategory: "Royal Heritage Suite", otaMappedRoomName: "Expedia Luxury Suite", inventoryAllocated: 3, syncState: "Mapped" },
-    ],
-  },
-  {
-    id: "OTA-05",
-    name: "Trip.com / Yatra",
-    code: "YTR",
-    logoBadge: "YTR",
-    status: "Active Sync",
-    monthlyRevenue: 340000,
-    monthlyBookings: 55,
-    roomNightsSold: 80,
-    commissionRate: 15.0,
-    commissionCost: 51000,
-    netPayout: 289000,
-    adr: 4250,
-    profitabilityScore: "Medium",
-    occupancyContribution: 6.5,
-    cancellationRate: 7.1,
-    avgStayNights: 1.9,
-    avgLeadTimeDays: 10,
-    growthRatePercent: 6.5,
-    lastSyncTime: "5 mins ago",
-    inventoryPushStatus: "Success",
-    ratePushStatus: "Success",
-    restrictionPushStatus: "Success",
-    roomMappings: [
-      { pmsRoomCategory: "Standard Room", otaMappedRoomName: "Yatra Standard Room", inventoryAllocated: 4, syncState: "Mapped" },
-    ],
-  },
-];
+export const INITIAL_OTA_CHANNELS: OtaChannel[] = [];
 
 export function OtaChannelPerformanceView() {
+  const [channels, setChannels] = useState<OtaChannel[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -244,10 +137,28 @@ export function OtaChannelPerformanceView() {
   const [mappingChannel, setMappingChannel] = useState<OtaChannel | null>(null);
 
   // Channel Comparison Selection State
-  const [compareChannelAId, setCompareChannelAId] = useState<string>("OTA-02"); // Booking.com
-  const [compareChannelBId, setCompareChannelBId] = useState<string>("OTA-01"); // MMT
+  const [compareChannelAId, setCompareChannelAId] = useState<string>("");
+  const [compareChannelBId, setCompareChannelBId] = useState<string>("");
 
-  const channels = INITIAL_OTA_CHANNELS;
+  const loadChannels = async () => {
+    setLoading(true);
+    try {
+      const rows = await smOtaChannelService.list();
+      const mapped = rows.map(mapOtaChannelFromApi);
+      setChannels(mapped);
+      if (mapped[0]) setCompareChannelAId(mapped[0].id);
+      if (mapped[1]) setCompareChannelBId(mapped[1].id);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load OTA channels");
+      setChannels([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadChannels();
+  }, []);
 
   // ─────────────────────────────────────────────────────────────
   // HIGH-LEVEL AGGREGATE METRICS & RANKINGS
@@ -257,13 +168,14 @@ export function OtaChannelPerformanceView() {
     const totalBookings = channels.reduce((s, c) => s + c.monthlyBookings, 0);
     const totalNet = channels.reduce((s, c) => s + c.netPayout, 0);
     const totalCommCost = channels.reduce((s, c) => s + c.commissionCost, 0);
-    const avgCommission = (channels.reduce((s, c) => s + c.commissionRate, 0) / channels.length).toFixed(1);
+    const avgCommission = channels.length
+      ? (channels.reduce((s, c) => s + c.commissionRate, 0) / channels.length).toFixed(1)
+      : "0.0";
 
-    // Rankings
-    const topRevenueOta = [...channels].sort((a, b) => b.monthlyRevenue - a.monthlyRevenue)[0];
-    const topBookingOta = [...channels].sort((a, b) => b.monthlyBookings - a.monthlyBookings)[0];
-    const topAdrOta = [...channels].sort((a, b) => b.adr - a.adr)[0];
-    const highestCommissionOta = [...channels].sort((a, b) => b.commissionRate - a.commissionRate)[0];
+    const topRevenueOta = pickTopChannel(channels, (a, b) => b.monthlyRevenue - a.monthlyRevenue);
+    const topBookingOta = pickTopChannel(channels, (a, b) => b.monthlyBookings - a.monthlyBookings);
+    const topAdrOta = pickTopChannel(channels, (a, b) => b.adr - a.adr);
+    const highestCommissionOta = pickTopChannel(channels, (a, b) => b.commissionRate - a.commissionRate);
 
     // Channel Health Count
     const activeSyncCount = channels.filter((c) => c.status === "Active Sync").length;
@@ -294,8 +206,10 @@ export function OtaChannelPerformanceView() {
   }, [channels, searchTerm]);
 
   // Selected Channels for Comparison Tool
-  const compareChannelA = channels.find((c) => c.id === compareChannelAId) || channels[0];
-  const compareChannelB = channels.find((c) => c.id === compareChannelBId) || channels[1];
+  const compareChannelA =
+    channels.find((c) => c.id === compareChannelAId) || channels[0] || EMPTY_OTA_CHANNEL;
+  const compareChannelB =
+    channels.find((c) => c.id === compareChannelBId) || channels[1] || EMPTY_OTA_CHANNEL;
 
   return (
     <ModulePageShell
@@ -331,6 +245,19 @@ export function OtaChannelPerformanceView() {
       toast={toastMessage}
       onDismissToast={() => setToastMessage(null)}
     >
+      {loading && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          Loading OTA channels from database…
+        </div>
+      )}
+
+      {!loading && channels.length === 0 && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-900">
+          No OTA channel data for this property yet. Run{" "}
+          <code className="font-mono">sales-marketing-seeds.sql</code> in Supabase, or switch to Grand Palace Resort.
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────────────
           1. OTA PERFORMANCE RANKINGS & TOP METRICS (MATCHING F&B DASHBOARD STYLE)
          ───────────────────────────────────────────────────────────── */}
@@ -425,8 +352,13 @@ export function OtaChannelPerformanceView() {
           </div>
 
           <div className="space-y-3 pt-1">
+            {channels.length === 0 && (
+              <p className="text-xs text-slate-500 py-2">No channel revenue data to display.</p>
+            )}
             {channels.map((c) => {
-              const pct = ((c.monthlyRevenue / metrics.totalRev) * 100).toFixed(1);
+              const pct = metrics.totalRev > 0
+                ? ((c.monthlyRevenue / metrics.totalRev) * 100).toFixed(1)
+                : "0.0";
               return (
                 <div key={c.id} className="space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium text-slate-800">
@@ -440,7 +372,11 @@ export function OtaChannelPerformanceView() {
                   </div>
                   <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden flex">
                     <div className="bg-emerald-600 h-full transition-all" style={{ width: `${pct}%` }} title={`Net Revenue: ₹${c.netPayout.toLocaleString("en-IN")}`} />
-                    <div className="bg-amber-400 h-full transition-all" style={{ width: `${(c.commissionCost / metrics.totalRev) * 100}%` }} title={`Commission Cut: ₹${c.commissionCost.toLocaleString("en-IN")}`} />
+                    <div
+                      className="bg-amber-400 h-full transition-all"
+                      style={{ width: metrics.totalRev > 0 ? `${(c.commissionCost / metrics.totalRev) * 100}%` : "0%" }}
+                      title={`Commission Cut: ₹${c.commissionCost.toLocaleString("en-IN")}`}
+                    />
                   </div>
                 </div>
               );

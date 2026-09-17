@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   CalendarClock,
   Calendar,
@@ -31,6 +31,54 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Card, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { smVenueService, smBookingService } from "@/services/sales-marketing";
+import { mapVenueFromApi, mapBookingFromApi } from "@/lib/sales-marketing/api-mappers";
+import type { VenueSpaceMasterItem } from "./masters/SalesMarketingMastersView";
+import type { CentralBookingItem } from "./EventBookingsView";
+
+function mapVenueTypeToCategory(venueType: string): VenueHall["category"] {
+  const lower = venueType.toLowerCase();
+  if (lower.includes("conference")) return "Conference Room";
+  if (lower.includes("pool")) return "Poolside";
+  if (lower.includes("roof")) return "Rooftop";
+  if (lower.includes("outdoor") || lower.includes("lawn")) return "Outdoor Lawn";
+  return "Indoor Hall";
+}
+
+function mapApiVenueToHall(v: VenueSpaceMasterItem): VenueHall {
+  return {
+    id: v.venueId,
+    name: v.venueName,
+    category: mapVenueTypeToCategory(v.venueType),
+    maxCapacity: v.maximumCapacity,
+    areaSqFt: v.maximumCapacity * 15,
+    halfDayRate: 0,
+    fullDayRate: 0,
+    status: v.status === "Active" ? "Available" : "Maintenance",
+  };
+}
+
+function mapBookingToSlot(b: CentralBookingItem): VenueSlotBooking {
+  const timeSlot: VenueSlotBooking["timeSlot"] =
+    b.startTime && b.startTime.includes("09")
+      ? "Morning (09:00 - 15:00)"
+      : b.startTime
+        ? "Evening (18:00 - 23:30)"
+        : "Full Day (09:00 - 23:30)";
+  return {
+    id: b.bookingId,
+    venueId: b.venueId || b.venueOrRoom,
+    venueName: b.venueOrRoom,
+    date: b.startDate,
+    timeSlot,
+    eventName: b.bookingName,
+    clientName: b.customerName,
+    expectedPax: b.guestCount ?? 0,
+    bookingStatus: b.status === "Tentative" ? "Tentative Hold" : "Confirmed",
+    salesExecutive: b.coordinatorName || "—",
+    roomsBlocked: b.roomCount ?? 0,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────
 // TYPES & MOCK DATA FOR VENUES & ROOM INVENTORY
@@ -71,58 +119,7 @@ export interface VenueSlotBooking {
   roomsBlocked: number;
 }
 
-export const HOTEL_VENUES: VenueHall[] = [
-  {
-    id: "V-01",
-    name: "Grand Ballroom & Royal Lawn",
-    category: "Indoor Hall",
-    maxCapacity: 800,
-    areaSqFt: 12000,
-    halfDayRate: 85000,
-    fullDayRate: 150000,
-    status: "Available",
-  },
-  {
-    id: "V-02",
-    name: "Chamber Ballroom A",
-    category: "Indoor Hall",
-    maxCapacity: 250,
-    areaSqFt: 4500,
-    halfDayRate: 40000,
-    fullDayRate: 75000,
-    status: "Available",
-  },
-  {
-    id: "V-03",
-    name: "Poolside Pavilion",
-    category: "Poolside",
-    maxCapacity: 150,
-    areaSqFt: 3500,
-    halfDayRate: 30000,
-    fullDayRate: 55000,
-    status: "Available",
-  },
-  {
-    id: "V-04",
-    name: "Skyline Rooftop Terrace",
-    category: "Rooftop",
-    maxCapacity: 200,
-    areaSqFt: 4000,
-    halfDayRate: 35000,
-    fullDayRate: 65000,
-    status: "Available",
-  },
-  {
-    id: "V-05",
-    name: "Executive Boardroom B",
-    category: "Conference Room",
-    maxCapacity: 40,
-    areaSqFt: 1200,
-    halfDayRate: 15000,
-    fullDayRate: 25000,
-    status: "Available",
-  },
-];
+export const HOTEL_VENUES: VenueHall[] = [];
 
 export const HOTEL_ROOM_CATEGORIES: RoomCategoryAvailability[] = [
   {
@@ -163,60 +160,7 @@ export const HOTEL_ROOM_CATEGORIES: RoomCategoryAvailability[] = [
   },
 ];
 
-export const INITIAL_BOOKINGS: VenueSlotBooking[] = [
-  {
-    id: "SLOT-101",
-    venueId: "V-01",
-    venueName: "Grand Ballroom & Royal Lawn",
-    date: "2027-01-15",
-    timeSlot: "Full Day (09:00 - 23:30)",
-    eventName: "Sharma Wedding Reception",
-    clientName: "Sharma Family (Rahul Sharma)",
-    expectedPax: 500,
-    bookingStatus: "Confirmed",
-    salesExecutive: "Jay Kumar",
-    roomsBlocked: 20,
-  },
-  {
-    id: "SLOT-102",
-    venueId: "V-02",
-    venueName: "Chamber Ballroom A",
-    date: "2026-09-18",
-    timeSlot: "Morning (09:00 - 15:00)",
-    eventName: "TCS Global Tech Summit 2026",
-    clientName: "TCS India",
-    expectedPax: 150,
-    bookingStatus: "Confirmed",
-    salesExecutive: "Jay Kumar",
-    roomsBlocked: 10,
-  },
-  {
-    id: "SLOT-103",
-    venueId: "V-03",
-    venueName: "Poolside Pavilion",
-    date: "2026-09-22",
-    timeSlot: "Evening (18:00 - 23:30)",
-    eventName: "Ananya Birthday Gala",
-    clientName: "Vikram Kapoor",
-    expectedPax: 100,
-    bookingStatus: "Tentative Hold",
-    salesExecutive: "Sneha Kapadia",
-    roomsBlocked: 0,
-  },
-  {
-    id: "SLOT-104",
-    venueId: "V-04",
-    venueName: "Skyline Rooftop Terrace",
-    date: "2026-09-18",
-    timeSlot: "Evening (18:00 - 23:30)",
-    eventName: "Reddy Cocktail Party",
-    clientName: "Sanjay Reddy",
-    expectedPax: 120,
-    bookingStatus: "Confirmed",
-    salesExecutive: "Jay Kumar",
-    roomsBlocked: 5,
-  },
-];
+export const INITIAL_BOOKINGS: VenueSlotBooking[] = [];
 
 export function VenueAvailabilityView() {
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -237,18 +181,39 @@ export function VenueAvailabilityView() {
     booking?: VenueSlotBooking;
   } | null>(null);
 
-  const [slotBookings] = useState<VenueSlotBooking[]>(INITIAL_BOOKINGS);
+  const [venues, setVenues] = useState<VenueHall[]>([]);
+  const [slotBookings, setSlotBookings] = useState<VenueSlotBooking[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadVenueData = async () => {
+    setLoading(true);
+    try {
+      const [venueRows, bookingRows] = await Promise.all([smVenueService.list(), smBookingService.list()]);
+      setVenues(venueRows.map(mapVenueFromApi).map(mapApiVenueToHall));
+      setSlotBookings(bookingRows.map(mapBookingFromApi).map(mapBookingToSlot));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load venue availability");
+      setVenues([]);
+      setSlotBookings([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadVenueData();
+  }, []);
 
   // Filtered Venues
   const filteredVenues = useMemo(() => {
-    return HOTEL_VENUES.filter((v) => {
+    return venues.filter((v) => {
       const matchSearch =
         v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.category.toLowerCase().includes(searchTerm.toLowerCase());
       const matchCat = selectedCategory === "ALL" || v.category === selectedCategory;
       return matchSearch && matchCat;
     });
-  }, [searchTerm, selectedCategory]);
+  }, [venues, searchTerm, selectedCategory]);
 
   // Filtered Rooms
   const filteredRooms = useMemo(() => {
@@ -259,7 +224,7 @@ export function VenueAvailabilityView() {
 
   // Metric Stats for Selected Date
   const dateMetrics = useMemo(() => {
-    const totalHalls = HOTEL_VENUES.length;
+    const totalHalls = venues.length;
     const dateSlots = slotBookings.filter((b) => b.date === selectedDate);
     const confirmedCount = dateSlots.filter((b) => b.bookingStatus === "Confirmed").length;
     const tentativeCount = dateSlots.filter((b) => b.bookingStatus === "Tentative Hold").length;
@@ -277,7 +242,7 @@ export function VenueAvailabilityView() {
       totalRoomsInventory,
       totalRoomsAvailable,
     };
-  }, [selectedDate, slotBookings]);
+  }, [selectedDate, slotBookings, venues.length]);
 
   // Helper to generate array of ISO date strings for current view range
   const dateColumns = useMemo(() => {
@@ -338,6 +303,12 @@ export function VenueAvailabilityView() {
       toast={toastMessage}
       onDismissToast={() => setToastMessage(null)}
     >
+      {loading && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          Loading venues and bookings from database…
+        </div>
+      )}
+
       {/* 1. SUMMARY CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
         <Card className="p-4 bg-white border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">

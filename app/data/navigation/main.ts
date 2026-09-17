@@ -9,5 +9,5 @@ export const navItems: NavItem[] = [
   { label: "Human Resource", href: "/human-resources/dashboard", icon: "users" },
   { label: "Accounts", href: "/accounts", icon: "calculator" },
   { label: "Sales & Marketing", href: "/sales-marketing/dashboard", icon: "trending-up" },
-  { label: "Maintenance", href: "/maintenance", icon: "wrench" },
+  // { label: "Maintenance", href: "#", icon: "wrench" },
 ];

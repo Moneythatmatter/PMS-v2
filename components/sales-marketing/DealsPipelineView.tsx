@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Kanban,
@@ -46,9 +46,12 @@ import {
 import { ModulePageShell } from "@/components/pms";
 import { Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { INITIAL_CENTRAL_LEADS, CentralLeadItem } from "@/app/data/centralLeadData";
+import { CentralLeadItem } from "@/app/data/centralLeadData";
 import { LeadType, LeadSource } from "./LeadsInquiriesView";
 import { AddActivityModal, ActivityPayload, SharedActivityType, SharedActivityStatus } from "./shared/AddActivityModal";
+import { smDealService, smLeadService } from "@/services/sales-marketing";
+import { mapDealFromApi, mapDealToApi, mapCentralLeadFromApi } from "@/lib/sales-marketing/api-mappers";
+import { nowTimelineStamp, todayIsoDate } from "@/lib/sales-marketing/useSmList";
 
 // ─────────────────────────────────────────────────────────────
 // 1. HOTEL-SPECIFIC PIPELINE STAGES (8 VERSION 1 STAGES)
@@ -198,6 +201,7 @@ export interface DealActivity {
 }
 
 export interface HotelDealItem {
+  dbId?: string;
   id: string; // e.g. "OPP-301"
   dealName: string;
   leadId: string; // Linked Lead ID e.g. "LD-502"
@@ -276,407 +280,81 @@ export interface HotelDealItem {
 // 3. INITIAL SEED DEALS (LINKED TO CENTRAL LEADS)
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_HOTEL_DEALS: HotelDealItem[] = [
-  {
-    id: "OPP-301",
-    dealName: "Reddy & Sharma Wedding Reception",
-    leadId: "LD-502",
-    stage: "Quotation / Proposal",
-    status: "Open",
-    customerName: "Pooja Reddy",
-    companyName: "Reddy Family",
-    contactPerson: "Pooja Reddy",
-    mobile: "+91 99001 22334",
-    email: "pooja.reddy@gmail.com",
-    preferredContactMethod: "Phone",
-    leadType: "Wedding",
-    customerRequirement: "Need Grand Ballroom & Royal Lawn for 450 guests. Live North & South Indian buffet + 30 rooms block.",
-    expectedEventDate: "2026-11-12",
-    guestCount: 450,
-    expectedRoomNights: 30,
-    venueRequired: "Grand Ballroom & Royal Lawn",
-    requestedServices: ["Live Buffet", "30 Room Block", "Stage Decor", "Bridal Suite"],
-    leadSource: "Walk-In",
-    campaignName: "Grand Wedding Season Early Bird",
-    campaignId: "CMP-WDG-02",
-    dealValue: 2400000,
-    quotedValue: 2600000,
-    expectedRevenue: 2400000,
-    discountOffered: "8% Early Bird Discount",
-    expectedCloseDate: "2026-09-10",
-    paymentTerms: "30% Advance on Booking, 50% 10 Days Prior, 20% on Checkout",
-    assignedExecutive: "Vikram Malhotra",
-    nextActionSummary: "Site Visit scheduled for 28 Aug at 2:00 PM (Grand Ballroom)",
-    siteVisitDate: "2026-08-28",
-    siteVisitTime: "02:00 PM",
-    siteVisitVenue: "Grand Ballroom & Royal Lawn",
-    siteVisitStatus: "Scheduled",
-    siteVisitNotes: "Decor sample catalogue to be presented during walkthrough.",
-    nextCallDate: "2026-08-29",
-    nextCallTime: "03:00 PM",
-    nextCallNotes: "Discuss revised banquet menu package.",
-    quotations: [
-      {
-        id: "QTN-001",
-        versionName: "Initial Grand Ballroom Package",
-        date: "17 Aug 2026",
-        amount: 2600000,
-        status: "Superseded",
-        inclusions: "Grand Ballroom, standard audio setup, 3 buffet live counters.",
-        validUntil: "25 Aug 2026",
-      },
-      {
-        id: "QTN-002",
-        versionName: "Revised Wedding Gala & Lawn Package",
-        date: "24 Aug 2026",
-        amount: 2400000,
-        status: "Sent",
-        inclusions: "Grand Ballroom + Royal Lawn, premium North & South Indian buffet, bridal suite, 30 rooms.",
-        validUntil: "05 Sep 2026",
-      },
-    ],
-    tentativeHold: undefined,
-    activities: [
-      { id: "ACT-1", type: "Note", date: "15 Aug 2026, 02:15 PM", user: "Front Desk", notes: "Lead Record Linked (#LD-502)" },
-      { id: "ACT-2", type: "Phone Call", date: "15 Aug 2026, 04:00 PM", user: "Vikram Malhotra", notes: "Initial requirement call with Ms. Pooja Reddy. Confirmed 450 pax." },
-      { id: "ACT-3", type: "Proposal Sent", date: "17 Aug 2026, 05:00 PM", user: "Vikram Malhotra", notes: "Sent formal quotation for Grand Ballroom & Royal Lawn (₹24.00 Lakhs)." },
-      { id: "ACT-4", type: "Site Visit", date: "28 Aug 2026, 02:00 PM", user: "Vikram Malhotra", notes: "Site visit scheduled for venue walkthrough.", status: "Scheduled", venue: "Grand Ballroom" },
-    ],
-    createdDate: "15 Aug 2026",
-  },
-  {
-    id: "OPP-302",
-    dealName: "TCS Q4 Executive Leadership Meet",
-    leadId: "LD-501",
-    stage: "Negotiation",
-    status: "Open",
-    customerName: "Sunil V",
-    companyName: "TCS India Ltd",
-    corporateClientId: "CORP-9910",
-    corporateClientName: "TCS India Corporate Account",
-    contactPerson: "Sunil V (Admin Lead)",
-    mobile: "+91 97110 44556",
-    email: "sunil.v@tcs.com",
-    preferredContactMethod: "Email",
-    leadType: "Corporate Booking",
-    customerRequirement: "Need 45 rooms for 3 nights with breakfast. High-speed WiFi and airport transfer required.",
-    expectedEventDate: "2026-09-15",
-    guestCount: 150,
-    expectedRoomNights: 135,
-    venueRequired: "Executive Conference Hall A & B",
-    requestedServices: ["45 Deluxe Rooms x 3 Nights", "High Speed WiFi", "Airport Pickup", "Buffet Breakfast"],
-    leadSource: "Email",
-    campaignName: "Corporate Annual Partner Saver",
-    campaignId: "CMP-CRP-03",
-    dealValue: 890000,
-    quotedValue: 950000,
-    expectedRevenue: 890000,
-    discountOffered: "Corporate Tier Rate Code TCS-2026",
-    expectedCloseDate: "2026-08-31",
-    paymentTerms: "Direct Company Billing / 15 Days Credit",
-    creditTerms: "Approved 15-Day Corporate Credit Account",
-    assignedExecutive: "Jay Kumar",
-    nextActionSummary: "Follow-up call on 29 Aug at 3:00 PM regarding corporate tariff confirmation",
-    nextCallDate: "2026-08-29",
-    nextCallTime: "03:00 PM",
-    nextCallNotes: "Confirm airport transfer flight schedule.",
-    quotations: [
-      {
-        id: "QTN-003",
-        versionName: "Standard Corporate Tariff Quotation",
-        date: "16 Aug 2026",
-        amount: 950000,
-        status: "Superseded",
-        inclusions: "45 rooms @ ₹7,000/night + Conference Hall A",
-        validUntil: "22 Aug 2026",
-      },
-      {
-        id: "QTN-004",
-        versionName: "Negotiated Corporate SLA Proposal",
-        date: "20 Aug 2026",
-        amount: 890000,
-        status: "Sent",
-        inclusions: "45 rooms @ ₹5,800/night + Conference Hall A & B + Airport Shuttles",
-        validUntil: "31 Aug 2026",
-      },
-    ],
-    tentativeHold: undefined,
-    activities: [
-      { id: "ACT-10", type: "Note", date: "16 Aug 2026, 09:30 AM", user: "System", notes: "Lead Record Linked (#LD-501)" },
-      { id: "ACT-11", type: "Phone Call", date: "16 Aug 2026, 02:00 PM", user: "Jay Kumar", notes: "Discussed corporate room rate inclusions." },
-      { id: "ACT-12", type: "Negotiation", date: "17 Aug 2026, 11:00 AM", user: "Jay Kumar", notes: "Negotiating room rate from ₹6,500 to ₹5,800/night." },
-    ],
-    createdDate: "16 Aug 2026",
-  },
-  {
-    id: "OPP-303",
-    dealName: "IMA Annual Medical Conference",
-    leadId: "LD-503",
-    stage: "Tentative Hold",
-    status: "Open",
-    customerName: "Dr. K.S. Rao",
-    companyName: "Indian Medical Association",
-    contactPerson: "Dr. K.S. Rao",
-    mobile: "+91 98450 11223",
-    email: "drksrao@ima.org",
-    preferredContactMethod: "Email",
-    leadType: "Conference",
-    customerRequirement: "Need conference hall for 350 delegates and 120 rooms for 2 nights.",
-    expectedEventDate: "2026-10-05",
-    guestCount: 350,
-    expectedRoomNights: 240,
-    venueRequired: "Convention Center & Exhibition Lawn",
-    requestedServices: ["Convention Center Hall", "120 Rooms x 2 Nights", "Pharma Exhibition Space", "3 Buffet Meals"],
-    leadSource: "Website",
-    dealValue: 1850000,
-    quotedValue: 1950000,
-    expectedRevenue: 1850000,
-    expectedCloseDate: "2026-09-05",
-    paymentTerms: "25% Advance, Balance prior to check-in",
-    assignedExecutive: "Jay Kumar",
-    nextActionSummary: "Hold active on Convention Center until 30 Aug 2026. Awaiting committee advance approval.",
-    nextCallDate: "2026-08-29",
-    nextCallTime: "11:30 AM",
-    quotations: [
-      {
-        id: "QTN-005",
-        versionName: "Medical Conference Master Proposal",
-        date: "21 Aug 2026",
-        amount: 1850000,
-        status: "Sent",
-        inclusions: "Convention Center, 120 rooms, audio visual setup, 3 buffet meals.",
-        validUntil: "30 Aug 2026",
-      },
-    ],
-    tentativeHold: {
-      venueName: "Convention Center & Exhibition Lawn",
-      startDate: "2026-10-05",
-      endDate: "2026-10-07",
-      holdExpiryDate: "2026-08-30",
-      holdStatus: "Active",
-      holdNotes: "Held for IMA annual delegation; hold expires 30 Aug 2026 unless 25% token advance paid.",
+export const INITIAL_HOTEL_DEALS: HotelDealItem[] = [];
+
+function buildDealPayload(deal: HotelDealItem, leadDbId?: string): Record<string, unknown> {
+  return mapDealToApi({
+    dealName: deal.dealName,
+    leadDbId,
+    leadId: deal.leadId,
+    customerName: deal.customerName,
+    companyName: deal.companyName,
+    mobile: deal.mobile,
+    email: deal.email,
+    bookingType: deal.leadType,
+    stage: deal.stage,
+    status: deal.status,
+    dealValue: deal.dealValue,
+    expectedCloseDate: deal.expectedCloseDate,
+    assignedExecutive: deal.assignedExecutive,
+    campaignId: deal.campaignId,
+    campaignName: deal.campaignName,
+    leadSource: deal.leadSource,
+    customerRequirement: deal.customerRequirement,
+    guestCount: deal.guestCount,
+    expectedEventDate: deal.expectedEventDate,
+    metadata: {
+      quotations: deal.quotations,
+      activities: deal.activities,
+      tentativeHold: deal.tentativeHold,
+      lostReason: deal.lostReason,
+      lostNotes: deal.lostNotes,
+      nextActionSummary: deal.nextActionSummary,
+      quotedValue: deal.quotedValue,
+      venueRequired: deal.venueRequired,
+      preferredContactMethod: deal.preferredContactMethod,
     },
-    activities: [
-      { id: "ACT-20", type: "Note", date: "17 Aug 2026, 11:00 AM", user: "System", notes: "Lead Record Linked (#LD-503)" },
-      { id: "ACT-21", type: "Phone Call", date: "18 Aug 2026, 03:00 PM", user: "Jay Kumar", notes: "Spoke with Dr. Rao. Confirmed 350 delegates and banquet requirements." },
-      { id: "ACT-22", type: "Stage Change", date: "22 Aug 2026, 10:00 AM", user: "Jay Kumar", notes: "Moved to Tentative Hold. Reserved Convention Center until 30 Aug 2026." },
-    ],
-    createdDate: "17 Aug 2026",
-  },
-  {
-    id: "OPP-304",
-    dealName: "Thomas Cook UK Inbound Group",
-    leadId: "LD-504",
-    stage: "Final Decision",
-    status: "Open",
-    customerName: "Vikram Rathi",
-    companyName: "Thomas Cook India Ltd",
-    travelAgentId: "TA-4401",
-    travelAgentName: "Thomas Cook India Ltd",
-    commissionAgreement: "10% Standard Commission on Room Tariff",
-    contactPerson: "Vikram Rathi (Key Account Mgr)",
-    mobile: "+91 98334 55667",
-    email: "vikram.r@thomascook.in",
-    preferredContactMethod: "Phone",
-    leadType: "Travel Group",
-    customerRequirement: "60 rooms block for 4 nights with dinner package for UK tourism group.",
-    expectedEventDate: "2026-10-20",
-    guestCount: 110,
-    expectedRoomNights: 240,
-    requestedServices: ["60 Deluxe Twin Rooms", "Daily Dinner Buffet", "Baggage Handling", "Welcome Drinks"],
-    leadSource: "Corporate Reference",
-    dealValue: 1560000,
-    quotedValue: 1650000,
-    expectedRevenue: 1560000,
-    expectedCloseDate: "2026-08-30",
-    paymentTerms: "100% Pre-payment via Agent VCC 7 days prior",
-    assignedExecutive: "Vikram Malhotra",
-    nextActionSummary: "Final contract signature expected by 30 Aug from Thomas Cook Head Office",
-    nextCallDate: "2026-08-30",
-    nextCallTime: "11:00 AM",
-    quotations: [
-      {
-        id: "QTN-006",
-        versionName: "UK Inbound Delegation Group Agreement",
-        date: "22 Aug 2026",
-        amount: 1560000,
-        status: "Accepted",
-        inclusions: "60 Deluxe Rooms x 4 Nights, Daily Dinner, 10% agent commission rebate.",
-        validUntil: "30 Aug 2026",
-      },
-    ],
-    tentativeHold: {
-      venueName: "Room Block Wing A (60 Rooms)",
-      startDate: "2026-10-20",
-      endDate: "2026-10-24",
-      holdExpiryDate: "2026-08-30",
-      holdStatus: "Active",
-      holdNotes: "60 room block locked for Thomas Cook UK inbound group.",
-    },
-    activities: [
-      { id: "ACT-30", type: "Note", date: "18 Aug 2026, 01:00 PM", user: "System", notes: "Lead Record Linked (#LD-504)" },
-      { id: "ACT-31", type: "Proposal Sent", date: "20 Aug 2026, 04:30 PM", user: "Vikram Malhotra", notes: "Sent group contract with 10% commission agreement." },
-      { id: "ACT-32", type: "Stage Change", date: "26 Aug 2026, 12:00 PM", user: "Vikram Malhotra", notes: "Moved to Final Decision. Client approved terms." },
-    ],
-    createdDate: "18 Aug 2026",
-  },
-  {
-    id: "OPP-305",
-    dealName: "Singhania Destination 3-Day Wedding",
-    leadId: "LD-505",
-    stage: "Won",
-    status: "Won",
-    customerName: "Rakesh Singhania",
-    companyName: "Singhania Group",
-    contactPerson: "Rakesh Singhania",
-    mobile: "+91 98220 11990",
-    email: "rakesh@singhaniagroup.com",
-    preferredContactMethod: "Phone",
-    leadType: "Wedding",
-    customerRequirement: "Full hotel buyout for 3 days: Sangeet, Mehendi, Wedding Ceremony & Reception.",
-    expectedEventDate: "2026-12-10",
-    guestCount: 500,
-    expectedRoomNights: 360,
-    venueRequired: "Grand Ballroom, Royal Lawn & Poolside",
-    leadSource: "Walk-In",
-    dealValue: 4200000,
-    quotedValue: 4500000,
-    expectedRevenue: 4200000,
-    expectedCloseDate: "2026-08-25",
-    paymentTerms: "50% Advance Received, Balance 15 Days Prior",
-    assignedExecutive: "Vikram Malhotra",
-    nextActionSummary: "Deal Won! Advance of ₹21.00L received. Ready for Event Booking creation.",
-    quotations: [
-      {
-        id: "QTN-007",
-        versionName: "Full Resort Buyout Contract",
-        date: "15 Aug 2026",
-        amount: 4200000,
-        status: "Accepted",
-        inclusions: "Full hotel buyout, 3-day banquet catering, decor, bridal suites, 120 rooms x 3 nights.",
-        validUntil: "25 Aug 2026",
-      },
-    ],
-    tentativeHold: {
-      venueName: "Grand Ballroom, Royal Lawn & Poolside",
-      startDate: "2026-12-10",
-      endDate: "2026-12-13",
-      holdExpiryDate: "2026-08-25",
-      holdStatus: "Converted to Booking",
-      holdNotes: "Token advance received; hold converted to confirmed booking queue.",
-    },
-    activities: [
-      { id: "ACT-40", type: "Note", date: "10 Aug 2026, 10:00 AM", user: "System", notes: "Lead Record Linked (#LD-505)" },
-      { id: "ACT-41", type: "Proposal Sent", date: "15 Aug 2026, 05:00 PM", user: "Vikram Malhotra", notes: "Contract signed and 50% advance payment receipt confirmed." },
-      { id: "ACT-42", type: "Stage Change", date: "25 Aug 2026, 02:00 PM", user: "Vikram Malhotra", notes: "Deal Won! Advance received. Moved to Booking Queue." },
-    ],
-    createdDate: "10 Aug 2026",
-  },
-  {
-    id: "OPP-306",
-    dealName: "Infosys Q3 Tech Innovation Summit",
-    leadId: "LD-506",
-    stage: "Requirement Analysis",
-    status: "Open",
-    customerName: "Priya Menon",
-    companyName: "Infosys Ltd",
-    contactPerson: "Priya Menon (HR Lead)",
-    mobile: "+91 98112 88990",
-    email: "priya.m@infosys.com",
-    preferredContactMethod: "Email",
-    leadType: "Corporate Booking",
-    customerRequirement: "Tech summit for 200 developers with high-speed internet and hackathon seating.",
-    expectedEventDate: "2026-10-15",
-    guestCount: 200,
-    expectedRoomNights: 80,
-    venueRequired: "Convention Hall B",
-    leadSource: "Website",
-    dealValue: 720000,
-    quotedValue: 780000,
-    expectedRevenue: 720000,
-    expectedCloseDate: "2026-09-15",
-    assignedExecutive: "Jay Kumar",
-    nextActionSummary: "Requirements call scheduled for 29 Aug at 4:00 PM with Tech Lead",
-    nextCallDate: "2026-08-29",
-    nextCallTime: "04:00 PM",
-    quotations: [],
-    tentativeHold: undefined,
-    activities: [
-      { id: "ACT-50", type: "Phone Call", date: "19 Aug 2026, 03:00 PM", user: "Jay Kumar", notes: "Introductory call to understand hackathon AV requirements." },
-    ],
-    createdDate: "18 Aug 2026",
-  },
-  {
-    id: "OPP-307",
-    dealName: "Apex Events Annual Fashion Awards",
-    leadId: "LD-507",
-    stage: "Qualification",
-    status: "Open",
-    customerName: "Dr. Alok Nath",
-    companyName: "Apex Event Management Co.",
-    contactPerson: "Dr. Alok Nath",
-    mobile: "+91 98221 66778",
-    email: "alok@apexevents.in",
-    preferredContactMethod: "Phone",
-    leadType: "Restaurant Event",
-    customerRequirement: "Private lounge buyout for 120 guests with signature cocktails.",
-    expectedEventDate: "2026-11-05",
-    guestCount: 120,
-    venueRequired: "Saffron Lounge & Terrace",
-    leadSource: "Direct Inquiry",
-    dealValue: 650000,
-    quotedValue: 700000,
-    expectedRevenue: 650000,
-    expectedCloseDate: "2026-09-20",
-    assignedExecutive: "Jay Kumar",
-    nextActionSummary: "Discovery call scheduled for 30 Aug at 10:00 AM",
-    nextCallDate: "2026-08-30",
-    nextCallTime: "10:00 AM",
-    quotations: [],
-    tentativeHold: undefined,
-    activities: [
-      { id: "ACT-60", type: "Phone Call", date: "19 Aug 2026, 11:30 AM", user: "Jay Kumar", notes: "Qualification call on guest numbers and catering style." },
-    ],
-    createdDate: "19 Aug 2026",
-  },
-  {
-    id: "OPP-308",
-    dealName: "Pharma Global Leadership Summit",
-    leadId: "LD-508",
-    stage: "Lost",
-    status: "Lost",
-    customerName: "Dr. S. Nambiar",
-    companyName: "Sun Pharma Ltd",
-    contactPerson: "Dr. S. Nambiar",
-    mobile: "+91 98990 77889",
-    email: "nambiar@sunpharma.com",
-    preferredContactMethod: "Email",
-    leadType: "Conference",
-    customerRequirement: "Global summit for 400 delegates.",
-    expectedEventDate: "2026-09-10",
-    guestCount: 400,
-    venueRequired: "Grand Convention Hall",
-    leadSource: "Email",
-    dealValue: 1400000,
-    expectedCloseDate: "2026-08-24",
-    assignedExecutive: "Vikram Malhotra",
-    lostReason: "Customer Chose Competitor",
-    lostNotes: "Selected competitor hotel due to closer proximity to airport.",
-    nextActionSummary: "Closed Lost: Customer selected competitor due to airport proximity.",
-    quotations: [],
-    tentativeHold: undefined,
-    activities: [
-      { id: "ACT-70", type: "Stage Change", date: "24 Aug 2026, 04:00 PM", user: "Vikram Malhotra", notes: "Marked Lost: Customer chose airport competitor." },
-    ],
-    createdDate: "12 Aug 2026",
-  },
-];
+  });
+}
 
 export function DealsPipelineView() {
   const router = useRouter();
-  const [deals, setDeals] = useState<HotelDealItem[]>(INITIAL_HOTEL_DEALS);
-  const [centralLeads, setCentralLeads] = useState<CentralLeadItem[]>(INITIAL_CENTRAL_LEADS);
+  const [deals, setDeals] = useState<HotelDealItem[]>([]);
+  const [centralLeads, setCentralLeads] = useState<CentralLeadItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const loadDealsAndLeads = async () => {
+    setLoading(true);
+    try {
+      const [dealRows, leadRows] = await Promise.all([smDealService.list(), smLeadService.list()]);
+      setDeals(dealRows.map(mapDealFromApi));
+      setCentralLeads(leadRows.map(mapCentralLeadFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load deals");
+      setDeals([]);
+      setCentralLeads([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadDealsAndLeads();
+  }, []);
+
+  const persistDeal = async (deal: HotelDealItem, leadDbId?: string): Promise<HotelDealItem | null> => {
+    try {
+      const payload = buildDealPayload(deal, leadDbId);
+      const row = deal.dbId
+        ? await smDealService.update(deal.dbId, payload)
+        : await smDealService.create(payload);
+      return mapDealFromApi(row);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to save deal");
+      return null;
+    }
+  };
 
   // Drag and Drop State
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
@@ -780,7 +458,7 @@ export function DealsPipelineView() {
       return;
     }
 
-    applyStageChange(deal, next);
+    void applyStageChange(deal, next);
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -904,18 +582,18 @@ export function DealsPipelineView() {
       return;
     }
 
-    applyStageChange(targetDeal, targetStage);
+    void applyStageChange(targetDeal, targetStage);
   };
 
   // Core Stage Changer with Audit Log Creation
-  const applyStageChange = (deal: HotelDealItem, targetStage: HotelDealStage, extraAuditNotes?: string) => {
+  const applyStageChange = async (deal: HotelDealItem, targetStage: HotelDealStage, extraAuditNotes?: string) => {
     const previousStage = deal.stage;
     const newStatus: HotelDealStatus = targetStage === "Won" ? "Won" : targetStage === "Lost" ? "Lost" : "Open";
 
     const auditActivity: DealActivity = {
       id: `ACT-${Date.now()}`,
       type: "Stage Change",
-      date: "Today 12:45 PM",
+      date: nowTimelineStamp(),
       user: deal.assignedExecutive,
       notes: extraAuditNotes || `Stage moved from "${previousStage}" → "${targetStage}".`,
       purpose: "Pipeline Progression",
@@ -932,21 +610,24 @@ export function DealsPipelineView() {
           : targetStage === "Lost"
           ? `Closed Lost: ${deal.lostReason || "Customer cancelled/chose alternative"}`
           : targetStage === "Tentative Hold"
-          ? `Venue on Tentative Hold until ${deal.tentativeHold?.holdExpiryDate || "30 Aug 2026"}.`
+          ? `Venue on Tentative Hold until ${deal.tentativeHold?.holdExpiryDate || todayIsoDate()}.`
           : `Advanced to ${targetStage}. Awaiting next action.`,
       activities: [auditActivity, ...deal.activities],
     };
 
-    setDeals((prev) => prev.map((d) => (d.id === deal.id ? updatedDeal : d)));
+    const saved = await persistDeal(updatedDeal);
+    if (!saved) return;
+
+    setDeals((prev) => prev.map((d) => (d.id === deal.id ? saved : d)));
     if (selectedDeal?.id === deal.id) {
-      setSelectedDeal(updatedDeal);
+      setSelectedDeal(saved);
     }
 
-    setToastMessage(`🚀 Deal "${updatedDeal.dealName}" moved to "${targetStage}"!`);
+    setToastMessage(`🚀 Deal "${saved.dealName}" moved to "${targetStage}"!`);
   };
 
   // Handle Save Tentative Hold
-  const handleSaveTentativeHold = (e: React.FormEvent) => {
+  const handleSaveTentativeHold = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!holdDealTarget) return;
 
@@ -971,7 +652,7 @@ export function DealsPipelineView() {
         {
           id: `ACT-${Date.now()}`,
           type: "Stage Change",
-          date: "Today 12:45 PM",
+          date: nowTimelineStamp(),
           user: holdDealTarget.assignedExecutive,
           notes: auditNotes,
           purpose: "Venue Reservation Hold",
@@ -981,9 +662,12 @@ export function DealsPipelineView() {
       ],
     };
 
-    setDeals((prev) => prev.map((d) => (d.id === holdDealTarget.id ? updatedDeal : d)));
+    const saved = await persistDeal(updatedDeal);
+    if (!saved) return;
+
+    setDeals((prev) => prev.map((d) => (d.id === holdDealTarget.id ? saved : d)));
     if (selectedDeal?.id === holdDealTarget.id) {
-      setSelectedDeal(updatedDeal);
+      setSelectedDeal(saved);
     }
 
     setIsHoldModalOpen(false);
@@ -992,7 +676,7 @@ export function DealsPipelineView() {
   };
 
   // Handle Create Quotation Revision (QTN)
-  const handleCreateQuotationSubmit = (e: React.FormEvent) => {
+  const handleCreateQuotationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDeal) return;
 
@@ -1000,14 +684,13 @@ export function DealsPipelineView() {
     const newQuotation: DealQuotation = {
       id: newQtnId,
       versionName: qtnVersionName.trim() || `Quotation Revision #${selectedDeal.quotations.length + 1}`,
-      date: "Today 01:00 PM",
+      date: nowTimelineStamp(),
       amount: Number(qtnAmount) || selectedDeal.dealValue,
       status: "Sent",
       inclusions: qtnInclusions.trim() || undefined,
       validUntil: qtnValidUntil,
     };
 
-    // Supersede previous active quotations if any
     const updatedQuotations = selectedDeal.quotations.map((q) =>
       q.status === "Sent" ? { ...q, status: "Superseded" as const } : q
     );
@@ -1015,7 +698,7 @@ export function DealsPipelineView() {
     const auditActivity: DealActivity = {
       id: `ACT-${Date.now()}`,
       type: "Proposal Sent",
-      date: "Today 01:00 PM",
+      date: nowTimelineStamp(),
       user: selectedDeal.assignedExecutive,
       notes: `Generated and sent new quotation #${newQtnId} ("${newQuotation.versionName}") for ₹${newQuotation.amount.toLocaleString("en-IN")}.`,
       purpose: "Quotation Issuance",
@@ -1029,14 +712,17 @@ export function DealsPipelineView() {
       activities: [auditActivity, ...selectedDeal.activities],
     };
 
-    setDeals((prev) => prev.map((d) => (d.id === selectedDeal.id ? updatedDeal : d)));
-    setSelectedDeal(updatedDeal);
+    const saved = await persistDeal(updatedDeal);
+    if (!saved) return;
+
+    setDeals((prev) => prev.map((d) => (d.id === selectedDeal.id ? saved : d)));
+    setSelectedDeal(saved);
     setIsQuotationModalOpen(false);
     setToastMessage(`✓ Created and issued Quotation #${newQtnId}!`);
   };
 
   // Handle Save Activity from Modal (Scheduled vs Completed)
-  const handleSaveActivity = (payload: ActivityPayload) => {
+  const handleSaveActivity = async (payload: ActivityPayload) => {
     if (!selectedDeal) return;
 
     const newDealActivity: DealActivity = {
@@ -1054,7 +740,6 @@ export function DealsPipelineView() {
       nextActionDate: payload.nextActionDate,
     };
 
-    // Dynamically update immediate next action on deal card
     const nextSummary = payload.nextActionSummary
       ? `${payload.nextActionSummary} (${payload.nextActionDate || "Soon"})`
       : payload.status === "Upcoming"
@@ -1068,14 +753,17 @@ export function DealsPipelineView() {
       activities: [newDealActivity, ...selectedDeal.activities],
     };
 
-    setDeals((prev) => prev.map((d) => (d.id === selectedDeal.id ? updatedDeal : d)));
-    setSelectedDeal(updatedDeal);
+    const saved = await persistDeal(updatedDeal);
+    if (!saved) return;
+
+    setDeals((prev) => prev.map((d) => (d.id === selectedDeal.id ? saved : d)));
+    setSelectedDeal(saved);
     setIsAddActivityModalOpen(false);
     setToastMessage(`✓ Logged activity "${payload.subject}"!`);
   };
 
   // Handle Mark Lost Confirm
-  const handleConfirmMarkLost = (e: React.FormEvent) => {
+  const handleConfirmMarkLost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!dealToMarkLost) return;
 
@@ -1090,7 +778,7 @@ export function DealsPipelineView() {
         {
           id: `ACT-${Date.now()}`,
           type: "Stage Change",
-          date: "Today 01:15 PM",
+          date: nowTimelineStamp(),
           user: dealToMarkLost.assignedExecutive,
           notes: `Marked Lost: ${lostReasonInput}. ${lostNotesInput.trim()}`,
           purpose: "Opportunity Closeout",
@@ -1100,14 +788,17 @@ export function DealsPipelineView() {
       ],
     };
 
-    setDeals((prev) => prev.map((d) => (d.id === dealToMarkLost.id ? updatedDeal : d)));
+    const saved = await persistDeal(updatedDeal);
+    if (!saved) return;
+
+    setDeals((prev) => prev.map((d) => (d.id === dealToMarkLost.id ? saved : d)));
     if (selectedDeal?.id === dealToMarkLost.id) {
-      setSelectedDeal(updatedDeal);
+      setSelectedDeal(saved);
     }
 
     setIsLostModalOpen(false);
     setDealToMarkLost(null);
-    setToastMessage(`✓ Opportunity #${updatedDeal.id} marked as Lost.`);
+    setToastMessage(`✓ Opportunity #${saved.id} marked as Lost.`);
   };
 
   // Pre-fill Create Deal from Lead Selection
@@ -1141,15 +832,15 @@ export function DealsPipelineView() {
   };
 
   // Handle Create Deal Submit
-  const handleCreateDealSubmit = (e: React.FormEvent) => {
+  const handleCreateDealSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createDealName.trim() || !createCustomerName.trim() || !createMobile.trim()) return;
 
-    const newDealId = `OPP-${300 + deals.length + 1}`;
+    const linkedLead = centralLeads.find((l) => l.id === createLeadIdSelect);
     const newDeal: HotelDealItem = {
-      id: newDealId,
+      id: `OPP-${Date.now()}`,
       dealName: createDealName.trim(),
-      leadId: createLeadIdSelect || `LD-${newDealId}`,
+      leadId: createLeadIdSelect || "",
       stage: createStage,
       status: createStage === "Won" ? "Won" : createStage === "Lost" ? "Lost" : "Open",
       customerName: createCustomerName.trim(),
@@ -1160,7 +851,7 @@ export function DealsPipelineView() {
       preferredContactMethod: "Phone",
       leadType: createLeadType,
       customerRequirement: createRequirement.trim() || "Event inquiry details pending discovery call.",
-      expectedEventDate: "2026-11-20",
+      expectedEventDate: todayIsoDate(),
       dealValue: Number(createDealValue) || 500000,
       quotedValue: Number(createDealValue) || 500000,
       expectedRevenue: Number(createDealValue) || 500000,
@@ -1172,19 +863,22 @@ export function DealsPipelineView() {
         {
           id: `ACT-${Date.now()}`,
           type: "Note",
-          date: "Today 12:00 PM",
+          date: nowTimelineStamp(),
           user: createExecutive,
-          notes: `Opportunity #${newDealId} created from Qualified Lead (#${createLeadIdSelect || "Direct"}).`,
+          notes: `Opportunity created from Qualified Lead (#${createLeadIdSelect || "Direct"}).`,
           status: "Completed",
           purpose: "Opportunity Inception",
         },
       ],
-      createdDate: "29 Aug 2026",
+      createdDate: todayIsoDate(),
     };
 
-    setDeals([newDeal, ...deals]);
+    const saved = await persistDeal(newDeal, linkedLead?.dbId);
+    if (!saved) return;
+
+    setDeals((prev) => [saved, ...prev]);
     setIsCreateModalOpen(false);
-    setToastMessage(`✓ Created Sales Opportunity #${newDeal.id} for ${newDeal.dealName}!`);
+    setToastMessage(`✓ Created Sales Opportunity #${saved.id} for ${saved.dealName}!`);
   };
 
   return (
@@ -1236,6 +930,12 @@ export function DealsPipelineView() {
         </div>
       }
     >
+      {loading && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          Loading deals and leads from database…
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: PIPELINE COMMERCIAL KPI CARDS (F&B DASHBOARD STYLE)
       ───────────────────────────────────────────────────────────── */}
@@ -1645,7 +1345,7 @@ export function DealsPipelineView() {
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => applyStageChange(selectedDeal, "Qualification", "Reopened opportunity back to Qualification")}
+                    onClick={() => void applyStageChange(selectedDeal, "Qualification", "Reopened opportunity back to Qualification")}
                     className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-xs cursor-pointer flex items-center gap-1.5"
                   >
                     <RotateCcw className="h-3.5 w-3.5" /> Reopen Deal
@@ -2473,7 +2173,7 @@ export function DealsPipelineView() {
                 type="button"
                 size="sm"
                 onClick={() => {
-                  applyStageChange(dealToMarkWon, "Won", "Deal confirmed Won and routed to Booking Queue.");
+                  void applyStageChange(dealToMarkWon, "Won", "Deal confirmed Won and routed to Booking Queue.");
                   setIsWonModalOpen(false);
                   setDealToMarkWon(null);
                 }}

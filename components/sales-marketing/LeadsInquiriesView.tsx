@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useMemo, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Search,
   Plus,
@@ -43,19 +43,17 @@ import { ModulePageShell } from "@/components/pms";
 import { Button, Card, Drawer, Modal, ActionMenu, ActionMenuItem } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { CsvLeadImportModal } from "./shared/CsvLeadImportModal";
+import { type LeadBookingType } from "@/lib/sales-marketing/booking-types";
+import { usePropertyBookingTypes } from "@/lib/sales-marketing/property-booking-types";
+import { smLeadService, smDealService } from "@/services/sales-marketing";
+import { mapLeadFromApi, mapLeadToApi, mapDealToApi } from "@/lib/sales-marketing/api-mappers";
+import { nowTimelineStamp, todayIsoDate } from "@/lib/sales-marketing/useSmList";
 
 // ─────────────────────────────────────────────────────────────
 // 1. DATA TYPES & SCHEMAS (HOTEL PMS V1 MASTER SPEC)
 // ─────────────────────────────────────────────────────────────
 
-export type BookingType =
-  | "Room Booking"
-  | "Banquet Event"
-  | "Conference"
-  | "Restaurant"
-  | "Swimming Pool"
-  | "Private Event"
-  | "Other";
+export type BookingType = LeadBookingType | "Other";
 
 export type LeadType =
   | BookingType
@@ -123,6 +121,7 @@ export interface LeadTimelineEvent {
 }
 
 export interface HotelLeadItem {
+  dbId?: string;
   id?: string;
   leadId?: string;
   leadName?: string;
@@ -157,6 +156,7 @@ export interface HotelLeadItem {
 }
 
 export interface LeadRecordItem {
+  dbId?: string;
   id: string; // e.g. "LEAD-001" or "LD-501"
   leadName: string;
   contactPerson: string;
@@ -231,228 +231,16 @@ export const sanitizeDisplayBudget = (val: string | undefined): string => {
 // 2. INITIAL MOCK LEADS DIRECTORY
 // ─────────────────────────────────────────────────────────────
 
-export const INITIAL_LEADS: LeadRecordItem[] = [
-  {
-    id: "LEAD-001",
-    leadName: "Rajesh Sharma",
-    contactPerson: "Rajesh Sharma",
-    mobileNumber: "+91 98765 43210",
-    mobile: "+91 98765 43210",
-    email: "rajesh.sharma@sharmagroup.in",
-    city: "Mumbai",
-    companyName: "Sharma Family Enterprise",
-    preferredContactMethod: "Phone Call",
-    bookingType: "Banquet Event",
-    eventDate: "2026-11-15",
-    expectedEventDate: "2026-11-15",
-    guestCount: 400,
-    estimatedRevenue: 850000,
-    rawRevenue: 850000,
-    expectedRevenue: "₹8,50,000",
-    budgetRange: "₹8,00,000 - ₹10,00,000",
-    priority: "High",
-    customerRequirements: "Looking for Grand Ballroom + Poolside Lawn for Wedding Reception. Pure veg catering required for 400 guests.",
-    specialRequirements: "Looking for Grand Ballroom + Poolside Lawn for Wedding Reception. Pure veg catering required for 400 guests.",
-    customerRequirement: "Looking for Grand Ballroom + Poolside Lawn for Wedding Reception. Pure veg catering required for 400 guests.",
-    leadSource: "Google Ads",
-    campaignId: "CAMP-001",
-    campaignName: "Wedding Campaign 2026",
-    promotionCode: "WEDDING2026",
-    promotionName: "WEDDING2026",
-    importedVia: "CSV Import",
-    createdDate: "2026-08-28",
-    assignedExecutive: "Vikram Malhotra",
-    status: "Converted",
-    linkedDealId: "DEAL-801",
-    linkedDealStage: "Negotiation",
-    timeline: [
-      { id: "T-1", date: "2026-08-28 10:30 AM", title: "Lead Imported via Google Ads CSV", actor: "System Engine" },
-      { id: "T-2", date: "2026-08-28 10:35 AM", title: "Assigned to Vikram Malhotra", actor: "Auto-Assignment Engine" },
-      { id: "T-3", date: "2026-08-28 11:15 AM", title: "Introductory Discovery Call Completed", actor: "Vikram Malhotra", notes: "Client confirmed dates & ballroom preference." },
-      { id: "T-4", date: "2026-08-28 01:00 PM", title: "Converted to Active Deal (#DEAL-801)", actor: "Vikram Malhotra" },
-    ],
-  },
-  {
-    id: "LEAD-002",
-    leadName: "TechCorp Global Offsite",
-    contactPerson: "Meera Kapoor",
-    mobileNumber: "+91 98200 99881",
-    mobile: "+91 98200 99881",
-    email: "meera.k@techcorp.io",
-    city: "Bangalore",
-    companyName: "TechCorp Global Solutions",
-    preferredContactMethod: "Email",
-    bookingType: "Conference",
-    eventDate: "2026-09-20",
-    expectedEventDate: "2026-09-20",
-    guestCount: 50,
-    estimatedRevenue: 450000,
-    rawRevenue: 450000,
-    expectedRevenue: "₹4,50,000",
-    budgetRange: "₹4,00,000 - ₹5,00,000",
-    priority: "High",
-    customerRequirements: "Need Executive Boardroom for 2 days with hybrid Zoom setup, dual mics, and executive business lunch.",
-    specialRequirements: "Need Executive Boardroom for 2 days with hybrid Zoom setup, dual mics, and executive business lunch.",
-    customerRequirement: "Need Executive Boardroom for 2 days with hybrid Zoom setup, dual mics, and executive business lunch.",
-    leadSource: "Website",
-    campaignId: "CAMP-002",
-    campaignName: "Corporate Direct 2026",
-    promotionCode: null,
-    importedVia: "Website",
-    createdDate: "2026-08-27",
-    assignedExecutive: "Ananya Roy",
-    status: "Qualified",
-    timeline: [
-      { id: "T-5", date: "2026-08-27 02:00 PM", title: "Inquiry Submitted via Website Form", actor: "Website Webhook" },
-      { id: "T-6", date: "2026-08-27 03:30 PM", title: "Discovery Call Completed", actor: "Ananya Roy", notes: "Client requested quotation for 50 attendees" },
-      { id: "T-7", date: "2026-08-28 11:00 AM", title: "Lead Marked as Qualified", actor: "Ananya Roy", notes: "Decision maker confirmed budget approval." },
-    ],
-  },
-  {
-    id: "LEAD-003",
-    leadName: "Sanjay Oberoi Silver Anniversary",
-    contactPerson: "Sanjay Oberoi",
-    mobileNumber: "+91 98112 55443",
-    mobile: "+91 98112 55443",
-    email: "sanjay@oberoiind.com",
-    city: "Delhi NCR",
-    companyName: "Oberoi Industries",
-    preferredContactMethod: "Phone Call",
-    bookingType: "Banquet Event",
-    eventDate: "2026-10-05",
-    expectedEventDate: "2026-10-05",
-    guestCount: 150,
-    estimatedRevenue: 320000,
-    rawRevenue: 320000,
-    expectedRevenue: "₹3,20,000",
-    budgetRange: "₹3,00,000 - ₹4,00,000",
-    priority: "Medium",
-    customerRequirements: "Rooftop Terrace Garden setup with live acoustic music and international cocktail menu.",
-    specialRequirements: "Rooftop Terrace Garden setup with live acoustic music and international cocktail menu.",
-    customerRequirement: "Rooftop Terrace Garden setup with live acoustic music and international cocktail menu.",
-    leadSource: "Phone Inquiry",
-    campaignId: null,
-    campaignName: null,
-    promotionCode: null,
-    importedVia: "Phone Inquiry",
-    createdDate: "2026-08-26",
-    assignedExecutive: "Vikram Malhotra",
-    status: "Contacted",
-    timeline: [
-      { id: "T-8", date: "2026-08-26 11:00 AM", title: "Direct Inbound Call Received", actor: "Front Desk Reception" },
-      { id: "T-9", date: "2026-08-26 11:15 AM", title: "Assigned to Vikram Malhotra", actor: "Sales Lead" },
-      { id: "T-10", date: "2026-08-26 04:00 PM", title: "Initial Follow-up Call Logged", actor: "Vikram Malhotra", notes: "Sent preliminary rooftop brochure via WhatsApp." },
-    ],
-  },
-  {
-    id: "LEAD-004",
-    leadName: "Amitabh Choudhury Staycation",
-    contactPerson: "Amitabh Choudhury",
-    mobileNumber: "+91 98330 77661",
-    mobile: "+91 98330 77661",
-    email: "amitabh.c@gmail.com",
-    city: "Kolkata",
-    companyName: "Self / Family",
-    preferredContactMethod: "WhatsApp",
-    bookingType: "Room Booking",
-    eventDate: "2026-09-01",
-    expectedEventDate: "2026-09-01",
-    guestCount: 12,
-    estimatedRevenue: 120000,
-    rawRevenue: 120000,
-    expectedRevenue: "₹1,20,000",
-    budgetRange: "₹1,00,000 - ₹1,50,000",
-    priority: "Low",
-    customerRequirements: "Weekend family getaway booking 4 Deluxe rooms with complimentary breakfast.",
-    specialRequirements: "Weekend family getaway booking 4 Deluxe rooms with complimentary breakfast.",
-    customerRequirement: "Weekend family getaway booking 4 Deluxe rooms with complimentary breakfast.",
-    leadSource: "Walk-In",
-    campaignId: null,
-    campaignName: null,
-    promotionCode: null,
-    importedVia: "Walk-In",
-    createdDate: "2026-08-28",
-    assignedExecutive: "Rohan Varma",
-    status: "New",
-    timeline: [
-      { id: "T-11", date: "2026-08-28 09:00 AM", title: "Walk-In Inquiry Logged", actor: "Rohan Varma" },
-    ],
-  },
-  {
-    id: "LEAD-005",
-    leadName: "Dr. Vikram Sethi Healthcare Gala",
-    contactPerson: "Dr. Vikram Sethi",
-    mobileNumber: "+91 98112 33445",
-    mobile: "+91 98112 33445",
-    email: "v.sethi@healthcarecorp.com",
-    city: "Hyderabad",
-    companyName: "Healthcare Corp India",
-    preferredContactMethod: "Email",
-    bookingType: "Restaurant",
-    eventDate: "2026-10-18",
-    expectedEventDate: "2026-10-18",
-    guestCount: 200,
-    estimatedRevenue: 620000,
-    rawRevenue: 620000,
-    expectedRevenue: "₹6,20,000",
-    budgetRange: "₹5,00,000 - ₹7,00,000",
-    priority: "High",
-    customerRequirements: "Saffron Fine Dining private buyout for doctors association annual awards gala dinner.",
-    specialRequirements: "Saffron Fine Dining private buyout for doctors association annual awards gala dinner.",
-    customerRequirement: "Saffron Fine Dining private buyout for doctors association annual awards gala dinner.",
-    leadSource: "Corporate Inquiry",
-    campaignId: null,
-    campaignName: null,
-    promotionCode: null,
-    importedVia: "Manual Entry",
-    createdDate: "2026-08-25",
-    assignedExecutive: "Ananya Roy",
-    status: "Qualified",
-    timeline: [
-      { id: "T-12", date: "2026-08-25 01:00 PM", title: "Corporate Inquiry Created", actor: "Ananya Roy" },
-      { id: "T-13", date: "2026-08-26 10:00 AM", title: "Requirements Verified & Qualified", actor: "Ananya Roy" },
-    ],
-  },
-  {
-    id: "LEAD-006",
-    leadName: "Tanya Oberoi Fashion Trunk Show",
-    contactPerson: "Tanya Oberoi",
-    mobileNumber: "+91 98199 44556",
-    mobile: "+91 98199 44556",
-    email: "tanya.oberoi@fashion.in",
-    city: "Mumbai",
-    companyName: "Oberoi Fashion Studio",
-    preferredContactMethod: "Phone Call",
-    bookingType: "Private Event",
-    eventDate: "2026-09-05",
-    expectedEventDate: "2026-09-05",
-    guestCount: 300,
-    estimatedRevenue: 550000,
-    rawRevenue: 550000,
-    expectedRevenue: "₹5,50,000",
-    budgetRange: "₹5,00,000 - ₹6,00,000",
-    priority: "Medium",
-    customerRequirements: "Exhibition hall space for fashion designer trunk show and pop-up boutiques.",
-    specialRequirements: "Exhibition hall space for fashion designer trunk show and pop-up boutiques.",
-    customerRequirement: "Exhibition hall space for fashion designer trunk show and pop-up boutiques.",
-    leadSource: "Referral",
-    campaignId: null,
-    campaignName: null,
-    promotionCode: null,
-    importedVia: "Manual Entry",
-    createdDate: "2026-08-20",
-    assignedExecutive: "Vikram Malhotra",
-    status: "Lost",
-    timeline: [
-      { id: "T-14", date: "2026-08-20 11:00 AM", title: "Referral Lead Logged", actor: "Vikram Malhotra" },
-      { id: "T-15", date: "2026-08-23 04:30 PM", title: "Client Selected Alternative Venue", actor: "Vikram Malhotra", notes: "Client postponed trunk show to next quarter." },
-    ],
-  },
-];
+export const INITIAL_LEADS = [];
 
 export function LeadsInquiriesView() {
   const router = useRouter();
-  const [leads, setLeads] = useState<LeadRecordItem[]>(INITIAL_LEADS);
+  const searchParams = useSearchParams();
+  const { enabledTypes } = usePropertyBookingTypes();
+  const defaultLeadBookingType =
+    (enabledTypes[0]?.leadType ?? "Banquet Event") as BookingType;
+  const [leads, setLeads] = useState<LeadRecordItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("ALL");
   const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>("ALL");
@@ -485,6 +273,41 @@ export function LeadsInquiriesView() {
     assignedExecutive: "Vikram Malhotra",
   });
 
+  const loadLeads = async () => {
+    setLoading(true);
+    try {
+      const rows = await smLeadService.list();
+      setLeads(rows.map(mapLeadFromApi));
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to load leads");
+      setLeads([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadLeads();
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get("create") !== "1") return;
+    setIsCreateModalOpen(true);
+    router.replace("/sales-marketing/crm/leads", { scroll: false });
+  }, [searchParams, router]);
+
+  const persistLead = async (lead: LeadRecordItem): Promise<LeadRecordItem | null> => {
+    try {
+      const row = lead.dbId
+        ? await smLeadService.update(lead.dbId, mapLeadToApi(lead))
+        : await smLeadService.create(mapLeadToApi(lead));
+      return mapLeadFromApi(row);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to save lead");
+      return null;
+    }
+  };
+
   // Create Form State (<1 min entry)
   const [createForm, setCreateForm] = useState({
     leadName: "",
@@ -494,7 +317,7 @@ export function LeadsInquiriesView() {
     companyName: "",
     city: "",
     preferredContactMethod: "Phone Call" as "Phone Call" | "WhatsApp" | "Email",
-    bookingType: "Banquet Event" as BookingType,
+    bookingType: defaultLeadBookingType,
     leadSource: "Google Ads" as LeadSource,
     campaignName: "",
     eventDate: "2026-11-20",
@@ -545,41 +368,35 @@ export function LeadsInquiriesView() {
   }, [leads, searchTerm, selectedTypeFilter, selectedSourceFilter, selectedStatusFilter]);
 
   // Handle Quick Status Change
-  const handleQuickStatusChange = (leadId: string, newStatus: LeadStatus) => {
-    setLeads((prev) =>
-      prev.map((l) => {
-        if (l.id === leadId) {
-          const updatedTimeline: LeadTimelineEvent = {
-            id: `T-${Date.now()}`,
-            date: "Today 12:00 PM",
-            title: `Status updated to ${newStatus}`,
-            actor: l.assignedExecutive,
-          };
-          return {
-            ...l,
-            status: newStatus,
-            timeline: [updatedTimeline, ...l.timeline],
-          };
-        }
-        return l;
-      })
-    );
+  const handleQuickStatusChange = async (leadId: string, newStatus: LeadStatus) => {
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) return;
 
-    if (selectedLead && selectedLead.id === leadId) {
-      setSelectedLead((prev) => (prev ? { ...prev, status: newStatus } : null));
-    }
+    const updatedTimeline: LeadTimelineEvent = {
+      id: `T-${Date.now()}`,
+      date: nowTimelineStamp(),
+      title: `Status updated to ${newStatus}`,
+      actor: lead.assignedExecutive,
+    };
+    const saved = await persistLead({
+      ...lead,
+      status: newStatus,
+      timeline: [updatedTimeline, ...lead.timeline],
+    });
+    if (!saved) return;
 
+    setLeads((prev) => prev.map((l) => (l.id === leadId ? saved : l)));
+    if (selectedLead?.id === leadId) setSelectedLead(saved);
     setToastMessage(`✓ Lead status updated to "${newStatus}"`);
   };
 
   // Handle Create Lead (<1 min fast submission)
-  const handleCreateLeadSubmit = (e: React.FormEvent) => {
+  const handleCreateLeadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createForm.leadName.trim() || !createForm.mobileNumber.trim() || !createForm.customerRequirements.trim()) return;
 
-    const newLeadId = `LEAD-${String(leads.length + 1).padStart(3, "0")}`;
-    const newLead: LeadRecordItem = {
-      id: newLeadId,
+    const draft: LeadRecordItem = {
+      id: "",
       leadName: createForm.leadName.trim(),
       contactPerson: createForm.contactPerson.trim() || createForm.leadName.trim(),
       mobileNumber: createForm.mobileNumber.trim(),
@@ -605,24 +422,26 @@ export function LeadsInquiriesView() {
       campaignName: createForm.campaignName.trim() || null,
       promotionCode: null,
       importedVia: "Manual Entry",
-      createdDate: "2026-08-29",
+      createdDate: todayIsoDate(),
       assignedExecutive: createForm.assignedExecutive,
       status: "New",
       timeline: [
         {
           id: `T-${Date.now()}`,
-          date: "2026-08-29 12:00 PM",
+          date: nowTimelineStamp(),
           title: "Lead Inquiry Created (Manual Entry)",
           actor: createForm.assignedExecutive,
         },
       ],
     };
 
-    setLeads([newLead, ...leads]);
-    setIsCreateModalOpen(false);
-    setToastMessage(`✓ Created new inquiry #${newLead.id} for ${newLead.leadName}`);
+    const saved = await persistLead(draft);
+    if (!saved) return;
 
-    // Reset Form
+    setLeads((prev) => [saved, ...prev]);
+    setIsCreateModalOpen(false);
+    setToastMessage(`✓ Created new inquiry #${saved.id} for ${saved.leadName}`);
+
     setCreateForm({
       leadName: "",
       contactPerson: "",
@@ -631,10 +450,10 @@ export function LeadsInquiriesView() {
       companyName: "",
       city: "",
       preferredContactMethod: "Phone Call",
-      bookingType: "Banquet Event",
+      bookingType: defaultLeadBookingType,
       leadSource: "Google Ads",
       campaignName: "",
-      eventDate: "2026-11-20",
+      eventDate: todayIsoDate(),
       guestCount: 150,
       estimatedRevenue: 450000,
       priority: "Medium",
@@ -650,116 +469,93 @@ export function LeadsInquiriesView() {
   };
 
   // Handle Edit Lead Submit (Progressive profiling)
-  const handleEditLeadSubmit = (e: React.FormEvent) => {
+  const handleEditLeadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editForm) return;
 
-    setLeads((prev) => prev.map((l) => (l.id === editForm.id ? editForm : l)));
-    if (selectedLead && selectedLead.id === editForm.id) {
-      setSelectedLead(editForm);
-    }
+    const saved = await persistLead(editForm);
+    if (!saved) return;
+
+    setLeads((prev) => prev.map((l) => (l.id === saved.id ? saved : l)));
+    if (selectedLead?.id === saved.id) setSelectedLead(saved);
     setIsEditModalOpen(false);
-    setToastMessage(`✓ Updated lead record #${editForm.id}`);
+    setToastMessage(`✓ Updated lead record #${saved.id}`);
   };
 
   // ── 1. Contact Lead (New -> Contacted) ──
-  const handleContactLeadSubmit = (e: React.FormEvent) => {
+  const handleContactLeadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!contactingLead) return;
 
-    const timestamp = "Today 04:30 PM";
-    const updatedList = leads.map((l) => {
-      if (l.id === contactingLead.id) {
-        return {
-          ...l,
-          status: "Contacted" as LeadStatus,
-          timeline: [
-            {
-              id: `T-${Date.now()}`,
-              date: timestamp,
-              title: `Contacted Lead via ${contactForm.method}`,
-              actor: l.assignedExecutive,
-              notes: contactForm.notes.trim() || `First customer outreach via ${contactForm.method}.`,
-            },
-            ...l.timeline,
-          ],
-        };
-      }
-      return l;
+    const saved = await persistLead({
+      ...contactingLead,
+      status: "Contacted",
+      timeline: [
+        {
+          id: `T-${Date.now()}`,
+          date: nowTimelineStamp(),
+          title: `Contacted Lead via ${contactForm.method}`,
+          actor: contactingLead.assignedExecutive,
+          notes: contactForm.notes.trim() || `First customer outreach via ${contactForm.method}.`,
+        },
+        ...contactingLead.timeline,
+      ],
     });
+    if (!saved) return;
 
-    setLeads(updatedList);
-    if (selectedLead?.id === contactingLead.id) {
-      const updated = updatedList.find((l) => l.id === contactingLead.id);
-      if (updated) setSelectedLead(updated);
-    }
+    setLeads((prev) => prev.map((l) => (l.id === saved.id ? saved : l)));
+    if (selectedLead?.id === saved.id) setSelectedLead(saved);
     setToastMessage(`✓ Lead #${contactingLead.id} marked as Contacted!`);
     setContactingLead(null);
   };
 
   // ── 2. Add Interaction Note (Contacted) ──
-  const handleAddNoteSubmit = (e: React.FormEvent) => {
+  const handleAddNoteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!notingLead || !noteText.trim()) return;
 
-    const timestamp = "Today 04:35 PM";
-    const updatedList = leads.map((l) => {
-      if (l.id === notingLead.id) {
-        return {
-          ...l,
-          timeline: [
-            {
-              id: `T-${Date.now()}`,
-              date: timestamp,
-              title: "Interaction Note Added",
-              actor: l.assignedExecutive,
-              notes: noteText.trim(),
-            },
-            ...l.timeline,
-          ],
-        };
-      }
-      return l;
+    const saved = await persistLead({
+      ...notingLead,
+      timeline: [
+        {
+          id: `T-${Date.now()}`,
+          date: nowTimelineStamp(),
+          title: "Interaction Note Added",
+          actor: notingLead.assignedExecutive,
+          notes: noteText.trim(),
+        },
+        ...notingLead.timeline,
+      ],
     });
+    if (!saved) return;
 
-    setLeads(updatedList);
-    if (selectedLead?.id === notingLead.id) {
-      const updated = updatedList.find((l) => l.id === notingLead.id);
-      if (updated) setSelectedLead(updated);
-    }
+    setLeads((prev) => prev.map((l) => (l.id === saved.id ? saved : l)));
+    if (selectedLead?.id === saved.id) setSelectedLead(saved);
     setToastMessage(`✓ Interaction note logged for Lead #${notingLead.id}!`);
     setNotingLead(null);
     setNoteText("");
   };
 
   // ── 3. Mark Qualified (Contacted -> Qualified) ──
-  const handleMarkQualified = (lead: LeadRecordItem) => {
-    const timestamp = "Today 04:40 PM";
-    const updatedList = leads.map((l) => {
-      if (l.id === lead.id) {
-        return {
-          ...l,
-          status: "Qualified" as LeadStatus,
-          timeline: [
-            {
-              id: `T-${Date.now()}`,
-              date: timestamp,
-              title: "Lead Marked as Qualified",
-              actor: l.assignedExecutive,
-              notes: "Customer confirmed genuine requirements and buying interest.",
-            },
-            ...l.timeline,
-          ],
-        };
-      }
-      return l;
+  const handleMarkQualified = async (lead: LeadRecordItem) => {
+    const saved = await persistLead({
+      ...lead,
+      status: "Qualified",
+      timeline: [
+        {
+          id: `T-${Date.now()}`,
+          date: nowTimelineStamp(),
+          title: "Lead Marked as Qualified",
+          actor: lead.assignedExecutive,
+          notes: "Customer confirmed genuine requirements and buying interest.",
+        },
+        ...lead.timeline,
+      ],
     });
+    if (!saved) return;
 
-    setLeads(updatedList);
-    if (selectedLead?.id === lead.id) {
-      const updated = updatedList.find((l) => l.id === lead.id);
-      if (updated) setSelectedLead(updated);
-    }
+    setLeads((prev) => prev.map((l) => (l.id === saved.id ? saved : l)));
+    if (selectedLead?.id === saved.id) setSelectedLead(saved);
     setToastMessage(`✓ Lead #${lead.id} marked as Qualified! Ready to move to Pipeline.`);
   };
 
@@ -773,92 +569,95 @@ export function LeadsInquiriesView() {
     });
   };
 
-  const handleConfirmMoveToPipeline = (e: React.FormEvent) => {
+  const handleConfirmMoveToPipeline = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!movingLead) return;
 
-    const rawNum = movingLead.id.replace(/[^0-9]/g, "");
-    const createdDealId = `DEAL-${rawNum ? String(Number(rawNum) + 1000).slice(-4) : "1001"}`;
-    const timestamp = "Today 04:45 PM";
+    try {
+      const dealRow = await smDealService.create(
+        mapDealToApi({
+          dealName: moveForm.dealName,
+          leadDbId: movingLead.dbId,
+          customerName: movingLead.contactPerson || movingLead.leadName,
+          companyName: movingLead.companyName,
+          mobile: movingLead.mobileNumber,
+          email: movingLead.email,
+          bookingType: movingLead.bookingType,
+          stage: "Qualification",
+          status: "Open",
+          dealValue: moveForm.expectedRevenue,
+          assignedExecutive: moveForm.assignedExecutive,
+          campaignId: movingLead.campaignId,
+          campaignName: movingLead.campaignName,
+        }),
+      );
+      const createdDealId = String(dealRow.dealCode ?? dealRow.id ?? "");
 
-    const updatedLeads = leads.map((l) => {
-      if (l.id === movingLead.id) {
-        return {
-          ...l,
-          status: "Converted" as LeadStatus,
-          linkedDealId: createdDealId,
-          linkedDealStage: "Qualification",
-          timeline: [
-            {
-              id: `T-${Date.now()}`,
-              date: timestamp,
-              title: `Moved to Pipeline • Deal Created (#${createdDealId})`,
-              actor: moveForm.assignedExecutive,
-              notes: `Initial Stage: Qualification • Opportunity: ${moveForm.dealName} • Expected Value: ₹${moveForm.expectedRevenue.toLocaleString("en-IN")}`,
-            },
-            ...l.timeline,
-          ],
-        };
-      }
-      return l;
-    });
-
-    setLeads(updatedLeads);
-
-    if (selectedLead && selectedLead.id === movingLead.id) {
-      setSelectedLead({
-        ...selectedLead,
+      const saved = await persistLead({
+        ...movingLead,
         status: "Converted",
         linkedDealId: createdDealId,
         linkedDealStage: "Qualification",
+        timeline: [
+          {
+            id: `T-${Date.now()}`,
+            date: nowTimelineStamp(),
+            title: `Moved to Pipeline • Deal Created (#${createdDealId})`,
+            actor: moveForm.assignedExecutive,
+            notes: `Initial Stage: Qualification • Opportunity: ${moveForm.dealName} • Expected Value: ₹${moveForm.expectedRevenue.toLocaleString("en-IN")}`,
+          },
+          ...movingLead.timeline,
+        ],
       });
-    }
+      if (!saved) return;
 
-    setToastMessage(`✓ Lead #${movingLead.id} moved to Pipeline as Deal #${createdDealId} in Qualification stage!`);
-    setMovingLead(null);
+      setLeads((prev) => prev.map((l) => (l.id === saved.id ? saved : l)));
+      if (selectedLead?.id === saved.id) setSelectedLead(saved);
+      setToastMessage(`✓ Lead #${movingLead.id} moved to Pipeline as Deal #${createdDealId}!`);
+      setMovingLead(null);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to create deal");
+    }
   };
 
   // Handle CSV Import Leads
-  const handleImportLeads = (newImportedLeads: LeadRecordItem[]) => {
-    setLeads((prev) => [...newImportedLeads, ...prev]);
+  const handleImportLeads = async (newImportedLeads: LeadRecordItem[]) => {
+    const saved: LeadRecordItem[] = [];
+    for (const lead of newImportedLeads) {
+      const row = await persistLead({ ...lead, importedVia: "CSV Import" });
+      if (row) saved.push(row);
+    }
+    if (saved.length) setLeads((prev) => [...saved, ...prev]);
     setIsCsvModalOpen(false);
-    setToastMessage(`✓ Successfully imported ${newImportedLeads.length} leads from CSV!`);
+    setToastMessage(`✓ Successfully imported ${saved.length} leads from CSV!`);
   };
 
   // Mark Lead as Lost / Drop
-  const handleMarkLost = (lead: LeadRecordItem) => {
+  const handleMarkLost = async (lead: LeadRecordItem) => {
     const reason = prompt(
       "Enter reason for dropping/marking lead as lost (optional):",
       "Client chose another venue / Budget mismatch"
     );
     if (reason === null) return;
 
-    const timestamp = "Today";
-    const updatedList = leads.map((l) => {
-      if (l.id === lead.id) {
-        return {
-          ...l,
-          status: "Lost" as LeadStatus,
-          timeline: [
-            {
-              id: `T-${Date.now()}`,
-              date: timestamp,
-              title: "Lead Marked as Lost",
-              actor: l.assignedExecutive,
-              notes: reason || "Lead marked as dropped/lost.",
-            },
-            ...l.timeline,
-          ],
-        };
-      }
-      return l;
+    const saved = await persistLead({
+      ...lead,
+      status: "Lost",
+      timeline: [
+        {
+          id: `T-${Date.now()}`,
+          date: nowTimelineStamp(),
+          title: "Lead Marked as Lost",
+          actor: lead.assignedExecutive,
+          notes: reason || "Lead marked as dropped/lost.",
+        },
+        ...lead.timeline,
+      ],
     });
+    if (!saved) return;
 
-    setLeads(updatedList);
-    if (selectedLead?.id === lead.id) {
-      const updated = updatedList.find((l) => l.id === lead.id);
-      if (updated) setSelectedLead(updated);
-    }
+    setLeads((prev) => prev.map((l) => (l.id === saved.id ? saved : l)));
+    if (selectedLead?.id === saved.id) setSelectedLead(saved);
     setToastMessage(`✓ Lead #${lead.id} marked as Lost.`);
   };
 
@@ -970,6 +769,12 @@ export function LeadsInquiriesView() {
         </div>
       }
     >
+      {loading && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          Loading leads from database…
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────────────
           SECTION 1: INQUIRIES OPERATIONAL KPI CARDS (F&B DASHBOARD STYLE)
       ───────────────────────────────────────────────────────────── */}
@@ -1070,12 +875,11 @@ export function LeadsInquiriesView() {
             className="text-xs rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
           >
             <option value="ALL">All Booking Types</option>
-            <option value="Room Booking">Room Booking</option>
-            <option value="Banquet Event">Banquet Event</option>
-            <option value="Conference">Conference</option>
-            <option value="Restaurant">Restaurant</option>
-            <option value="Swimming Pool">Swimming Pool</option>
-            <option value="Private Event">Private Event</option>
+            {enabledTypes.map((item) => (
+              <option key={item.code} value={item.leadType}>
+                {item.shortLabel}
+              </option>
+            ))}
             <option value="Other">Other</option>
           </select>
 
@@ -1729,12 +1533,11 @@ export function LeadsInquiriesView() {
                   onChange={(e) => setCreateForm({ ...createForm, bookingType: e.target.value as BookingType })}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs text-slate-900"
                 >
-                  <option value="Banquet Event">Banquet Event</option>
-                  <option value="Room Booking">Room Booking</option>
-                  <option value="Conference">Conference</option>
-                  <option value="Restaurant">Restaurant</option>
-                  <option value="Swimming Pool">Swimming Pool</option>
-                  <option value="Private Event">Private Event</option>
+                  {enabledTypes.map((item) => (
+                    <option key={item.code} value={item.leadType}>
+                      {item.cardLabel}
+                    </option>
+                  ))}
                   <option value="Other">Other</option>
                 </select>
               </div>
