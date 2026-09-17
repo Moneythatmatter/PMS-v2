@@ -463,15 +463,15 @@ export function ShiftManagementView() {
 
     const historyLog: ShiftHistoryEntry[] = editingAssignment
       ? [
-          {
-            id: `h-${Date.now()}`,
-            date: new Date().toLocaleDateString("en-GB"),
+        {
+          id: `h-${Date.now()}`,
+          date: new Date().toLocaleDateString("en-GB"),
             oldShift: editingAssignment.shiftName,
-            newShift: shiftObj.name,
+          newShift: shiftObj.name,
             changedBy: "HR Admin",
-            remarks: assignRemarks || "Shift modified via Management Center",
-          },
-          ...(editingAssignment.history || []),
+          remarks: assignRemarks || "Shift modified via Management Center",
+        },
+        ...(editingAssignment.history || []),
         ]
       : [
           {
@@ -508,10 +508,10 @@ export function ShiftManagementView() {
         setToastMessage(`Updated shift assignment for ${empName} to ${shiftObj.name}.`);
       } else {
         await hrShiftAssignmentService.create(payload);
-        setToastMessage(`Assigned ${shiftObj.name} to ${empName}.`);
-      }
+      setToastMessage(`Assigned ${shiftObj.name} to ${empName}.`);
+    }
       await loadShiftData();
-      setIsAssignModalOpen(false);
+    setIsAssignModalOpen(false);
     } catch (err) {
       setAssignError(err instanceof Error ? err.message : "Failed to save shift assignment.");
     } finally {
@@ -549,18 +549,18 @@ export function ShiftManagementView() {
         quickChangeTarget.id,
         mapShiftAssignmentToApi({
           ...quickChangeTarget,
-          shiftId: shiftObj.id,
-          shiftCode: shiftObj.code,
-          shiftName: shiftObj.name,
-          shiftCategory: shiftObj.category,
-          startTime: shiftObj.startTime,
-          endTime: shiftObj.endTime,
-          history: historyLog,
+              shiftId: shiftObj.id,
+              shiftCode: shiftObj.code,
+              shiftName: shiftObj.name,
+              shiftCategory: shiftObj.category,
+              startTime: shiftObj.startTime,
+              endTime: shiftObj.endTime,
+              history: historyLog,
         }),
-      );
+    );
       await loadShiftData();
-      setIsQuickChangeModalOpen(false);
-      setToastMessage(`Quick swapped ${quickChangeTarget.employeeName} to ${shiftObj.name}.`);
+    setIsQuickChangeModalOpen(false);
+    setToastMessage(`Quick swapped ${quickChangeTarget.employeeName} to ${shiftObj.name}.`);
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : "Quick shift swap failed.");
     }
@@ -575,7 +575,7 @@ export function ShiftManagementView() {
         id,
         mapShiftAssignmentToApi({
           ...target,
-          status: "Inactive",
+              status: "Inactive",
           effectiveTo: todayIso,
         }),
       );
@@ -608,16 +608,16 @@ export function ShiftManagementView() {
         );
         const payload = mapShiftAssignmentToApi({
           employeeId: emp.id,
-          shiftId: shiftObj.id,
-          shiftCode: shiftObj.code,
-          shiftName: shiftObj.name,
-          shiftCategory: shiftObj.category,
-          startTime: shiftObj.startTime,
-          endTime: shiftObj.endTime,
+            shiftId: shiftObj.id,
+            shiftCode: shiftObj.code,
+            shiftName: shiftObj.name,
+            shiftCategory: shiftObj.category,
+            startTime: shiftObj.startTime,
+            endTime: shiftObj.endTime,
           effectiveFrom: bulkEffectiveFrom,
           effectiveTo: bulkEffectiveTo || undefined,
-          status: "Active",
-          assignedBy: "HR Admin (Bulk Action)",
+            status: "Active",
+            assignedBy: "HR Admin (Bulk Action)",
           remarks: "Bulk assigned via Shift Management.",
         });
         if (existing) {
@@ -629,7 +629,7 @@ export function ShiftManagementView() {
         }
       }
       await loadShiftData();
-      setIsBulkModalOpen(false);
+    setIsBulkModalOpen(false);
       setToastMessage(
         `Bulk assigned ${shiftObj.name} to ${bulkPreviewStaff.length} employee(s) (${created} created, ${updated} updated).`,
       );
@@ -689,16 +689,16 @@ export function ShiftManagementView() {
             </span>
           </Button>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
             onClick={() => setIsExportModalOpen(true)}
             className="rounded-xl text-xs font-medium bg-white text-slate-700 border-slate-300 shadow-xs"
-          >
+            >
             <Printer className="h-3.5 w-3.5 mr-1 text-slate-500" />
             Export Roster
-          </Button>
+            </Button>
         </div>
       }
     >
@@ -716,33 +716,33 @@ export function ShiftManagementView() {
         extraFilters={renderShiftFilters()}
         trailing={
           <div className="flex items-center rounded-full border border-slate-200 bg-slate-50 p-0.5 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setViewMode("table")}
-              className={cn(
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={cn(
                 "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition cursor-pointer",
-                viewMode === "table"
+                  viewMode === "table"
                   ? "border border-slate-200 bg-white text-emerald-800 shadow-2xs"
                   : "text-slate-500 hover:text-slate-800",
-              )}
-            >
-              <Layers className="h-3.5 w-3.5" />
+                )}
+              >
+                <Layers className="h-3.5 w-3.5" />
               Table
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("roster")}
-              className={cn(
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("roster")}
+                className={cn(
                 "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition cursor-pointer",
-                viewMode === "roster"
+                  viewMode === "roster"
                   ? "border border-slate-200 bg-white text-emerald-800 shadow-2xs"
                   : "text-slate-500 hover:text-slate-800",
-              )}
-            >
-              <CalendarDays className="h-3.5 w-3.5" />
+                )}
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
               Roster
-            </button>
-          </div>
+              </button>
+            </div>
         }
       />
 
@@ -1410,7 +1410,7 @@ export function ShiftManagementView() {
         footer={
           viewingAssignment ? (
             <div className="w-full space-y-2">
-              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
                 <Button
                   type="button"
                   size="sm"
@@ -1475,52 +1475,52 @@ export function ShiftManagementView() {
       >
         {viewingAssignment && (
           <>
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-sm text-slate-900">{viewingAssignment.employeeName}</h4>
-                <span className="font-mono text-xs font-bold text-slate-600">{viewingAssignment.employeeId}</span>
-              </div>
-              <p className="text-xs text-slate-500">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-sm text-slate-900">{viewingAssignment.employeeName}</h4>
+                    <span className="font-mono text-xs font-bold text-slate-600">{viewingAssignment.employeeId}</span>
+                  </div>
+                  <p className="text-xs text-slate-500">
                 {viewingAssignment.designation} •{" "}
                 <span className="text-emerald-700 font-semibold">{viewingAssignment.department}</span>
-              </p>
-            </div>
-
-            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500">Assigned Shift</span>
-                <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  {viewingAssignment.shiftCode}
-                </span>
-              </div>
-              <h3 className="font-bold text-base text-slate-900">{viewingAssignment.shiftName}</h3>
-
-              <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t border-slate-100">
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Check-In Time</span>
-                  <span className="font-bold text-slate-900">{viewingAssignment.startTime} AM</span>
+                  </p>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Check-Out Time</span>
-                  <span className="font-bold text-slate-900">{viewingAssignment.endTime} PM</span>
-                </div>
-              </div>
-            </div>
 
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500 font-medium">Effective Date Range</span>
-                <span className="font-bold text-slate-800">
-                  {viewingAssignment.effectiveFrom} → {viewingAssignment.effectiveTo || "Until Further Notice"}
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500 font-medium">Assigned By / On</span>
-                <span className="font-semibold text-slate-800">
-                  {viewingAssignment.assignedBy} ({viewingAssignment.assignedOn})
-                </span>
-              </div>
-            </div>
+                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500">Assigned Shift</span>
+                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      {viewingAssignment.shiftCode}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-base text-slate-900">{viewingAssignment.shiftName}</h3>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t border-slate-100">
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Check-In Time</span>
+                      <span className="font-bold text-slate-900">{viewingAssignment.startTime} AM</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Check-Out Time</span>
+                      <span className="font-bold text-slate-900">{viewingAssignment.endTime} PM</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500 font-medium">Effective Date Range</span>
+                    <span className="font-bold text-slate-800">
+                      {viewingAssignment.effectiveFrom} → {viewingAssignment.effectiveTo || "Until Further Notice"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500 font-medium">Assigned By / On</span>
+                    <span className="font-semibold text-slate-800">
+                      {viewingAssignment.assignedBy} ({viewingAssignment.assignedOn})
+                    </span>
+                  </div>
+                </div>
           </>
         )}
       </Drawer>
@@ -1545,18 +1545,18 @@ export function ShiftManagementView() {
         icon={<CalendarDays className="h-5 w-5 text-emerald-700" />}
         maxWidth="md"
         footer={
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => {
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
               setIsUpcomingChangesDrawerOpen(false);
               handleOpenSingleAssign();
-            }}
+                  }}
             className="w-full rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white h-9 cursor-pointer"
-          >
+                >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Schedule New Shift Change
-          </Button>
+                </Button>
         }
       >
         {upcomingChanges.length === 0 ? (
@@ -1564,7 +1564,7 @@ export function ShiftManagementView() {
             <CalendarDays className="mx-auto mb-2 h-8 w-8 text-slate-300" />
             <p className="text-xs font-bold text-slate-600">No upcoming shift changes</p>
             <p className="mt-1 text-[11px] text-slate-400">Scheduled roster changes will appear here.</p>
-          </div>
+              </div>
         ) : (
           <div className="space-y-2">
             {upcomingChanges.map((uc, i) => (
@@ -1583,15 +1583,15 @@ export function ShiftManagementView() {
                     <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 border border-emerald-200 font-bold text-emerald-800">
                       {uc.toShift}
                     </span>
-                  </div>
-                </div>
+              </div>
+            </div>
                 <span className="ml-3 shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-mono font-bold text-slate-700 shadow-2xs">
                   {uc.effectiveDate}
                 </span>
-              </div>
-            ))}
           </div>
-        )}
+            ))}
+        </div>
+      )}
       </Drawer>
     </ModulePageShell>
   );

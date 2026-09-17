@@ -43,6 +43,8 @@ export type LiveTable = {
   openSessionId?: string | null;
   openBillId?: string | null;
   housekeeping?: string;
+  reservationId?: string | null;
+  kotCount?: number;
 };
 
 export type PosEntryMode = "new" | "manage" | "settle";
@@ -134,6 +136,12 @@ export const floorPlanService = {
     api.get<LiveTable[]>(
       fbPath(
         `/floor-plan${outletId ? `?outletId=${encodeURIComponent(outletId)}` : ""}`,
+      ),
+    ),
+  listRoomServiceOpen: (outletId?: string) =>
+    api.get<LiveTable[]>(
+      fbPath(
+        `/floor-plan/room-service${outletId ? `?outletId=${encodeURIComponent(outletId)}` : ""}`,
       ),
     ),
   get: (tableId: string) => api.get<LiveTable>(fbPath(`/floor-plan/${tableId}`)),

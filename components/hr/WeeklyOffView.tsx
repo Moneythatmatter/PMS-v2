@@ -391,9 +391,9 @@ export function WeeklyOffView() {
     try {
       const payload = mapWeeklyOffToApi({
         employeeId: assignEmpId,
-        type: assignType,
-        days: assignDays,
-        rotationPattern: rotationPatternStr,
+                type: assignType,
+                days: assignDays,
+                rotationPattern: rotationPatternStr,
         effectiveFrom: assignEffectiveFrom,
         effectiveTo: assignEffectiveTo || assignEffectiveFrom,
         assignedBy: "HR Admin",
@@ -405,10 +405,10 @@ export function WeeklyOffView() {
         setToastMessage(`Updated weekly off for ${empName} (${assignDays.join(", ")}).`);
       } else {
         await hrWeeklyOffService.create(payload);
-        setToastMessage(`Assigned ${assignDays.join(", ")} weekly off to ${empName}.`);
-      }
+      setToastMessage(`Assigned ${assignDays.join(", ")} weekly off to ${empName}.`);
+    }
       await loadWeeklyOffs();
-      setIsAssignModalOpen(false);
+    setIsAssignModalOpen(false);
     } catch (err) {
       setAssignError(err instanceof Error ? err.message : "Failed to save weekly off assignment.");
     } finally {
@@ -440,11 +440,11 @@ export function WeeklyOffView() {
           await hrWeeklyOffService.create(
             mapWeeklyOffToApi({
               employeeId: emp.id,
-              type: bulkType,
-              days: bulkDays,
+            type: bulkType,
+            days: bulkDays,
               effectiveFrom: bulkEffectiveFrom,
               effectiveTo: bulkEffectiveTo || bulkEffectiveFrom,
-              assignedBy: "HR Admin (Bulk Action)",
+            assignedBy: "HR Admin (Bulk Action)",
               remarks: "Bulk assigned via Weekly Off Center.",
             }),
           );
@@ -454,7 +454,7 @@ export function WeeklyOffView() {
         }
       }
       await loadWeeklyOffs();
-      setIsBulkModalOpen(false);
+    setIsBulkModalOpen(false);
       setToastMessage(
         skipped > 0
           ? `Bulk assigned ${bulkDays.join(", ")} to ${created} employee(s). ${skipped} skipped due to conflicts.`
@@ -472,7 +472,7 @@ export function WeeklyOffView() {
       await hrWeeklyOffService.remove(id);
       await loadWeeklyOffs();
       setViewingAssignment(null);
-      setToastMessage(`Removed weekly off assignment for ${empName}.`);
+    setToastMessage(`Removed weekly off assignment for ${empName}.`);
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : "Failed to remove assignment.");
     }
@@ -1114,62 +1114,62 @@ export function WeeklyOffView() {
                 <Trash2 className="mr-1 h-3.5 w-3.5" /> Remove
               </Button>
               <Button
-                type="button"
+                  type="button"
                 size="sm"
                 onClick={() => handleOpenSingleAssign(viewingAssignment)}
                 className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold h-9"
-              >
+                >
                 <Edit2 className="mr-1 h-3.5 w-3.5" /> Edit Rest Day Schedule
               </Button>
-            </div>
+              </div>
           ) : undefined
         }
       >
         {viewingAssignment && (
           <>
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-sm text-slate-900">{viewingAssignment.employeeName}</h4>
-                <span className="font-mono text-xs font-bold text-slate-600">{viewingAssignment.employeeId}</span>
-              </div>
-              <p className="text-xs text-slate-500">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-sm text-slate-900">{viewingAssignment.employeeName}</h4>
+                    <span className="font-mono text-xs font-bold text-slate-600">{viewingAssignment.employeeId}</span>
+                  </div>
+                  <p className="text-xs text-slate-500">
                 {viewingAssignment.designation} •{" "}
                 <span className="text-emerald-700 font-semibold">{viewingAssignment.department}</span>
-              </p>
-            </div>
+                  </p>
+                </div>
 
-            <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500">Assignment Type</span>
-                <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  {viewingAssignment.type} Schedule
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                {viewingAssignment.days.map((day) => (
-                  <span key={day} className="px-3 py-1 rounded-xl bg-emerald-700 text-white text-xs font-bold shadow-2xs">
-                    🌴 Every {day}
-                  </span>
-                ))}
-              </div>
-            </div>
+                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500">Assignment Type</span>
+                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      {viewingAssignment.type} Schedule
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    {viewingAssignment.days.map((day) => (
+                      <span key={day} className="px-3 py-1 rounded-xl bg-emerald-700 text-white text-xs font-bold shadow-2xs">
+                        🌴 Every {day}
+                      </span>
+                    ))}
+                  </div>
+                </div>
 
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500 font-medium">Effective Date Range</span>
-                <span className="font-bold text-slate-800">
-                  {viewingAssignment.effectiveFrom} → {viewingAssignment.effectiveTo}
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500 font-medium">Attendance Overtime Rule</span>
-                <span className="font-bold text-emerald-700">2.0x OT or Comp-Off</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500 font-medium">Assigned By</span>
-                <span className="font-semibold text-slate-800">{viewingAssignment.assignedBy}</span>
-              </div>
-            </div>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500 font-medium">Effective Date Range</span>
+                    <span className="font-bold text-slate-800">
+                      {viewingAssignment.effectiveFrom} → {viewingAssignment.effectiveTo}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500 font-medium">Attendance Overtime Rule</span>
+                    <span className="font-bold text-emerald-700">2.0x OT or Comp-Off</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500 font-medium">Assigned By</span>
+                    <span className="font-semibold text-slate-800">{viewingAssignment.assignedBy}</span>
+                  </div>
+                </div>
           </>
         )}
       </Drawer>

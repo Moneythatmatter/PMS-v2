@@ -193,7 +193,7 @@ export function UserManagementView() {
       title="User management"
       description="Assign properties and module access (read / write / admin)."
       actions={
-        <Button variant="outline" onClick={resetNew}>
+        <Button variant="outline" className="w-full sm:w-auto" onClick={resetNew}>
           New user
         </Button>
       }
@@ -204,8 +204,8 @@ export function UserManagementView() {
         </p>
       )}
 
-      <div className="mt-2 grid gap-6 lg:grid-cols-[280px_1fr]">
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm">
+      <div className="mt-2 grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[280px_1fr]">
+        <div className="max-h-64 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm lg:max-h-none">
           <p className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
             Users
           </p>
@@ -233,11 +233,11 @@ export function UserManagementView() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-sm font-semibold text-slate-900">
             {selected ? `Edit — ${selected.name}` : "Create user"}
           </h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input
               className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               placeholder="Full name"
@@ -380,9 +380,9 @@ export function UserManagementView() {
             </>
           )}
 
-          <div className="mt-6 flex gap-2">
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row">
             <Button
-              className="bg-emerald-700 hover:bg-emerald-800"
+              className="w-full bg-emerald-700 hover:bg-emerald-800 sm:w-auto"
               onClick={() => void handleSave()}
               disabled={saving}
             >

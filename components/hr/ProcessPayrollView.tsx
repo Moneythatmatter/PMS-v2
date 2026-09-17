@@ -83,7 +83,7 @@ export interface EmployeePayrollRecord {
   designation: string;
   avatar: string;
   photoUrl?: string;
-
+  
   // Earnings breakdown
   basicSalary: number;
   hra: number;
@@ -93,7 +93,7 @@ export interface EmployeePayrollRecord {
   incentives: number;
   bonus: number;
   otherEarnings: number;
-
+  
   // Deductions breakdown
   leaveDeduction: number;
   pfDeduction: number;
@@ -107,7 +107,7 @@ export interface EmployeePayrollRecord {
   paymentRefNo?: string;
   bankRefNo?: string;
   payslipGenerated?: boolean;
-
+  
   // Validation flags
   hasAttendanceIssue?: boolean;
   missingBankDetails?: boolean;
@@ -1333,7 +1333,7 @@ export function ProcessPayrollView() {
             <div className="flex items-center justify-between">
               <HREmployeeCell name={r.employeeName} id={r.employeeId} avatar={r.avatar} photoUrl={r.photoUrl} />
               <div className="flex items-center gap-2">
-                <StatusBadge status={r.status} />
+              <StatusBadge status={r.status} />
                 {renderPayrollActionMenu(r)}
               </div>
             </div>

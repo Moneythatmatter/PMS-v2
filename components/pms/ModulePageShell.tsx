@@ -119,7 +119,7 @@ export function ModulePageShell({
   const showToolbar = search !== undefined && onSearchChange;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {toast && onDismissToast && (
         <AlertBanner variant={toastVariant} message={toast} onDismiss={onDismissToast} />
       )}
@@ -131,13 +131,13 @@ export function ModulePageShell({
         breadcrumbs={breadcrumbs}
         action={
           (primaryAction || secondaryActions || actionButtons) && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
               {secondaryActions}
               {actionButtons}
               {primaryAction && (
                 <Button
                   size="sm"
-                  className="bg-emerald-700 hover:bg-emerald-800"
+                  className="w-full bg-emerald-700 hover:bg-emerald-800 sm:w-auto"
                   onClick={primaryAction.onClick}
                 >
                   <Plus className="mr-1.5 h-3.5 w-3.5" />

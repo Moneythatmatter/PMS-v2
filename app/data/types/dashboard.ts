@@ -71,4 +71,6 @@ export interface Booking {
   checkIn: string;
   checkOut: string;
   status: BookingStatus;
+  createdAt?: string;
+  reservationId?: string;
 }

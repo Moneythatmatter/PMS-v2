@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   BedDouble,
@@ -8,7 +9,9 @@ import {
   CalendarDays,
   CheckCircle2,
   CreditCard,
+  Loader2,
   MapPin,
+  Pencil,
   User,
   Users,
 } from "lucide-react";
@@ -50,7 +53,8 @@ import {
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 import { displayBookingNo } from "@/lib/booking-display";
-import type { ReservationBooking } from "@/app/data/types/frontoffice";
+import { guestProfileHref } from "@/lib/check-in-navigation";
+import type { ReservationBooking, ReservationStatus } from "@/app/data/types/frontoffice";
 import { normalizeToIso } from "@/lib/reservation-dates";
 import {
   filterRoomsForStay,
@@ -100,23 +104,28 @@ function SectionCard({
   icon: Icon,
   title,
   description,
+  action,
   children,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   description?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-      <div className="mb-5 flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-          <Icon className="h-5 w-5" />
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+            <Icon className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+            {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
+          </div>
         </div>
-        <div>
-          <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-          {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
-        </div>
+        {action}
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
     </section>
@@ -130,9 +139,15 @@ const bookingTypeOptions = [
   { id: "Company", label: "Company", hint: "Corporate" },
 ] as const;
 
+const NON_EDITABLE_STATUSES = new Set(["Cancelled", "Checked Out", "No Show"]);
+
 export function NewReservationForm() {
   const searchParams = useSearchParams();
   const todayStr = useMemo(() => getTodayString(), []);
+
+  const editBookingId =
+    searchParams.get("bookingId") ?? searchParams.get("booking") ?? "";
+  const isEditMode = Boolean(editBookingId);
 
   const searchParamCheckIn = searchParams.get("checkIn");
   const searchParamCheckOut = searchParams.get("checkOut");
@@ -154,6 +169,9 @@ export function NewReservationForm() {
     : "";
 
   const [savedBookingNo, setSavedBookingNo] = useState<string | null>(null);
+  const [editLoading, setEditLoading] = useState(isEditMode);
+  const [editLoadError, setEditLoadError] = useState<string | null>(null);
+  const [editBookingStatus, setEditBookingStatus] = useState<ReservationStatus | null>(null);
   const [allRoomNos, setAllRoomNos] = useState<string[]>([]);
   const [roomIdByNo, setRoomIdByNo] = useState<Record<string, string>>({});
   const [reservations, setReservations] = useState<ReservationBooking[]>([]);
@@ -217,8 +235,78 @@ export function NewReservationForm() {
     loyaltyPoints: 0,
   });
 
+  // Load existing booking for edit mode
+  useEffect(() => {
+    if (!editBookingId) return;
+
+    let cancelled = false;
+    (async () => {
+      setEditLoading(true);
+      setEditLoadError(null);
+      try {
+        const booking = await reservationService.get(editBookingId);
+        if (cancelled) return;
+
+        if (NON_EDITABLE_STATUSES.has(booking.status)) {
+          setEditLoadError(`This booking is ${booking.status.toLowerCase()} and cannot be edited.`);
+          return;
+        }
+
+        const { firstName, lastName } = splitGuestName(booking.guestName ?? "");
+        setEditBookingStatus(booking.status);
+        setSavedBookingNo(displayBookingNo(booking));
+        setForm((prev) => ({
+          ...prev,
+          guestId: booking.guestId,
+          firstName,
+          lastName,
+          mobile: booking.phone ?? "",
+          email: booking.email ?? "",
+          bookingType:
+            booking.bookingType ?? (booking.companyName ? "Company" : "Individual"),
+          companyName: booking.companyName ?? "",
+          checkIn: booking.checkIn?.slice(0, 10) ?? prev.checkIn,
+          checkOut: booking.checkOut?.slice(0, 10) ?? prev.checkOut,
+          adults: booking.adults ?? 1,
+          children: booking.children ?? 0,
+          roomType: booking.roomType ?? "",
+          roomNumber: booking.roomNo ?? "",
+          tariffPlan: booking.tariffPlan ?? "",
+          mealPlan: booking.mealPlan ?? "",
+          source: booking.sourceId ?? booking.source ?? "",
+          advancePaid: booking.advancePaid ?? 0,
+          paymentMode: booking.paymentMode ?? "",
+          externalReference: booking.externalReference ?? "",
+          notes: booking.specialRequests ?? "",
+          nationality: booking.nationality ?? "",
+          idProofType: booking.idProofType ?? "",
+          idNumber: booking.idNumber ?? "",
+          address: booking.address ?? "",
+          gender: booking.gender ?? "",
+          dob: booking.dob ?? "",
+          city: booking.city ?? "",
+          state: booking.state ?? "",
+          country: booking.country ?? "",
+          pincode: booking.pincode ?? "",
+        }));
+      } catch (e) {
+        if (!cancelled) {
+          setEditLoadError(e instanceof Error ? e.message : "Failed to load booking");
+        }
+      } finally {
+        if (!cancelled) setEditLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editBookingId]);
+
   // Prefill from Room Availability (or deep links) when query params change
   useEffect(() => {
+    if (isEditMode) return;
+
     const room = searchParams.get("room");
     const roomType = searchParams.get("roomType");
     const checkIn = searchParams.get("checkIn");
@@ -394,6 +482,7 @@ export function NewReservationForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const [saving, setSaving] = useState(false);
   const [savedStatus, setSavedStatus] = useState<string | null>(null);
 
   const nights = useMemo(
@@ -418,8 +507,25 @@ export function NewReservationForm() {
     const checkOut = normalizeToIso(form.checkOut);
     if (!checkIn || !checkOut || checkOut <= checkIn) return [];
 
-    return filterRoomsForStay(pool, reservations, checkIn, checkOut, availabilityBlocks);
-  }, [form.roomType, form.checkIn, form.checkOut, allRoomsByType, allRoomNos, reservations, availabilityBlocks]);
+    return filterRoomsForStay(
+      pool,
+      reservations,
+      checkIn,
+      checkOut,
+      availabilityBlocks,
+      isEditMode ? editBookingId : undefined,
+    );
+  }, [
+    form.roomType,
+    form.checkIn,
+    form.checkOut,
+    allRoomsByType,
+    allRoomNos,
+    reservations,
+    availabilityBlocks,
+    isEditMode,
+    editBookingId,
+  ]);
 
   const roomSelectOptions = useMemo(() => {
     const rooms = [...filteredRooms];
@@ -616,16 +722,21 @@ export function NewReservationForm() {
     if (!form.mobile.trim()) next.mobile = "Required";
     if (!form.email.trim()) next.email = "Required";
     if (!form.bookingType) next.bookingType = "Required";
-    if (form.bookingType === "Company" && !form.companyId)
+    if (
+      form.bookingType === "Company" &&
+      !form.companyId &&
+      !form.companyName.trim()
+    ) {
       next.companyName = "Please select a company";
+    }
     if (!form.checkIn) {
       next.checkIn = "Required";
-    } else if (form.checkIn < today) {
+    } else if (!isEditMode && form.checkIn < today) {
       next.checkIn = "Check-in date cannot be in the past";
     }
     if (!form.checkOut) {
       next.checkOut = "Required";
-    } else if (form.checkOut < today) {
+    } else if (!isEditMode && form.checkOut < today) {
       next.checkOut = "Check-out date cannot be in the past";
     } else if (form.checkIn && form.checkOut <= form.checkIn) {
       next.checkOut = "Check-out date must be after check-in date";
@@ -655,6 +766,8 @@ export function NewReservationForm() {
   };
 
   const handleSave = async () => {
+    if (saving) return;
+
     if (!validate()) {
       setToastVariant("error");
       const hasDuplicate =
@@ -667,6 +780,7 @@ export function NewReservationForm() {
       return;
     }
 
+    setSaving(true);
     try {
       let finalGuestId = form.guestId;
       const guestNameStr = `${form.firstName} ${form.lastName}`;
@@ -693,7 +807,7 @@ export function NewReservationForm() {
         finalGuestId = created.id;
       }
 
-      const booking = await reservationService.create({
+      const payload = {
         guestId: finalGuestId!,
         roomRefId:
           (form.roomNumber && roomIdByNo[form.roomNumber]) ||
@@ -713,22 +827,36 @@ export function NewReservationForm() {
         paymentMode: form.paymentMode || undefined,
         externalReference: form.externalReference.trim() || undefined,
         balance: pendingAmount,
-        status: "Reserved",
-        bookedBy: currentUser.name,
         bookingType: form.bookingType || undefined,
         companyName: form.companyName,
         specialRequests: form.notes || undefined,
-      });
+      };
 
-      setSavedStatus("Reserved");
+      const booking = isEditMode
+        ? await reservationService.update(editBookingId, {
+            ...payload,
+            status: editBookingStatus ?? undefined,
+          })
+        : await reservationService.create({
+            ...payload,
+            status: "Reserved",
+            bookedBy: currentUser.name,
+          });
+
+      const savedStatusLabel = booking.status ?? (isEditMode ? editBookingStatus : "Reserved");
+      setSavedStatus(savedStatusLabel ?? "Reserved");
       setSavedBookingNo(displayBookingNo(booking));
       setToastVariant("success");
       setToast(
-        `Reservation ${displayBookingNo(booking)} saved as Reserved for ${form.firstName} ${form.lastName}. Total: ${formatINR(totalAmount)}`,
+        isEditMode
+          ? `Booking ${displayBookingNo(booking)} updated for ${form.firstName} ${form.lastName}. Total: ${formatINR(totalAmount)}`
+          : `Reservation ${displayBookingNo(booking)} saved as Reserved for ${form.firstName} ${form.lastName}. Total: ${formatINR(totalAmount)}`,
       );
     } catch (e) {
       setToastVariant("error");
       setToast(e instanceof Error ? e.message : "Failed to save reservation");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -740,22 +868,68 @@ export function NewReservationForm() {
 
   const guestName = [form.firstName, form.lastName].filter(Boolean).join(" ") || "Guest";
 
+  if (editLoading) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center p-8">
+        <p className="text-sm text-slate-500">Loading booking…</p>
+      </div>
+    );
+  }
+
+  if (editLoadError) {
+    return (
+      <div className="space-y-4 p-6">
+        <AlertBanner variant="error" message={editLoadError} />
+        <Button variant="outline" onClick={() => window.history.back()}>
+          Back to All Bookings
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {saving && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 backdrop-blur-[2px]"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="mx-4 flex max-w-sm flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white px-8 py-10 shadow-2xl">
+            <Loader2 className="h-10 w-10 animate-spin text-emerald-700" />
+            <div className="text-center">
+              <p className="text-base font-semibold text-slate-900">
+                {isEditMode ? "Updating reservation…" : "Saving reservation…"}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Please wait while we confirm your booking
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <AlertBanner variant={toastVariant} message={toast} onDismiss={() => setToast(null)} />
       )}
 
       <FOPageHeader
         eyebrow="Reservations"
-        title="New Reservation"
-        description="Capture essential guest contact and booking details. Full guest profile is completed at check-in."
+        title={isEditMode ? "Edit Reservation" : "New Reservation"}
+        description={
+          isEditMode
+            ? "Update guest contact and booking details for this reservation."
+            : "Capture essential guest contact and booking details. Full guest profile is completed at check-in."
+        }
         badge={
           <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-green-50 px-4 py-2.5">
             <CalendarDays className="h-4 w-4 text-emerald-700" />
             <div>
               <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Booking No.</p>
-              <p className="text-sm font-bold text-slate-800">Assigned on save</p>
+              <p className="text-sm font-bold text-slate-800">
+                {isEditMode && savedBookingNo ? savedBookingNo : "Assigned on save"}
+              </p>
             </div>
           </div>
         }
@@ -808,7 +982,9 @@ export function NewReservationForm() {
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-200">
             <CheckCircle2 className="h-8 w-8" />
           </div>
-          <p className="mt-4 text-xl font-bold text-slate-900">Reservation Saved</p>
+          <p className="mt-4 text-xl font-bold text-slate-900">
+            {isEditMode ? "Reservation Updated" : "Reservation Saved"}
+          </p>
           <p className="mt-1 text-sm text-slate-600">
             {savedBookingNo} · {guestName} · {savedStatus}
           </p>
@@ -822,7 +998,22 @@ export function NewReservationForm() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Form columns */}
           <div className="space-y-5 lg:col-span-2">
-            <SectionCard icon={User} title="Guest Details" description="Basic contact only — ID, address, and other details are collected at check-in">
+            <SectionCard
+              icon={User}
+              title="Guest Details"
+              description="Basic contact only — ID, address, and other details are collected at check-in"
+              action={
+                form.guestId ? (
+                  <Link
+                    href={guestProfileHref({ id: form.guestId }, { edit: true })}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit Guest
+                  </Link>
+                ) : undefined
+              }
+            >
               <FormField label="Search Guest" className="sm:col-span-2 lg:col-span-3">
                 <GuestProfileSearchSelect
                   value={
@@ -1163,7 +1354,11 @@ export function NewReservationForm() {
               <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Booking Summary</p>
                 <p className="mt-2 text-lg font-bold text-slate-900">{guestName}</p>
-                <p className="text-xs text-slate-500">Auto-assigned on save (BK-0, BK-1, …)</p>
+                <p className="text-xs text-slate-500">
+                  {isEditMode && savedBookingNo
+                    ? savedBookingNo
+                    : "Auto-assigned on save (BK-0, BK-1, …)"}
+                </p>
 
                 <div className="mt-4 space-y-2.5 text-sm">
                   {[
@@ -1173,7 +1368,11 @@ export function NewReservationForm() {
                     { icon: Users, label: "Guests", value: form.adults ? `${form.adults} Adult${form.adults !== 1 ? "s" : ""}${form.children ? `, ${form.children} Child${form.children !== 1 ? "ren" : ""}` : ""}` : "—" },
                     { icon: form.bookingType === "Company" ? Building2 : User, label: "Booking Type", value: form.bookingType === "Company" ? `${form.companyName || "Company"}` : form.bookingType === "Individual" ? "Individual" : "—" },
                     { icon: MapPin, label: "Source", value: form.source || "—" },
-                    { icon: CheckCircle2, label: "Status", value: "Reserved" },
+                    {
+                      icon: CheckCircle2,
+                      label: "Status",
+                      value: isEditMode ? (editBookingStatus ?? "—") : "Reserved",
+                    },
                   ].map(({ icon: Icon, label, value }) => (
                     <div key={label} className="flex items-start gap-2.5">
                       <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
@@ -1225,10 +1424,28 @@ export function NewReservationForm() {
               </div>
 
               <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm space-y-2">
-                <Button onClick={handleSave} className="h-11 w-full bg-slate-900 hover:bg-slate-800 cursor-pointer">
-                  Save Reservation
+                <Button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="h-11 w-full bg-slate-900 hover:bg-slate-800 cursor-pointer disabled:opacity-60"
+                >
+                  {saving ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {isEditMode ? "Updating…" : "Saving…"}
+                    </span>
+                  ) : isEditMode ? (
+                    "Update Reservation"
+                  ) : (
+                    "Save Reservation"
+                  )}
                 </Button>
-                <button type="button" onClick={() => window.history.back()} className="w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-700 cursor-pointer">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => window.history.back()}
+                  className="w-full py-2 text-sm font-medium text-slate-500 hover:text-slate-700 cursor-pointer disabled:opacity-50"
+                >
                   Cancel
                 </button>
               </div>

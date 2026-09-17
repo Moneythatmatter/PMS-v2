@@ -402,13 +402,13 @@ export function AddEmployeeView() {
   };
 
   const resetFormForAnother = () => {
-    setFormData({
-      ...formData,
-      empCode: `EMP-0${Math.floor(100 + Math.random() * 900)}`,
-      firstName: "",
-      lastName: "",
-      phone: "",
-      personalEmail: "",
+        setFormData({
+          ...formData,
+          empCode: `EMP-0${Math.floor(100 + Math.random() * 900)}`,
+          firstName: "",
+          lastName: "",
+          phone: "",
+          personalEmail: "",
       department: "",
       designation: "",
       employmentType: "",
@@ -417,19 +417,19 @@ export function AddEmployeeView() {
       leavePolicy: "",
       salaryStructure: "",
       bankName: "",
-      accountHolderName: "",
-      accountNumber: "",
-      panNumber: "",
-      uanNumber: "",
-      esicNumber: "",
-      emergencyName: "",
-      emergencyPhone: "",
-      enableSystemAccess: false,
-      username: "",
-      password: "",
-      confirmPassword: "",
-    });
-    setDocuments([]);
+          accountHolderName: "",
+          accountNumber: "",
+          panNumber: "",
+          uanNumber: "",
+          esicNumber: "",
+          emergencyName: "",
+          emergencyPhone: "",
+          enableSystemAccess: false,
+          username: "",
+          password: "",
+          confirmPassword: "",
+        });
+        setDocuments([]);
   };
 
   const handleConfirmSave = async () => {
@@ -509,8 +509,8 @@ export function AddEmployeeView() {
           subtitle="Personal identity and contact info"
           badge={
             <span className="rounded-xl border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-              ID: {formData.empCode}
-            </span>
+                ID: {formData.empCode}
+              </span>
           }
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -527,59 +527,59 @@ export function AddEmployeeView() {
             </FormField>
             <FormField label="First Name" required>
               <TextInput
-                name="firstName"
-                value={formData.firstName}
-                onChange={handleChange}
-                placeholder="e.g. Abhinav"
+                  name="firstName"
+                  value={formData.firstName}
+                  onChange={handleChange}
+                  placeholder="e.g. Abhinav"
                 className={inputClass}
               />
             </FormField>
             <FormField label="Last Name" required>
               <TextInput
-                name="lastName"
-                value={formData.lastName}
-                onChange={handleChange}
-                placeholder="e.g. Nayak"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleChange}
+                  placeholder="e.g. Nayak"
                 className={inputClass}
               />
             </FormField>
             <FormField label="Date of Birth" required>
               <TextInput
-                type="date"
-                name="dob"
-                value={formData.dob}
-                onChange={handleChange}
+                  type="date"
+                  name="dob"
+                  value={formData.dob}
+                  onChange={handleChange}
                 className={inputClass}
               />
             </FormField>
             <FormField label="Mobile Number" required>
               <TextInput
-                type="tel"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                placeholder="+91 98765 43210"
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  placeholder="+91 98765 43210"
                 className={inputClass}
               />
             </FormField>
             <FormField label="Personal Email">
               <TextInput
-                type="email"
-                name="personalEmail"
-                value={formData.personalEmail}
-                onChange={handleChange}
-                placeholder="e.g. abhinav.nayak@gmail.com"
+                  type="email"
+                  name="personalEmail"
+                  value={formData.personalEmail}
+                  onChange={handleChange}
+                  placeholder="e.g. abhinav.nayak@gmail.com"
                 className={inputClass}
               />
             </FormField>
             <FormField label="Profile Photo Upload">
-              <input
-                type="file"
-                accept="image/*"
+                <input
+                  type="file"
+                  accept="image/*"
                 className="h-10 w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-emerald-800 hover:file:bg-emerald-100"
-              />
+                />
             </FormField>
-          </div>
+              </div>
         </FormSection>
 
         <FormSection
@@ -600,7 +600,7 @@ export function AddEmployeeView() {
             </FormField>
             <FormField label="Designation" required>
               <DropdownSelect
-                value={formData.designation}
+                  value={formData.designation}
                 onChange={(value) => updateField("designation", value)}
                 options={designationOptions}
                 placeholder="Select designation"
@@ -610,16 +610,16 @@ export function AddEmployeeView() {
             </FormField>
             <FormField label="Reporting Manager">
               <TextInput
-                name="reportingManager"
-                value={formData.reportingManager}
-                onChange={handleChange}
-                placeholder="e.g. Vikram Malhotra (GM)"
+                  name="reportingManager"
+                  value={formData.reportingManager}
+                  onChange={handleChange}
+                  placeholder="e.g. Vikram Malhotra (GM)"
                 className={inputClass}
               />
             </FormField>
             <FormField label="Employment Type" required>
               <DropdownSelect
-                value={formData.employmentType}
+                  value={formData.employmentType}
                 onChange={(value) => updateField("employmentType", value)}
                 options={employmentTypeOptions}
                 placeholder="Select employment type"
@@ -628,31 +628,31 @@ export function AddEmployeeView() {
             </FormField>
             <FormField label="Joining Date" required>
               <TextInput
-                type="date"
-                name="joinDate"
-                value={formData.joinDate}
-                onChange={handleChange}
+                  type="date"
+                  name="joinDate"
+                  value={formData.joinDate}
+                  onChange={handleChange}
                 className={inputClass}
               />
             </FormField>
             <FormField label="Work Location">
               <TextInput
-                name="workLocation"
-                value={formData.workLocation}
-                onChange={handleChange}
-                placeholder="e.g. Grand Hotel Main Property"
+                  name="workLocation"
+                  value={formData.workLocation}
+                  onChange={handleChange}
+                  placeholder="e.g. Grand Hotel Main Property"
                 className={inputClass}
               />
             </FormField>
             <FormField label="Employee Status">
               <DropdownSelect
-                value={formData.status}
+                  value={formData.status}
                 onChange={(value) => updateField("status", value)}
                 options={statusOptions}
                 aria-label="Employee status"
               />
             </FormField>
-          </div>
+              </div>
         </FormSection>
 
         <FormSection
@@ -673,7 +673,7 @@ export function AddEmployeeView() {
             </FormField>
             <FormField label="Weekly Off Pattern">
               <DropdownSelect
-                value={formData.weeklyOffPattern}
+                  value={formData.weeklyOffPattern}
                 onChange={(value) => updateField("weeklyOffPattern", value)}
                 options={weeklyOffOptions}
                 placeholder="Select weekly off"
@@ -682,23 +682,23 @@ export function AddEmployeeView() {
             </FormField>
             <FormField label="Leave Policy" className="sm:col-span-2">
               <DropdownSelect
-                value={formData.leavePolicy}
+                  value={formData.leavePolicy}
                 onChange={(value) => updateField("leavePolicy", value)}
                 options={leavePolicyOptions}
                 placeholder="Select leave policy"
                 aria-label="Leave policy"
               />
             </FormField>
-          </div>
+              </div>
           <div className="mt-4 flex items-center justify-between rounded-xl border border-purple-200 bg-purple-50/60 p-3 text-xs">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-purple-700" />
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-purple-700" />
               <span className="font-bold text-purple-900">Assigned Shift Timing Preview</span>
-            </div>
+              </div>
             <span className="rounded-lg border border-purple-200 bg-white px-3 py-1 font-semibold text-purple-950">
               {formData.shiftType || "No shift selected"}
-            </span>
-          </div>
+              </span>
+            </div>
         </FormSection>
 
         <FormSection
@@ -738,7 +738,7 @@ export function AddEmployeeView() {
             <FormField label="ESIC Number" helperText="Optional">
               <TextInput name="esicNumber" value={formData.esicNumber} onChange={handleChange} placeholder="e.g. 3100987654" className={inputClass} />
             </FormField>
-          </div>
+              </div>
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
             <p className="border-b border-amber-200/60 pb-2 text-xs font-bold uppercase tracking-wide text-amber-900">
               {selectedSalaryStructure
@@ -763,9 +763,9 @@ export function AddEmployeeView() {
                 <p className="text-[10px] font-bold uppercase text-amber-800">Gross Salary</p>
                 <p className="text-sm font-extrabold text-amber-950">₹{salaryBreakdown.gross.toLocaleString("en-IN")}</p>
               </div>
-            </div>
+              </div>
             )}
-          </div>
+              </div>
         </FormSection>
 
         <FormSection
@@ -789,7 +789,7 @@ export function AddEmployeeView() {
             <FormField label="Mobile Number">
               <TextInput type="tel" name="emergencyPhone" value={formData.emergencyPhone} onChange={handleChange} placeholder="+91 98765 00000" className={inputClass} />
             </FormField>
-          </div>
+              </div>
         </FormSection>
 
         <FormSection
@@ -808,42 +808,42 @@ export function AddEmployeeView() {
               />
             </FormField>
             <FormField label="Choose File to Upload" className="sm:col-span-2">
-              <input
-                type="file"
-                onChange={handleFileUpload}
+                <input
+                  type="file"
+                  onChange={handleFileUpload}
                 className="h-10 w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-700 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-emerald-800"
-              />
+                />
             </FormField>
-          </div>
-          {documents.length > 0 && (
+              </div>
+            {documents.length > 0 && (
             <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
               <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
                 Uploaded Files ({documents.length})
               </p>
-              {documents.map((doc) => (
+                  {documents.map((doc) => (
                 <div key={doc.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <FileText className="h-4 w-4 text-emerald-700" />
-                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <FileText className="h-4 w-4 text-emerald-700" />
+                        <div>
                       <p className="font-bold text-slate-900">
                         {doc.type}: <span className="font-normal text-slate-600">{doc.fileName}</span>
                       </p>
                       <p className="text-[10px] text-slate-400">
                         Uploaded: {doc.uploadDate} · Size: {doc.size}
                       </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveDoc(doc.id)}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDoc(doc.id)}
                     className="rounded-lg p-1 text-rose-600 hover:bg-rose-50 hover:text-rose-800"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
         </FormSection>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
@@ -852,7 +852,7 @@ export function AddEmployeeView() {
             onCancel={() => router.push("/human-resources/employees/list")}
             onReviewSave={handleReviewSave}
           />
-        </div>
+          </div>
       </div>
 
       <AddEmployeePreviewModal

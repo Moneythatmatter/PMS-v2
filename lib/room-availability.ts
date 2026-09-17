@@ -50,6 +50,7 @@ export function getBlockedRoomNos(
   checkIn: string,
   checkOut: string,
   availabilityBlocks: RoomAvailabilityBlock[] = [],
+  excludeReservationId?: string,
 ): Set<string> {
   const blocked = new Set<string>();
   const stayIn = normalizeToIso(checkIn);
@@ -57,6 +58,7 @@ export function getBlockedRoomNos(
   if (!stayIn || !stayOut || stayOut <= stayIn) return blocked;
 
   for (const reservation of reservations) {
+    if (excludeReservationId && reservation.id === excludeReservationId) continue;
     if (!isActiveReservation(reservation.status)) continue;
     const roomNo = String(reservation.roomNo ?? "").trim();
     if (!roomNo || /^(tba|n\/?a|unassigned|-)$/i.test(roomNo)) continue;
@@ -78,8 +80,15 @@ export function filterRoomsForStay(
   checkIn: string,
   checkOut: string,
   availabilityBlocks: RoomAvailabilityBlock[] = [],
+  excludeReservationId?: string,
 ): string[] {
-  const blocked = getBlockedRoomNos(reservations, checkIn, checkOut, availabilityBlocks);
+  const blocked = getBlockedRoomNos(
+    reservations,
+    checkIn,
+    checkOut,
+    availabilityBlocks,
+    excludeReservationId,
+  );
   return roomNos
     .filter((roomNo) => !blocked.has(roomNo))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));

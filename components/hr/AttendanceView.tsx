@@ -459,9 +459,9 @@ export function AttendanceView() {
           overrideReason: reason,
           remarks: reason,
         });
-      } else {
+    } else {
         await hrAttendanceService.punchIn({
-          employeeId: punchEmpId,
+        employeeId: punchEmpId,
           attendanceDate: punchDate,
           punchInAt: punchInIso,
           source: "MANUAL",
@@ -539,7 +539,7 @@ export function AttendanceView() {
       }
 
       await loadAttendance(selectedDate);
-      setIsManualPunchModalOpen(false);
+    setIsManualPunchModalOpen(false);
       setToastMessage(`Punch-out recorded at ${punchOutTime} for ${empName}.`);
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : "Failed to record punch-out");
@@ -749,22 +749,22 @@ export function AttendanceView() {
       >
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Select Employee <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={punchEmpId}
-                onChange={(e) => setPunchEmpId(e.target.value)}
-                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
-              >
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Select Employee <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={punchEmpId}
+              onChange={(e) => setPunchEmpId(e.target.value)}
+              className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
+            >
                 {employees.map((staff) => (
                   <option key={staff.id} value={staff.id}>
                     {staff.name} — {staff.department}
-                  </option>
-                ))}
-              </select>
-            </div>
+                </option>
+              ))}
+            </select>
+          </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Attendance Date</label>
@@ -776,7 +776,7 @@ export function AttendanceView() {
                 className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-medium"
               />
             </div>
-          </div>
+            </div>
 
           {!isPastDate && (hasPunchedIn || hasPunchedOut) && (
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -789,26 +789,26 @@ export function AttendanceView() {
           {isPastDate && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
               Past date selected — enter both punch-in and punch-out times, then save.
-            </div>
+          </div>
           )}
 
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3.5 space-y-3">
             <p className="text-xs font-bold text-emerald-900 uppercase tracking-wide">Punch In</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Punch-In Time <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={punchInTime}
-                  onChange={(e) => setPunchInTime(e.target.value)}
-                  placeholder="e.g. 09:00 AM"
-                  className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-mono font-bold"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Punch-In Time <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={punchInTime}
+                onChange={(e) => setPunchInTime(e.target.value)}
+                placeholder="e.g. 09:00 AM"
+                className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-mono font-bold"
+              />
+            </div>
 
-              <div>
+            <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Attendance Status</label>
                 <select
                   value={punchStatus}
@@ -964,8 +964,8 @@ export function AttendanceView() {
                 <p className="italic text-amber-900">
                   &ldquo;{viewingRecord.manualReason || "Manual punch recorded by HR."}&rdquo;
                 </p>
-              </div>
-            )}
+                </div>
+              )}
 
             {/* Edit Button Inside Detail View Drawer */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
@@ -997,7 +997,7 @@ export function AttendanceView() {
         >
           <div className="space-y-3 text-xs">
             <ToolbarFilterSelect
-              value={selectedDepartment}
+                value={selectedDepartment}
               onChange={setSelectedDepartment}
               options={[...employeeDepartmentFilterOptions]}
               ariaLabel="Filter by department"
@@ -1011,7 +1011,7 @@ export function AttendanceView() {
               className="w-full min-w-0"
             />
             <ToolbarFilterSelect
-              value={selectedStatus}
+                value={selectedStatus}
               onChange={setSelectedStatus}
               options={[...attendanceStatusFilterOptions]}
               ariaLabel="Filter by status"

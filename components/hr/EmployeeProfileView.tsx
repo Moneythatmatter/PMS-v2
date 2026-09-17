@@ -1402,15 +1402,15 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                 <ProfileCard
                   title="Document vault"
                   action={
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => setToastMessage("Opening document upload dialog...")}
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setToastMessage("Opening document upload dialog...")}
                       className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold h-8"
-                    >
-                      <Upload className="mr-1.5 h-3.5 w-3.5" />
+                  >
+                    <Upload className="mr-1.5 h-3.5 w-3.5" />
                       Upload
-                    </Button>
+                  </Button>
                   }
                 >
                   <p className="text-xs text-slate-500 -mt-1">
@@ -1449,7 +1449,7 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                     employeeName={employee.name}
                   />
                 </ProfileCard>
-              </div>
+                          </div>
             )}
 
             {/* ─────────────────────────────────────────────────────────────
@@ -1492,8 +1492,8 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
               >
                 <ActivityLogPanel items={filteredActivities} />
               </ProfileCard>
-            </div>
-          )}
+                  </div>
+            )}
           </div>
         </>
       )}

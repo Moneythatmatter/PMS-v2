@@ -311,12 +311,12 @@ export function FbKitchenOrdersView() {
     <div className="min-h-full bg-slate-100">
       <div className="border-b border-slate-300 bg-white px-4 py-3 shadow-sm">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-6">
+          <div className="flex w-full min-w-0 items-center gap-4 sm:gap-6">
             <button
               type="button"
               onClick={() => setTab("kot")}
               className={cn(
-                "border-b-2 pb-2 text-sm font-semibold uppercase tracking-wide transition",
+                "border-b-2 pb-2 text-xs font-semibold uppercase tracking-wide transition sm:text-sm",
                 tab === "kot"
                   ? "border-red-600 text-red-600"
                   : "border-transparent text-slate-500 hover:text-slate-700",
@@ -342,14 +342,14 @@ export function FbKitchenOrdersView() {
             value={outletId}
             onChange={setOutletId}
             allowAll
-            className="h-9 min-w-[11rem]"
+            className="h-9 w-full min-w-0 sm:min-w-[11rem] sm:w-auto"
           />
         </div>
       </div>
 
       <div className="mx-auto max-w-[1600px] px-4 py-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="relative min-w-[240px] flex-1 max-w-md">
+          <div className="relative min-w-0 w-full flex-1 sm:max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"

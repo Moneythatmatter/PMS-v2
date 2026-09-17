@@ -29,13 +29,27 @@ export function Header({ user: fallbackUser }: HeaderProps) {
     : fallbackUser;
 
   const [searchOpen, setSearchOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (searchOpen) {
       searchInputRef.current?.focus();
     }
   }, [searchOpen]);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileRef.current?.contains(event.target as Node)) return;
+      setProfileOpen(false);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [profileOpen]);
 
   function handleLogout() {
     logout();
@@ -61,7 +75,7 @@ export function Header({ user: fallbackUser }: HeaderProps) {
               Impact <span className="text-emerald-500">PMS</span>
             </p>
             {propertyCtx?.property && (
-              <p className="truncate text-[10px] text-neutral-400">
+              <p className="hidden truncate text-[10px] text-neutral-400 sm:block">
                 {propertyCtx.property.name}
               </p>
             )}
@@ -99,8 +113,23 @@ export function Header({ user: fallbackUser }: HeaderProps) {
             <Bell className="h-4 w-4" />
             <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
           </button>
-          <div className="ml-0.5 flex items-center gap-2 border-l border-neutral-700 pl-2 sm:gap-2.5 sm:pl-3">
-            <Avatar initials={user.initials} size="sm" />
+          <div
+            ref={profileRef}
+            className="relative ml-0.5 flex items-center gap-2 border-l border-neutral-700 pl-2 sm:gap-2.5 sm:pl-3"
+          >
+            <button
+              type="button"
+              aria-expanded={profileOpen}
+              aria-haspopup="true"
+              aria-label="Open profile menu"
+              onClick={() => setProfileOpen((open) => !open)}
+              className={cn(
+                "rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
+                profileOpen && "ring-2 ring-emerald-500/60",
+              )}
+            >
+              <Avatar initials={user.initials} size="sm" />
+            </button>
             <div className="hidden min-w-0 md:block">
               <p className="truncate text-sm font-medium text-white">{user.name}</p>
               <p className="truncate text-xs text-neutral-400">{user.role}</p>
@@ -114,6 +143,22 @@ export function Header({ user: fallbackUser }: HeaderProps) {
             >
               <LogOut className="h-4 w-4" />
             </button>
+
+            {profileOpen && (
+              <div
+                role="menu"
+                aria-label="Profile"
+                className="absolute right-10 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl sm:right-12"
+              >
+                <div className="border-b border-slate-100 px-4 py-3">
+                  <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
+                  {authUser?.email ? (
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{authUser.email}</p>
+                  ) : null}
+                  <p className="mt-1 text-xs font-medium text-emerald-700">{user.role}</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

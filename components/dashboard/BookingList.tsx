@@ -7,6 +7,8 @@ import type { Booking } from "@/app/data/types";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { formatBookingCreatedAt } from "@/lib/reservation-dates";
+import { allBookingsDetailHref } from "@/lib/check-in-navigation";
 
 interface BookingListProps {
   bookings: Booking[];
@@ -32,15 +34,22 @@ export function BookingList({ bookings, loading = false }: BookingListProps) {
         <div>
           <h3 className="text-sm font-semibold text-slate-900">Booking List</h3>
           <p className="mt-0.5 text-xs text-slate-500">
-            Today&apos;s arrivals only
+            Bookings created today
           </p>
         </div>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <Link href="/frontoffice/dashboard" className="w-full sm:w-auto">
+          <Button size="sm" variant="outline" className="w-full shrink-0 gap-1.5 sm:w-auto">
+            Front Office
+          </Button>
+        </Link>
         <Link href="/frontoffice/reservation/new" className="w-full sm:w-auto">
           <Button size="sm" className="w-full shrink-0 gap-1.5 sm:w-auto">
             <Plus className="h-3.5 w-3.5" />
             New Booking
           </Button>
         </Link>
+        </div>
       </div>
       <div className="mb-4">
         <div className="relative w-full sm:max-w-xs">
@@ -78,9 +87,14 @@ export function BookingList({ bookings, loading = false }: BookingListProps) {
       {/* Mobile card list */}
       <div className="space-y-3 md:hidden">
         {filtered.map((booking) => (
-          <div
+          <Link
             key={booking.id}
-            className="rounded-lg border border-slate-100 p-3"
+            href={
+              booking.reservationId
+                ? allBookingsDetailHref({ id: booking.reservationId })
+                : "/frontoffice/reservation/all-bookings"
+            }
+            className="block rounded-lg border border-slate-100 p-3 transition-colors hover:bg-emerald-50/40"
           >
             <div className="mb-2 flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -108,8 +122,14 @@ export function BookingList({ bookings, loading = false }: BookingListProps) {
                 <dt className="text-slate-400">Check out</dt>
                 <dd className="font-medium text-slate-700">{booking.checkOut}</dd>
               </div>
+              <div className="col-span-2">
+                <dt className="text-slate-400">Created</dt>
+                <dd className="font-medium text-slate-700">
+                  {formatBookingCreatedAt(booking.createdAt)}
+                </dd>
+              </div>
             </dl>
-          </div>
+          </Link>
         ))}
       </div>
 
@@ -125,6 +145,7 @@ export function BookingList({ bookings, loading = false }: BookingListProps) {
               <th className="pb-3 pr-4">Duration</th>
               <th className="pb-3 pr-4">Check In</th>
               <th className="pb-3 pr-4">Check Out</th>
+              <th className="pb-3 pr-4">Created</th>
               <th className="pb-3">Status</th>
             </tr>
           </thead>
@@ -135,7 +156,16 @@ export function BookingList({ bookings, loading = false }: BookingListProps) {
                 className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50"
               >
                 <td className="py-3.5 pr-4 font-medium text-slate-900">
-                  {booking.id}
+                  {booking.reservationId ? (
+                    <Link
+                      href={allBookingsDetailHref({ id: booking.reservationId })}
+                      className="hover:text-emerald-700"
+                    >
+                      {booking.id}
+                    </Link>
+                  ) : (
+                    booking.id
+                  )}
                 </td>
                 <td className="py-3.5 pr-4 text-slate-700">{booking.guestName}</td>
                 <td className="py-3.5 pr-4 text-slate-700">{booking.roomType}</td>
@@ -143,6 +173,9 @@ export function BookingList({ bookings, loading = false }: BookingListProps) {
                 <td className="py-3.5 pr-4 text-slate-700">{booking.duration}</td>
                 <td className="py-3.5 pr-4 text-slate-700">{booking.checkIn}</td>
                 <td className="py-3.5 pr-4 text-slate-700">{booking.checkOut}</td>
+                <td className="py-3.5 pr-4 text-slate-600">
+                  {formatBookingCreatedAt(booking.createdAt)}
+                </td>
                 <td className="py-3.5">
                   <Badge status={booking.status} />
                 </td>

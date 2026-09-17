@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Award,
   Calendar,
@@ -101,7 +102,23 @@ function buildPersonalFields(guest: GuestProfile): ProfileField[] {
   ];
 }
 
+function findGuestByKey(profiles: GuestProfile[], key: string) {
+  const trimmed = key.trim();
+  if (!trimmed) return null;
+  return (
+    profiles.find((g) => g.id === trimmed) ??
+    profiles.find((g) => displayGuestNo(g) === trimmed) ??
+    null
+  );
+}
+
 export function GuestProfileView() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const guestIdQuery = searchParams.get("guestId") ?? "";
+  const openEditFromQuery =
+    searchParams.get("edit") === "1" || searchParams.get("edit") === "true";
+
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("all");
   const [pmsProfiles, setPmsProfiles] = useState<GuestProfile[]>([]);
@@ -115,6 +132,11 @@ export function GuestProfileView() {
   const [allFeedbacks, setAllFeedbacks] = useState<GuestFeedbackRecord[]>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<GuestDocumentItem | null>(null);
+  const appliedDeepLinkRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!guestIdQuery) appliedDeepLinkRef.current = null;
+  }, [guestIdQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,6 +164,22 @@ export function GuestProfileView() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!guestIdQuery || loading || pmsProfiles.length === 0) return;
+
+    const deepLinkKey = `${guestIdQuery}:${openEditFromQuery}`;
+    if (appliedDeepLinkRef.current === deepLinkKey) return;
+
+    const match = findGuestByKey(pmsProfiles, guestIdQuery);
+    if (!match) return;
+
+    appliedDeepLinkRef.current = deepLinkKey;
+    setSelected(match);
+    setActiveTab("Personal");
+    setDrawerOpen(true);
+    if (openEditFromQuery) setEditOpen(true);
+  }, [guestIdQuery, openEditFromQuery, loading, pmsProfiles]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -182,6 +220,16 @@ export function GuestProfileView() {
     setDrawerOpen(false);
     setEditOpen(false);
     setPreviewDoc(null);
+    if (guestIdQuery) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("guestId");
+      params.delete("edit");
+      const qs = params.toString();
+      router.replace(
+        qs ? `/frontoffice/guest-profiles?${qs}` : "/frontoffice/guest-profiles",
+        { scroll: false },
+      );
+    }
   };
 
   const handleGuestSaved = (updated: GuestProfile) => {

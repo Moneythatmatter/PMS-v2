@@ -53,9 +53,13 @@ export function Drawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby="drawer-title"
-        style={fullScreen || !canResize ? undefined : { width: panelWidth, maxWidth: "60vw" }}
+        style={
+          fullScreen || !canResize
+            ? undefined
+            : { width: panelWidth, maxWidth: "min(60vw, 100vw)" }
+        }
         className={cn(
-          "fixed z-50 flex flex-col bg-white shadow-2xl",
+          "fixed z-50 flex w-full max-w-full flex-col bg-white shadow-2xl sm:max-w-none",
           !isResizing && "transition-all duration-300 ease-out",
           fullScreen
             ? "inset-0 border-0"

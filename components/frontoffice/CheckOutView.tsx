@@ -21,8 +21,9 @@ import {
 } from "lucide-react";
 import { computeCheckoutTotals, computeCheckoutBills } from "@/app/data";
 import type { CheckoutFolio, SplittableChargeKey } from "@/app/data/frontoffice/checkout";
+import type { FolioListItem } from "@/app/data/types/billing";
 import { paymentModes, reservationPaymentModesNeedingExternalRef } from "@/app/data/frontoffice/constants";
-import { reservationService } from "@/services/front-office";
+import { billingFolioService, reservationService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -71,26 +72,52 @@ function formatRoomLabel(room?: string): string {
   return value;
 }
 
-function mapInHouseToFolio(g: {
-  id: string;
-  bookingNo?: string;
-  guestName: string;
-  phone?: string;
-  email?: string;
-  room: string;
-  roomType: string;
-  checkIn: string;
-  checkOut: string;
-  nights: number;
-  adults: number;
-  children: number;
-  balance: number;
-  restaurantBill?: number;
-  laundry?: number;
-  isVip?: boolean;
-}): CheckoutFolio {
+function folioByBookingId(folios: FolioListItem[]): Map<string, FolioListItem> {
+  const map = new Map<string, FolioListItem>();
+  for (const folio of folios) {
+    const bookingId = String(folio.bookingId ?? "").trim();
+    if (!bookingId) continue;
+    const existing = map.get(bookingId);
+    if (!existing || folio.status === "OPEN") {
+      map.set(bookingId, folio);
+    }
+  }
+  return map;
+}
+
+function mapInHouseToFolio(
+  g: {
+    id: string;
+    bookingNo?: string;
+    guestName: string;
+    phone?: string;
+    email?: string;
+    room: string;
+    roomType: string;
+    checkIn: string;
+    checkOut: string;
+    nights: number;
+    adults: number;
+    children: number;
+    balance: number;
+    restaurantBill?: number;
+    laundry?: number;
+    isVip?: boolean;
+  },
+  folio?: FolioListItem | null,
+): CheckoutFolio {
   const restaurant = g.restaurantBill || 0;
   const laundry = g.laundry || 0;
+  const folioSubtotal = folio ? Number(folio.subtotal ?? 0) : 0;
+  const folioTotal = folio ? Number(folio.totalAmount ?? 0) : 0;
+  const chargeBase =
+    folioSubtotal > 0
+      ? folioSubtotal
+      : folioTotal > 0
+        ? folioTotal
+        : Math.max(0, g.balance);
+  const advancePaid = folio ? Math.max(0, Number(folio.paidAmount ?? 0)) : 0;
+
   return {
     id: g.id,
     bookingId: displayBookingNo(g),
@@ -104,15 +131,15 @@ function mapInHouseToFolio(g: {
     nights: g.nights,
     adults: g.adults,
     children: g.children,
-    roomCharges: Math.max(0, g.balance - restaurant - laundry),
+    roomCharges: Math.max(0, chargeBase - restaurant - laundry),
     restaurantCharges: restaurant,
     laundry,
     miniBar: 0,
     extraBed: 0,
     otherCharges: 0,
-    gst: 0,
-    discount: 0,
-    advancePaid: 0,
+    gst: folio ? Number(folio.taxTotal ?? 0) : 0,
+    discount: folio ? Number(folio.discountTotal ?? 0) : 0,
+    advancePaid,
     isVip: g.isVip,
     departingToday: isDepartingToday({ checkOut: g.checkOut }),
   };
@@ -157,9 +184,15 @@ export function CheckOutView() {
     (async () => {
       try {
         setLoading(true);
-        const inHouse = await reservationService.inHouse();
+        const [inHouse, billingFolios] = await Promise.all([
+          reservationService.inHouse(),
+          billingFolioService.list({ status: "OPEN" }).catch(() => [] as FolioListItem[]),
+        ]);
         if (!cancelled) {
-          setFolios(inHouse.map(mapInHouseToFolio));
+          const folioMap = folioByBookingId(billingFolios);
+          setFolios(
+            inHouse.map((guest) => mapInHouseToFolio(guest, folioMap.get(guest.id))),
+          );
           setError(null);
         }
       } catch (e) {
