@@ -167,12 +167,17 @@ function profileLockedFields(
 }
 
 function isEligibleForCheckIn(status: string) {
-  return (
-    status !== "Checked In" &&
-    status !== "Cancelled" &&
-    status !== "Checked Out" &&
-    status !== "In-House"
-  );
+  const s = String(status || "").toLowerCase().trim().replace(/[-_]/g, " ");
+  if (
+    s === "checked in" ||
+    s === "cancelled" ||
+    s === "checked out" ||
+    s === "in house" ||
+    s === "completed"
+  ) {
+    return false;
+  }
+  return s === "confirmed" || s === "reserved" || s === "pending" || s === "guaranteed" || s === "";
 }
 
 export function CheckInForm() {

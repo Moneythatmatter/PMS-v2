@@ -26,7 +26,7 @@ import {
   filterAttendanceForExport,
   isHolidayPresentRecord,
 } from "@/lib/hr/attendance-export";
-import { hrAttendanceService, hrEmployeeService } from "@/services/human-resources";
+import { hrAttendanceService, hrEmployeeService, hrHolidayService } from "@/services/human-resources";
 import { mapAttendanceFromApi, mapEmployeeFromApi, buildPunchTimestamp } from "@/lib/hr/api-mappers";
 import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
@@ -132,14 +132,16 @@ function clampToToday(iso: string): string {
 export function AttendanceView() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
+  const [activeHoliday, setActiveHoliday] = useState<{ name: string; category: string } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(todayIsoDate);
 
   const loadAttendance = async (date = selectedDate) => {
     try {
-      const [recordRows, empRows] = await Promise.all([
-        hrAttendanceService.getDaily(date),
-        hrEmployeeService.list(),
+      const [recordRows, empRows, holidays] = await Promise.all([
+        hrAttendanceService.getDaily(date).catch(() => []),
+        hrEmployeeService.list().catch(() => []),
+        hrHolidayService.list().catch(() => []),
       ]);
       const emps = empRows.map(mapEmployeeFromApi);
       setEmployees(emps);
@@ -150,10 +152,33 @@ export function AttendanceView() {
         ),
       );
       if (emps[0]) setPunchEmpId(emps[0].id);
+
+      // Detect holiday for selected date
+      const matchedHoliday = holidays.find((h) => {
+        const rawDate = String((h as Record<string, unknown>).holidayDate || (h as Record<string, unknown>).holiday_date || "").trim();
+        let iso = "";
+        if (/^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+          iso = rawDate.slice(0, 10);
+        } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(rawDate)) {
+          const [d, m, y] = rawDate.split("/");
+          iso = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+        }
+        return iso === date && String((h as Record<string, unknown>).status ?? "Active").toLowerCase() !== "inactive";
+      });
+
+      if (matchedHoliday) {
+        setActiveHoliday({
+          name: String((matchedHoliday as Record<string, unknown>).holidayName || (matchedHoliday as Record<string, unknown>).name || "Holiday"),
+          category: String((matchedHoliday as Record<string, unknown>).category || "Public Holiday"),
+        });
+      } else {
+        setActiveHoliday(null);
+      }
     } catch (e) {
       setToastMessage(e instanceof Error ? e.message : "Failed to load attendance");
       setRecords([]);
       setEmployees([]);
+      setActiveHoliday(null);
     }
   };
 
@@ -242,8 +267,35 @@ export function AttendanceView() {
         byEmployee.set(record.employeeId, record);
       }
     }
+
+    // Ensure all active employees are represented for selected date
+    for (const emp of employees) {
+      if (!byEmployee.has(emp.id)) {
+        const isFuture = selectedDate > todayIsoDate();
+        byEmployee.set(emp.id, {
+          id: `pending-${emp.id}-${selectedDate}`,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          department: emp.department,
+          designation: emp.designation,
+          avatar: emp.avatar,
+          photoUrl: emp.photoUrl,
+          shiftCode: emp.shiftType ? emp.shiftType.slice(0, 3).toUpperCase() : "GEN",
+          shiftName: emp.shiftType || "General Shift",
+          date: selectedDate,
+          checkIn: "—",
+          checkOut: "—",
+          workedHours: 0,
+          expectedHours: 8,
+          status: isFuture ? "Pending" : activeHoliday ? "Holiday" : "Pending",
+          deviceType: "Manual Entry",
+          source: "MANUAL",
+        });
+      }
+    }
+
     return Array.from(byEmployee.values());
-  }, [records, selectedDate]);
+  }, [records, employees, selectedDate, activeHoliday]);
 
   const filteredRecords = useMemo(() => {
     return dateScopedRecords.filter((r) => {
@@ -351,10 +403,27 @@ export function AttendanceView() {
   }) => {
     setExporting(true);
     try {
-      const rows = await hrAttendanceService.listRange(options.fromDate, options.toDate);
-      const mapped = rows.map((row) =>
-        mapAttendanceFromApi(row, employeeLookup.get(String(row.employeeId))),
-      );
+      let rows: Record<string, unknown>[] = [];
+      try {
+        rows = await hrAttendanceService.listRange(options.fromDate, options.toDate);
+      } catch (err) {
+        console.warn("listRange failed, checking fallback records:", err);
+        rows = [];
+      }
+
+      let mapped: AttendanceRecord[] = [];
+      if (rows && rows.length > 0) {
+        mapped = rows.map((row) =>
+          mapAttendanceFromApi(row, employeeLookup.get(String(row.employeeId))),
+        );
+      } else if (
+        options.fromDate === selectedDate &&
+        options.toDate === selectedDate &&
+        records.length > 0
+      ) {
+        mapped = records;
+      }
+
       const filtered = filterAttendanceForExport(mapped, employeeLookup, {
         searchTerm,
         department: selectedDepartment,

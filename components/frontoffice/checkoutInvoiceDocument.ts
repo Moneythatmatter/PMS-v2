@@ -1,3 +1,4 @@
+import jsPDF from "jspdf";
 import type { CheckoutBillGroup, CheckoutFolio, SplittableChargeKey } from "@/app/data/frontoffice/checkout";
 import { SPLITTABLE_CHARGE_LABELS } from "@/app/data/frontoffice/checkout";
 
@@ -58,6 +59,7 @@ function formatInrPlain(amount: number): string {
 }
 
 function formatRoomLabel(folio: CheckoutFolio): string {
+
   const room = folio.room?.trim();
   const roomType = folio.roomType?.trim();
   if (room && room !== "TBA" && room !== "-") {
@@ -79,62 +81,62 @@ function lineItemForCharge(
     roomCharges:
       folio.roomCharges > 0
         ? {
-            desc: `Room Charges — ${roomLabel}`,
-            sac: "996311",
-            qty: Math.max(folio.nights, 1),
-            rate: Math.round(folio.roomCharges / Math.max(folio.nights, 1)),
-            amount: folio.roomCharges,
-          }
+          desc: `Room Charges — ${roomLabel}`,
+          sac: "996311",
+          qty: Math.max(folio.nights, 1),
+          rate: Math.round(folio.roomCharges / Math.max(folio.nights, 1)),
+          amount: folio.roomCharges,
+        }
         : null,
     restaurantCharges:
       folio.restaurantCharges > 0
         ? {
-            desc: "Restaurant / F&B Charges",
-            sac: "996331",
-            qty: 1,
-            rate: folio.restaurantCharges,
-            amount: folio.restaurantCharges,
-          }
+          desc: "Restaurant / F&B Charges",
+          sac: "996331",
+          qty: 1,
+          rate: folio.restaurantCharges,
+          amount: folio.restaurantCharges,
+        }
         : null,
     laundry:
       folio.laundry > 0
         ? {
-            desc: "Laundry Services",
-            sac: "999799",
-            qty: 1,
-            rate: folio.laundry,
-            amount: folio.laundry,
-          }
+          desc: "Laundry Services",
+          sac: "999799",
+          qty: 1,
+          rate: folio.laundry,
+          amount: folio.laundry,
+        }
         : null,
     miniBar:
       folio.miniBar > 0
         ? {
-            desc: "Mini Bar Consumption",
-            sac: "996331",
-            qty: 1,
-            rate: folio.miniBar,
-            amount: folio.miniBar,
-          }
+          desc: "Mini Bar Consumption",
+          sac: "996331",
+          qty: 1,
+          rate: folio.miniBar,
+          amount: folio.miniBar,
+        }
         : null,
     extraBed:
       folio.extraBed > 0
         ? {
-            desc: "Extra Bed Charges",
-            sac: "996311",
-            qty: 1,
-            rate: folio.extraBed,
-            amount: folio.extraBed,
-          }
+          desc: "Extra Bed Charges",
+          sac: "996311",
+          qty: 1,
+          rate: folio.extraBed,
+          amount: folio.extraBed,
+        }
         : null,
     otherCharges:
       folio.otherCharges > 0
         ? {
-            desc: "Miscellaneous Charges",
-            sac: "999799",
-            qty: 1,
-            rate: folio.otherCharges,
-            amount: folio.otherCharges,
-          }
+          desc: "Miscellaneous Charges",
+          sac: "999799",
+          qty: 1,
+          rate: folio.otherCharges,
+          amount: folio.otherCharges,
+        }
         : null,
   };
 
@@ -469,21 +471,334 @@ export function buildCheckoutInvoiceHtml(
 </html>`;
 }
 
+function formatPdfInr(amount: number): string {
+  return `Rs. ${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export function generateCheckoutInvoicePdf(
+  data: CheckoutInvoiceContent,
+  hotel = CHECKOUT_INVOICE_HOTEL,
+): jsPDF {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const { invoiceNo, invoiceDate, folio, discount, paymentMode, bill, billTitle } = data;
+  const lineItems = buildCheckoutInvoiceLineItems(folio, bill);
+  const taxableAmount =
+    bill?.charges ??
+    folio.roomCharges +
+    folio.restaurantCharges +
+    folio.laundry +
+    folio.miniBar +
+    folio.extraBed +
+    folio.otherCharges;
+  const billGst = bill?.gst ?? folio.gst;
+  const cgst = Math.round(billGst / 2);
+  const sgst = Math.round(billGst / 2);
+  const subtotalWithTax = bill ? bill.charges + bill.gst : taxableAmount + folio.gst;
+  const billDiscount = bill?.discount ?? discount;
+  const advancePaid = bill?.advance ?? folio.advancePaid;
+  const pending = bill?.due ?? Math.max(0, subtotalWithTax - billDiscount - advancePaid);
+  const invoiceHeading = bill ? billTitle || "Split Bill Invoice" : "Tax Invoice";
+  const roomLabel = formatRoomLabel(folio);
+
+  const leftMargin = 15;
+  const rightMargin = 195;
+  const contentWidth = 180;
+
+  // 1. Minimal Header (No background boxes)
+  const yHeader = 18;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(0, 0, 0);
+  doc.text(hotel.name, leftMargin, yHeader);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(60, 60, 60);
+  doc.text(hotel.tagline, leftMargin, yHeader + 5);
+
+  doc.setFontSize(7.5);
+  doc.setTextColor(80, 80, 80);
+  doc.text(hotel.address, leftMargin, yHeader + 10);
+  doc.text(`${hotel.phone}  ·  ${hotel.email}`, leftMargin, yHeader + 14.5);
+  doc.text(`GSTIN: ${hotel.gstin}  ·  PAN: ${hotel.pan}`, leftMargin, yHeader + 19);
+
+  // Invoice Meta (Right side)
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(0, 0, 0);
+  doc.text(invoiceHeading.toUpperCase(), rightMargin, yHeader, { align: "right" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text(invoiceNo, rightMargin, yHeader + 5.5, { align: "right" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(80, 80, 80);
+  doc.text(`Date: ${invoiceDate}`, rightMargin, yHeader + 10.5, { align: "right" });
+  doc.text(`Place of Supply: ${hotel.state} (${hotel.stateCode})`, rightMargin, yHeader + 15, {
+    align: "right",
+  });
+
+  // Header Divider
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.4);
+  doc.line(leftMargin, yHeader + 23, rightMargin, yHeader + 23);
+
+  // 2. Info Section (Bill To & Stay Details - No boxes)
+  const yInfo = yHeader + 29;
+
+  // Bill To (Left)
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("BILL TO", leftMargin, yInfo);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.text(folio.guestName || "Guest", leftMargin, yInfo + 5);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(60, 60, 60);
+  let curBillY = yInfo + 9.5;
+  if (folio.phone) {
+    doc.text(folio.phone, leftMargin, curBillY);
+    curBillY += 4.5;
+  }
+  if (folio.email) {
+    doc.text(folio.email, leftMargin, curBillY);
+    curBillY += 4.5;
+  }
+  doc.text(`Booking ID: ${folio.bookingId}`, leftMargin, curBillY);
+
+  // Stay Details (Right)
+  const rightColX = 112;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("STAY DETAILS", rightColX, yInfo);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text("Room: ", rightColX, yInfo + 5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
+  doc.text(roomLabel, rightColX + 13, yInfo + 5);
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text("Check-in: ", rightColX, yInfo + 9.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
+  doc.text(folio.checkIn, rightColX + 16, yInfo + 9.5);
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text("Check-out: ", rightColX, yInfo + 14);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
+  doc.text(folio.checkOut, rightColX + 18, yInfo + 14);
+
+  const guestsDesc = `${folio.adults} Adult${folio.adults !== 1 ? "s" : ""}${folio.children > 0 ? `, ${folio.children} Child${folio.children !== 1 ? "ren" : ""}` : ""
+    } · ${folio.nights} Night${folio.nights !== 1 ? "s" : ""}`;
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text("Guests: ", rightColX, yInfo + 18.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
+  doc.text(guestsDesc, rightColX + 13, yInfo + 18.5);
+
+  // 3. Line Items Table (Minimal rules only)
+  const yTable = Math.max(curBillY, yInfo + 18.5) + 8;
+
+  // Table header top line
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.35);
+  doc.line(leftMargin, yTable, rightMargin, yTable);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("#", leftMargin, yTable + 4.5);
+  doc.text("DESCRIPTION", leftMargin + 8, yTable + 4.5);
+  doc.text("SAC", leftMargin + 92, yTable + 4.5);
+  doc.text("QTY", leftMargin + 118, yTable + 4.5, { align: "right" });
+  doc.text("RATE", leftMargin + 148, yTable + 4.5, { align: "right" });
+  doc.text("AMOUNT", rightMargin, yTable + 4.5, { align: "right" });
+
+  // Table header bottom line
+  doc.setLineWidth(0.2);
+  doc.line(leftMargin, yTable + 6.5, rightMargin, yTable + 6.5);
+
+  let curY = yTable + 7;
+  const rowH = 6.5;
+
+  lineItems.forEach((item, index) => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(80, 80, 80);
+    doc.text(String(index + 1), leftMargin, curY + 4);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(0, 0, 0);
+    doc.text(item.desc, leftMargin + 8, curY + 4);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(80, 80, 80);
+    doc.text(item.sac, leftMargin + 92, curY + 4);
+
+    doc.setFontSize(8);
+    doc.setTextColor(50, 50, 50);
+    doc.text(String(item.qty), leftMargin + 118, curY + 4, { align: "right" });
+    doc.text(formatPdfInr(item.rate), leftMargin + 148, curY + 4, { align: "right" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
+    doc.text(formatPdfInr(item.amount), rightMargin, curY + 4, { align: "right" });
+
+    curY += rowH;
+  });
+
+  // Table bottom border
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.35);
+  doc.line(leftMargin, curY, rightMargin, curY);
+
+  // 4. Totals and Payment Section (No boxes)
+  const yBottom = curY + 6;
+
+  const totalsRows: { label: string; value: string }[] = [
+    { label: "Taxable Amount", value: formatPdfInr(taxableAmount) },
+    { label: "CGST @ 9%", value: formatPdfInr(cgst) },
+    { label: "SGST @ 9%", value: formatPdfInr(sgst) },
+    { label: "Subtotal (incl. tax)", value: formatPdfInr(subtotalWithTax) },
+  ];
+  if (billDiscount > 0) {
+    totalsRows.push({ label: "Discount", value: `- ${formatPdfInr(billDiscount)}` });
+  }
+  if (advancePaid > 0) {
+    totalsRows.push({ label: "Advance Paid", value: `- ${formatPdfInr(advancePaid)}` });
+  }
+
+  // Payment Info (Left)
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("PAYMENT INFORMATION", leftMargin, yBottom);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text("Mode: ", leftMargin, yBottom + 5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(60, 60, 60);
+  doc.text(paymentMode, leftMargin + 12, yBottom + 5);
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text("Amount in words:", leftMargin, yBottom + 11);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(60, 60, 60);
+  const wordsText = `${amountInWords(pending)} Rupees Only`;
+  const wordsLines = doc.splitTextToSize(wordsText, 85);
+  doc.text(wordsLines, leftMargin, yBottom + 16);
+
+  // Totals Breakdown (Right)
+  const totalsLabelX = 118;
+  let tY = yBottom;
+
+  totalsRows.forEach((row, i) => {
+    if (i === 3) {
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.2);
+      doc.line(totalsLabelX, tY - 1, rightMargin, tY - 1);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(0, 0, 0);
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(60, 60, 60);
+    }
+
+    doc.text(row.label, totalsLabelX, tY + 2.5);
+    doc.text(row.value, rightMargin, tY + 2.5, { align: "right" });
+    tY += 5;
+  });
+
+  // Amount Due Line
+  tY += 2;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.35);
+  doc.line(totalsLabelX, tY, rightMargin, tY);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Amount Due", totalsLabelX, tY + 5);
+  doc.text(formatPdfInr(pending), rightMargin, tY + 5, { align: "right" });
+
+  doc.setLineWidth(0.35);
+  doc.line(totalsLabelX, tY + 7.5, rightMargin, tY + 7.5);
+
+  // 5. Footer & Legal Terms
+  const yFooter = Math.max(tY + 14, yBottom + 32);
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.2);
+  doc.line(leftMargin, yFooter, rightMargin, yFooter);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(110, 110, 110);
+  const disclaimer = `This is a computer-generated tax invoice and does not require a physical signature. Subject to Bengaluru jurisdiction. E.&O.E. GST charged as per applicable rates. For queries contact ${hotel.email} within 7 days of checkout.`;
+  const disclaimerLines = doc.splitTextToSize(disclaimer, contentWidth);
+  doc.text(disclaimerLines, leftMargin, yFooter + 4.5);
+
+  // Signatures
+  const ySign = yFooter + 18;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Guest Signature", leftMargin, ySign);
+
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.25);
+  doc.line(leftMargin, ySign + 9, leftMargin + 45, ySign + 9);
+
+  doc.text("Authorised Signatory", rightMargin, ySign, { align: "right" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(80, 80, 80);
+  doc.text("Front Office", rightMargin, ySign + 4, { align: "right" });
+  doc.line(rightMargin - 45, ySign + 9, rightMargin, ySign + 9);
+
+  return doc;
+}
+
 export function downloadCheckoutInvoice(
   data: CheckoutInvoiceContent,
   hotel = CHECKOUT_INVOICE_HOTEL,
 ): boolean {
-  if (typeof window === "undefined" || typeof document === "undefined") return false;
+  if (typeof window === "undefined") return false;
 
-  const html = buildCheckoutInvoiceHtml(data, hotel);
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${data.invoiceNo.replace(/[^\w-]+/g, "_")}.html`;
-  anchor.click();
-  URL.revokeObjectURL(url);
-  return true;
+  try {
+    const doc = generateCheckoutInvoicePdf(data, hotel);
+    const safeName = data.invoiceNo.replace(/[^\w-]+/g, "_") || "Tax_Invoice";
+    doc.save(`${safeName}.pdf`);
+    return true;
+  } catch (err) {
+    console.error("Failed to download PDF invoice:", err);
+    return false;
+  }
 }
 
 export function printCheckoutInvoice(

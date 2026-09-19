@@ -246,5 +246,5 @@ export function exportAttendanceReport(
     return;
   }
 
-  exportTableAsPdf(title, attendanceExportColumns, rows);
+  exportTableAsPdf(title, attendanceExportColumns, rows, `${baseName}.pdf`);
 }

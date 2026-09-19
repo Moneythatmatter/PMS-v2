@@ -302,11 +302,11 @@ export function ShiftManagementView() {
 
   const summaryStats = useMemo(
     () => [
-      { label: "Morning shift", value: coverageMetrics.morning, color: "#f59e0b", icon: "clock" as const },
-      { label: "Evening shift", value: coverageMetrics.evening, color: "#0284c7", icon: "clock" as const },
-      { label: "Night shift", value: coverageMetrics.night, color: "#9333ea", icon: "clock" as const },
-      { label: "Weekly off", value: coverageMetrics.weeklyOff, color: "#16a34a", icon: "calendar-off" as const },
-      { label: "Unassigned", value: coverageMetrics.unassigned, color: "#e11d48", icon: "alert-triangle" as const },
+      { label: "Total Staff", value: coverageMetrics.total, color: "#10b981", icon: "users" as const },
+      { label: "Morning Shift", value: coverageMetrics.morning, color: "#f59e0b", icon: "clock" as const },
+      { label: "Evening Shift", value: coverageMetrics.evening, color: "#0284c7", icon: "clock" as const },
+      { label: "Night Shift", value: coverageMetrics.night, color: "#9333ea", icon: "clock" as const },
+      { label: "Unassigned Staff", value: coverageMetrics.unassigned, color: "#e11d48", icon: "alert-triangle" as const },
     ],
     [coverageMetrics],
   );
@@ -368,7 +368,7 @@ export function ShiftManagementView() {
     </ToolbarFilterGroup>
   );
 
-  // Upcoming Shift Changes List (Improvement #6)
+  // Dynamic Upcoming Shift Changes derived from real assignments
   const upcomingChanges = useMemo(() => {
     return assignments
       .filter((a) => a.status === "Upcoming")
@@ -386,7 +386,7 @@ export function ShiftManagementView() {
       });
   }, [assignments]);
 
-  // Conflict Detection Check (Improvement #3)
+  // Conflict Detection Check
   const checkConflict = (empId: string, currentId?: string) => {
     const existing = assignments.find((a) => a.employeeId === empId && a.status === "Active" && a.id !== currentId);
     if (existing) {
@@ -398,7 +398,7 @@ export function ShiftManagementView() {
     }
   };
 
-  // Bulk Preview Staff List (Improvement #7)
+  // Bulk Preview Staff List
   const bulkPreviewStaff = useMemo(() => {
     if (bulkApplyTo === "Department") {
       if (!bulkDepartment) return [];
@@ -436,7 +436,7 @@ export function ShiftManagementView() {
       setAssignEmpId("");
       setAssignEmpQuery("");
       setIsEmpComboboxOpen(false);
-      setAssignShiftId("");
+      setAssignShiftId(masterShifts[0]?.id || "");
       setAssignEffectiveFrom(todayIso);
       setAssignEffectiveTo("");
       setAssignRemarks("");
@@ -519,10 +519,11 @@ export function ShiftManagementView() {
     }
   };
 
-  // Quick Shift Change Handler (Improvement #5)
+  // Quick Shift Change Handler
   const handleOpenQuickChange = (a: ShiftAssignment) => {
     setQuickChangeTarget(a);
-    setQuickNewShiftId(a.shiftId === "shift-m1" ? "shift-e2" : "shift-m1");
+    const alternativeShift = masterShifts.find((s) => s.id !== a.shiftId);
+    setQuickNewShiftId(alternativeShift ? alternativeShift.id : a.shiftId);
     setIsQuickChangeModalOpen(true);
   };
 

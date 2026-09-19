@@ -216,7 +216,7 @@ export function CorporateClientsView() {
     gstNumber: "",
     website: "",
     createdFrom: "Direct Walk-In" as CreatedFromSource,
-    createdBy: "Vikram Malhotra",
+    createdBy: "",
     status: "Active" as ContactStatus,
     notes: "",
   });
@@ -308,7 +308,7 @@ export function CorporateClientsView() {
       gstNumber: "",
       website: "",
       createdFrom: "Direct Walk-In",
-      createdBy: "Vikram Malhotra",
+      createdBy: "",
       status: "Active",
       notes: "",
     });
@@ -341,13 +341,13 @@ export function CorporateClientsView() {
   };
 
   const handleMobileChange = (value: string) => {
-    setFormData({ ...formData, mobileNumber: value });
-    const normalizedMobile = value.replace(/\s+/g, "").replace(/[^0-9]/g, "");
-    if (normalizedMobile.length >= 10) {
+    const digitsOnly = value.replace(/\D/g, "").slice(0, 15);
+    setFormData({ ...formData, mobileNumber: digitsOnly });
+    if (digitsOnly.length >= 10) {
       const match = contacts.find((c) => {
         if (editingContact && c.contactId === editingContact.contactId) return false;
         const existingNorm = c.mobileNumber.replace(/\s+/g, "").replace(/[^0-9]/g, "");
-        return existingNorm.endsWith(normalizedMobile.slice(-10));
+        return existingNorm.endsWith(digitsOnly.slice(-10));
       });
 
       if (match) {
@@ -365,6 +365,11 @@ export function CorporateClientsView() {
   const handleSaveContact = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.contactName.trim() || !formData.mobileNumber.trim()) return;
+
+    if (formData.emailAddress.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.emailAddress.trim())) {
+      setToastMessage("Please enter a valid email address.");
+      return;
+    }
 
     const normalizedMobile = formData.mobileNumber.replace(/\s+/g, "").replace(/[^0-9]/g, "");
     const existingMatch = !editingContact
@@ -1414,9 +1419,11 @@ export function CorporateClientsView() {
               <div>
                 <label className="block font-bold text-slate-700 mb-1 text-[11px]">Mobile Number *</label>
                 <input
-                  type="text"
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   required
-                  placeholder="+91 98765 43210"
+                  placeholder="e.g. 9876543210"
                   value={formData.mobileNumber}
                   onChange={(e) => handleMobileChange(e.target.value)}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-emerald-900 text-xs"

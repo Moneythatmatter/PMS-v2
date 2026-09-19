@@ -29,7 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
-import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
+import { TextInput, SelectInput, FormField, TextAreaInput, DigitalSignaturePad } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 
 // Mock Data Sets (6 Active Requisitions, 4 Backorders, 5 Issue Tracking, 8 Stock Availability, 8 Audit Logs)
@@ -111,31 +111,53 @@ export default function RequisitionsPage() {
   const [selectedReq, setSelectedReq] = useState<any | null>(null);
 
   // Form State - Register Requisition
-  const [reqNo, setReqNo] = useState("REQ-907");
+  const [reqNo, setReqNo] = useState("");
   const [dept, setDept] = useState("Housekeeping");
-  const [requestedByStaff, setRequestedByStaff] = useState("Meena Kumari");
-  const [reqDate, setReqDate] = useState("2026-07-20");
-  const [requiredDate, setRequiredDate] = useState("2026-07-21");
+  const [requestedByStaff, setRequestedByStaff] = useState("");
+  const [reqDate, setReqDate] = useState("");
+  const [requiredDate, setRequiredDate] = useState("");
   const [priority, setPriority] = useState("High");
-  const [purpose, setPurpose] = useState("Guest Room Supplies Replenishment");
+  const [purpose, setPurpose] = useState("");
   const [costCenterCode, setCostCenterCode] = useState("CC-HK-GUEST");
   const [reqType, setReqType] = useState<"Standard" | "Emergency Fast Track">("Standard");
 
   // Requisition Items List (Editable Table)
-  const [reqItemsList, setReqItemsList] = useState([
-    { item: "Hermes Herbal Soap (20g)", category: "Amenity", unit: "Pcs", reqQty: "50", availQty: "200", issuedQty: "30", backorderQty: "20", cost: "₹14,500", remarks: "Standard room refill" },
-  ]);
+  const [reqItemsList, setReqItemsList] = useState<Array<{
+    item: string;
+    category: string;
+    unit: string;
+    reqQty: string;
+    availQty: string;
+    issuedQty: string;
+    backorderQty: string;
+    cost: string;
+    remarks: string;
+  }>>([]);
 
   // Receiving Form State
-  const [receivedBy, setReceivedBy] = useState("Meena Kumari");
-  const [staffPin, setStaffPin] = useState("4921");
-  const [hasSignature, setHasSignature] = useState(true);
+  const [receivedBy, setReceivedBy] = useState("");
+  const [staffPin, setStaffPin] = useState("");
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
 
   // Remarks
   const [reqRemarks, setReqRemarks] = useState("");
 
   // Toast
   const [toast, setToast] = useState<{ message: string; variant: "success" | "error" | "info" } | null>(null);
+
+  const deptBudget = 150000;
+
+  const totalRequestedValue = useMemo(() => {
+    return reqItemsList.reduce((sum, item) => {
+      const rawCost = String(item.cost || "").replace(/[^0-9.]/g, "");
+      const numericCost = parseFloat(rawCost) || 0;
+      return sum + numericCost;
+    }, 0);
+  }, [reqItemsList]);
+
+  const remainingBudget = useMemo(() => {
+    return Math.max(0, deptBudget - totalRequestedValue);
+  }, [totalRequestedValue, deptBudget]);
 
   useEffect(() => {
     if (toast) {
@@ -163,8 +185,21 @@ export default function RequisitionsPage() {
   }, [search, deptFilter, priorityFilter, statusFilter, typeFilter]);
 
   const handleCreateSubmit = () => {
+    const newReqId = reqNo.trim() || `REQ-${Math.floor(100 + Math.random() * 900)}`;
     setCreateDrawerOpen(false);
-    setToast({ message: `Requisition ${reqNo} submitted successfully!`, variant: "success" });
+    setReqNo("");
+    setDept("Housekeeping");
+    setRequestedByStaff("");
+    setReqDate("");
+    setRequiredDate("");
+    setPriority("High");
+    setCostCenterCode("CC-HK-GUEST");
+    setReqType("Standard");
+    setReqItemsList([]);
+    setReceivedBy("");
+    setStaffPin("");
+    setSignatureDataUrl(null);
+    setToast({ message: `Requisition ${newReqId} submitted successfully!`, variant: "success" });
   };
 
   const statusBadges: Record<string, string> = {
@@ -750,7 +785,7 @@ export default function RequisitionsPage() {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Requisition Number" required>
-                <TextInput value={reqNo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReqNo(e.target.value)} className="h-9 text-xs rounded-xl font-mono" />
+                <TextInput placeholder="e.g. REQ-907" value={reqNo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReqNo(e.target.value)} className="h-9 text-xs rounded-xl font-mono" />
               </FormField>
 
               <FormField label="Department" required>
@@ -764,7 +799,7 @@ export default function RequisitionsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <FormField label="Requested By" required>
-                <TextInput value={requestedByStaff} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRequestedByStaff(e.target.value)} className="h-9 text-xs rounded-xl" />
+                <TextInput placeholder="e.g. Meena Kumari" value={requestedByStaff} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRequestedByStaff(e.target.value)} className="h-9 text-xs rounded-xl" />
               </FormField>
 
               <FormField label="Request Date" required>
@@ -809,7 +844,7 @@ export default function RequisitionsPage() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setReqItemsList(prev => [...prev, { item: "Bath Towel Plush 600GSM", category: "Linen", unit: "Pcs", reqQty: "20", availQty: "50", issuedQty: "20", backorderQty: "0", cost: "₹8,000", remarks: "Replacement stock" }]);
+                  setReqItemsList(prev => [...prev, { item: "", category: "Amenity", unit: "Pcs", reqQty: "1", availQty: "0", issuedQty: "0", backorderQty: "0", cost: "0", remarks: "" }]);
                 }}
                 className="h-6 px-2 text-[9.5px] font-bold !bg-slate-100 hover:!bg-slate-200 rounded-md"
               >
@@ -817,36 +852,134 @@ export default function RequisitionsPage() {
               </Button>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    <th className="px-2 py-2">Item Name</th>
-                    <th className="px-2 py-2">Category</th>
-                    <th className="px-2 py-2 text-center">Req Qty</th>
-                    <th className="px-2 py-2 text-center">Avail Qty</th>
-                    <th className="px-2 py-2 text-center">Issued Qty</th>
-                    <th className="px-2 py-2 text-center">Backorder Qty</th>
-                    <th className="px-2 py-2 text-right">Est. Cost</th>
+                    <th className="px-2.5 py-2.5 min-w-[140px]">Item Name</th>
+                    <th className="px-2 py-2.5 w-24 min-w-[90px]">Category</th>
+                    <th className="px-2 py-2.5 text-center w-20 min-w-[70px]">Req Qty</th>
+                    <th className="px-2 py-2.5 text-center w-20 min-w-[70px]">Avail Qty</th>
+                    <th className="px-2 py-2.5 text-center w-20 min-w-[70px]">Issued Qty</th>
+                    <th className="px-2 py-2.5 text-center w-20 min-w-[70px]">Backorder Qty</th>
+                    <th className="px-2 py-2.5 text-right w-28 min-w-[95px]">Est. Cost</th>
+                    <th className="px-1.5 py-2.5 text-center w-8"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                  {reqItemsList.map((row, idx) => (
-                    <tr key={idx}>
-                      <td className="px-2 py-2 font-bold text-slate-800">{row.item}</td>
-                      <td className="px-2 py-2 text-slate-500">{row.category}</td>
-                      <td className="px-2 py-2 text-center">
-                        <TextInput value={row.reqQty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const val = e.target.value;
-                          setReqItemsList(prev => prev.map((item, i) => i === idx ? { ...item, reqQty: val } : item));
-                        }} className="w-12 h-6 text-xs text-center font-bold" />
+                  {reqItemsList.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-6 text-slate-400 italic font-medium text-xs">
+                        No items added yet. Click &quot;+ Add Item&quot; to add requisition items.
                       </td>
-                      <td className="px-2 py-2 text-center text-slate-600">{row.availQty}</td>
-                      <td className="px-2 py-2 text-center text-emerald-800 font-bold">{row.issuedQty}</td>
-                      <td className="px-2 py-2 text-center text-red-700 font-bold">{row.backorderQty}</td>
-                      <td className="px-2 py-2 text-right font-extrabold">{row.cost}</td>
                     </tr>
-                  ))}
+                  ) : (
+                    reqItemsList.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/40">
+                        <td className="px-2 py-2">
+                          <input
+                            type="text"
+                            placeholder="e.g. Bath Soap 20g"
+                            value={row.item}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              const val = e.target.value;
+                              setReqItemsList(prev => prev.map((item, i) => i === idx ? { ...item, item: val } : item));
+                            }}
+                            className="h-8 text-xs font-semibold w-full rounded-lg border border-slate-200 bg-white px-2.5 text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          <input
+                            type="text"
+                            placeholder="Amenity"
+                            value={row.category}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              const val = e.target.value;
+                              setReqItemsList(prev => prev.map((item, i) => i === idx ? { ...item, category: val } : item));
+                            }}
+                            className="h-8 text-xs w-full rounded-lg border border-slate-200 bg-white px-2 text-slate-700 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          />
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={row.reqQty}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              const val = e.target.value.replace(/[^0-9]/g, "");
+                              setReqItemsList(prev => prev.map((item, i) => i === idx ? { ...item, reqQty: val } : item));
+                            }}
+                            className="w-16 h-8 text-xs text-center font-bold rounded-lg border border-slate-200 bg-white px-1 text-slate-800 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 mx-auto block"
+                          />
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={row.availQty}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              const val = e.target.value.replace(/[^0-9]/g, "");
+                              setReqItemsList(prev => prev.map((item, i) => i === idx ? { ...item, availQty: val } : item));
+                            }}
+                            className="w-16 h-8 text-xs text-center text-slate-600 rounded-lg border border-slate-200 bg-white px-1 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 mx-auto block"
+                          />
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={row.issuedQty}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              const val = e.target.value.replace(/[^0-9]/g, "");
+                              setReqItemsList(prev => prev.map((item, i) => i === idx ? { ...item, issuedQty: val } : item));
+                            }}
+                            className="w-16 h-8 text-xs text-center text-emerald-800 font-bold rounded-lg border border-slate-200 bg-white px-1 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 mx-auto block"
+                          />
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={row.backorderQty}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              const val = e.target.value.replace(/[^0-9]/g, "");
+                              setReqItemsList(prev => prev.map((item, i) => i === idx ? { ...item, backorderQty: val } : item));
+                            }}
+                            className="w-16 h-8 text-xs text-center text-red-700 font-bold rounded-lg border border-slate-200 bg-white px-1 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 mx-auto block"
+                          />
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          <div className="relative flex items-center justify-end">
+                            <span className="absolute left-2.5 text-xs text-slate-400 font-bold pointer-events-none">₹</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0"
+                              value={row.cost}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                const val = e.target.value.replace(/[^0-9.]/g, "");
+                                setReqItemsList(prev => prev.map((item, i) => i === idx ? { ...item, cost: val } : item));
+                              }}
+                              className="w-24 h-8 text-xs text-right font-extrabold pl-6 pr-2 rounded-lg border border-slate-200 bg-white text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 ml-auto block"
+                            />
+                          </div>
+                        </td>
+                        <td className="px-1 py-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setReqItemsList(prev => prev.filter((_, i) => i !== idx))}
+                            className="text-slate-400 hover:text-red-600 p-1 rounded transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -870,15 +1003,22 @@ export default function RequisitionsPage() {
               <div className="grid grid-cols-3 gap-2 text-[10px] font-semibold text-slate-600 border-t border-slate-200 pt-1.5">
                 <div>
                   <span className="block text-slate-400 font-bold">Dept Budget</span>
-                  <span className="text-slate-900 font-extrabold">₹150,000</span>
+                  <span className="text-slate-900 font-extrabold">₹{deptBudget.toLocaleString("en-IN")}</span>
                 </div>
                 <div>
                   <span className="block text-slate-400 font-bold">Requested Value</span>
-                  <span className="text-emerald-800 font-extrabold">₹14,500</span>
+                  <span className="text-emerald-800 font-extrabold">
+                    ₹{totalRequestedValue.toLocaleString("en-IN")}
+                  </span>
                 </div>
                 <div>
                   <span className="block text-slate-400 font-bold">Remaining Budget</span>
-                  <span className="text-slate-900 font-extrabold">₹135,500</span>
+                  <span className={cn(
+                    "font-extrabold",
+                    remainingBudget < 0 ? "text-red-600" : "text-slate-900"
+                  )}>
+                    ₹{remainingBudget.toLocaleString("en-IN")}
+                  </span>
                 </div>
               </div>
             </div>
@@ -915,18 +1055,25 @@ export default function RequisitionsPage() {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="Received By Staff" required>
-                <TextInput value={receivedBy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReceivedBy(e.target.value)} className="h-8 text-xs rounded-xl" />
+                <TextInput placeholder="e.g. Meena Kumari" value={receivedBy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReceivedBy(e.target.value)} className="h-8 text-xs rounded-xl" />
               </FormField>
 
               <FormField label="Staff PIN (Handover Verification)" required>
-                <TextInput type="password" value={staffPin} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStaffPin(e.target.value)} className="h-8 text-xs rounded-xl font-mono" />
+                <TextInput placeholder="Enter 4-digit PIN" type="password" value={staffPin} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStaffPin(e.target.value)} className="h-8 text-xs rounded-xl font-mono" />
               </FormField>
             </div>
 
-            {/* Digital Signature Pad Placeholder */}
-            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-center space-y-1">
-              <span className="text-[10px] font-bold text-slate-600 block">Digital Signature Pad</span>
-              <p className="text-[9px] font-mono text-emerald-700 font-bold">✓ Receiver Signature Saved (PIN 4921)</p>
+            {/* Reusable Digital Signature Pad Component */}
+            <div className="pt-1">
+              <DigitalSignaturePad
+                label="Receiver Digital Signature"
+                value={signatureDataUrl}
+                onChange={setSignatureDataUrl}
+                placeholder="Sign here using mouse, stylus, or touch..."
+                height={100}
+                penColor="#0F8A5F"
+                helperText="Digital signature confirms item receipt and physical handover verification."
+              />
             </div>
           </div>
 

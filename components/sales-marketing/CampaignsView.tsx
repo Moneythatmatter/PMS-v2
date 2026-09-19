@@ -207,12 +207,12 @@ export function CampaignsView() {
     email: "",
     preferredContactMethod: "Phone" as "Phone" | "WhatsApp" | "Email",
     leadType: "Room Booking" as LeadType,
-    inquiryDate: "2026-08-26",
+    inquiryDate: "",
     expectedEventDate: "",
     guestCount: "",
     expectedRevenue: "",
     leadSource: "Marketing Campaign" as LeadSource,
-    assignedExecutive: "Jay Kumar",
+    assignedExecutive: "",
     priority: "Medium" as LeadPriority,
     customerRequirement: "",
     additionalNotes: "",
@@ -226,19 +226,17 @@ export function CampaignsView() {
       email: "",
       preferredContactMethod: "Phone",
       leadType: "Room Booking",
-      inquiryDate: "2026-08-26",
+      inquiryDate: "",
       expectedEventDate: "",
       guestCount: "",
       expectedRevenue: "",
       leadSource: "Marketing Campaign",
-      assignedExecutive: "Jay Kumar",
+      assignedExecutive: "",
       priority: "Medium",
       customerRequirement: "",
       additionalNotes: "",
     });
   };
-
-
 
   // New Campaign Form State (Matching exact V1 specification)
   const [newForm, setNewForm] = useState({
@@ -248,17 +246,39 @@ export function CampaignsView() {
     linkedPromoCode: "",
     targetAudience: "Past Guests" as TargetAudience,
     goal: "Room Bookings" as CampaignGoal,
-    startDate: "2026-09-01",
-    endDate: "2026-10-31",
-    budget: 25000,
-    expectedLeads: 50,
-    expectedBookings: 25,
-    expectedRevenue: 350000,
+    startDate: "",
+    endDate: "",
+    budget: 0,
+    expectedLeads: 0,
+    expectedBookings: 0,
+    expectedRevenue: 0,
     externalPlatform: "Google Ads" as ExternalPlatform,
     externalCampaignId: "",
     externalCampaignName: "",
     status: "Active" as CampaignStatus,
   });
+
+  const handleOpenCreateCampaign = () => {
+    setNewForm({
+      campaignName: "",
+      description: "",
+      campaignType: "Room Promotion",
+      linkedPromoCode: "",
+      targetAudience: "Past Guests",
+      goal: "Room Bookings",
+      startDate: "",
+      endDate: "",
+      budget: 0,
+      expectedLeads: 0,
+      expectedBookings: 0,
+      expectedRevenue: 0,
+      externalPlatform: "Google Ads",
+      externalCampaignId: "",
+      externalCampaignName: "",
+      status: "Active",
+    });
+    setIsCreateModalOpen(true);
+  };
 
   const loadCampaignData = async () => {
     setLoading(true);
@@ -465,7 +485,7 @@ export function CampaignsView() {
         <Button
           type="button"
           size="sm"
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={handleOpenCreateCampaign}
           className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-2xs flex items-center gap-1.5 px-3.5 py-1.5 cursor-pointer"
         >
           <Plus className="h-3.5 w-3.5" /> Create Campaign
@@ -895,8 +915,8 @@ export function CampaignsView() {
                   type="number"
                   min={0}
                   placeholder="e.g. 50000"
-                  value={newForm.budget}
-                  onChange={(e) => setNewForm({ ...newForm, budget: Number(e.target.value) })}
+                  value={newForm.budget || ""}
+                  onChange={(e) => setNewForm({ ...newForm, budget: Number(e.target.value) || 0 })}
                   className="w-full rounded-lg border border-slate-200 p-2.5 font-bold text-slate-900 bg-white font-mono focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>

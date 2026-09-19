@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Camera, ShieldCheck } from "lucide-react";
+import { Camera, ShieldCheck, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { FormField, SelectInput, TextAreaInput, TextInput } from "@/components/frontoffice/ui";
@@ -43,15 +43,16 @@ export function LuggageEntryModal({
   recommendedBellboy,
   onSaveJob,
 }: LuggageEntryModalProps) {
-  const [guest, setGuest] = useState("Sarah Chen");
-  const [reservationId, setReservationId] = useState("RES-2026-9812");
-  const [room, setRoom] = useState("305");
+  const [guest, setGuest] = useState("");
+  const [reservationId, setReservationId] = useState("");
+  const [room, setRoom] = useState("");
   const [targetRoom, setTargetRoom] = useState("");
   const [bellBoy, setBellBoy] = useState("");
-  const [tagNumber, setTagNumber] = useState("TAG-");
-  const [bagCount, setBagCount] = useState("2");
+  const [tagNumber, setTagNumber] = useState("");
+  const [bagCount, setBagCount] = useState("");
   const [type, setType] = useState<"Check-in" | "Check-out" | "Storage" | "Room Move">("Check-in");
   const [remarks, setRemarks] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   const [bagType, setBagType] = useState<"Suitcase" | "Duffel" | "Backpack" | "Box" | "Garment Bag" | "Golf Club">("Suitcase");
   const [lockerCoordinate, setLockerCoordinate] = useState("Shelf A-1");
@@ -63,25 +64,71 @@ export function LuggageEntryModal({
   const [handles, setHandles] = useState(false);
   const [fragileTag, setFragileTag] = useState(false);
 
+  const resetForm = () => {
+    setGuest("");
+    setReservationId("");
+    setRoom("");
+    setTargetRoom("");
+    setTagNumber("");
+    setBagCount("");
+    setType("Check-in");
+    setRemarks("");
+    setBagType("Suitcase");
+    setLockerCoordinate("Shelf A-1");
+    setLongTermStorage(false);
+    setVipHandling(false);
+    setScratches(false);
+    setZippers(false);
+    setHandles(false);
+    setFragileTag(false);
+    setErrorMessage("");
+  };
+
   React.useEffect(() => {
     if (open) {
       setBellBoy(recommendedBellboy?.name || bellboys[0]?.name || "");
-      setTagNumber(`TAG-${Math.floor(1000 + Math.random() * 9000)}`);
+      if (!tagNumber) {
+        setTagNumber(`TAG-${Math.floor(1000 + Math.random() * 9000)}`);
+      }
+      setErrorMessage("");
+    } else {
+      resetForm();
     }
   }, [open, recommendedBellboy, bellboys]);
 
   const handleCreate = () => {
-    const bags = parseInt(bagCount, 10) || 1;
+    if (!guest.trim()) {
+      setErrorMessage("Please enter the Guest Name.");
+      return;
+    }
+    if (!room.trim()) {
+      setErrorMessage("Please enter the Room Number.");
+      return;
+    }
+    if (type === "Room Move" && !targetRoom.trim()) {
+      setErrorMessage("Please enter the Target Destination Room.");
+      return;
+    }
+    if (!tagNumber.trim()) {
+      setErrorMessage("Please enter a Tag ID Number.");
+      return;
+    }
+    const bags = parseInt(bagCount, 10);
+    if (!bagCount.trim() || isNaN(bags) || bags <= 0) {
+      setErrorMessage("Please enter a valid Total Baggage Count (at least 1).");
+      return;
+    }
+
     onSaveJob({
-      guest,
-      reservationId,
-      room,
-      targetRoom,
-      bellBoy,
-      tagNumber,
+      guest: guest.trim(),
+      reservationId: reservationId.trim(),
+      room: room.trim(),
+      targetRoom: targetRoom.trim(),
+      bellBoy: bellBoy || (recommendedBellboy?.name || bellboys[0]?.name || ""),
+      tagNumber: tagNumber.trim(),
       bagCount: bags,
       type,
-      remarks,
+      remarks: remarks.trim(),
       bagType,
       lockerCoordinate,
       longTermStorage,
@@ -89,18 +136,49 @@ export function LuggageEntryModal({
       preInspection: { scratches, zippers, handles, fragileTag },
     });
 
-    setRemarks("");
-    setTargetRoom("");
-    setScratches(false);
-    setZippers(false);
-    setHandles(false);
-    setFragileTag(false);
-    setVipHandling(false);
+    resetForm();
+    onClose();
   };
 
   return (
-    <Drawer open={open} onClose={onClose} title="Tag Guest Baggage">
-      <div className="space-y-4 select-none">
+    <Drawer
+      open={open}
+      onClose={() => {
+        resetForm();
+        onClose();
+      }}
+      title="Tag Guest Baggage"
+      description="Register new guest luggage, assign bell staff, and track storage location"
+      width="lg"
+      footer={
+        <div className="flex w-full items-center justify-between gap-3">
+          <Button
+            variant="outline"
+            onClick={() => {
+              resetForm();
+              onClose();
+            }}
+            className="!bg-slate-100 hover:!bg-slate-200 !text-slate-700 !border-slate-300 font-bold text-xs rounded-xl h-9 px-4 transition-all"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreate}
+            className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white font-bold text-xs rounded-xl h-9 px-5 transition-all shadow-sm"
+          >
+            Create Luggage Job
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-4 select-none pb-2">
+        {errorMessage && (
+          <div className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-200 p-3 text-xs font-bold text-red-700">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
         <FormField label="Movement / Storage Type" required>
           <SelectInput value={type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setType(e.target.value as any)}>
             <option value="Check-in">Check-in (Lobby ➔ Guest Room)</option>
@@ -112,21 +190,46 @@ export function LuggageEntryModal({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Guest Name" required>
-            <TextInput value={guest} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGuest(e.target.value)} />
+            <TextInput
+              placeholder="e.g. Sarah Chen"
+              value={guest}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                setGuest(e.target.value);
+                if (errorMessage) setErrorMessage("");
+              }}
+            />
           </FormField>
-          <FormField label="Reservation ID" required>
-            <TextInput value={reservationId} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReservationId(e.target.value)} />
+          <FormField label="Reservation ID">
+            <TextInput
+              placeholder="e.g. RES-2026-9812"
+              value={reservationId}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReservationId(e.target.value)}
+            />
           </FormField>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {type === "Room Move" ? (
             <FormField label="Source Room" required>
-              <TextInput value={room} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoom(e.target.value)} />
+              <TextInput
+                placeholder="e.g. 101"
+                value={room}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setRoom(e.target.value);
+                  if (errorMessage) setErrorMessage("");
+                }}
+              />
             </FormField>
           ) : (
             <FormField label="Room Number" required>
-              <TextInput value={room} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoom(e.target.value)} />
+              <TextInput
+                placeholder="e.g. 305"
+                value={room}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setRoom(e.target.value);
+                  if (errorMessage) setErrorMessage("");
+                }}
+              />
             </FormField>
           )}
 
@@ -135,7 +238,10 @@ export function LuggageEntryModal({
               <TextInput
                 placeholder="e.g. 204"
                 value={targetRoom}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTargetRoom(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setTargetRoom(e.target.value);
+                  if (errorMessage) setErrorMessage("");
+                }}
               />
             </FormField>
           ) : (
@@ -150,10 +256,26 @@ export function LuggageEntryModal({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Tag ID Number" required>
-            <TextInput value={tagNumber} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTagNumber(e.target.value)} />
+            <TextInput
+              placeholder="e.g. TAG-2802"
+              value={tagNumber}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                setTagNumber(e.target.value);
+                if (errorMessage) setErrorMessage("");
+              }}
+            />
           </FormField>
           <FormField label="Total Baggage Count" required>
-            <TextInput type="number" min="1" value={bagCount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBagCount(e.target.value)} />
+            <TextInput
+              type="number"
+              min="1"
+              placeholder="e.g. 2"
+              value={bagCount}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                setBagCount(e.target.value);
+                if (errorMessage) setErrorMessage("");
+              }}
+            />
           </FormField>
         </div>
 
@@ -242,13 +364,6 @@ export function LuggageEntryModal({
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setRemarks(e.target.value)}
           />
         </FormField>
-
-        <Button
-          onClick={handleCreate}
-          className="w-full !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white font-bold py-2.5 rounded-xl transition-all shadow-sm"
-        >
-          Create Luggage Job
-        </Button>
       </div>
     </Drawer>
   );

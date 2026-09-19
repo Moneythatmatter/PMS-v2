@@ -47,12 +47,19 @@ import {
   Ban,
   Activity,
   FileSpreadsheet,
+  Printer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
+import {
+  LaundryKotData,
+  printLaundryKotDocument,
+  buildLaundryKotHtml,
+} from "@/lib/housekeeping/print-laundry-kot";
 
 const LAUNDRY_STATUS_STEPS = [
   "Collection",
@@ -119,15 +126,17 @@ export default function LaundryOperations() {
   const [createOpen, setCreateOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [kotModalData, setKotModalData] = useState<LaundryKotData | null>(null);
+  const [isPrintingKot, setIsPrintingKot] = useState(false);
 
   // Form: Laundry basic fields
   const [type, setType] = useState<"Guest" | "Hotel" | "Staff">("Guest");
   const [selectedItem, setSelectedItem] = useState("King Bed Sheets");
   const [guestItemText, setGuestItemText] = useState("");
   const [quantity, setQuantity] = useState("1");
-  const [room, setRoom] = useState("102");
-  const [guestName, setGuestName] = useState("James Wilson");
-  const [baseCharges, setBaseCharges] = useState("150");
+  const [room, setRoom] = useState("");
+  const [guestName, setGuestName] = useState("");
+  const [baseCharges, setBaseCharges] = useState("");
   const [notes, setNotes] = useState("");
 
   // Form: Urgency & Process
@@ -150,7 +159,7 @@ export default function LaundryOperations() {
   // Form: Outsourcing Fields
   const [isOutsourced, setIsOutsourced] = useState(false);
   const [vendorName, setVendorName] = useState("Elite Dry Cleaners Ltd");
-  const [vendorCost, setVendorCost] = useState("80");
+  const [vendorCost, setVendorCost] = useState("");
 
   // Discard Form Fields
   const [discardItemId, setDiscardItemId] = useState("");
@@ -472,19 +481,89 @@ export default function LaundryOperations() {
     return hotelLinenItems.find((item) => item.id === selectedLinenId) || null;
   }, [hotelLinenItems, selectedLinenId]);
 
+  const resetLaundryForm = () => {
+    setType("Guest");
+    setSelectedItem(hotelLinenItems[0]?.name || "King Bed Sheets");
+    setGuestItemText("");
+    setQuantity("1");
+    setRoom("");
+    setGuestName("");
+    setBaseCharges("");
+    setNotes("");
+    setUrgency("Normal");
+    setServiceType("Wash & Iron");
+    setWashBatch("Colors");
+    setStains(false);
+    setTears(false);
+    setButtons(false);
+    setFading(false);
+    setCareLabel("Normal Cotton");
+    setEmployeeName("");
+    setEmployeeDept("Housekeeping");
+    setCostCenter("Housekeeping");
+    setIsOutsourced(false);
+    setVendorName("Elite Dry Cleaners Ltd");
+    setVendorCost("");
+  };
+
   const handleCreateJob = () => {
-    const qty = parseInt(quantity, 10) || 1;
+    // 1. Strict Validation
+    if (type === "Guest") {
+      if (!room.trim()) {
+        setToast({ message: "Please enter a Room Number for Guest Laundry.", variant: "error" });
+        return;
+      }
+      if (!guestName.trim()) {
+        setToast({ message: "Please enter the Guest Name.", variant: "error" });
+        return;
+      }
+      if (!guestItemText.trim()) {
+        setToast({ message: "Please enter the Guest Item Description (e.g. 2 Shirts, 1 Trouser).", variant: "error" });
+        return;
+      }
+      if (!baseCharges || parseFloat(baseCharges) <= 0) {
+        setToast({ message: "Please enter a valid Base Rate (INR) greater than 0.", variant: "error" });
+        return;
+      }
+    } else if (type === "Staff") {
+      if (!employeeName.trim()) {
+        setToast({ message: "Please enter the Employee Name for Staff Uniform.", variant: "error" });
+        return;
+      }
+      if (!guestItemText.trim()) {
+        setToast({ message: "Please enter the Staff Uniform Description.", variant: "error" });
+        return;
+      }
+    } else if (type === "Hotel") {
+      if (!selectedItem.trim()) {
+        setToast({ message: "Please select a Hotel Linen Item.", variant: "error" });
+        return;
+      }
+    }
+
+    const qty = parseInt(quantity, 10);
+    if (!qty || qty <= 0) {
+      setToast({ message: "Quantity must be at least 1.", variant: "error" });
+      return;
+    }
+
+    if (isOutsourced && !vendorName.trim()) {
+      setToast({ message: "Please select an Outsource Partner.", variant: "error" });
+      return;
+    }
+
     const finalPrice = calculateTotalCharges;
     const nextId = `LD-${String(laundryJobs.length + 1).padStart(2, "0")}`;
+    const itemText = type === "Hotel" ? selectedItem : guestItemText.trim();
 
     addLaundryJob({
       type: type === "Staff" ? "Hotel" : type,
-      item: type === "Hotel" ? selectedItem : guestItemText,
+      item: itemText,
       quantity: qty,
-      room: type === "Guest" ? room : undefined,
-      guestName: type === "Guest" ? guestName : type === "Staff" ? employeeName : undefined,
+      room: type === "Guest" ? room.trim() : undefined,
+      guestName: type === "Guest" ? guestName.trim() : type === "Staff" ? employeeName.trim() : undefined,
       charges: finalPrice,
-      notes: notes,
+      notes: notes.trim(),
     });
 
     const extra = {
@@ -493,18 +572,18 @@ export default function LaundryOperations() {
       washBatch,
       isOutsourced,
       vendorName: isOutsourced ? vendorName : "In-house",
-      vendorCost: isOutsourced ? Number(vendorCost) : 0,
+      vendorCost: isOutsourced ? Number(vendorCost) || 0 : 0,
       preInspection: {
         stains,
         tears,
         buttons,
         fading,
         photoUploaded: true,
-        notes: notes,
+        notes: notes.trim(),
         careLabel,
       },
       qualityInspection: "Pending",
-      employeeName: type === "Staff" ? employeeName : "",
+      employeeName: type === "Staff" ? employeeName.trim() : "",
       employeeDept: type === "Staff" ? employeeDept : "",
       costCenter: type !== "Guest" ? costCenter : "",
     };
@@ -513,19 +592,107 @@ export default function LaundryOperations() {
     // Audit logs entry
     addAuditLog(
       "Laundry Created",
-      `Laundry job ${nextId} created for ${type === "Guest" ? "Room " + room : type === "Staff" ? employeeName : "Hotel Linen Stock"}`,
+      `Laundry job ${nextId} created for ${type === "Guest" ? "Room " + room.trim() : type === "Staff" ? employeeName.trim() : "Hotel Linen Stock"}`,
       nextId
     );
 
+    const dateStr = new Date().toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    const kotPayload: LaundryKotData = {
+      jobId: nextId,
+      type,
+      item: itemText,
+      quantity: qty,
+      room: type === "Guest" ? room.trim() : undefined,
+      guestName: type === "Guest" ? guestName.trim() : undefined,
+      employeeName: type === "Staff" ? employeeName.trim() : undefined,
+      employeeDept: type === "Staff" ? employeeDept : undefined,
+      serviceType,
+      urgency,
+      washBatch,
+      careLabel,
+      preInspection: {
+        stains,
+        tears,
+        buttons,
+        fading,
+        notes: notes.trim(),
+      },
+      isOutsourced,
+      vendorName: isOutsourced ? vendorName : undefined,
+      charges: finalPrice,
+      baseCharges: parseFloat(baseCharges) || 0,
+      notes: notes.trim(),
+      createdAt: dateStr,
+    };
+
+    setKotModalData(kotPayload);
+    printLaundryKotDocument(kotPayload);
+
+    resetLaundryForm();
     setCreateOpen(false);
-    setGuestItemText("");
-    setNotes("");
-    setEmployeeName("");
-    setStains(false);
-    setTears(false);
-    setButtons(false);
-    setFading(false);
-    setToast({ message: `Laundry job booked successfully under ID ${nextId}!`, variant: "success" });
+    setToast({ message: `Laundry job ${nextId} created and KOT sent to print.`, variant: "success" });
+  };
+
+  const handlePrintJobKot = async (job: typeof laundryJobs[0]) => {
+    if (!job || !job.item || job.quantity <= 0) {
+      setToast({ message: "Unable to prepare KOT for printing.", variant: "error" });
+      return;
+    }
+
+    setIsPrintingKot(true);
+    const extra = getJobExtra(job);
+    const kotPayload: LaundryKotData = {
+      jobId: job.id,
+      kotNo: `KOT-${job.id}`,
+      type: job.type as "Guest" | "Hotel" | "Staff",
+      item: job.item,
+      quantity: job.quantity,
+      room: job.room,
+      guestName: job.guestName,
+      employeeName: extra.employeeName,
+      employeeDept: extra.employeeDept,
+      serviceType: extra.serviceType || "Wash & Iron",
+      urgency: extra.urgency || "Normal",
+      washBatch: extra.washBatch || "Colors",
+      careLabel: extra.preInspection?.careLabel || "Normal Cotton",
+      preInspection: {
+        stains: !!extra.preInspection?.stains,
+        tears: !!extra.preInspection?.tears,
+        buttons: !!extra.preInspection?.buttons,
+        fading: !!extra.preInspection?.fading,
+        notes: extra.preInspection?.notes,
+      },
+      isOutsourced: !!extra.isOutsourced,
+      vendorName: extra.vendorName,
+      charges: job.charges,
+      baseCharges: job.charges,
+      notes: job.notes,
+      createdAt: job.timeline?.collectedAt || new Date().toLocaleString("en-IN"),
+    };
+
+    try {
+      const success = await printLaundryKotDocument(kotPayload);
+      if (success) {
+        setToast({ message: "KOT sent to print.", variant: "success" });
+      } else {
+        setToast({ message: "Unable to prepare KOT for printing.", variant: "error" });
+      }
+    } catch (err) {
+      console.error("Print KOT error:", err);
+      setToast({ message: "Unable to prepare KOT for printing.", variant: "error" });
+    } finally {
+      setTimeout(() => {
+        setIsPrintingKot(false);
+      }, 700);
+    }
   };
 
   const handleQualityCheck = (jobId: string, status: "Passed" | "Failed") => {
@@ -647,7 +814,7 @@ export default function LaundryOperations() {
         <div className="flex flex-wrap gap-2.5 text-xs self-start lg:self-center">
           <Button
             onClick={() => {
-              setSelectedItem(hotelLinenItems[0]?.name || "");
+              resetLaundryForm();
               setCreateOpen(true);
             }}
             className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white font-semibold text-xs flex items-center justify-center gap-1.5 rounded-xl h-9 px-3.5 shadow-sm transition-all"
@@ -1534,7 +1701,65 @@ export default function LaundryOperations() {
         open={!!selectedJobId}
         onClose={() => setSelectedJobId(null)}
         title={`${selectedJob?.id || "Laundry Job"} Operations & Quality Control`}
+        description={
+          selectedJob
+            ? `${selectedJob.type === "Guest" ? `Room ${selectedJob.room || "N/A"} · ${selectedJob.guestName || "Guest"}` : (selectedJob.type as string) === "Staff" ? `Staff: ${getJobExtra(selectedJob).employeeName || "Staff Member"}` : "Hotel Linen Batch"} · ${selectedJob.item} (Qty: ${selectedJob.quantity})`
+            : undefined
+        }
         width="xl"
+        footer={
+          selectedJob ? (
+            <div className="flex w-full items-center justify-between gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setSelectedJobId(null)}
+                className="!bg-slate-100 hover:!bg-slate-200 !text-slate-700 !border-slate-300 font-bold text-xs rounded-xl h-9 px-4 transition-all"
+              >
+                Close
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  disabled={isPrintingKot}
+                  onClick={() => handlePrintJobKot(selectedJob)}
+                  className="!bg-white hover:!bg-slate-50 !text-slate-800 !border-slate-300 font-bold text-xs rounded-xl h-9 px-3.5 flex items-center gap-1.5 shadow-xs transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isPrintingKot ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin text-slate-500" />
+                      <span>Printing KOT...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Printer className="h-3.5 w-3.5 text-slate-600" />
+                      <span>Print KOT</span>
+                    </>
+                  )}
+                </Button>
+
+                {selectedJob.status !== "Delivered" && (
+                  <Button
+                    onClick={() => {
+                      const next = LAUNDRY_STATUS_STEPS[LAUNDRY_STATUS_STEPS.indexOf(selectedJob.status) + 1];
+                      advanceStatus(selectedJob.id, selectedJob.status);
+                      setSelectedJobId(null);
+                    }}
+                    disabled={selectedJob.status === "Ironing" && getJobExtra(selectedJob).qualityInspection === "Pending"}
+                    className={cn(
+                      "text-white font-bold text-xs rounded-xl h-9 px-4 flex items-center gap-1.5 shadow-xs transition-all",
+                      selectedJob.status === "Ironing" && getJobExtra(selectedJob).qualityInspection === "Pending"
+                        ? "bg-slate-300 hover:bg-slate-350 cursor-not-allowed text-slate-400"
+                        : "!bg-[#0F8A5F] hover:!bg-[#0d7d56]"
+                    )}
+                  >
+                    Advance to {LAUNDRY_STATUS_STEPS[LAUNDRY_STATUS_STEPS.indexOf(selectedJob.status) + 1] || "Delivered"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : undefined
+        }
       >
         {selectedJob && (() => {
           const extra = getJobExtra(selectedJob);
@@ -1548,369 +1773,335 @@ export default function LaundryOperations() {
           const margin = selectedJob.charges > 0 ? Math.round((profit / selectedJob.charges) * 100) : 0;
 
           return (
-            <div className="flex flex-col h-full bg-slate-50/30">
-              <div className="flex-1 overflow-y-auto p-5 space-y-4 select-none">
-                
-                {/* Visual Timeline Pipeline */}
-                <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
-                  <h4 className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-700" />
-                    Laundry Service Pipeline Status
-                  </h4>
-                  <div className="flex flex-col gap-2 pl-2">
-                    {[
-                      { label: "Requested & Registered", stepStatus: "Requested" },
-                      { label: "Collected from Guest", stepStatus: "Collection" },
-                      { label: "Pre-Inspected (Damage Checked)", stepStatus: "Collection" },
-                      { label: "Wash Batch Assigned", stepStatus: "Collection" },
-                      { label: "Processing (Washing/Ironing)", stepStatus: "Washing" },
-                      { label: "Quality Inspection Passed", stepStatus: "Ready" },
-                      { label: "Delivered to Guest", stepStatus: "Delivered" },
-                      { label: "Folio Charges Posted & Closed", stepStatus: "Delivered" },
-                    ].map((step, idx) => {
-                      // Map state machine index
-                      let isCompleted = false;
-                      let isCurrent = false;
+            <div className="space-y-4 select-none pb-2">
+              {/* Visual Timeline Pipeline */}
+              <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
+                <h4 className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+                  Laundry Service Pipeline Status
+                </h4>
+                <div className="flex flex-col gap-2 pl-2">
+                  {[
+                    { label: "Requested & Registered", stepStatus: "Requested" },
+                    { label: "Collected from Guest", stepStatus: "Collection" },
+                    { label: "Pre-Inspected (Damage Checked)", stepStatus: "Collection" },
+                    { label: "Wash Batch Assigned", stepStatus: "Collection" },
+                    { label: "Processing (Washing/Ironing)", stepStatus: "Washing" },
+                    { label: "Quality Inspection Passed", stepStatus: "Ready" },
+                    { label: "Delivered to Guest", stepStatus: "Delivered" },
+                    { label: "Folio Charges Posted & Closed", stepStatus: "Delivered" },
+                  ].map((step, idx) => {
+                    // Map state machine index
+                    let isCompleted = false;
+                    let isCurrent = false;
 
-                      const currentIdx = selectedJob.status === "Collection" ? 1 :
-                                         selectedJob.status === "Washing" ? 4 :
-                                         selectedJob.status === "Ironing" ? 4 :
-                                         selectedJob.status === "Ready" ? 5 : 7;
+                    const currentIdx = selectedJob.status === "Collection" ? 1 :
+                                       selectedJob.status === "Washing" ? 4 :
+                                       selectedJob.status === "Ironing" ? 4 :
+                                       selectedJob.status === "Ready" ? 5 : 7;
 
-                      if (idx < currentIdx) {
-                        isCompleted = true;
-                      } else if (idx === currentIdx) {
-                        isCurrent = true;
-                      }
+                    if (idx < currentIdx) {
+                      isCompleted = true;
+                    } else if (idx === currentIdx) {
+                      isCurrent = true;
+                    }
 
-                      return (
-                        <div key={step.label} className="flex items-center gap-3">
-                          <div className={cn(
-                            "flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold text-white",
-                            isCompleted ? "bg-emerald-600" :
-                            isCurrent ? "bg-orange-500" : "bg-slate-200"
-                          )}>
-                            {isCompleted ? "✓" : idx + 1}
-                          </div>
-                          <span className={cn(
-                            "text-xs font-semibold",
-                            isCurrent ? "text-orange-600 font-extrabold animate-pulse" :
-                            isCompleted ? "text-slate-850" : "text-slate-400"
-                          )}>
-                            {step.label}
-                          </span>
+                    return (
+                      <div key={step.label} className="flex items-center gap-3">
+                        <div className={cn(
+                          "flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold text-white",
+                          isCompleted ? "bg-emerald-600" :
+                          isCurrent ? "bg-orange-500" : "bg-slate-200"
+                        )}>
+                          {isCompleted ? "✓" : idx + 1}
                         </div>
-                      );
-                    })}
+                        <span className={cn(
+                          "text-xs font-semibold",
+                          isCurrent ? "text-orange-600 font-extrabold animate-pulse" :
+                          isCompleted ? "text-slate-850" : "text-slate-400"
+                        )}>
+                          {step.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* KPI Surcharges & Urgency Summary */}
+              <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
+                <h4 className="font-bold text-slate-855 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
+                  <Layers className="h-4 w-4 text-slate-400" /> Laundry Specifications
+                </h4>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs font-semibold text-slate-700">
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Job ID</span>
+                    <span className="text-slate-900 font-extrabold text-[12px]">{selectedJob.id}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Service Category</span>
+                    <span className="text-slate-850 font-bold uppercase">{selectedJob.type}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Urgency Speed</span>
+                    <span className="text-slate-850 font-bold uppercase text-red-655">{extra.urgency}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Service Type</span>
+                    <span className="text-slate-850 font-bold">{extra.serviceType}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Est. Turnaround</span>
+                    <span className="text-slate-750 font-bold">{estFinish}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Wash Batch</span>
+                    <span className="text-slate-750 font-bold text-blue-700">{extra.washBatch} Batch</span>
                   </div>
                 </div>
+              </div>
 
-                {/* KPI Surcharges & Urgency Summary */}
+              {/* Pre-Inspection & Care Warning Panel */}
+              <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
+                <h4 className="font-bold text-slate-855 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
+                  <Camera className="h-4 w-4 text-emerald-700" /> Pre-Processing Inspection Check
+                </h4>
+                <div className="space-y-3 text-xs font-semibold">
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-450">Care Label Limit:</span>
+                    <span className="text-slate-800 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px]">
+                      {extra.preInspection.careLabel}
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Intake Defects Found</span>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[9px] border font-bold",
+                        extra.preInspection.stains ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                      )}>
+                        {extra.preInspection.stains ? "⚠ Stains Logged" : "✓ No Stains"}
+                      </span>
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[9px] border font-bold",
+                        extra.preInspection.tears ? "bg-red-50 text-red-700 border-red-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                      )}>
+                        {extra.preInspection.tears ? "⚠ Tears Logged" : "✓ No Tears"}
+                      </span>
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[9px] border font-bold",
+                        extra.preInspection.buttons ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                      )}>
+                        {extra.preInspection.buttons ? "⚠ Loose Buttons" : "✓ Buttons OK"}
+                      </span>
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[9px] border font-bold",
+                        extra.preInspection.fading ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                      )}>
+                        {extra.preInspection.fading ? "⚠ Fading/Discolor" : "✓ Color OK"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Damage Evidence Photo</span>
+                    <div className="mt-1 flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                      <Camera className="h-6 w-6 text-slate-400 shrink-0" />
+                      <div>
+                        <p className="text-[10px] text-slate-800 font-bold">InspectionPhoto_LD.jpg</p>
+                        <p className="text-[9px] text-slate-400 font-semibold">Pre-intake check-in evidence photo</p>
+                      </div>
+                      <span className="ml-auto text-[9.5px] font-bold text-emerald-700 hover:underline cursor-pointer">View</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Outsourced Vendor Information */}
+              {extra.isOutsourced && (
                 <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
                   <h4 className="font-bold text-slate-855 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
-                    <Layers className="h-4 w-4 text-slate-400" /> Laundry Specifications
+                    <Truck className="h-4 w-4 text-amber-700" /> Outsourcing & Cost Reconciliation
                   </h4>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs font-semibold text-slate-700">
                     <div>
-                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Job ID</span>
-                      <span className="text-slate-900 font-extrabold text-[12px]">{selectedJob.id}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Service Category</span>
-                      <span className="text-slate-850 font-bold uppercase">{selectedJob.type}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Urgency Speed</span>
-                      <span className="text-slate-850 font-bold uppercase text-red-655">{extra.urgency}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Service Type</span>
-                      <span className="text-slate-850 font-bold">{extra.serviceType}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Est. Turnaround</span>
-                      <span className="text-slate-750 font-bold">{estFinish}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Wash Batch</span>
-                      <span className="text-slate-750 font-bold text-blue-700">{extra.washBatch} Batch</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Pre-Inspection & Care Warning Panel */}
-                <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
-                  <h4 className="font-bold text-slate-855 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
-                    <Camera className="h-4 w-4 text-emerald-700" /> Pre-Processing Inspection Check
-                  </h4>
-                  <div className="space-y-3 text-xs font-semibold">
-                    <div className="flex justify-between py-1 border-b border-slate-50">
-                      <span className="text-slate-450">Care Label Limit:</span>
-                      <span className="text-slate-800 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px]">
-                        {extra.preInspection.careLabel}
+                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Laundry Partner</span>
+                      <span className="text-slate-850 font-bold flex items-center gap-1 text-slate-900">
+                        {extra.vendorName}
+                        <ExternalLink className="h-3 w-3 text-slate-400" />
                       </span>
                     </div>
-                    
-                    <div className="space-y-1">
-                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Intake Defects Found</span>
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-[9px] border font-bold",
-                          extra.preInspection.stains ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                        )}>
-                          {extra.preInspection.stains ? "⚠ Stains Logged" : "✓ No Stains"}
-                        </span>
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-[9px] border font-bold",
-                          extra.preInspection.tears ? "bg-red-50 text-red-700 border-red-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                        )}>
-                          {extra.preInspection.tears ? "⚠ Tears Logged" : "✓ No Tears"}
-                        </span>
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-[9px] border font-bold",
-                          extra.preInspection.buttons ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                        )}>
-                          {extra.preInspection.buttons ? "⚠ Loose Buttons" : "✓ Buttons OK"}
-                        </span>
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-[9px] border font-bold",
-                          extra.preInspection.fading ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                        )}>
-                          {extra.preInspection.fading ? "⚠ Fading/Discolor" : "✓ Color OK"}
-                        </span>
-                      </div>
+                    <div>
+                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Dispatch Status</span>
+                      <span className="bg-amber-50 text-amber-700 border border-amber-100 rounded px-1.5 py-0.5 text-[8px] uppercase font-extrabold">
+                        Sent to Vendor
+                      </span>
                     </div>
-
-                    <div className="pt-2">
-                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Damage Evidence Photo</span>
-                      <div className="mt-1 flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-2.5">
-                        <Camera className="h-6 w-6 text-slate-400 shrink-0" />
-                        <div>
-                          <p className="text-[10px] text-slate-800 font-bold">InspectionPhoto_LD.jpg</p>
-                          <p className="text-[9px] text-slate-400 font-semibold">Pre-intake check-in evidence photo</p>
-                        </div>
-                        <span className="ml-auto text-[9.5px] font-bold text-emerald-700 hover:underline cursor-pointer">View</span>
-                      </div>
+                    <div>
+                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Vendor Invoice Cost</span>
+                      <span className="text-slate-850 font-bold text-red-655">INR {extra.vendorCost}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Retail Guest Charge</span>
+                      <span className="text-emerald-700 font-extrabold">INR {selectedJob.charges}</span>
+                    </div>
+                    <div className="col-span-2 border-t border-slate-50 pt-2.5 flex justify-between items-center text-xs">
+                      <span className="text-slate-500 font-semibold">Net Profit Margin:</span>
+                      <span className="text-emerald-700 font-extrabold">
+                        INR {profit} ({margin}% Margin)
+                      </span>
                     </div>
                   </div>
                 </div>
+              )}
 
-                {/* Outsourced Vendor Information */}
-                {extra.isOutsourced && (
-                  <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
-                    <h4 className="font-bold text-slate-855 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
-                      <Truck className="h-4 w-4 text-amber-700" /> Outsourcing & Cost Reconciliation
-                    </h4>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs font-semibold text-slate-700">
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Laundry Partner</span>
-                        <span className="text-slate-850 font-bold flex items-center gap-1 text-slate-900">
-                          {extra.vendorName}
-                          <ExternalLink className="h-3 w-3 text-slate-400" />
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Dispatch Status</span>
-                        <span className="bg-amber-50 text-amber-700 border border-amber-100 rounded px-1.5 py-0.5 text-[8px] uppercase font-extrabold">
-                          Sent to Vendor
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Vendor Invoice Cost</span>
-                        <span className="text-slate-850 font-bold text-red-655">INR {extra.vendorCost}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Retail Guest Charge</span>
-                        <span className="text-emerald-700 font-extrabold">INR {selectedJob.charges}</span>
-                      </div>
-                      <div className="col-span-2 border-t border-slate-50 pt-2.5 flex justify-between items-center text-xs">
-                        <span className="text-slate-500 font-semibold">Net Profit Margin:</span>
-                        <span className="text-emerald-700 font-extrabold">
-                          INR {profit} ({margin}% Margin)
-                        </span>
-                      </div>
+              {/* Cost Center / Internal Allocation Details */}
+              {selectedJob.type !== "Guest" && (
+                <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
+                  <h4 className="font-bold text-slate-855 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
+                    <Shirt className="h-4 w-4 text-blue-700" /> BOH Internal Cost Center
+                  </h4>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs font-semibold text-slate-700">
+                    <div>
+                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Allocation Category</span>
+                      <span className="text-slate-850 font-bold">
+                        {extra.employeeName ? "Staff Uniform Laundry" : "Hotel Linen Laundry"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Cost Center</span>
+                      <span className="text-slate-850 font-bold uppercase text-blue-700">
+                        {extra.costCenter || "Housekeeping"}
+                      </span>
+                    </div>
+                    {extra.employeeName && (
+                      <>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Employee Name</span>
+                          <span className="text-slate-850 font-bold text-slate-900">{extra.employeeName}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Department</span>
+                          <span className="text-slate-800">{extra.employeeDept}</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="col-span-2 border-t border-slate-50 pt-2 text-[10px] text-slate-400 font-semibold leading-relaxed">
+                      * Internal laundry costs are aggregated monthly and billed to the respective department budget lines (no guest folio posting occurred).
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Cost Center / Internal Allocation Details */}
-                {selectedJob.type !== "Guest" && (
-                  <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
-                    <h4 className="font-bold text-slate-855 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
-                      <Shirt className="h-4 w-4 text-blue-700" /> BOH Internal Cost Center
-                    </h4>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs font-semibold text-slate-700">
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Allocation Category</span>
-                        <span className="text-slate-850 font-bold">
-                          {extra.employeeName ? "Staff Uniform Laundry" : "Hotel Linen Laundry"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Cost Center</span>
-                        <span className="text-slate-850 font-bold uppercase text-blue-700">
-                          {extra.costCenter || "Housekeeping"}
-                        </span>
-                      </div>
-                      {extra.employeeName && (
-                        <>
-                          <div>
-                            <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Employee Name</span>
-                            <span className="text-slate-850 font-bold text-slate-900">{extra.employeeName}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Department</span>
-                            <span className="text-slate-800">{extra.employeeDept}</span>
-                          </div>
-                        </>
-                      )}
-                      <div className="col-span-2 border-t border-slate-50 pt-2 text-[10px] text-slate-400 font-semibold leading-relaxed">
-                        * Internal laundry costs are aggregated monthly and billed to the respective department budget lines (no guest folio posting occurred).
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Machine Assignment & Lockout */}
-                {selectedJob.status === "Washing" && (
-                  <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
-                    <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
-                      <Zap className="h-4 w-4 text-slate-400" /> Wash Capacity status
-                    </h4>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs font-semibold text-slate-700">
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Assigned Machine</span>
-                        <span className="text-slate-900 font-extrabold flex items-center gap-1">
-                          {machine.machine}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Operator Staff</span>
-                        <span className="text-slate-800">Ravi Shankar</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Charges Invoice Card */}
-                {selectedJob.type === "Guest" && (
-                  <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
-                    <h4 className="font-bold text-slate-855 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
-                      <Coins className="h-4 w-4 text-slate-400" /> Guest Folio Invoice Details
-                    </h4>
-                    <div className="space-y-2 text-xs font-semibold text-slate-700">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Base Surcharge:</span>
-                        <span>INR {selectedJob.charges}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Tax GST (18%):</span>
-                        <span>INR {Math.round(selectedJob.charges * 0.18)}</span>
-                      </div>
-                      <div className="flex justify-between border-b border-slate-100 pb-2">
-                        <span className="text-slate-400">Payment status</span>
-                        <span className="bg-amber-50 text-amber-700 border border-amber-100 rounded px-1.5 py-0.5 text-[8px] uppercase font-extrabold">
-                          Pending Folio Charge
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm font-extrabold text-slate-900 pt-1">
-                        <span>Grand Total:</span>
-                        <span>INR {selectedJob.charges + Math.round(selectedJob.charges * 0.18)}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Audit History Logs */}
+              {/* Machine Assignment & Lockout */}
+              {selectedJob.status === "Washing" && (
                 <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
                   <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
-                    <History className="h-4 w-4 text-slate-400" /> Pipeline Logs
+                    <Zap className="h-4 w-4 text-slate-400" /> Wash Capacity status
                   </h4>
-                  <div className="space-y-2 text-[10.5px] font-semibold text-slate-500 font-mono">
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span>Collection and pre-inspection check</span>
-                      <span className="text-slate-400 font-normal">{selectedJob.timeline.collectedAt}</span>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs font-semibold text-slate-700">
+                    <div>
+                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Assigned Machine</span>
+                      <span className="text-slate-900 font-extrabold flex items-center gap-1">
+                        {machine.machine}
+                      </span>
                     </div>
-                    {selectedJob.timeline.washedAt && (
-                      <div className="flex justify-between py-1 border-b border-slate-100">
-                        <span>Washing & Batching complete</span>
-                        <span className="text-slate-400 font-normal">{selectedJob.timeline.washedAt}</span>
-                      </div>
-                    )}
-                    {selectedJob.timeline.readyAt && (
-                      <div className="flex justify-between py-1 border-b border-slate-100">
-                        <span>Quality check passed & packaged</span>
-                        <span className="text-slate-400 font-normal">{selectedJob.timeline.readyAt}</span>
-                      </div>
-                    )}
-                    {selectedJob.timeline.deliveredAt && (
-                      <div className="flex justify-between py-1 border-b border-slate-100">
-                        <span>Delivered to guest & charges posted</span>
-                        <span className="text-slate-400 font-normal">{selectedJob.timeline.deliveredAt}</span>
-                      </div>
-                    )}
+                    <div>
+                      <span className="text-slate-400 block text-[9px] uppercase font-extrabold">Operator Staff</span>
+                      <span className="text-slate-800">Ravi Shankar</span>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                {/* Interactive Quality Inspection Panel */}
-                {(selectedJob.status === "Ironing" || selectedJob.status === "Ready") && extra.qualityInspection === "Pending" && (
-                  <div className="rounded-2xl border border-slate-200 bg-amber-50/15 p-4 shadow-sm space-y-3">
-                    <h4 className="font-bold text-amber-800 text-[10px] uppercase tracking-wider flex items-center gap-1.5">
-                      <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                      Quality Inspection Pending
-                    </h4>
-                    <p className="text-[10px] font-semibold text-slate-500 leading-relaxed">
-                      Before changing status to Ready/Delivered, perform the garment quality check.
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => handleQualityCheck(selectedJob.id, "Failed")}
-                        className="w-1/2 !bg-red-50 hover:!bg-red-100 !border-red-200 !text-red-750 font-bold text-xs h-8.5 rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                      >
-                        <ThumbsDown className="h-3.5 w-3.5" /> Fail (Reprocess)
-                      </Button>
-                      <Button
-                        onClick={() => handleQualityCheck(selectedJob.id, "Passed")}
-                        className="w-1/2 !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white font-bold text-xs h-8.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs"
-                      >
-                        <ThumbsUp className="h-3.5 w-3.5" /> Pass Quality
-                      </Button>
+              {/* Charges Invoice Card */}
+              {selectedJob.type === "Guest" && (
+                <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
+                  <h4 className="font-bold text-slate-855 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
+                    <Coins className="h-4 w-4 text-slate-400" /> Guest Folio Invoice Details
+                  </h4>
+                  <div className="space-y-2 text-xs font-semibold text-slate-700">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Base Surcharge:</span>
+                      <span>INR {selectedJob.charges}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Tax GST (18%):</span>
+                      <span>INR {Math.round(selectedJob.charges * 0.18)}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span className="text-slate-400">Payment status</span>
+                      <span className="bg-amber-50 text-amber-700 border border-amber-100 rounded px-1.5 py-0.5 text-[8px] uppercase font-extrabold">
+                        Pending Folio Charge
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm font-extrabold text-slate-900 pt-1">
+                      <span>Grand Total:</span>
+                      <span>INR {selectedJob.charges + Math.round(selectedJob.charges * 0.18)}</span>
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
+              {/* Audit History Logs */}
+              <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
+                <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider border-b border-slate-50 pb-1.5 flex items-center gap-1.5">
+                  <History className="h-4 w-4 text-slate-400" /> Pipeline Logs
+                </h4>
+                <div className="space-y-2 text-[10.5px] font-semibold text-slate-500 font-mono">
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span>Collection and pre-inspection check</span>
+                    <span className="text-slate-400 font-normal">{selectedJob.timeline.collectedAt}</span>
+                  </div>
+                  {selectedJob.timeline.washedAt && (
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span>Washing & Batching complete</span>
+                      <span className="text-slate-400 font-normal">{selectedJob.timeline.washedAt}</span>
+                    </div>
+                  )}
+                  {selectedJob.timeline.readyAt && (
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span>Quality check passed & packaged</span>
+                      <span className="text-slate-400 font-normal">{selectedJob.timeline.readyAt}</span>
+                    </div>
+                  )}
+                  {selectedJob.timeline.deliveredAt && (
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span>Delivered to guest & charges posted</span>
+                      <span className="text-slate-400 font-normal">{selectedJob.timeline.deliveredAt}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Drawer Sticky Footer Actions */}
-              <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 flex gap-3 shadow-lg">
-                <Button
-                  variant="outline"
-                  onClick={() => setSelectedJobId(null)}
-                  className="w-1/2 !bg-slate-100 hover:!bg-slate-200 !text-slate-700 !border-slate-205 flex items-center justify-center text-xs py-2 px-3 font-bold rounded-xl transition-all h-9"
-                >
-                  Close Console
-                </Button>
-
-                {selectedJob.status !== "Delivered" && (
-                  <Button
-                    onClick={() => {
-                      const next = LAUNDRY_STATUS_STEPS[LAUNDRY_STATUS_STEPS.indexOf(selectedJob.status) + 1];
-                      advanceStatus(selectedJob.id, selectedJob.status);
-                      setSelectedJobId(null);
-                    }}
-                    disabled={selectedJob.status === "Ironing" && extra.qualityInspection === "Pending"}
-                    className={cn(
-                      "w-1/2 text-white flex items-center justify-center text-xs py-2 px-3 font-bold rounded-xl transition-all shadow-xs h-9",
-                      selectedJob.status === "Ironing" && extra.qualityInspection === "Pending"
-                        ? "bg-slate-300 hover:bg-slate-350 cursor-not-allowed text-slate-400"
-                        : "!bg-[#0F8A5F] hover:!bg-[#0d7d56]"
-                    )}
-                  >
-                    Advance Status to {LAUNDRY_STATUS_STEPS[LAUNDRY_STATUS_STEPS.indexOf(selectedJob.status) + 1] || "Delivered"}
-                  </Button>
-                )}
-              </div>
+              {/* Interactive Quality Inspection Panel */}
+              {(selectedJob.status === "Ironing" || selectedJob.status === "Ready") && extra.qualityInspection === "Pending" && (
+                <div className="rounded-2xl border border-slate-200 bg-amber-50/15 p-4 shadow-sm space-y-3">
+                  <h4 className="font-bold text-amber-800 text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    Quality Inspection Pending
+                  </h4>
+                  <p className="text-[10px] font-semibold text-slate-500 leading-relaxed">
+                    Before changing status to Ready/Delivered, perform the garment quality check.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => handleQualityCheck(selectedJob.id, "Failed")}
+                      className="w-1/2 !bg-red-50 hover:!bg-red-100 !border-red-200 !text-red-750 font-bold text-xs h-8.5 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <ThumbsDown className="h-3.5 w-3.5" /> Fail (Reprocess)
+                    </Button>
+                    <Button
+                      onClick={() => handleQualityCheck(selectedJob.id, "Passed")}
+                      className="w-1/2 !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white font-bold text-xs h-8.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                    >
+                      <ThumbsUp className="h-3.5 w-3.5" /> Pass Quality
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}
@@ -2006,10 +2197,10 @@ export default function LaundryOperations() {
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="Room Number" required>
-                  <TextInput value={room} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoom(e.target.value)} />
+                  <TextInput placeholder="e.g. 102" value={room} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoom(e.target.value)} />
                 </FormField>
                 <FormField label="Guest Name" required>
-                  <TextInput value={guestName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGuestName(e.target.value)} />
+                  <TextInput placeholder="e.g. James Wilson" value={guestName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGuestName(e.target.value)} />
                 </FormField>
               </div>
               <FormField label="Guest Item Description" required>
@@ -2026,7 +2217,7 @@ export default function LaundryOperations() {
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="Employee Name" required>
-                  <TextInput value={employeeName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmployeeName(e.target.value)} />
+                  <TextInput placeholder="e.g. Ramesh Kumar" value={employeeName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmployeeName(e.target.value)} />
                 </FormField>
                 <FormField label="Employee Department" required>
                   <SelectInput value={employeeDept} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEmployeeDept(e.target.value)}>
@@ -2080,10 +2271,10 @@ export default function LaundryOperations() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Quantity (Pcs)" required>
-              <TextInput type="number" min="1" value={quantity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuantity(e.target.value)} />
+              <TextInput type="number" min="1" placeholder="1" value={quantity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuantity(e.target.value)} />
             </FormField>
             <FormField label="Base Rate (INR)" required>
-              <TextInput type="number" min="0" value={baseCharges} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBaseCharges(e.target.value)} />
+              <TextInput type="number" min="0" placeholder="0" value={baseCharges} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBaseCharges(e.target.value)} />
             </FormField>
           </div>
 
@@ -2091,12 +2282,12 @@ export default function LaundryOperations() {
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs font-semibold text-slate-700">
             <div className="flex justify-between">
               <span className="text-slate-400">Base Surcharge:</span>
-              <span>INR {baseCharges}</span>
+              <span>INR {baseCharges || "0"}</span>
             </div>
             {urgency !== "Normal" && (
               <div className="flex justify-between text-red-655 font-bold">
                 <span>Speed Surcharge ({urgency === "Same-Day" ? "+25%" : "+50%"}):</span>
-                <span>+ INR {calculateTotalCharges - Number(baseCharges)}</span>
+                <span>+ INR {calculateTotalCharges - Number(baseCharges || 0)}</span>
               </div>
             )}
             <div className="flex justify-between border-t border-slate-200/60 pt-1.5 text-sm font-extrabold text-slate-900">
@@ -2170,7 +2361,7 @@ export default function LaundryOperations() {
                   </SelectInput>
                 </FormField>
                 <FormField label="Vendor Cost Price (INR)">
-                  <TextInput type="number" min="0" value={vendorCost} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVendorCost(e.target.value)} />
+                  <TextInput type="number" min="0" placeholder="0" value={vendorCost} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVendorCost(e.target.value)} />
                 </FormField>
               </div>
             )}
@@ -2234,6 +2425,127 @@ export default function LaundryOperations() {
           </Button>
         </div>
       </Drawer>
+
+      {/* LAUNDRY KOT DOCKET PREVIEW MODAL */}
+      {kotModalData && (
+        <Modal
+          isOpen={Boolean(kotModalData)}
+          onClose={() => setKotModalData(null)}
+          title="Laundry Order Ticket (KOT)"
+          description={`Official Service Docket • Job #${kotModalData.jobId}`}
+          size="lg"
+          footer={
+            <div className="flex w-full justify-between items-center gap-3">
+              <span className="text-xs text-slate-400 font-medium">Auto-synced to Housekeeping Queue</span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setKotModalData(null)}
+                  className="!bg-slate-100 hover:!bg-slate-200 !text-slate-700 font-bold text-xs rounded-xl h-9 px-4"
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={() => printLaundryKotDocument(kotModalData)}
+                  className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white font-bold text-xs rounded-xl h-9 px-4 flex items-center gap-1.5 shadow-sm"
+                >
+                  <Printer className="h-4 w-4" /> Print Ticket
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 text-slate-900 select-none">
+            <div className="flex justify-between items-start border-b border-slate-200 pb-3">
+              <div>
+                <span className="text-[10px] font-extrabold tracking-wider uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-0.5">
+                  HOUSEKEEPING LAUNDRY
+                </span>
+                <h3 className="text-xl font-extrabold text-slate-900 mt-1.5">Order #{kotModalData.jobId}</h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">{kotModalData.createdAt}</p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Source</span>
+                <span className="text-sm font-extrabold text-slate-800">
+                  {kotModalData.type === "Guest"
+                    ? `Room ${kotModalData.room || "N/A"}`
+                    : kotModalData.type === "Staff"
+                    ? `${kotModalData.employeeDept || "Staff"}`
+                    : "Hotel Linen Stock"}
+                </span>
+                {kotModalData.guestName && (
+                  <span className="text-xs text-slate-600 block font-semibold">{kotModalData.guestName}</span>
+                )}
+                {kotModalData.employeeName && (
+                  <span className="text-xs text-slate-600 block font-semibold">{kotModalData.employeeName}</span>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+              <div className="flex justify-between items-center text-sm font-bold text-slate-900">
+                <span>{kotModalData.item}</span>
+                <span className="text-emerald-700 font-extrabold text-base">{kotModalData.quantity} Pcs</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-100 text-xs">
+                <div>
+                  <span className="text-slate-400 text-[10px] block font-bold uppercase">Service</span>
+                  <span className="font-semibold text-slate-800">{kotModalData.serviceType}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block font-bold uppercase">Urgency</span>
+                  <span className="font-semibold text-slate-800">{kotModalData.urgency}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block font-bold uppercase">Batch</span>
+                  <span className="font-semibold text-slate-800">{kotModalData.washBatch}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block font-bold uppercase">Care</span>
+                  <span className="font-semibold text-slate-800">{kotModalData.careLabel}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-1.5">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                Pre-Inspection Intake Status
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-semibold">
+                <span className={cn("px-2 py-1 rounded-lg border text-center", kotModalData.preInspection?.stains ? "bg-amber-50 text-amber-800 border-amber-200 font-bold" : "bg-slate-50 text-slate-600 border-slate-200")}>
+                  {kotModalData.preInspection?.stains ? "⚠ Stains Logged" : "✓ No Stains"}
+                </span>
+                <span className={cn("px-2 py-1 rounded-lg border text-center", kotModalData.preInspection?.tears ? "bg-red-50 text-red-800 border-red-200 font-bold" : "bg-slate-50 text-slate-600 border-slate-200")}>
+                  {kotModalData.preInspection?.tears ? "⚠ Tears Logged" : "✓ No Tears"}
+                </span>
+                <span className={cn("px-2 py-1 rounded-lg border text-center", kotModalData.preInspection?.buttons ? "bg-amber-50 text-amber-800 border-amber-200 font-bold" : "bg-slate-50 text-slate-600 border-slate-200")}>
+                  {kotModalData.preInspection?.buttons ? "⚠ Loose Buttons" : "✓ Buttons OK"}
+                </span>
+                <span className={cn("px-2 py-1 rounded-lg border text-center", kotModalData.preInspection?.fading ? "bg-amber-50 text-amber-800 border-amber-200 font-bold" : "bg-slate-50 text-slate-600 border-slate-200")}>
+                  {kotModalData.preInspection?.fading ? "⚠ Fading / Discolor" : "✓ Color OK"}
+                </span>
+              </div>
+            </div>
+
+            {kotModalData.notes && (
+              <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-900 font-medium">
+                <strong className="font-bold block text-[10px] uppercase tracking-wider text-amber-800 mb-0.5">Handling Instructions:</strong>
+                {kotModalData.notes}
+              </div>
+            )}
+
+            <div className="flex justify-between items-center bg-slate-900 text-white rounded-xl p-3.5 px-4 shadow-sm">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Payable Amount</span>
+                <span className="text-xs text-slate-300 font-medium">
+                  {kotModalData.type === "Guest" ? "Post to Guest Room Folio" : "BOH Department Internal Allocation"}
+                </span>
+              </div>
+              <span className="text-2xl font-black text-emerald-400">INR {kotModalData.charges}</span>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

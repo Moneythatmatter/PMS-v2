@@ -55,6 +55,30 @@ export interface HolidayMaster {
   year: string;
 }
 
+export function computeDayOfWeek(dateStr: string): string {
+  if (!dateStr) return "";
+  let d: Date | null = null;
+  const trimmed = dateStr.trim();
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) {
+    const [day, month, year] = trimmed.split("/").map(Number);
+    d = new Date(year, month - 1, day);
+  } else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(trimmed)) {
+    const [day, month, year] = trimmed.split("-").map(Number);
+    d = new Date(year, month - 1, day);
+  } else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed.split("-").map(Number);
+    d = new Date(year, month - 1, day);
+  } else {
+    d = new Date(trimmed);
+  }
+
+  if (d && !isNaN(d.getTime())) {
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return days[d.getDay()];
+  }
+  return "";
+}
+
 export function HolidayCalendarMasterView() {
   const [holidays, setHolidays] = useState<HolidayMaster[]>([]);
   const [loading, setLoading] = useState(true);
@@ -670,18 +694,22 @@ export function HolidayCalendarMasterView() {
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Holiday Date</label>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Holiday Date <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="date"
                   required
                   value={formDateIso}
                   onChange={(e) => handleDateChange(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-white"
+                  className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Day of Week</label>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Day of Week <span className="text-[10px] text-emerald-600 font-medium">(Auto)</span>
+                </label>
                 <input
                   type="text"
                   readOnly

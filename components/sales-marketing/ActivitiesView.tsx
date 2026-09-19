@@ -195,7 +195,7 @@ export function ActivitiesView() {
   const [completeOutcome, setCompleteOutcome] = useState<ActivityOutcome>("Interested");
   const [completeNotes, setCompleteNotes] = useState("");
   const [completeNextAction, setCompleteNextAction] = useState("");
-  const [completeNextActionDate, setCompleteNextActionDate] = useState("2026-09-02");
+  const [completeNextActionDate, setCompleteNextActionDate] = useState("");
 
   const todayStr = todayIsoDate();
 
@@ -291,7 +291,7 @@ export function ActivitiesView() {
     setCompleteOutcome("Interested");
     setCompleteNotes(act.outcomeNotes || "");
     setCompleteNextAction(act.nextAction || "");
-    setCompleteNextActionDate(act.nextActionDate || "2026-09-02");
+    setCompleteNextActionDate(act.nextActionDate || "");
   };
 
   const handleSaveCompletion = async (e: React.FormEvent) => {

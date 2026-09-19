@@ -40,12 +40,12 @@ export function RevenueChart({ data }: RevenueChartProps) {
               axisLine={false}
               tickLine={false}
               tick={{ fill: "#94a3b8", fontSize: 12 }}
-              tickFormatter={(v) => `$${v / 1000}k`}
+              tickFormatter={(v) => `₹${v / 1000}k`}
               domain={[0, 34000]}
               ticks={[0, 8500, 17000, 25500, 34000]}
             />
             <Tooltip
-              formatter={(value) => [`$${Number(value).toLocaleString()}`, "Revenue"]}
+              formatter={(value) => [`₹${Number(value).toLocaleString()}`, "Revenue"]}
               contentStyle={{
                 borderRadius: "8px",
                 border: "1px solid #e2e8f0",

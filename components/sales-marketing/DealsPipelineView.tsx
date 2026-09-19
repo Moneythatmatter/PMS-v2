@@ -49,23 +49,15 @@ import { cn } from "@/lib/utils";
 import { CentralLeadItem } from "@/app/data/centralLeadData";
 import { LeadType, LeadSource } from "./LeadsInquiriesView";
 import { AddActivityModal, ActivityPayload, SharedActivityType, SharedActivityStatus } from "./shared/AddActivityModal";
-import { smDealService, smLeadService } from "@/services/sales-marketing";
-import { mapDealFromApi, mapDealToApi, mapCentralLeadFromApi } from "@/lib/sales-marketing/api-mappers";
+import { smDealService, smLeadService, smDealStageService } from "@/services/sales-marketing";
+import { mapDealFromApi, mapDealToApi, mapCentralLeadFromApi, mapDealStageFromApi } from "@/lib/sales-marketing/api-mappers";
 import { nowTimelineStamp, todayIsoDate } from "@/lib/sales-marketing/useSmList";
 
 // ─────────────────────────────────────────────────────────────
-// 1. HOTEL-SPECIFIC PIPELINE STAGES (8 VERSION 1 STAGES)
+// 1. HOTEL-SPECIFIC PIPELINE STAGES
 // ─────────────────────────────────────────────────────────────
 
-export type HotelDealStage =
-  | "Qualification"
-  | "Requirement Analysis"
-  | "Quotation / Proposal"
-  | "Negotiation"
-  | "Tentative Hold"
-  | "Final Decision"
-  | "Won"
-  | "Lost";
+export type HotelDealStage = string;
 
 export type HotelDealStatus = "Open" | "Won" | "Lost";
 
@@ -153,6 +145,94 @@ export const HOTEL_PIPELINE_STAGES: PipelineStageConfig[] = [
     description: "Opportunity closed without booking",
   },
 ];
+
+export function getStageStyle(stageName: string, index: number, totalStages: number): {
+  probability: string;
+  badgeBg: string;
+  badgeText: string;
+  headerBorder: string;
+} {
+  const lower = stageName.toLowerCase();
+  if (lower.includes("lost") || lower.includes("cancel") || lower.includes("drop")) {
+    return {
+      probability: "0%",
+      badgeBg: "bg-rose-100",
+      badgeText: "text-rose-900",
+      headerBorder: "border-rose-200",
+    };
+  }
+  if (lower.includes("won") || lower.includes("close won") || lower.includes("deal won") || lower.includes("confirm")) {
+    return {
+      probability: "100%",
+      badgeBg: "bg-emerald-100",
+      badgeText: "text-emerald-900",
+      headerBorder: "border-emerald-200",
+    };
+  }
+  if (lower.includes("hold") || lower.includes("tentative")) {
+    return {
+      probability: "85%",
+      badgeBg: "bg-amber-100",
+      badgeText: "text-amber-900",
+      headerBorder: "border-amber-200",
+    };
+  }
+  if (lower.includes("final") || lower.includes("decision") || lower.includes("contract") || lower.includes("sign")) {
+    return {
+      probability: "90%",
+      badgeBg: "bg-purple-100",
+      badgeText: "text-purple-900",
+      headerBorder: "border-purple-200",
+    };
+  }
+  if (lower.includes("negotiat")) {
+    return {
+      probability: "70%",
+      badgeBg: "bg-indigo-50",
+      badgeText: "text-indigo-900",
+      headerBorder: "border-indigo-200",
+    };
+  }
+  if (lower.includes("quote") || lower.includes("quotation") || lower.includes("proposal")) {
+    return {
+      probability: "50%",
+      badgeBg: "bg-cyan-50",
+      badgeText: "text-cyan-900",
+      headerBorder: "border-cyan-200",
+    };
+  }
+  if (lower.includes("analysis") || lower.includes("requirement") || lower.includes("discovery")) {
+    return {
+      probability: "25%",
+      badgeBg: "bg-blue-50",
+      badgeText: "text-blue-900",
+      headerBorder: "border-blue-200",
+    };
+  }
+  if (lower.includes("qualif")) {
+    return {
+      probability: "10%",
+      badgeBg: "bg-slate-100",
+      badgeText: "text-slate-800",
+      headerBorder: "border-slate-200",
+    };
+  }
+
+  const nonTerminalTotal = Math.max(1, totalStages - 2);
+  const calculatedProb = Math.min(90, Math.max(10, Math.round(((index + 1) / (nonTerminalTotal + 1)) * 100)));
+  const palette = [
+    { badgeBg: "bg-slate-100", badgeText: "text-slate-800", headerBorder: "border-slate-200" },
+    { badgeBg: "bg-blue-50", badgeText: "text-blue-800", headerBorder: "border-blue-200" },
+    { badgeBg: "bg-indigo-50", badgeText: "text-indigo-800", headerBorder: "border-indigo-200" },
+    { badgeBg: "bg-cyan-50", badgeText: "text-cyan-800", headerBorder: "border-cyan-200" },
+    { badgeBg: "bg-teal-50", badgeText: "text-teal-800", headerBorder: "border-teal-200" },
+  ];
+  const color = palette[index % palette.length];
+  return {
+    probability: `${calculatedProb}%`,
+    ...color,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────
 // 2. DATA TYPES & SCHEMAS FOR DEAL OPPORTUNITY
@@ -321,19 +401,51 @@ export function DealsPipelineView() {
   const router = useRouter();
   const [deals, setDeals] = useState<HotelDealItem[]>([]);
   const [centralLeads, setCentralLeads] = useState<CentralLeadItem[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<PipelineStageConfig[]>(HOTEL_PIPELINE_STAGES);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const loadDealsAndLeads = async () => {
     setLoading(true);
     try {
-      const [dealRows, leadRows] = await Promise.all([smDealService.list(), smLeadService.list()]);
+      const [dealRows, leadRows, stageRows] = await Promise.all([
+        smDealService.list(),
+        smLeadService.list(),
+        smDealStageService.list(),
+      ]);
       setDeals(dealRows.map(mapDealFromApi));
       setCentralLeads(leadRows.map(mapCentralLeadFromApi));
+
+      const activeMasterStages = stageRows
+        .map(mapDealStageFromApi)
+        .filter((s) => s.status !== "Inactive")
+        .sort((a, b) => a.sequence - b.sequence);
+
+      if (activeMasterStages.length > 0) {
+        const dynamicStages: PipelineStageConfig[] = activeMasterStages.map((st, idx) => {
+          const style = getStageStyle(st.stageName, idx, activeMasterStages.length);
+          return {
+            id: st.stageName,
+            label: st.stageName,
+            probability: style.probability,
+            badgeBg: style.badgeBg,
+            badgeText: style.badgeText,
+            headerBorder: style.headerBorder,
+            description: st.description || `Stage ${idx + 1} of pipeline`,
+          };
+        });
+        setPipelineStages(dynamicStages);
+        setCreateStage((prev) =>
+          dynamicStages.some((s) => s.id.toLowerCase() === prev.toLowerCase()) ? prev : dynamicStages[0].id
+        );
+      } else {
+        setPipelineStages(HOTEL_PIPELINE_STAGES);
+      }
     } catch (e) {
       setToastMessage(e instanceof Error ? e.message : "Failed to load deals");
       setDeals([]);
       setCentralLeads([]);
+      setPipelineStages(HOTEL_PIPELINE_STAGES);
     } finally {
       setLoading(false);
     }
@@ -383,17 +495,17 @@ export function DealsPipelineView() {
   // Tentative Hold Modal State
   const [isHoldModalOpen, setIsHoldModalOpen] = useState(false);
   const [holdDealTarget, setHoldDealTarget] = useState<HotelDealItem | null>(null);
-  const [holdVenueName, setHoldVenueName] = useState("Grand Ballroom & Royal Lawn");
-  const [holdStartDate, setHoldStartDate] = useState("2026-11-15");
-  const [holdEndDate, setHoldEndDate] = useState("2026-11-16");
-  const [holdExpiryDate, setHoldExpiryDate] = useState("2026-09-05");
+  const [holdVenueName, setHoldVenueName] = useState("");
+  const [holdStartDate, setHoldStartDate] = useState("");
+  const [holdEndDate, setHoldEndDate] = useState("");
+  const [holdExpiryDate, setHoldExpiryDate] = useState("");
   const [holdNotes, setHoldNotes] = useState("");
 
   // Quotation Modal State
   const [isQuotationModalOpen, setIsQuotationModalOpen] = useState(false);
   const [qtnVersionName, setQtnVersionName] = useState("");
-  const [qtnAmount, setQtnAmount] = useState<number>(500000);
-  const [qtnValidUntil, setQtnValidUntil] = useState("2026-09-15");
+  const [qtnAmount, setQtnAmount] = useState<number>(0);
+  const [qtnValidUntil, setQtnValidUntil] = useState("");
   const [qtnInclusions, setQtnInclusions] = useState("");
 
   // Lost Modal Input State
@@ -409,9 +521,9 @@ export function DealsPipelineView() {
   const [createEmail, setCreateEmail] = useState("");
   const [createLeadType, setCreateLeadType] = useState<LeadType>("Wedding");
   const [createDealValue, setCreateDealValue] = useState("");
-  const [createExpectedCloseDate, setCreateExpectedCloseDate] = useState("2026-09-30");
+  const [createExpectedCloseDate, setCreateExpectedCloseDate] = useState("");
   const [createStage, setCreateStage] = useState<HotelDealStage>("Qualification");
-  const [createExecutive, setCreateExecutive] = useState("Jay Kumar");
+  const [createExecutive, setCreateExecutive] = useState("");
   const [createRequirement, setCreateRequirement] = useState("");
 
   // ─────────────────────────────────────────────────────────────
@@ -419,40 +531,33 @@ export function DealsPipelineView() {
   // ─────────────────────────────────────────────────────────────
 
   const getNextStage = (currentStage: HotelDealStage): HotelDealStage | null => {
-    switch (currentStage) {
-      case "Qualification":
-        return "Requirement Analysis";
-      case "Requirement Analysis":
-        return "Quotation / Proposal";
-      case "Quotation / Proposal":
-        return "Negotiation";
-      case "Negotiation":
-        return "Tentative Hold";
-      case "Tentative Hold":
-        return "Final Decision";
-      case "Final Decision":
-        return "Won";
-      default:
-        return null;
+    const currentIndex = pipelineStages.findIndex(
+      (s) => s.id.toLowerCase() === currentStage.toLowerCase()
+    );
+    if (currentIndex >= 0 && currentIndex < pipelineStages.length - 1) {
+      return pipelineStages[currentIndex + 1].id;
     }
+    return null;
   };
 
   const handleAdvanceToNextStage = (deal: HotelDealItem) => {
     const next = getNextStage(deal.stage);
     if (!next) return;
 
-    if (next === "Tentative Hold" && !deal.tentativeHold) {
+    const nextLower = next.toLowerCase();
+
+    if ((nextLower.includes("hold") || nextLower.includes("tentative")) && !deal.tentativeHold) {
       setHoldDealTarget(deal);
-      setHoldVenueName(deal.venueRequired || "Grand Ballroom");
-      setHoldStartDate(deal.expectedEventDate || "2026-11-15");
-      setHoldEndDate(deal.expectedEventDate || "2026-11-16");
-      setHoldExpiryDate("2026-09-05");
-      setHoldNotes(`Hold for ${deal.dealName}`);
+      setHoldVenueName(deal.venueRequired || "");
+      setHoldStartDate(deal.expectedEventDate || "");
+      setHoldEndDate(deal.expectedEventDate || "");
+      setHoldExpiryDate("");
+      setHoldNotes("");
       setIsHoldModalOpen(true);
       return;
     }
 
-    if (next === "Won") {
+    if (nextLower.includes("won") || nextLower.includes("close won") || nextLower.includes("deal won")) {
       setDealToMarkWon(deal);
       setIsWonModalOpen(true);
       return;
@@ -474,7 +579,9 @@ export function DealsPipelineView() {
         d.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         d.leadId.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchStage = selectedStageFilter === "ALL" || d.stage === selectedStageFilter;
+      const matchStage =
+        selectedStageFilter === "ALL" ||
+        d.stage.toLowerCase() === selectedStageFilter.toLowerCase();
       const matchType = selectedLeadTypeFilter === "ALL" || d.leadType === selectedLeadTypeFilter;
       const matchExec = selectedExecutiveFilter === "ALL" || d.assignedExecutive === selectedExecutiveFilter;
       const matchStatus = selectedStatusFilter === "ALL" || d.status === selectedStatusFilter;
@@ -502,25 +609,24 @@ export function DealsPipelineView() {
 
   // Map Deals by Stage for Kanban Columns
   const dealsByStage = useMemo(() => {
-    const map: Record<HotelDealStage, HotelDealItem[]> = {
-      Qualification: [],
-      "Requirement Analysis": [],
-      "Quotation / Proposal": [],
-      Negotiation: [],
-      "Tentative Hold": [],
-      "Final Decision": [],
-      Won: [],
-      Lost: [],
-    };
+    const map: Record<string, HotelDealItem[]> = {};
+    pipelineStages.forEach((s) => {
+      map[s.id] = [];
+    });
 
     filteredDeals.forEach((d) => {
-      if (map[d.stage]) {
-        map[d.stage].push(d);
+      const matchedStage = pipelineStages.find(
+        (s) => s.id.toLowerCase() === (d.stage || "").toLowerCase()
+      );
+      if (matchedStage && map[matchedStage.id]) {
+        map[matchedStage.id].push(d);
+      } else if (pipelineStages.length > 0 && map[pipelineStages[0].id]) {
+        map[pipelineStages[0].id].push(d);
       }
     });
 
     return map;
-  }, [filteredDeals]);
+  }, [filteredDeals, pipelineStages]);
 
   // Helper to calculate total value per stage
   const getStageTotalValue = (stageId: HotelDealStage) => {
@@ -554,29 +660,31 @@ export function DealsPipelineView() {
     if (!dealId) return;
 
     const targetDeal = deals.find((d) => d.id === dealId);
-    if (!targetDeal || targetDeal.stage === targetStage) return;
+    if (!targetDeal || targetDeal.stage.toLowerCase() === targetStage.toLowerCase()) return;
+
+    const targetLower = targetStage.toLowerCase();
 
     // If moving to Tentative Hold, prompt for hold specifics
-    if (targetStage === "Tentative Hold" && !targetDeal.tentativeHold) {
+    if ((targetLower.includes("hold") || targetLower.includes("tentative")) && !targetDeal.tentativeHold) {
       setHoldDealTarget(targetDeal);
-      setHoldVenueName(targetDeal.venueRequired || "Grand Ballroom");
-      setHoldStartDate(targetDeal.expectedEventDate || "2026-11-15");
-      setHoldEndDate(targetDeal.expectedEventDate || "2026-11-16");
-      setHoldExpiryDate("2026-09-05");
-      setHoldNotes(`Tentative hold for ${targetDeal.dealName}`);
+      setHoldVenueName(targetDeal.venueRequired || "");
+      setHoldStartDate(targetDeal.expectedEventDate || "");
+      setHoldEndDate(targetDeal.expectedEventDate || "");
+      setHoldExpiryDate("");
+      setHoldNotes("");
       setIsHoldModalOpen(true);
       return;
     }
 
     // If moving to Won, open Won Confirmation Modal
-    if (targetStage === "Won") {
+    if (targetLower.includes("won") || targetLower.includes("close won") || targetLower.includes("deal won")) {
       setDealToMarkWon(targetDeal);
       setIsWonModalOpen(true);
       return;
     }
 
     // If moving to Lost, open Lost Modal
-    if (targetStage === "Lost") {
+    if (targetLower.includes("lost") || targetLower.includes("close lost") || targetLower.includes("deal lost")) {
       setDealToMarkLost(targetDeal);
       setIsLostModalOpen(true);
       return;
@@ -588,7 +696,13 @@ export function DealsPipelineView() {
   // Core Stage Changer with Audit Log Creation
   const applyStageChange = async (deal: HotelDealItem, targetStage: HotelDealStage, extraAuditNotes?: string) => {
     const previousStage = deal.stage;
-    const newStatus: HotelDealStatus = targetStage === "Won" ? "Won" : targetStage === "Lost" ? "Lost" : "Open";
+    const targetLower = targetStage.toLowerCase();
+    const newStatus: HotelDealStatus =
+      targetLower.includes("won") || targetLower.includes("close won") || targetLower.includes("deal won")
+        ? "Won"
+        : targetLower.includes("lost") || targetLower.includes("close lost") || targetLower.includes("deal lost")
+        ? "Lost"
+        : "Open";
 
     const auditActivity: DealActivity = {
       id: `ACT-${Date.now()}`,
@@ -605,11 +719,11 @@ export function DealsPipelineView() {
       stage: targetStage,
       status: newStatus,
       nextActionSummary:
-        targetStage === "Won"
+        newStatus === "Won"
           ? "Deal Won! Advance received. Click 'Convert to Booking →' in Bookings Queue."
-          : targetStage === "Lost"
+          : newStatus === "Lost"
           ? `Closed Lost: ${deal.lostReason || "Customer cancelled/chose alternative"}`
-          : targetStage === "Tentative Hold"
+          : targetLower.includes("hold") || targetLower.includes("tentative")
           ? `Venue on Tentative Hold until ${deal.tentativeHold?.holdExpiryDate || todayIsoDate()}.`
           : `Advanced to ${targetStage}. Awaiting next action.`,
       activities: [auditActivity, ...deal.activities],
@@ -640,11 +754,16 @@ export function DealsPipelineView() {
       holdNotes: holdNotes.trim() || undefined,
     };
 
+    const holdStageObj = pipelineStages.find(
+      (s) => s.id.toLowerCase().includes("hold") || s.id.toLowerCase().includes("tentative")
+    );
+    const holdStageName = holdStageObj ? holdStageObj.id : "Tentative Hold";
+
     const auditNotes = `Moved to Tentative Hold: Locked "${holdDetails.venueName}" (${holdDetails.startDate} to ${holdDetails.endDate}). Hold expires on ${holdDetails.holdExpiryDate}.`;
 
     const updatedDeal: HotelDealItem = {
       ...holdDealTarget,
-      stage: "Tentative Hold",
+      stage: holdStageName,
       status: "Open",
       tentativeHold: holdDetails,
       nextActionSummary: `Tentative Hold on "${holdDetails.venueName}" active until ${holdDetails.holdExpiryDate}.`,
@@ -767,9 +886,12 @@ export function DealsPipelineView() {
     e.preventDefault();
     if (!dealToMarkLost) return;
 
+    const lostStageObj = pipelineStages.find((s) => s.id.toLowerCase().includes("lost"));
+    const lostStageName = lostStageObj ? lostStageObj.id : "Lost";
+
     const updatedDeal: HotelDealItem = {
       ...dealToMarkLost,
-      stage: "Lost",
+      stage: lostStageName,
       status: "Lost",
       lostReason: lostReasonInput,
       lostNotes: lostNotesInput.trim() || undefined,
@@ -823,7 +945,7 @@ export function DealsPipelineView() {
       setCreateMobile((foundLead as any).mobileNumber || foundLead.mobile || "");
       setCreateEmail(foundLead.email || "");
       setCreateLeadType((foundLead.leadType || "Wedding") as LeadType);
-      setCreateDealValue(String((foundLead as any).estimatedRevenue || foundLead.rawRevenue || 500000));
+      setCreateDealValue(String((foundLead as any).estimatedRevenue ?? foundLead.rawRevenue ?? ""));
       setCreateRequirement((foundLead as any).customerRequirements || foundLead.customerRequirement || "");
       if (foundLead.assignedExecutive) {
         setCreateExecutive(foundLead.assignedExecutive);
@@ -836,6 +958,12 @@ export function DealsPipelineView() {
     e.preventDefault();
     if (!createDealName.trim() || !createCustomerName.trim() || !createMobile.trim()) return;
 
+    const trimmedEmail = createEmail.trim();
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setToastMessage("Please enter a valid email address (e.g. name@example.com).");
+      return;
+    }
+
     const linkedLead = centralLeads.find((l) => l.id === createLeadIdSelect);
     const newDeal: HotelDealItem = {
       id: `OPP-${Date.now()}`,
@@ -847,14 +975,14 @@ export function DealsPipelineView() {
       companyName: createCompanyName.trim() || undefined,
       contactPerson: createCustomerName.trim(),
       mobile: createMobile.trim(),
-      email: createEmail.trim() || undefined,
+      email: trimmedEmail || undefined,
       preferredContactMethod: "Phone",
       leadType: createLeadType,
-      customerRequirement: createRequirement.trim() || "Event inquiry details pending discovery call.",
+      customerRequirement: createRequirement.trim() || "",
       expectedEventDate: todayIsoDate(),
-      dealValue: Number(createDealValue) || 500000,
-      quotedValue: Number(createDealValue) || 500000,
-      expectedRevenue: Number(createDealValue) || 500000,
+      dealValue: Number(createDealValue) || 0,
+      quotedValue: Number(createDealValue) || 0,
+      expectedRevenue: Number(createDealValue) || 0,
       expectedCloseDate: createExpectedCloseDate,
       assignedExecutive: createExecutive,
       nextActionSummary: `Initial discovery call scheduled with ${createCustomerName}.`,
@@ -881,11 +1009,35 @@ export function DealsPipelineView() {
     setToastMessage(`✓ Created Sales Opportunity #${saved.id} for ${saved.dealName}!`);
   };
 
+  const handleOpenCreateDealModal = () => {
+    setCreateLeadIdSelect("");
+    setCreateDealName("");
+    setCreateCustomerName("");
+    setCreateCompanyName("");
+    setCreateMobile("");
+    setCreateEmail("");
+    setCreateLeadType("Wedding");
+    setCreateDealValue("");
+    setCreateExpectedCloseDate("");
+    setCreateStage(pipelineStages[0]?.id || "Qualification");
+    setCreateExecutive("");
+    setCreateRequirement("");
+    setIsCreateModalOpen(true);
+  };
+
+  const handleOpenQuotationModal = () => {
+    setQtnVersionName("");
+    setQtnAmount(selectedDeal?.dealValue || 0);
+    setQtnValidUntil("");
+    setQtnInclusions("");
+    setIsQuotationModalOpen(true);
+  };
+
   return (
     <ModulePageShell
       eyebrow="Lead & Sales Management"
       title="Deals & Pipeline — Commercial Opportunities"
-      description="Active sales opportunities pipeline across 8 operational stages from Qualification to Tentative Hold and Won/Lost bookings."
+      description={`Active sales opportunities pipeline across ${pipelineStages.length} operational stages from ${pipelineStages[0]?.label || "Qualification"} to Won/Lost bookings.`}
       breadcrumbs={[
         { label: "Sales & Marketing", href: "/sales-marketing/dashboard" },
         { label: "Lead & Sales" },
@@ -922,7 +1074,7 @@ export function DealsPipelineView() {
           <Button
             type="button"
             size="sm"
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={handleOpenCreateDealModal}
             className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
           >
             <Plus className="h-4 w-4" /> + Create Deal
@@ -1035,8 +1187,8 @@ export function DealsPipelineView() {
             onChange={(e) => setSelectedStageFilter(e.target.value)}
             className="text-xs rounded-lg border border-slate-200 py-2 px-3 bg-white text-slate-700 focus:outline-none focus:border-slate-300 cursor-pointer"
           >
-            <option value="ALL">All 8 Stages</option>
-            {HOTEL_PIPELINE_STAGES.map((st) => (
+            <option value="ALL">All {pipelineStages.length} Stages</option>
+            {pipelineStages.map((st) => (
               <option key={st.id} value={st.id}>
                 {st.label}
               </option>
@@ -1072,12 +1224,15 @@ export function DealsPipelineView() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 3: KANBAN BOARD (ALL 8 PIPELINE STAGES VISIBLE)
+          SECTION 3: KANBAN BOARD (DYNAMIC PIPELINE STAGES VISIBLE)
       ───────────────────────────────────────────────────────────── */}
       {viewMode === "KANBAN" ? (
         <div className="overflow-x-auto pb-4">
-          <div className="flex gap-3.5 min-w-[1920px]">
-            {HOTEL_PIPELINE_STAGES.map((stage) => {
+          <div
+            className="flex gap-3.5"
+            style={{ minWidth: `${Math.max(1000, pipelineStages.length * 260)}px` }}
+          >
+            {pipelineStages.map((stage) => {
               const stageDeals = dealsByStage[stage.id] || [];
               const stageTotal = getStageTotalValue(stage.id);
               const isDragOver = dragOverStageId === stage.id;
@@ -1657,7 +1812,7 @@ export function DealsPipelineView() {
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => setIsQuotationModalOpen(true)}
+                    onClick={handleOpenQuotationModal}
                     className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] rounded-lg h-7"
                   >
                     <Plus className="h-3 w-3 mr-1" /> + Create QTN Revision
@@ -1902,11 +2057,13 @@ export function DealsPipelineView() {
               <div>
                 <label className="block font-bold text-slate-700 mb-1 text-[11px]">Mobile Number *</label>
                 <input
-                  type="text"
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   required
-                  placeholder="+91 98000 00000"
+                  placeholder="e.g. 9800000000"
                   value={createMobile}
-                  onChange={(e) => setCreateMobile(e.target.value)}
+                  onChange={(e) => setCreateMobile(e.target.value.replace(/\D/g, "").slice(0, 15))}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono text-xs text-slate-900"
                 />
               </div>
@@ -1946,7 +2103,7 @@ export function DealsPipelineView() {
                   onChange={(e) => setCreateStage(e.target.value as HotelDealStage)}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs"
                 >
-                  {HOTEL_PIPELINE_STAGES.map((st) => (
+                  {pipelineStages.map((st) => (
                     <option key={st.id} value={st.id}>
                       {st.label}
                     </option>
@@ -1975,6 +2132,7 @@ export function DealsPipelineView() {
                   onChange={(e) => setCreateExecutive(e.target.value)}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs"
                 >
+                  <option value="">-- Select Executive --</option>
                   <option value="Vikram Malhotra">Vikram Malhotra</option>
                   <option value="Jay Kumar">Jay Kumar</option>
                   <option value="Ananya Roy">Ananya Roy</option>
@@ -2173,7 +2331,9 @@ export function DealsPipelineView() {
                 type="button"
                 size="sm"
                 onClick={() => {
-                  void applyStageChange(dealToMarkWon, "Won", "Deal confirmed Won and routed to Booking Queue.");
+                  const wonStageObj = pipelineStages.find((s) => s.id.toLowerCase().includes("won"));
+                  const wonStageName = wonStageObj ? wonStageObj.id : "Won";
+                  void applyStageChange(dealToMarkWon, wonStageName, "Deal confirmed Won and routed to Booking Queue.");
                   setIsWonModalOpen(false);
                   setDealToMarkWon(null);
                 }}
@@ -2215,7 +2375,8 @@ export function DealsPipelineView() {
                 <input
                   type="number"
                   required
-                  value={qtnAmount}
+                  placeholder="e.g. 500000"
+                  value={qtnAmount || ""}
                   onChange={(e) => setQtnAmount(Number(e.target.value))}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-emerald-800 text-xs"
                 />

@@ -627,11 +627,18 @@ export function RoomAvailabilityView() {
 
   return (
     <div className="space-y-6">
-      <FOPageHeader
-        eyebrow="Front Office"
-        title="Room Availability"
-        action={
-          <div className="flex max-w-xl flex-wrap items-center justify-end gap-x-3 gap-y-1.5">
+      {/* Sticky Room Status & Header Banner */}
+      <div className="sticky -top-3 sm:-top-4 lg:-top-6 z-30 -mx-3 sm:-mx-4 lg:-mx-6 px-3 sm:px-4 lg:px-6 py-3 bg-[#f7f8f7]/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all duration-200">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">
+              Front Office
+            </span>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              Room Availability
+            </h1>
+          </div>
+          <div className="flex max-w-xl flex-wrap items-center justify-start sm:justify-end gap-x-3 gap-y-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 shadow-xs">
             {CALENDAR_LEGEND_ORDER.map((key) => {
               const cfg = statusConfig[key];
               return (
@@ -646,8 +653,8 @@ export function RoomAvailabilityView() {
               );
             })}
           </div>
-        }
-      />
+        </div>
+      </div>
 
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-3">
@@ -813,9 +820,9 @@ export function RoomAvailabilityView() {
         ) : (
           <div className="overflow-x-auto select-none">
             <table className="w-full min-w-[960px] border-collapse text-sm">
-              <thead>
+              <thead className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm shadow-2xs">
                 <tr>
-                  <th className="sticky left-0 z-20 min-w-[148px] border-b border-r border-slate-100 bg-slate-50/95 px-4 py-3.5 text-left backdrop-blur-sm">
+                  <th className="sticky left-0 top-0 z-30 min-w-[148px] border-b border-r border-slate-100 bg-slate-50/95 px-4 py-3.5 text-left backdrop-blur-sm shadow-xs">
                     <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
                       Room
                     </span>
@@ -828,9 +835,12 @@ export function RoomAvailabilityView() {
                       <th
                         key={d}
                         className={cn(
-                          "min-w-[44px] border-b border-slate-100 px-0.5 py-2.5 text-center",
-                          isToday && "bg-emerald-50/80",
-                          isWeekend && !isToday && "bg-slate-50/60",
+                          "sticky top-0 z-20 min-w-[44px] border-b border-slate-100 px-0.5 py-2.5 text-center backdrop-blur-sm",
+                          isToday
+                            ? "bg-emerald-50/95 text-emerald-800"
+                            : isWeekend
+                              ? "bg-slate-100/90 text-slate-700"
+                              : "bg-white/95 text-slate-700",
                         )}
                       >
                         <span

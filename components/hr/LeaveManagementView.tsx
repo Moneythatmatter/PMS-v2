@@ -39,7 +39,13 @@ import { employeeDepartmentFilterOptions } from "@/app/data/hr/employeeDepartmen
 import { exportGenericReport, filterByIsoDateRange, normalizeToIsoDate, todayIsoDate, type ReportExportOptions } from "@/lib/hr/report-export";
 import type { ExportColumn } from "@/lib/exportUtils";
 import { cn } from "@/lib/utils";
-import { hrLeaveApplicationService, hrEmployeeService, hrLeaveTypeService } from "@/services/human-resources";
+import {
+  hrLeaveApplicationService,
+  hrEmployeeService,
+  hrLeaveTypeService,
+  hrDepartmentService,
+  hrDesignationService,
+} from "@/services/human-resources";
 import { mapLeaveApplicationFromApi, mapLeaveApplicationToApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
 import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
@@ -199,6 +205,9 @@ export const MASTER_LEAVE_TYPES: LeaveTypeMaster[] = [
   { id: "lt-ml", code: "ML", name: "Maternity / Paternity Leave", annualQuota: 90, isPaid: true, colorClass: "bg-pink-100 text-pink-800 border-pink-200" },
 ];
 
+const isUuid = (val: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
 export function LeaveManagementView() {
   const [applications, setApplications] = useState<LeaveApplication[]>([]);
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
@@ -208,16 +217,67 @@ export function LeaveManagementView() {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const loadApplications = async () => {
     try {
-      const [rows, empRows, leaveTypeRows] = await Promise.all([
-        hrLeaveApplicationService.list(),
-        hrEmployeeService.list(),
-        hrLeaveTypeService.list(),
+      const [rows, empRows, leaveTypeRows, deptRows, desigRows] = await Promise.all([
+        hrLeaveApplicationService.list().catch(() => []),
+        hrEmployeeService.list().catch(() => []),
+        hrLeaveTypeService.list().catch(() => []),
+        hrDepartmentService.list().catch(() => []),
+        hrDesignationService.list().catch(() => []),
       ]);
-      const emps = empRows.map(mapEmployeeFromApi);
+
+      const deptMap = new Map<string, string>();
+      for (const d of deptRows) {
+        const id = String(d.id || "");
+        const name = String(
+          d.departmentName ||
+            d.department_name ||
+            d.name ||
+            d.dept_name ||
+            d.deptName ||
+            d.dept_code ||
+            "",
+        );
+        if (id && name) deptMap.set(id, name);
+      }
+
+      const desigMap = new Map<string, string>();
+      for (const d of desigRows) {
+        const id = String(d.id || "");
+        const title = String(
+          d.designationTitle ||
+            d.designation_title ||
+            d.designationName ||
+            d.designation_name ||
+            d.title ||
+            d.name ||
+            "",
+        );
+        if (id && title) desigMap.set(id, title);
+      }
+
+      const emps = empRows.map((raw) => {
+        const mapped = mapEmployeeFromApi(raw);
+        if (isUuid(mapped.department)) {
+          mapped.department = deptMap.get(mapped.department) || mapped.department;
+        }
+        if (isUuid(mapped.designation)) {
+          mapped.designation = desigMap.get(mapped.designation) || mapped.designation;
+        }
+        return mapped;
+      });
       setEmployees(emps);
       const lookup = new Map(emps.map((e) => [e.id, e]));
       setApplications(
-        rows.map((row) => mapLeaveApplicationFromApi(row, lookup.get(String(row.employeeId)))),
+        rows.map((row) => {
+          const mapped = mapLeaveApplicationFromApi(row, lookup.get(String(row.employeeId)));
+          if (isUuid(mapped.department)) {
+            mapped.department = deptMap.get(mapped.department) || mapped.department;
+          }
+          if (isUuid(mapped.designation)) {
+            mapped.designation = desigMap.get(mapped.designation) || mapped.designation;
+          }
+          return mapped;
+        }),
       );
       if (leaveTypeRows.length > 0) {
         setLeaveTypes(
@@ -520,8 +580,14 @@ export function LeaveManagementView() {
 
   // Department Staffing Risk from applied/approved leave
   const departmentStaffingRisk = useMemo(() => {
-    const deptNames = Array.from(new Set(employees.map((e) => e.department))).slice(0, 4);
-    return deptNames.map((dept) => {
+    const validDepts = Array.from(
+      new Set(
+        employees
+          .map((e) => e.department)
+          .filter((d) => d && !isUuid(d) && d !== "—"),
+      ),
+    ).slice(0, 4);
+    return validDepts.map((dept) => {
       const onLeave = applications.filter(
         (a) =>
           a.department === dept &&

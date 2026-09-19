@@ -3,7 +3,7 @@ import type { SummaryStat } from "../types";
 export const summaryStats: SummaryStat[] = [
   {
     title: "Total Revenue",
-    value: "$32,800",
+    value: "₹32,800",
     change: "+12.5%",
     trend: "up",
   },

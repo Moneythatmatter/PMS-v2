@@ -483,7 +483,7 @@ export function PayslipsView() {
           description={`Statement for ${viewingPayslip.month} (${viewingPayslip.payslipNo})`}
           size="xl"
         >
-          <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1 text-xs">
+          <div className="space-y-4 text-xs">
             {/* Printable Payslip Document Card */}
             <div className="p-6 rounded-2xl border border-slate-300 bg-white space-y-4 shadow-sm">
               {/* Hotel Header & Logo */}

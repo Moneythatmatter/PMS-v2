@@ -1,3 +1,5 @@
+import jsPDF from "jspdf";
+
 export interface ExportColumn<T extends Record<string, unknown>> {
   key: keyof T & string;
   header: string;
@@ -106,16 +108,160 @@ export function exportTableAsPdf<T extends Record<string, unknown>>(
   title: string,
   columns: ExportColumn<T>[],
   rows: T[],
+  filename?: string,
 ) {
-  const html = buildHtmlTable(title, columns, rows);
-  const printWindow = window.open("", "_blank");
+  if (typeof window === "undefined") return;
 
-  if (!printWindow) {
-    throw new Error("Pop-up blocked. Allow pop-ups to export as PDF.");
+  const isWide = columns.length > 5;
+  const orientation = isWide ? "landscape" : "portrait";
+  const doc = new jsPDF({
+    orientation,
+    unit: "mm",
+    format: "a4",
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginLeft = 10;
+  const marginRight = 10;
+  const marginTop = 12;
+  const marginBottom = 12;
+  const usableWidth = pageWidth - marginLeft - marginRight;
+
+  // Header Title
+  let y = marginTop;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42); // slate-900
+  doc.text(title, marginLeft, y);
+
+  // Metadata
+  y += 5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139); // slate-500
+  const dateStr = new Date().toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  doc.text(`Generated: ${dateStr}   |   Total Records: ${rows.length}`, marginLeft, y);
+
+  y += 4;
+  // Header divider
+  doc.setDrawColor(226, 232, 240); // slate-200
+  doc.setLineWidth(0.3);
+  doc.line(marginLeft, y, pageWidth - marginRight, y);
+
+  y += 3;
+
+  // Calculate dynamic column widths based on headers and row values
+  const weights = columns.map((col) => {
+    let maxLen = col.header.length;
+    const sampleSize = Math.min(rows.length, 50);
+    for (let i = 0; i < sampleSize; i++) {
+      const val = rows[i][col.key];
+      if (val !== undefined && val !== null) {
+        maxLen = Math.max(maxLen, String(val).length);
+      }
+    }
+    return Math.max(6, Math.min(maxLen, 24));
+  });
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  const colWidths = weights.map((w) => (w / totalWeight) * usableWidth);
+
+  const headerHeight = 6.5;
+  const rowHeight = 5.8;
+  const fontSize = columns.length > 10 ? 6.5 : columns.length > 6 ? 7 : 7.5;
+
+  const renderTableHeader = (currentY: number) => {
+    doc.setFillColor(30, 41, 59); // slate-800
+    doc.rect(marginLeft, currentY, usableWidth, headerHeight, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(fontSize);
+    doc.setTextColor(255, 255, 255);
+
+    let curX = marginLeft;
+    columns.forEach((col, idx) => {
+      const colWidth = colWidths[idx];
+      const headerLines = doc.splitTextToSize(col.header, colWidth - 2);
+      const text = headerLines[0] || col.header;
+      doc.text(text, curX + 1.2, currentY + 4.3);
+      curX += colWidth;
+    });
+
+    return currentY + headerHeight;
+  };
+
+  y = renderTableHeader(y);
+
+  // Render Rows
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(fontSize);
+
+  rows.forEach((row, rowIndex) => {
+    if (y + rowHeight > pageHeight - marginBottom) {
+      doc.addPage();
+      y = marginTop;
+      y = renderTableHeader(y);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(fontSize);
+    }
+
+    // Alternating row background
+    if (rowIndex % 2 === 1) {
+      doc.setFillColor(248, 250, 252); // slate-50
+      doc.rect(marginLeft, y, usableWidth, rowHeight, "F");
+    }
+
+    // Row bottom border
+    doc.setDrawColor(241, 245, 249); // slate-100
+    doc.setLineWidth(0.15);
+    doc.line(marginLeft, y + rowHeight, pageWidth - marginRight, y + rowHeight);
+
+    doc.setTextColor(30, 41, 59); // slate-800
+    let curX = marginLeft;
+    columns.forEach((col, idx) => {
+      const colWidth = colWidths[idx];
+      const raw = row[col.key];
+      const val = raw === undefined || raw === null ? "—" : String(raw);
+      const cellLines = doc.splitTextToSize(val, colWidth - 2);
+      const text = cellLines[0] || "";
+      doc.text(text, curX + 1.2, y + 3.8);
+      curX += colWidth;
+    });
+
+    y += rowHeight;
+  });
+
+  // Footers on all pages
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184); // slate-400
+    doc.text(
+      `Page ${p} of ${totalPages}`,
+      pageWidth - marginRight,
+      pageHeight - 5,
+      { align: "right" },
+    );
+    doc.text(
+      "Hotel PMS — Human Resources",
+      marginLeft,
+      pageHeight - 5,
+      { align: "left" },
+    );
   }
 
-  printWindow.document.write(html);
-  printWindow.document.close();
-  printWindow.focus();
-  printWindow.print();
+  const safeFilename =
+    filename || `${title.toLowerCase().replace(/[^a-z0-9_-]+/g, "_")}.pdf`;
+  const finalFilename = safeFilename.endsWith(".pdf")
+    ? safeFilename
+    : `${safeFilename}.pdf`;
+  doc.save(finalFilename);
 }

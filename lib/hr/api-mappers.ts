@@ -16,7 +16,6 @@ import type { LeaveApplication } from "@/components/hr/LeaveManagementView";
 import type { OvertimeRecord } from "@/components/hr/OvertimeManagementView";
 import type { SalaryStructure } from "@/components/hr/SalaryStructureView";
 import type { PayslipRecord } from "@/components/hr/PayslipsView";
-import type { ConfigurableTaxRule } from "@/components/hr/TaxManagementView";
 import type { ComplaintCategory } from "@/components/hr/ComplaintCategoriesView";
 import type { ComplaintRecord } from "@/components/hr/ComplaintListView";
 import type { GrievanceComplaint } from "@/components/hr/RaiseComplaintView";
@@ -27,9 +26,37 @@ import type {
   DepartmentHeadcount,
   EmployeeEventItem,
   HolidayShiftItem,
+  HRActivityItem,
 } from "@/app/data/hr/hrDashboardData";
 import { formatApiDate } from "./useHrList";
 import { normalizeToIsoDate } from "./report-export";
+
+export interface ConfigurableTaxRule {
+  id?: string;
+  ruleName?: string;
+  taxCode?: string;
+  taxType?: string;
+  description?: string;
+  calcMethod?: string;
+  ratePercentage?: number;
+  taxableBase?: string;
+  fixedAmount?: number;
+  applicableFrequency?: string;
+  slabs?: unknown;
+  applicableOn?: string;
+  department?: string;
+  employmentType?: string;
+  employeeCategory?: string;
+  taxRegime?: string;
+  financialYear?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  status?: string;
+  version?: string | number;
+  createdBy?: string;
+  createdDate?: string;
+  history?: unknown;
+}
 
 export function mapPayrollFromApi(row: Record<string, unknown>): EmployeePayrollRecord {
   return {
@@ -172,16 +199,29 @@ export function mapDesignationFromApi(
   row: Record<string, unknown>,
   deptName = "",
 ): DesignationMaster {
+  const title = String(
+    row.designationTitle ??
+      row.designation_title ??
+      row.designationName ??
+      row.designation_name ??
+      row.name ??
+      row.title ??
+      "",
+  );
+  const code = String(row.designationCode ?? row.designation_code ?? "");
+  const dept = deptName || String(row.departmentName ?? row.department_name ?? row.department ?? "");
+  const grade = String(row.jobGrade ?? row.job_grade ?? "Executive (L1)");
+
   return {
     id: String(row.id),
-    designationCode: String(row.designationCode ?? ""),
-    designationTitle: String(row.designationTitle ?? ""),
-    department: deptName || String(row.department ?? ""),
-    jobGrade: (row.jobGrade as DesignationMaster["jobGrade"]) ?? "Executive (L1)",
+    designationCode: code,
+    designationTitle: title,
+    department: dept,
+    jobGrade: grade as DesignationMaster["jobGrade"],
     description: String(row.description ?? ""),
-    status: (row.status as DesignationMaster["status"]) ?? "Active",
+    status: ((row.status as DesignationMaster["status"]) ?? "Active") || "Active",
     createdDate: formatApiDate(row.createdAt as string),
-    employeeCount: Number(row.employeeCount ?? 0),
+    employeeCount: Number(row.employeeCount ?? row.employee_count ?? 0),
   };
 }
 
@@ -198,6 +238,8 @@ export function mapDesignationToApi(
   return {
     designationCode: form.designationCode,
     designationTitle: form.designationTitle,
+    designationName: form.designationTitle,
+    name: form.designationTitle,
     departmentId: form.departmentId,
     jobGrade: form.jobGrade,
     description: form.description,
@@ -415,7 +457,21 @@ export function mapComplaintCategoryToApi(form: Omit<ComplaintCategory, "id" | "
 }
 
 export function mapComplaintToApi(form: Record<string, unknown>) {
-  return form;
+  const year = new Date().getFullYear();
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  const ticketNo = form.ticketNo || form.ticket_no || `TCK-${year}-${rand}`;
+  const submittedDate = form.submittedDate || form.submitted_date || new Date().toISOString().slice(0, 10);
+  const dueDate =
+    form.dueDate ||
+    form.due_date ||
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  return {
+    ...form,
+    ticketNo,
+    submittedDate,
+    dueDate,
+  };
 }
 
 export function mapSalaryStructureToApi(form: Omit<SalaryStructure, "id" | "history">) {
@@ -823,11 +879,11 @@ export function mapShiftAssignmentFromApi(
 
   return {
     id: String(row.id),
-    employeeId: String(row.employeeId ?? ""),
-    employeeName: emp?.name ?? String(row.employeeName ?? ""),
-    department: emp?.department ?? String(row.department ?? ""),
-    designation: emp?.designation ?? String(row.designation ?? ""),
-    employmentType: (row.employmentType as ShiftAssignment["employmentType"]) ?? "Permanent",
+    employeeId: String(row.employeeId ?? row.employee_id ?? ""),
+    employeeName: emp?.name ?? String(row.employeeName ?? row.employee_name ?? ""),
+    department: emp?.department ?? String(row.department ?? row.dept_name ?? ""),
+    designation: emp?.designation ?? String(row.designation ?? row.designation_name ?? ""),
+    employmentType: ((row.employmentType ?? row.employment_type ?? "Permanent") as ShiftAssignment["employmentType"]) || "Permanent",
     avatar: emp?.avatar ?? String(row.avatar ?? "??"),
     photoUrl: emp?.photoUrl,
     shiftId: String(row.shiftTypeId ?? row.shiftId ?? ""),
@@ -914,30 +970,30 @@ export function mapLeaveApplicationFromApi(
 export function mapOvertimeFromApi(row: Record<string, unknown>, emp?: EmployeeLookup): OvertimeRecord {
   return {
     id: String(row.id),
-    employeeId: String(row.employeeId ?? ""),
-    employeeName: emp?.name ?? String(row.employeeName ?? ""),
-    department: emp?.department ?? String(row.department ?? ""),
-    designation: emp?.designation ?? String(row.designation ?? ""),
+    employeeId: String(row.employeeId ?? row.employee_id ?? ""),
+    employeeName: emp?.name ?? String(row.employeeName ?? row.employee_name ?? ""),
+    department: emp?.department ?? String(row.department ?? row.dept_name ?? ""),
+    designation: emp?.designation ?? String(row.designation ?? row.designation_name ?? ""),
     avatar: emp?.avatar ?? String(row.avatar ?? "??"),
-    photoUrl: emp?.photoUrl,
-    shiftCode: String(row.shiftCode ?? ""),
-    shiftName: String(row.shiftName ?? ""),
-    otType: (row.otType as OvertimeRecord["otType"]) ?? "Regular OT",
-    date: formatApiDate(row.recordDate as string),
-    checkIn: String(row.checkIn ?? "—"),
-    checkOut: String(row.checkOut ?? "—"),
-    scheduledHours: Number(row.scheduledHours ?? 0),
-    breakHours: Number(row.breakHours ?? 0),
-    workedHours: Number(row.workedHours ?? 0),
-    overtimeHours: Number(row.overtimeHours ?? 0),
-    hourlyRate: Number(row.hourlyRate ?? 0),
-    otRateMultiplier: Number(row.otRateMultiplier ?? 1),
-    payableAmount: Number(row.payableAmount ?? 0),
+    photoUrl: emp?.photoUrl ?? (row.photoUrl as string | undefined) ?? (row.photo_url as string | undefined),
+    shiftCode: String(row.shiftCode ?? row.shift_code ?? ""),
+    shiftName: String(row.shiftName ?? row.shift_name ?? ""),
+    otType: ((row.otType ?? row.ot_type ?? "Regular OT") as OvertimeRecord["otType"]) || "Regular OT",
+    date: formatApiDate((row.recordDate ?? row.record_date ?? row.date) as string),
+    checkIn: String(row.checkIn ?? row.check_in ?? "—"),
+    checkOut: String(row.checkOut ?? row.check_out ?? "—"),
+    scheduledHours: Number(row.scheduledHours ?? row.scheduled_hours ?? 8),
+    breakHours: Number(row.breakHours ?? row.break_hours ?? 0),
+    workedHours: Number(row.workedHours ?? row.worked_hours ?? 0),
+    overtimeHours: Number(row.overtimeHours ?? row.overtime_hours ?? 0),
+    hourlyRate: Number(row.hourlyRate ?? row.hourly_rate ?? 0),
+    otRateMultiplier: Number(row.otRateMultiplier ?? row.ot_rate_multiplier ?? 1.5),
+    payableAmount: Number(row.payableAmount ?? row.payable_amount ?? 0),
     reason: String(row.reason ?? ""),
-    status: (row.status as OvertimeRecord["status"]) ?? "Pending",
-    approvedBy: row.approvedBy as string | undefined,
-    approvedOn: row.approvedOn ? formatApiDate(row.approvedOn as string) : undefined,
-    approvalRemarks: row.approvalRemarks as string | undefined,
+    status: ((row.status as OvertimeRecord["status"]) ?? "Pending") || "Pending",
+    approvedBy: (row.approvedBy as string | undefined) ?? (row.approved_by as string | undefined),
+    approvedOn: (row.approvedOn || row.approved_on) ? formatApiDate((row.approvedOn ?? row.approved_on) as string) : undefined,
+    approvalRemarks: (row.approvalRemarks as string | undefined) ?? (row.approval_remarks as string | undefined),
   };
 }
 
@@ -1017,34 +1073,6 @@ export function mapPayslipFromApi(row: Record<string, unknown>, emp?: EmployeeLo
   };
 }
 
-export function mapTaxRuleFromApi(row: Record<string, unknown>): ConfigurableTaxRule {
-  return {
-    id: String(row.id),
-    ruleName: String(row.ruleName ?? ""),
-    taxCode: String(row.taxCode ?? ""),
-    taxType: String(row.taxType ?? ""),
-    description: String(row.description ?? ""),
-    calcMethod: (row.calcMethod as ConfigurableTaxRule["calcMethod"]) ?? "Percentage",
-    ratePercentage: row.ratePercentage != null ? Number(row.ratePercentage) : undefined,
-    taxableBase: row.taxableBase as string | undefined,
-    fixedAmount: row.fixedAmount != null ? Number(row.fixedAmount) : undefined,
-    applicableFrequency: row.applicableFrequency as ConfigurableTaxRule["applicableFrequency"],
-    slabs: (row.slabs as ConfigurableTaxRule["slabs"]) ?? [],
-    applicableOn: (row.applicableOn as ConfigurableTaxRule["applicableOn"]) ?? "Gross Salary",
-    department: row.department as string | undefined,
-    employmentType: row.employmentType as string | undefined,
-    employeeCategory: row.employeeCategory as string | undefined,
-    taxRegime: row.taxRegime as ConfigurableTaxRule["taxRegime"],
-    financialYear: String(row.financialYear ?? ""),
-    effectiveFrom: formatApiDate(row.effectiveFrom as string),
-    effectiveTo: row.effectiveTo ? formatApiDate(row.effectiveTo as string) : undefined,
-    status: (row.status as ConfigurableTaxRule["status"]) ?? "Active",
-    version: Number(row.version ?? 1),
-    createdBy: String(row.createdBy ?? ""),
-    createdDate: formatApiDate(row.createdAt as string),
-    history: (row.history as ConfigurableTaxRule["history"]) ?? [],
-  };
-}
 
 export function mapComplaintCategoryFromApi(row: Record<string, unknown>): ComplaintCategory {
   return {
@@ -1059,83 +1087,180 @@ export function mapComplaintCategoryFromApi(row: Record<string, unknown>): Compl
 }
 
 export function mapComplaintFromApi(row: Record<string, unknown>, emp?: EmployeeLookup): ComplaintRecord {
+  const empName = emp?.name ?? String(row.employeeName ?? row.employee_name ?? "");
+  const dept = emp?.department ?? String(row.department ?? "");
+  const desig = emp?.designation ?? String(row.designation ?? "");
+  const avatar = emp?.avatar ?? (empName ? empName.slice(0, 2).toUpperCase() : "??");
+  const photoUrl = emp?.photoUrl ?? (row.photoUrl as string | undefined);
+
   return {
     id: String(row.id),
-    ticketNo: String(row.ticketNo ?? ""),
-    employeeId: String(row.employeeId ?? ""),
-    employeeName: emp?.name ?? String(row.employeeName ?? ""),
-    department: emp?.department ?? String(row.department ?? ""),
-    designation: emp?.designation ?? String(row.designation ?? ""),
-    avatar: emp?.avatar ?? String(row.avatar ?? "??"),
-    photoUrl: emp?.photoUrl,
+    ticketNo: String(row.ticketNo ?? row.ticket_no ?? ""),
+    employeeId: String(row.employeeId ?? row.employee_id ?? ""),
+    employeeName: empName,
+    department: dept,
+    designation: desig,
+    avatar,
+    photoUrl,
     category: String(row.category ?? ""),
     subject: String(row.subject ?? ""),
     description: String(row.description ?? ""),
-    incidentDate: formatApiDate(row.incidentDate as string),
-    priority: (row.priority as ComplaintRecord["priority"]) ?? "Medium",
-    status: (row.status as ComplaintRecord["status"]) ?? "Open",
+    incidentDate: formatApiDate((row.incidentDate ?? row.incident_date) as string),
+    priority: ((row.priority as ComplaintRecord["priority"]) ?? "Medium") || "Medium",
+    status: ((row.status as ComplaintRecord["status"]) ?? "Open") || "Open",
     reviewLevel: (row.reviewLevel as ComplaintRecord["reviewLevel"]) ?? "Standard",
-    submittedDate: formatApiDate(row.submittedDate as string),
-    dueDate: formatApiDate(row.dueDate as string),
-    isAnonymous: Boolean(row.isAnonymous),
-    isPoshOrConfidential: Boolean(row.isPoshOrConfidential),
-    assignedOfficer: row.assignedOfficer as string | undefined,
-    assignedRole: row.assignedRole as string | undefined,
-    assignedDate: row.assignedDate ? formatApiDate(row.assignedDate as string) : undefined,
-    assignedBy: row.assignedBy as string | undefined,
-    investigationNotes: (row.investigationNotes as ComplaintRecord["investigationNotes"]) ?? [],
-    evidenceDocuments: (row.evidenceDocuments as string[]) ?? [],
-    reviewChain: (row.reviewChain as ComplaintRecord["reviewChain"]) ?? [],
-    proposedResolution: row.proposedResolution as string | undefined,
-    resolutionNotes: row.resolutionNotes as string | undefined,
-    recommendedAction: row.recommendedAction as string | undefined,
+    submittedDate: formatApiDate((row.submittedDate ?? row.submitted_date) as string),
+    dueDate: formatApiDate((row.dueDate ?? row.due_date) as string),
+    isAnonymous: Boolean(row.isAnonymous ?? row.is_anonymous),
+    isPoshOrConfidential: Boolean(row.isPoshOrConfidential ?? row.is_posh_or_confidential),
+    assignedOfficer: (row.assignedOfficer ?? row.assigned_officer) as string | undefined,
+    assignedRole: (row.assignedRole ?? row.assigned_role) as string | undefined,
+    assignedDate: (row.assignedDate || row.assigned_date)
+      ? formatApiDate((row.assignedDate ?? row.assigned_date) as string)
+      : undefined,
+    assignedBy: (row.assignedBy ?? row.assigned_by) as string | undefined,
+    investigationNotes:
+      ((row.investigationNotes ?? row.investigation_notes) as ComplaintRecord["investigationNotes"]) ?? [],
+    evidenceDocuments: ((row.evidenceDocuments ?? row.evidence_documents) as string[]) ?? [],
+    reviewChain: ((row.reviewChain ?? row.review_chain) as ComplaintRecord["reviewChain"]) ?? [],
+    proposedResolution: (row.proposedResolution ?? row.proposed_resolution) as string | undefined,
+    resolutionNotes: (row.resolutionNotes ?? row.resolution_notes) as string | undefined,
+    recommendedAction: (row.recommendedAction ?? row.recommended_action) as string | undefined,
     timeline: (row.timeline as ComplaintRecord["timeline"]) ?? [],
   };
 }
 
 export function mapComplaintToGrievance(row: Record<string, unknown>, emp?: EmployeeLookup): GrievanceComplaint {
+  const empName = emp?.name ?? String(row.employeeName ?? row.employee_name ?? "");
+  const dept = emp?.department ?? String(row.department ?? "");
+  const desig = emp?.designation ?? String(row.designation ?? "");
+  const avatar = emp?.avatar ?? (empName ? empName.slice(0, 2).toUpperCase() : "??");
+  const photoUrl = emp?.photoUrl ?? (row.photoUrl as string | undefined);
+
   return {
     id: String(row.id),
-    ticketNo: String(row.ticketNo ?? ""),
-    employeeId: String(row.employeeId ?? ""),
-    employeeName: emp?.name ?? String(row.employeeName ?? ""),
-    department: emp?.department ?? String(row.department ?? ""),
-    designation: emp?.designation ?? String(row.designation ?? ""),
-    avatar: emp?.avatar ?? String(row.avatar ?? "??"),
-    photoUrl: emp?.photoUrl,
+    ticketNo: String(row.ticketNo ?? row.ticket_no ?? ""),
+    employeeId: String(row.employeeId ?? row.employee_id ?? ""),
+    employeeName: empName,
+    department: dept,
+    designation: desig,
+    avatar,
+    photoUrl,
     category: String(row.category ?? ""),
     subject: String(row.subject ?? ""),
     description: String(row.description ?? ""),
-    incidentDate: formatApiDate(row.incidentDate as string),
-    priority: (row.priority as GrievanceComplaint["priority"]) ?? "Medium",
-    status: (row.status as GrievanceComplaint["status"]) ?? "Open",
-    submittedDate: formatApiDate(row.submittedDate as string),
-    isAnonymous: Boolean(row.isAnonymous),
-    assignedTo: row.assignedOfficer as string | undefined,
-    attachmentName: row.attachmentName as string | undefined,
-    resolutionNotes: row.resolutionNotes as string | undefined,
+    incidentDate: formatApiDate((row.incidentDate ?? row.incident_date) as string),
+    priority: ((row.priority as GrievanceComplaint["priority"]) ?? "Medium") || "Medium",
+    status: ((row.status as GrievanceComplaint["status"]) ?? "Open") || "Open",
+    submittedDate: formatApiDate((row.submittedDate ?? row.submitted_date) as string),
+    isAnonymous: Boolean(row.isAnonymous ?? row.is_anonymous),
+    assignedTo: (row.assignedOfficer ?? row.assigned_officer) as string | undefined,
+    attachmentName: (row.attachmentName ?? row.attachment_name) as string | undefined,
+    resolutionNotes: (row.resolutionNotes ??
+      row.resolution_notes ??
+      row.proposedResolution ??
+      row.proposed_resolution) as string | undefined,
   };
 }
 
-export function mapComplaintToStatusTicket(row: Record<string, unknown>, emp?: EmployeeLookup): ComplaintStatusTicket {
+export function mapComplaintToStatusTicket(
+  row: Record<string, unknown>,
+  emp?: EmployeeLookup,
+): ComplaintStatusTicket {
+  const status = ((row.status as ComplaintStatusTicket["status"]) ?? "Open") || "Open";
+  const submittedDate = formatApiDate((row.submittedDate ?? row.submitted_date) as string);
+  const assignedOfficer = String(row.assignedOfficer ?? row.assigned_officer ?? "");
+  const resolutionNotes = (row.resolutionNotes ??
+    row.resolution_notes ??
+    row.proposedResolution ??
+    row.proposed_resolution) as string | undefined;
+
+  let rawTimeline = (row.timeline as Array<Record<string, unknown>>) ?? [];
+  if (!Array.isArray(rawTimeline)) {
+    rawTimeline = [];
+  }
+
+  let steps: ComplaintStatusTicket["steps"] = [];
+  if (rawTimeline.length > 0) {
+    steps = rawTimeline.map((item, idx) => ({
+      title: String(item.action || item.title || item.newStatus || "Investigation Step"),
+      timestamp: String(item.timestamp || item.date || ""),
+      by: String(item.user || item.actor || item.by || ""),
+      notes: String(item.comment || item.notes || ""),
+      completed: true,
+      active: idx === 0,
+    }));
+  }
+
+  if (steps.length === 0) {
+    const statusStr = String(status);
+    const isResolvedOrClosed = statusStr === "Resolved" || statusStr === "Closed";
+    const isInvestigating =
+      statusStr === "Assigned" ||
+      statusStr === "In Review" ||
+      statusStr === "Under Investigation" ||
+      statusStr.startsWith("Pending") ||
+      statusStr === "Resolution Proposed";
+
+    steps = [
+      {
+        title: "Complaint Logged",
+        timestamp: submittedDate || "Recently",
+        by: emp?.name ?? String(row.employeeName ?? row.employee_name ?? "Employee"),
+        notes: "Grievance ticket registered in system.",
+        completed: true,
+        active: statusStr === "Open",
+      },
+      {
+        title: assignedOfficer ? `Assigned to ${assignedOfficer}` : "Officer Assignment",
+        timestamp: assignedOfficer ? "In Progress" : "Pending",
+        by: assignedOfficer || "HR Review Desk",
+        notes: assignedOfficer ? "Officer assigned for grievance review." : "Pending review and assignment.",
+        completed: isInvestigating || isResolvedOrClosed,
+        active: statusStr === "Assigned" || statusStr === "In Review",
+      },
+      {
+        title: "Investigation & Review",
+        timestamp: isInvestigating ? "Active" : isResolvedOrClosed ? "Completed" : "Pending",
+        by: assignedOfficer || "Grievance Officer",
+        notes: isInvestigating ? "Case currently under inquiry and assessment." : undefined,
+        completed: isResolvedOrClosed,
+        active:
+          statusStr === "Under Investigation" ||
+          statusStr.startsWith("Pending") ||
+          statusStr === "Resolution Proposed",
+      },
+      {
+        title: "Resolution & Closure",
+        timestamp: isResolvedOrClosed ? "Finalized" : "Pending",
+        by: "HR Management",
+        notes: resolutionNotes || (isResolvedOrClosed ? "Grievance resolved." : "Pending final resolution."),
+        completed: isResolvedOrClosed,
+        active: isResolvedOrClosed,
+      },
+    ];
+  }
+
   return {
     id: String(row.id),
-    ticketNo: String(row.ticketNo ?? ""),
+    ticketNo: String(row.ticketNo ?? row.ticket_no ?? ""),
     category: String(row.category ?? ""),
     subject: String(row.subject ?? ""),
     description: String(row.description ?? ""),
-    incidentDate: formatApiDate(row.incidentDate as string),
-    submittedDate: formatApiDate(row.submittedDate as string),
+    incidentDate: formatApiDate((row.incidentDate ?? row.incident_date) as string),
+    submittedDate,
     priority: (row.priority as ComplaintStatusTicket["priority"]) ?? "Medium",
-    status: (row.status as ComplaintStatusTicket["status"]) ?? "Open",
-    isAnonymous: Boolean(row.isAnonymous),
-    employeeName: emp?.name ?? String(row.employeeName ?? ""),
-    assignedOfficer: String(row.assignedOfficer ?? ""),
-    assignedDepartment: String(row.assignedDepartment ?? row.assignedRole ?? ""),
-    lastUpdated: formatApiDate(row.updatedAt as string),
-    resolutionNotes: row.resolutionNotes as string | undefined,
-    attachmentName: row.attachmentName as string | undefined,
-    steps: (row.timeline as ComplaintStatusTicket["steps"]) ?? [],
+    status,
+    isAnonymous: Boolean(row.isAnonymous ?? row.is_anonymous),
+    employeeName: emp?.name ?? String(row.employeeName ?? row.employee_name ?? ""),
+    assignedOfficer,
+    assignedDepartment: String(
+      row.assignedDepartment ?? row.assigned_department ?? row.assignedRole ?? row.assigned_role ?? "",
+    ),
+    lastUpdated: formatApiDate((row.updatedAt ?? row.updated_at) as string) || submittedDate,
+    resolutionNotes,
+    attachmentName: (row.attachmentName ?? row.attachment_name) as string | undefined,
+    steps,
   };
 }
 
@@ -1240,6 +1365,12 @@ export function mapDashboardFromApi(data: Record<string, unknown>) {
     color: "bg-emerald-500",
   }));
 
+  const rawMale = Number(genderRaw.male ?? 0);
+  const rawFemale = Number(genderRaw.female ?? 0);
+  const rawOther = Number(genderRaw.other ?? 0);
+  const sumGender = rawMale + rawFemale + rawOther;
+  const genderTotal = Number(genderRaw.total ?? (sumGender > 0 ? sumGender : kpiSummary.totalEmployees));
+
   const genderDistribution = {
     male: Number(genderRaw.male ?? 0),
     female: Number(genderRaw.female ?? 0),
@@ -1250,6 +1381,15 @@ export function mapDashboardFromApi(data: Record<string, unknown>) {
   const upcomingBirthdays = (data.upcomingBirthdays as Record<string, unknown>[]) ?? [];
   const upcomingAnniversaries = (data.upcomingAnniversaries as Record<string, unknown>[]) ?? [];
   const upcomingHolidays = (data.upcomingHolidays as Record<string, unknown>[]) ?? [];
+  const activitiesRaw = (data.activities as Record<string, unknown>[]) ?? [];
+
+  const activities: HRActivityItem[] = activitiesRaw.map((row) => ({
+    id: String(row.id ?? Math.random().toString(36).slice(2, 9)),
+    type: (row.type as HRActivityItem["type"]) ?? "attendance",
+    title: String(row.title ?? ""),
+    description: String(row.description ?? ""),
+    timeAgo: String(row.timeAgo ?? row.created_at ?? "Just now"),
+  }));
 
   const events: EmployeeEventItem[] = [
     ...upcomingBirthdays.map((row) => ({
@@ -1289,5 +1429,6 @@ export function mapDashboardFromApi(data: Record<string, unknown>) {
     genderDistribution,
     events,
     holidaysAndShifts,
+    activities,
   };
 }

@@ -1242,7 +1242,7 @@ export function PayrollSettingsView() {
           description="Historical change log of all configuration updates made by HR and Finance administrators."
           size="lg"
         >
-          <div className="space-y-3 text-xs max-h-[60vh] overflow-y-auto pr-1">
+          <div className="space-y-3 text-xs">
             {auditLogs.map((log) => (
               <div key={log.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1">
                 <div className="flex items-center justify-between">

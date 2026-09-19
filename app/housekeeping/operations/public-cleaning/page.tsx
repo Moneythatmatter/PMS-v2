@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { DateTimePicker, formatDateTimeDisplay } from "@/components/ui";
 import {
   Drawer,
   Modal,
@@ -180,6 +181,7 @@ export default function PublicAreaCleaning() {
 
   // Admin and CRUD Modals State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isTemplateDrawerOpen, setIsTemplateDrawerOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -517,6 +519,16 @@ export default function PublicAreaCleaning() {
   // Admin add area submit
   const handleAddAreaSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newArea.nextCleaning || !newArea.nextCleaning.trim()) {
+      setScheduleError("Cleaning schedule is required.");
+      return;
+    }
+    const schedDate = new Date(newArea.nextCleaning);
+    if (isNaN(schedDate.getTime()) || schedDate.getTime() < Date.now()) {
+      setScheduleError("Cleaning schedule must be in the future.");
+      return;
+    }
+    setScheduleError("");
     addPublicArea(newArea);
     setIsAddModalOpen(false);
     // Reset form
@@ -658,7 +670,10 @@ export default function PublicAreaCleaning() {
           currentUserRole === "Executive Housekeeper" && (
             <div className="flex items-center gap-2">
               <Button
-                onClick={() => setIsAddModalOpen(true)}
+                onClick={() => {
+                  setScheduleError("");
+                  setIsAddModalOpen(true);
+                }}
                 className="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs flex items-center justify-center gap-1.5 rounded-xl h-9 px-3.5 shadow-sm transition-all whitespace-nowrap shrink-0"
               >
                 <Plus className="h-4 w-4" /> Add Public Area
@@ -1216,7 +1231,7 @@ export default function PublicAreaCleaning() {
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[9px] uppercase font-bold">Next Clean Schedule</span>
-                    <span className="text-emerald-700 font-bold">{selectedArea.nextCleaning}</span>
+                    <span className="text-emerald-700 font-bold">{formatDateTimeDisplay(selectedArea.nextCleaning) || selectedArea.nextCleaning}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[9px] uppercase font-bold">Last Cleaned</span>
@@ -1506,7 +1521,10 @@ export default function PublicAreaCleaning() {
       {/* CRUD: Add Public Area Modal */}
       <Modal
         open={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setScheduleError("");
+          setIsAddModalOpen(false);
+        }}
         title="Add New Public Area Space"
         size="md"
       >
@@ -1625,13 +1643,20 @@ export default function PublicAreaCleaning() {
               </SelectInput>
             </FormField>
 
-            <FormField label="Next Cleaning Schedule *">
-              <TextInput
-                placeholder="e.g. 16 Jul 04:30 PM"
+            <FormField label="Next Cleaning Schedule *" required>
+              <DateTimePicker
                 value={newArea.nextCleaning}
-                onChange={(e) => setNewArea({ ...newArea, nextCleaning: e.target.value })}
-                required
+                onChange={(val) => {
+                  setNewArea({ ...newArea, nextCleaning: val });
+                  if (scheduleError) setScheduleError("");
+                }}
+                minDateTime={new Date().toISOString()}
+                error={Boolean(scheduleError)}
+                placeholder="Select date & time"
               />
+              {scheduleError && (
+                <p className="mt-1 text-[11px] font-semibold text-red-500">{scheduleError}</p>
+              )}
             </FormField>
           </div>
 
