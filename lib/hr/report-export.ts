@@ -146,5 +146,5 @@ export function exportGenericReport<T extends Record<string, unknown>>(
     return;
   }
 
-  exportTableAsPdf(title, columns, rows);
+  exportTableAsPdf(title, columns, rows, `${baseName}.pdf`);
 }

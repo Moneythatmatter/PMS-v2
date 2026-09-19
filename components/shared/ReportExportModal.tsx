@@ -37,7 +37,7 @@ const formatOptions: {
   {
     id: "pdf",
     label: "PDF",
-    description: "Print or save as PDF",
+    description: "Download PDF document (.pdf)",
     icon: <FileCode className="h-4 w-4 text-rose-600" />,
   },
 ];

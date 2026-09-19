@@ -241,7 +241,7 @@ export default function GoodsReceiptNotePage() {
       vehicleNumber: formVehicleNo,
       deliveryChallan: formChallanNo,
       totalAmount: items.reduce((s, l) => s + l.receivedValue, 0),
-        remarks: formRemarks,
+      remarks: formRemarks,
       items,
       inspectionDetails: {
         status: "Pending",
@@ -269,7 +269,7 @@ export default function GoodsReceiptNotePage() {
     try {
       const created = await psGrnService.create(newRecord);
       await reload();
-    setCreateDrawerOpen(false);
+      setCreateDrawerOpen(false);
 
       const nextGRNNo = created.grnNumber;
       const batchCount = items.reduce((s, l) => s + l.batchAllocations.length, 0);
@@ -279,11 +279,11 @@ export default function GoodsReceiptNotePage() {
         `✓ Quality Inspection task auto-created`,
         `✓ Stock posts after QC pass — vendor invoice uploaded separately for 3-way match`,
       ]);
-    setSuccessModalData({
-      grnNumber: nextGRNNo,
-      poNumber: currentPO.poNumber,
-      actionType,
-    });
+      setSuccessModalData({
+        grnNumber: nextGRNNo,
+        poNumber: currentPO.poNumber,
+        actionType,
+      });
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to create GRN");
     } finally {
@@ -554,7 +554,7 @@ export default function GoodsReceiptNotePage() {
               className="h-9 w-full text-xs rounded-xl"
             />
           </FormField>
-          </div>
+        </div>
       </OperationsFilterDrawer>
 
       {/* CORE DATA TABLE */}
@@ -564,14 +564,14 @@ export default function GoodsReceiptNotePage() {
             Loading GRNs…
           </div>
         ) : (
-        <ModuleDataTable
-          columns={columns}
-          rows={filteredGRNs}
-          emptyMessage="No Goods Receipt Notes found."
-          onRowClick={(r) => setSelectedGRN(normalizeGrnRecord(r as GRNRecord))}
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-        />
+          <ModuleDataTable
+            columns={columns}
+            rows={filteredGRNs}
+            emptyMessage="No Goods Receipt Notes found."
+            onRowClick={(r) => setSelectedGRN(normalizeGrnRecord(r as GRNRecord))}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+          />
         )}
       </div>
 
@@ -841,12 +841,12 @@ export default function GoodsReceiptNotePage() {
                       <div className="md:col-span-8 text-[10px] font-bold text-emerald-800">
                         Batch #{bIdx + 1}
                       </div>
-                    <div>
+                      <div>
                         <span className="text-[10px] text-slate-500 block mb-1">Batch No.</span>
-                      <TextInput
+                        <TextInput
                           value={batch.batchNumber}
                           onChange={(e) =>
-                          setFormItems(
+                            setFormItems(
                               formItems.map((l) =>
                                 l.id === item.id ? updateLineBatch(l, batch.id, { batchNumber: e.target.value }) : l,
                               ),
@@ -871,9 +871,9 @@ export default function GoodsReceiptNotePage() {
                             );
                           }}
                           className="h-8 text-xs text-center font-bold"
-                      />
-                    </div>
-                    <div>
+                        />
+                      </div>
+                      <div>
                         <span className="text-[10px] text-slate-500 block mb-1">Expiry</span>
                         <TextInput
                           type="date"
@@ -887,10 +887,10 @@ export default function GoodsReceiptNotePage() {
                           }
                           className="h-8 text-xs"
                         />
-                    </div>
-                    <div>
+                      </div>
+                      <div>
                         <span className="text-[10px] text-slate-500 block mb-1">MFG Date</span>
-                      <TextInput
+                        <TextInput
                           type="date"
                           value={batch.mfgDate ?? ""}
                           onChange={(e) =>
@@ -901,11 +901,11 @@ export default function GoodsReceiptNotePage() {
                             )
                           }
                           className="h-8 text-xs"
-                      />
-                    </div>
-                    <div>
+                        />
+                      </div>
+                      <div>
                         <span className="text-[10px] text-slate-500 block mb-1">Warehouse</span>
-                      <TextInput
+                        <TextInput
                           value={batch.storageWarehouse}
                           onChange={(e) =>
                             setFormItems(
@@ -915,11 +915,11 @@ export default function GoodsReceiptNotePage() {
                             )
                           }
                           className="h-8 text-xs"
-                      />
-                    </div>
-                    <div>
+                        />
+                      </div>
+                      <div>
                         <span className="text-[10px] text-slate-500 block mb-1">Location (Bin)</span>
-                      <TextInput
+                        <TextInput
                           value={batch.storageLocation ?? ""}
                           onChange={(e) =>
                             setFormItems(
@@ -930,16 +930,16 @@ export default function GoodsReceiptNotePage() {
                           }
                           className="h-8 text-xs"
                           placeholder="Optional"
-                      />
-                    </div>
-                    <div>
+                        />
+                      </div>
+                      <div>
                         <span className="text-[10px] text-slate-500 block mb-1">Lot Value</span>
-                      <TextInput
+                        <TextInput
                           value={`₹${(batch.receivedQty * item.unitRate).toLocaleString("en-IN")}`}
                           readOnly
                           className="h-8 text-xs font-bold bg-slate-50"
-                      />
-                    </div>
+                        />
+                      </div>
                       <div className="flex items-end">
                         {item.batchAllocations.length > 1 && (
                           <Button
@@ -950,9 +950,9 @@ export default function GoodsReceiptNotePage() {
                                 formItems.map((l) =>
                                   l.id === item.id
                                     ? syncLineTotals({
-                                        ...l,
-                                        batchAllocations: l.batchAllocations.filter((b) => b.id !== batch.id),
-                                      })
+                                      ...l,
+                                      batchAllocations: l.batchAllocations.filter((b) => b.id !== batch.id),
+                                    })
                                     : l,
                                 ),
                               )
@@ -1196,17 +1196,17 @@ export default function GoodsReceiptNotePage() {
                     {selectedGRN.items.flatMap((item) =>
                       item.batchAllocations.map((batch) => (
                         <tr key={`${item.id}-${batch.id}`}>
-                        <td className="py-2.5 px-2 font-bold text-slate-900">
-                          {item.productName}
+                          <td className="py-2.5 px-2 font-bold text-slate-900">
+                            {item.productName}
                             <div className="text-[10px] font-normal text-slate-400">{item.productCode}</div>
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-slate-600">{item.orderedQty} {item.unit}</td>
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-slate-600">{item.orderedQty} {item.unit}</td>
                           <td className="py-2.5 px-2 text-center font-bold text-slate-800">{batch.receivedQty} {item.unit}</td>
                           <td className="py-2.5 px-2 text-center font-extrabold text-emerald-700">{batch.acceptedQty} {item.unit}</td>
                           <td className="py-2.5 px-2 text-center font-extrabold text-red-600">{batch.rejectedQty} {item.unit}</td>
                           <td className="py-2.5 px-2 font-mono text-slate-700">{batch.batchNumber}</td>
                           <td className="py-2.5 px-2 text-slate-600">{batch.expiryDate || "—"}</td>
-                      </tr>
+                        </tr>
                       )),
                     )}
                   </tbody>
@@ -1220,21 +1220,21 @@ export default function GoodsReceiptNotePage() {
                 <span className="flex items-center gap-2">
                   <ShieldCheck className="h-4 w-4 text-blue-600" /> Quality Inspection Sign-off
                 </span>
-                {renderInspectionBadge(selectedGRN.inspectionDetails.status)}
+                {renderInspectionBadge(selectedGRN.inspectionDetails?.status ?? "")}
               </h4>
 
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <span className="text-[10px] text-slate-400 block font-medium">Inspector / Auditor</span>
-                  <span className="font-bold text-slate-900">{selectedGRN.inspectionDetails.inspector}</span>
+                  <span className="font-bold text-slate-900">{selectedGRN.inspectionDetails?.inspector}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 block font-medium">Inspection Date</span>
-                  <span className="font-semibold text-slate-800">{selectedGRN.inspectionDetails.inspectionDate}</span>
+                  <span className="font-semibold text-slate-800">{selectedGRN.inspectionDetails?.inspectionDate}</span>
                 </div>
                 <div className="col-span-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200/70">
                   <span className="text-[10px] text-slate-400 block font-medium">QC Notes & Remarks</span>
-                  <p className="text-xs font-medium text-slate-700 mt-0.5">{selectedGRN.inspectionDetails.comments}</p>
+                  <p className="text-xs font-medium text-slate-700 mt-0.5">{selectedGRN.inspectionDetails?.comments}</p>
                 </div>
               </div>
             </div>

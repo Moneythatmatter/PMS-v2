@@ -403,10 +403,27 @@ export function AttendanceView() {
   }) => {
     setExporting(true);
     try {
-      const rows = await hrAttendanceService.listRange(options.fromDate, options.toDate);
-      const mapped = rows.map((row) =>
-        mapAttendanceFromApi(row, employeeLookup.get(String(row.employeeId))),
-      );
+      let rows: Record<string, unknown>[] = [];
+      try {
+        rows = await hrAttendanceService.listRange(options.fromDate, options.toDate);
+      } catch (err) {
+        console.warn("listRange failed, checking fallback records:", err);
+        rows = [];
+      }
+
+      let mapped: AttendanceRecord[] = [];
+      if (rows && rows.length > 0) {
+        mapped = rows.map((row) =>
+          mapAttendanceFromApi(row, employeeLookup.get(String(row.employeeId))),
+        );
+      } else if (
+        options.fromDate === selectedDate &&
+        options.toDate === selectedDate &&
+        records.length > 0
+      ) {
+        mapped = records;
+      }
+
       const filtered = filterAttendanceForExport(mapped, employeeLookup, {
         searchTerm,
         department: selectedDepartment,
