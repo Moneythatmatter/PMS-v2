@@ -16,6 +16,7 @@ export const maintenanceNavItems: ModuleNavItem[] = [
       { label: "Problem Categories", href: "/maintenance/masters/problem-categories", icon: "alert-triangle" },
       { label: "Root Causes", href: "/maintenance/masters/root-causes", icon: "check-square" },
       { label: "PM Task Templates", href: "/maintenance/masters/pm-templates", icon: "repeat" },
+      { label: "Vendor Master", href: "/maintenance/masters/vendors", icon: "truck" },
     ],
   },
 ];

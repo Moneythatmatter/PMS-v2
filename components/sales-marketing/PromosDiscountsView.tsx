@@ -90,17 +90,17 @@ export function PromosDiscountsView() {
 
   // Form State (Create / Edit Promotion)
   const [promoForm, setPromoForm] = useState({
-    uniquePromoId: `PRM-${Math.floor(100 + Math.random() * 900)}`,
+    uniquePromoId: "",
     name: "",
     promoCode: "",
     description: "",
     applicableTo: "Rooms" as ApplicableService,
     discountType: "Percentage" as DiscountType,
-    rawDiscountNumber: 10,
-    minSpend: 5000,
-    minNights: 1,
-    startDate: "2026-09-01",
-    endDate: "2026-12-31",
+    rawDiscountNumber: 0,
+    minSpend: 0,
+    minNights: 0,
+    startDate: "",
+    endDate: "",
     status: "Active" as PromoStatus,
   });
 
@@ -108,8 +108,8 @@ export function PromosDiscountsView() {
   const [applyForm, setApplyForm] = useState({
     promoCode: "",
     serviceType: "Rooms" as ApplicableService,
-    billAmount: 10000,
-    appliedByStaffRole: "Front Desk Staff",
+    billAmount: 0,
+    appliedByStaffRole: "",
   });
   const [applyValidationResult, setApplyValidationResult] = useState<PromoValidationResult | null>(null);
 
@@ -227,17 +227,17 @@ export function PromosDiscountsView() {
   // Reset Form
   const resetForm = () => {
     setPromoForm({
-      uniquePromoId: `PRM-${Math.floor(100 + Math.random() * 900)}`,
+      uniquePromoId: "",
       name: "",
       promoCode: "",
       description: "",
       applicableTo: "Rooms",
       discountType: "Percentage",
-      rawDiscountNumber: 10,
-      minSpend: 5000,
-      minNights: 1,
-      startDate: todayIsoDate(),
-      endDate: todayIsoDate(),
+      rawDiscountNumber: 0,
+      minSpend: 0,
+      minNights: 0,
+      startDate: "",
+      endDate: "",
       status: "Active",
     });
   };
@@ -773,11 +773,9 @@ export function PromosDiscountsView() {
                     value={promoForm.discountType}
                     onChange={(e) => {
                       const newType = e.target.value as DiscountType;
-                      const defaultVal = newType === "Percentage" ? 15 : 1500;
                       setPromoForm({
                         ...promoForm,
                         discountType: newType,
-                        rawDiscountNumber: defaultVal,
                       });
                     }}
                     className="w-full text-xs font-bold rounded-xl border border-slate-200 p-2.5 bg-white text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
@@ -803,8 +801,8 @@ export function PromosDiscountsView() {
                       min={1}
                       max={promoForm.discountType === "Percentage" ? 100 : undefined}
                       placeholder={promoForm.discountType === "Percentage" ? "e.g. 10, 20" : "e.g. 1500, 50000"}
-                      value={promoForm.rawDiscountNumber}
-                      onChange={(e) => setPromoForm({ ...promoForm, rawDiscountNumber: Number(e.target.value) })}
+                      value={promoForm.rawDiscountNumber || ""}
+                      onChange={(e) => setPromoForm({ ...promoForm, rawDiscountNumber: Number(e.target.value) || 0 })}
                       className="w-full text-xs font-extrabold rounded-xl border border-slate-200 pl-8 pr-3 py-2 bg-white text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
                     />
                   </div>
@@ -839,8 +837,8 @@ export function PromosDiscountsView() {
                       type="number"
                       min={0}
                       placeholder="e.g. 5000 (0 for no min spend)"
-                      value={promoForm.minSpend || 0}
-                      onChange={(e) => setPromoForm({ ...promoForm, minSpend: Number(e.target.value) })}
+                      value={promoForm.minSpend || ""}
+                      onChange={(e) => setPromoForm({ ...promoForm, minSpend: Number(e.target.value) || 0 })}
                       className="w-full text-xs font-bold rounded-xl border border-slate-200 p-2 bg-white text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
                     />
                     <span className="text-[9px] text-slate-400 block mt-0.5">
@@ -857,8 +855,8 @@ export function PromosDiscountsView() {
                         type="number"
                         min={1}
                         placeholder="e.g. 2 nights"
-                        value={promoForm.minNights || 1}
-                        onChange={(e) => setPromoForm({ ...promoForm, minNights: Number(e.target.value) })}
+                        value={promoForm.minNights || ""}
+                        onChange={(e) => setPromoForm({ ...promoForm, minNights: Number(e.target.value) || 0 })}
                         className="w-full text-xs font-bold rounded-xl border border-slate-200 p-2 bg-white text-slate-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
                       />
                       <span className="text-[9px] text-slate-400 block mt-0.5">
@@ -976,8 +974,9 @@ export function PromosDiscountsView() {
                     type="number"
                     required
                     min={1}
-                    value={applyForm.billAmount}
-                    onChange={(e) => setApplyForm({ ...applyForm, billAmount: Number(e.target.value) })}
+                    placeholder="e.g. 10000"
+                    value={applyForm.billAmount || ""}
+                    onChange={(e) => setApplyForm({ ...applyForm, billAmount: Number(e.target.value) || 0 })}
                     className="w-full text-xs font-bold rounded-xl border border-slate-200 p-2.5 bg-white text-slate-900"
                   />
                 </div>

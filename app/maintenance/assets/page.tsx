@@ -1,11 +1,5 @@
-import { MaintenanceBlankView } from "@/components/maintenance/MaintenanceBlankView";
+import { MaintenanceAssetsView } from "@/components/maintenance/MaintenanceAssetsView";
 
 export default function AssetsPage() {
-  return (
-    <MaintenanceBlankView
-      title="Assets & Equipment"
-      description="Service-critical hotel machinery ledger, warranties, AMC contracts, and complete lifetime repair service history."
-      actionLabel="+ Register Asset"
-    />
-  );
+  return <MaintenanceAssetsView />;
 }

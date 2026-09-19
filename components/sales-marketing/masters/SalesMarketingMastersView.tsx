@@ -304,9 +304,9 @@ export function SalesMarketingMastersView({ initialTab = "venues-halls" }: Props
   const [venueFormData, setVenueFormData] = useState<Omit<VenueSpaceMasterItem, "venueId">>({
     venueName: "",
     venueType: "Banquet Hall",
-    minimumCapacity: 100,
-    maximumCapacity: 500,
-    location: "Ground Floor - West Wing",
+    minimumCapacity: 0,
+    maximumCapacity: 0,
+    location: "",
     status: "Active",
     description: "",
   });
@@ -338,8 +338,8 @@ export function SalesMarketingMastersView({ initialTab = "venues-halls" }: Props
     setVenueFormData({
       venueName: "",
       venueType: venueTypes[0] || "Banquet Hall",
-      minimumCapacity: 100,
-      maximumCapacity: 500,
+      minimumCapacity: 0,
+      maximumCapacity: 0,
       location: "",
       status: "Active",
       description: "",
@@ -1633,8 +1633,8 @@ export function SalesMarketingMastersView({ initialTab = "venues-halls" }: Props
                   type="number"
                   min={1}
                   placeholder="e.g. 100"
-                  value={venueFormData.minimumCapacity}
-                  onChange={(e) => setVenueFormData({ ...venueFormData, minimumCapacity: Number(e.target.value) || 1 })}
+                  value={venueFormData.minimumCapacity || ""}
+                  onChange={(e) => setVenueFormData({ ...venueFormData, minimumCapacity: Number(e.target.value) || 0 })}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-semibold text-slate-900 text-xs focus:ring-1 focus:ring-emerald-600 focus:outline-none"
                 />
               </div>
@@ -1645,8 +1645,8 @@ export function SalesMarketingMastersView({ initialTab = "venues-halls" }: Props
                   type="number"
                   min={1}
                   placeholder="e.g. 500"
-                  value={venueFormData.maximumCapacity}
-                  onChange={(e) => setVenueFormData({ ...venueFormData, maximumCapacity: Number(e.target.value) || 1 })}
+                  value={venueFormData.maximumCapacity || ""}
+                  onChange={(e) => setVenueFormData({ ...venueFormData, maximumCapacity: Number(e.target.value) || 0 })}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-semibold text-slate-900 text-xs focus:ring-1 focus:ring-emerald-600 focus:outline-none"
                 />
               </div>

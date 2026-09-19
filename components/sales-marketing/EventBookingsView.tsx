@@ -292,31 +292,31 @@ export function EventBookingsView() {
   // Dates & Venue
   const [formStartDate, setFormStartDate] = useState(todayIsoDate());
   const [formEndDate, setFormEndDate] = useState(todayIsoDate());
-  const [formStartTime, setFormStartTime] = useState("06:00 PM");
-  const [formEndTime, setFormEndTime] = useState("11:30 PM");
-  const [formVenueId, setFormVenueId] = useState<string>("VEN-001");
-  const [formVenueOrRoom, setFormVenueOrRoom] = useState("Grand Ballroom");
-  const [formGuestCount, setFormGuestCount] = useState<number>(250);
-  const [formRoomCount, setFormRoomCount] = useState<number>(1);
-  const [formContractValue, setFormContractValue] = useState<number>(500000);
-  const [formAdvanceReceived, setFormAdvanceReceived] = useState<number>(100000);
+  const [formStartTime, setFormStartTime] = useState("");
+  const [formEndTime, setFormEndTime] = useState("");
+  const [formVenueId, setFormVenueId] = useState<string>("");
+  const [formVenueOrRoom, setFormVenueOrRoom] = useState("");
+  const [formGuestCount, setFormGuestCount] = useState<number>(0);
+  const [formRoomCount, setFormRoomCount] = useState<number>(0);
+  const [formContractValue, setFormContractValue] = useState<number>(0);
+  const [formAdvanceReceived, setFormAdvanceReceived] = useState<number>(0);
   const [formBookingStatus, setFormBookingStatus] = useState<BookingStatus>("Confirmed");
-  const [formCoordinatorName, setFormCoordinatorName] = useState("Vikram Malhotra");
-  const [formCoordinatorMobile, setFormCoordinatorMobile] = useState("+91 98111 22334");
+  const [formCoordinatorName, setFormCoordinatorName] = useState("");
+  const [formCoordinatorMobile, setFormCoordinatorMobile] = useState("");
 
   // Specific Type fields
-  const [formRoomType, setFormRoomType] = useState("Deluxe King Room");
-  const [formRatePlan, setFormRatePlan] = useState("Corporate Bed & Breakfast");
-  const [formAdults, setFormAdults] = useState(2);
+  const [formRoomType, setFormRoomType] = useState("");
+  const [formRatePlan, setFormRatePlan] = useState("");
+  const [formAdults, setFormAdults] = useState(0);
   const [formChildren, setFormChildren] = useState(0);
-  const [formExpectedArrival, setFormExpectedArrival] = useState("02:00 PM");
-  const [formSetupLayout, setFormSetupLayout] = useState("Round Banquet");
-  const [formMenuRequirement, setFormMenuRequirement] = useState("Standard Premium Buffet");
+  const [formExpectedArrival, setFormExpectedArrival] = useState("");
+  const [formSetupLayout, setFormSetupLayout] = useState("");
+  const [formMenuRequirement, setFormMenuRequirement] = useState("");
   const [formSpecialRequests, setFormSpecialRequests] = useState("");
-  const [formTableCount, setFormTableCount] = useState(2);
-  const [formDiningPackage, setFormDiningPackage] = useState("Chef Special Menu");
-  const [formPoolPackage, setFormPoolPackage] = useState("Private Pool Deck Access");
-  const [formPoolRequiresBeo, setFormPoolRequiresBeo] = useState(true);
+  const [formTableCount, setFormTableCount] = useState(0);
+  const [formDiningPackage, setFormDiningPackage] = useState("");
+  const [formPoolPackage, setFormPoolPackage] = useState("");
+  const [formPoolRequiresBeo, setFormPoolRequiresBeo] = useState(false);
 
   // Contact quick creation inline
   const [isQuickContactOpen, setIsQuickContactOpen] = useState(false);
@@ -332,7 +332,7 @@ export function EventBookingsView() {
 
   // Quick Payment Modal State
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState<number>(50000);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMode, setPaymentMode] = useState("UPI / Bank Transfer");
 
   // Helper to get booking type display configuration
@@ -526,18 +526,39 @@ export function EventBookingsView() {
     setFormLeadId(undefined);
     setFormStartDate(todayIsoDate());
     setFormEndDate(todayIsoDate());
-    setFormStartTime("06:00 PM");
-    setFormEndTime("11:30 PM");
-    setFormVenueId(venues[0]?.venueId ?? "");
-    setFormVenueOrRoom(venues[0]?.venueName ?? "");
-    setFormGuestCount(250);
-    setFormRoomCount(1);
-    setFormContractValue(500000);
-    setFormAdvanceReceived(100000);
+    setFormStartTime("");
+    setFormEndTime("");
+    setFormVenueId("");
+    setFormVenueOrRoom("");
+    setFormGuestCount(0);
+    setFormRoomCount(0);
+    setFormContractValue(0);
+    setFormAdvanceReceived(0);
     setFormBookingStatus("Confirmed");
+    setFormCoordinatorName("");
+    setFormCoordinatorMobile("");
+    setFormRoomType("");
+    setFormRatePlan("");
+    setFormAdults(0);
+    setFormChildren(0);
+    setFormExpectedArrival("");
+    setFormSetupLayout("");
+    setFormMenuRequirement("");
+    setFormSpecialRequests("");
+    setFormTableCount(0);
+    setFormDiningPackage("");
+    setFormPoolPackage("");
+    setFormPoolRequiresBeo(false);
     setIsCreateModalOpen(true);
     setCreatedBookingResult(null);
     setShowHandoverDialog(false);
+
+    // Reset quick contact form
+    setQuickContactName("");
+    setQuickContactMobile("");
+    setQuickContactEmail("");
+    setQuickContactCompany("");
+    setIsQuickContactOpen(false);
   };
 
   useEffect(() => {
@@ -598,6 +619,13 @@ export function EventBookingsView() {
     setIsCreateModalOpen(true);
     setCreatedBookingResult(null);
     setShowHandoverDialog(false);
+
+    // Reset quick contact form
+    setQuickContactName("");
+    setQuickContactMobile("");
+    setQuickContactEmail("");
+    setQuickContactCompany("");
+    setIsQuickContactOpen(false);
   };
 
   // Select Contact from Master
@@ -612,17 +640,40 @@ export function EventBookingsView() {
   // Create Quick Contact Inline
   const handleCreateQuickContact = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quickContactName || !quickContactMobile) return;
+    const trimmedName = quickContactName.trim();
+    const trimmedMobile = quickContactMobile.trim();
+    const trimmedEmail = quickContactEmail.trim();
+    const trimmedCompany = quickContactCompany.trim();
+
+    if (!trimmedName) {
+      setToastMessage("Please enter the contact full name.");
+      return;
+    }
+
+    if (!trimmedMobile) {
+      setToastMessage("Please enter a valid mobile number.");
+      return;
+    }
+
+    if (!/^\d{10,15}$/.test(trimmedMobile)) {
+      setToastMessage("Mobile number must be between 10 and 15 numeric digits.");
+      return;
+    }
+
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setToastMessage("Please enter a valid email address (e.g. name@example.com).");
+      return;
+    }
 
     try {
       const row = await smContactService.create(
         mapContactToApi({
-          contactName: quickContactName,
+          contactName: trimmedName,
           contactType: "Individual",
           category: "Regular Customer",
-          mobileNumber: quickContactMobile,
-          emailAddress: quickContactEmail,
-          companyName: quickContactCompany,
+          mobileNumber: trimmedMobile,
+          emailAddress: trimmedEmail || undefined,
+          companyName: trimmedCompany || undefined,
           createdFrom: "Direct Walk-In",
           status: "Active",
         }),
@@ -630,8 +681,14 @@ export function EventBookingsView() {
       const newContact = mapContactFromApi(row) as CustomerMasterContact;
       setContacts((prev) => [newContact, ...prev]);
       handleSelectContact(newContact);
+
+      // Cleanly reset quick contact form state
+      setQuickContactName("");
+      setQuickContactMobile("");
+      setQuickContactEmail("");
+      setQuickContactCompany("");
       setIsQuickContactOpen(false);
-      setToastMessage(`✓ Customer "${quickContactName}" created and linked!`);
+      setToastMessage(`✓ Customer "${trimmedName}" created and linked!`);
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : "Failed to create contact");
     }
@@ -1734,7 +1791,13 @@ export function EventBookingsView() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setIsQuickContactOpen(true)}
+                      onClick={() => {
+                        setQuickContactName("");
+                        setQuickContactMobile("");
+                        setQuickContactEmail("");
+                        setQuickContactCompany("");
+                        setIsQuickContactOpen(true);
+                      }}
                       className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer flex items-center gap-1"
                     >
                       + Create New Contact
@@ -1812,18 +1875,20 @@ export function EventBookingsView() {
                           className="p-1.5 text-xs rounded border border-slate-200"
                         />
                         <input
-                          type="text"
+                          type="tel"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           required
-                          placeholder="Mobile Number *"
+                          placeholder="Mobile Number (Digits only) *"
                           value={quickContactMobile}
-                          onChange={(e) => setQuickContactMobile(e.target.value)}
-                          className="p-1.5 text-xs rounded border border-slate-200"
+                          onChange={(e) => setQuickContactMobile(e.target.value.replace(/\D/g, "").slice(0, 15))}
+                          className="p-1.5 text-xs rounded border border-slate-200 font-mono"
                         />
                         <input
                           type="email"
-                          placeholder="Email Address"
+                          placeholder="Email Address (e.g. name@example.com)"
                           value={quickContactEmail}
-                          onChange={(e) => setQuickContactEmail(e.target.value)}
+                          onChange={(e) => setQuickContactEmail(e.target.value.trim())}
                           className="p-1.5 text-xs rounded border border-slate-200"
                         />
                         <input
@@ -1839,7 +1904,13 @@ export function EventBookingsView() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => setIsQuickContactOpen(false)}
+                          onClick={() => {
+                            setQuickContactName("");
+                            setQuickContactMobile("");
+                            setQuickContactEmail("");
+                            setQuickContactCompany("");
+                            setIsQuickContactOpen(false);
+                          }}
                           className="h-7 text-xs"
                         >
                           Cancel
@@ -1897,8 +1968,9 @@ export function EventBookingsView() {
                           <input
                             type="number"
                             min={1}
-                            value={formRoomCount}
-                            onChange={(e) => setFormRoomCount(Number(e.target.value) || 1)}
+                            placeholder="e.g. 1"
+                            value={formRoomCount || ""}
+                            onChange={(e) => setFormRoomCount(Number(e.target.value) || 0)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-semibold text-xs"
                           />
                         </div>
@@ -1909,6 +1981,7 @@ export function EventBookingsView() {
                             onChange={(e) => setFormRoomType(e.target.value)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white font-medium text-xs"
                           >
+                            <option value="">-- Select Room Type --</option>
                             <option value="Deluxe King Room">Deluxe King Room</option>
                             <option value="Executive Suite">Executive Suite</option>
                             <option value="Twin Bed Standard">Twin Bed Standard</option>
@@ -1919,6 +1992,7 @@ export function EventBookingsView() {
                           <label className="block font-bold text-slate-700 mb-1 text-[11px]">Rate Plan</label>
                           <input
                             type="text"
+                            placeholder="e.g. Bed & Breakfast"
                             value={formRatePlan}
                             onChange={(e) => setFormRatePlan(e.target.value)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white font-medium text-xs"
@@ -1931,9 +2005,10 @@ export function EventBookingsView() {
                           <label className="block font-bold text-slate-700 mb-1 text-[11px]">Adults</label>
                           <input
                             type="number"
-                            min={1}
-                            value={formAdults}
-                            onChange={(e) => setFormAdults(Number(e.target.value) || 1)}
+                            min={0}
+                            placeholder="e.g. 2"
+                            value={formAdults || ""}
+                            onChange={(e) => setFormAdults(Number(e.target.value) || 0)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono text-xs"
                           />
                         </div>
@@ -1942,7 +2017,8 @@ export function EventBookingsView() {
                           <input
                             type="number"
                             min={0}
-                            value={formChildren}
+                            placeholder="0"
+                            value={formChildren || ""}
                             onChange={(e) => setFormChildren(Number(e.target.value) || 0)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono text-xs"
                           />
@@ -1951,6 +2027,7 @@ export function EventBookingsView() {
                           <label className="block font-bold text-slate-700 mb-1 text-[11px]">Arrival Time</label>
                           <input
                             type="text"
+                            placeholder="e.g. 02:00 PM"
                             value={formExpectedArrival}
                             onChange={(e) => setFormExpectedArrival(e.target.value)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
@@ -2002,6 +2079,7 @@ export function EventBookingsView() {
                           <label className="block font-bold text-slate-700 mb-1 text-[11px]">Start Time</label>
                           <input
                             type="text"
+                            placeholder="e.g. 06:00 PM"
                             value={formStartTime}
                             onChange={(e) => setFormStartTime(e.target.value)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
@@ -2011,6 +2089,7 @@ export function EventBookingsView() {
                           <label className="block font-bold text-slate-700 mb-1 text-[11px]">End Time</label>
                           <input
                             type="text"
+                            placeholder="e.g. 11:30 PM"
                             value={formEndTime}
                             onChange={(e) => setFormEndTime(e.target.value)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
@@ -2032,6 +2111,7 @@ export function EventBookingsView() {
                             }}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs"
                           >
+                            <option value="">-- Select Venue / Space --</option>
                             {venues.map((v) => (
                               <option key={v.venueId} value={v.venueId}>
                                 {v.venueName} ({v.minimumCapacity}–{v.maximumCapacity} Pax) • {v.location}
@@ -2044,8 +2124,9 @@ export function EventBookingsView() {
                           <input
                             type="number"
                             min={1}
-                            value={formGuestCount}
-                            onChange={(e) => setFormGuestCount(Number(e.target.value) || 1)}
+                            placeholder="e.g. 250"
+                            value={formGuestCount || ""}
+                            onChange={(e) => setFormGuestCount(Number(e.target.value) || 0)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-semibold text-xs"
                           />
                         </div>
@@ -2059,6 +2140,7 @@ export function EventBookingsView() {
                             onChange={(e) => setFormSetupLayout(e.target.value)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
                           >
+                            <option value="">-- Select Setup Layout --</option>
                             <option value="Round Banquet">Round Banquet</option>
                             <option value="Theatre">Theatre</option>
                             <option value="Classroom">Classroom</option>
@@ -2072,6 +2154,7 @@ export function EventBookingsView() {
                           <label className="block font-bold text-slate-700 mb-1 text-[11px]">Food / Menu Plan</label>
                           <input
                             type="text"
+                            placeholder="e.g. Standard Premium Buffet"
                             value={formMenuRequirement}
                             onChange={(e) => setFormMenuRequirement(e.target.value)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
@@ -2098,6 +2181,7 @@ export function EventBookingsView() {
                           <label className="block font-bold text-slate-700 mb-1 text-[11px]">Dining Time</label>
                           <input
                             type="text"
+                            placeholder="e.g. 08:00 PM"
                             value={formStartTime}
                             onChange={(e) => setFormStartTime(e.target.value)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
@@ -2111,8 +2195,9 @@ export function EventBookingsView() {
                           <input
                             type="number"
                             min={1}
-                            value={formGuestCount}
-                            onChange={(e) => setFormGuestCount(Number(e.target.value) || 1)}
+                            placeholder="e.g. 4"
+                            value={formGuestCount || ""}
+                            onChange={(e) => setFormGuestCount(Number(e.target.value) || 0)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono text-xs"
                           />
                         </div>
@@ -2121,8 +2206,9 @@ export function EventBookingsView() {
                           <input
                             type="number"
                             min={1}
-                            value={formTableCount}
-                            onChange={(e) => setFormTableCount(Number(e.target.value) || 1)}
+                            placeholder="e.g. 2"
+                            value={formTableCount || ""}
+                            onChange={(e) => setFormTableCount(Number(e.target.value) || 0)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono text-xs"
                           />
                         </div>
@@ -2130,6 +2216,7 @@ export function EventBookingsView() {
                           <label className="block font-bold text-slate-700 mb-1 text-[11px]">Dining Package</label>
                           <input
                             type="text"
+                            placeholder="e.g. Chef Special Menu"
                             value={formDiningPackage}
                             onChange={(e) => setFormDiningPackage(e.target.value)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
@@ -2156,6 +2243,7 @@ export function EventBookingsView() {
                           <label className="block font-bold text-slate-700 mb-1 text-[11px]">Time Slot</label>
                           <input
                             type="text"
+                            placeholder="e.g. 07:00 AM - 11:00 AM"
                             value={formStartTime}
                             onChange={(e) => setFormStartTime(e.target.value)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
@@ -2169,8 +2257,9 @@ export function EventBookingsView() {
                           <input
                             type="number"
                             min={1}
-                            value={formGuestCount}
-                            onChange={(e) => setFormGuestCount(Number(e.target.value) || 1)}
+                            placeholder="e.g. 10"
+                            value={formGuestCount || ""}
+                            onChange={(e) => setFormGuestCount(Number(e.target.value) || 0)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono text-xs"
                           />
                         </div>
@@ -2178,6 +2267,7 @@ export function EventBookingsView() {
                           <label className="block font-bold text-slate-700 mb-1 text-[11px]">Access Type</label>
                           <input
                             type="text"
+                            placeholder="e.g. Private Pool Deck Access"
                             value={formPoolPackage}
                             onChange={(e) => setFormPoolPackage(e.target.value)}
                             className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
@@ -2208,7 +2298,8 @@ export function EventBookingsView() {
                       <input
                         type="number"
                         min={0}
-                        value={formContractValue}
+                        placeholder="e.g. 500000"
+                        value={formContractValue || ""}
                         onChange={(e) => setFormContractValue(Number(e.target.value) || 0)}
                         className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-emerald-900 text-xs"
                       />
@@ -2218,7 +2309,8 @@ export function EventBookingsView() {
                       <input
                         type="number"
                         min={0}
-                        value={formAdvanceReceived}
+                        placeholder="e.g. 100000"
+                        value={formAdvanceReceived || ""}
                         onChange={(e) => setFormAdvanceReceived(Number(e.target.value) || 0)}
                         className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-semibold text-xs"
                       />
@@ -2608,7 +2700,8 @@ export function EventBookingsView() {
                 required
                 min={1}
                 max={selectedBooking.balanceDue || selectedBooking.contractValue}
-                value={paymentAmount}
+                placeholder="e.g. 50000"
+                value={paymentAmount || ""}
                 onChange={(e) => setPaymentAmount(Number(e.target.value) || 0)}
                 className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold text-emerald-900 text-xs"
               />

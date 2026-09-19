@@ -19,11 +19,6 @@ import {
   Info,
   Layers,
   Phone,
-  Radio,
-  Activity,
-  Cpu,
-  Zap,
-  Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
@@ -34,9 +29,6 @@ import {
   MOCK_ACTIVE_WORK_ORDERS,
   MOCK_ROOMS_UNDER_MAINTENANCE,
   MOCK_PM_TASKS_TODAY,
-  MOCK_RECENT_MAINTENANCE_LOG,
-  MOCK_ON_DUTY_TECHNICIANS,
-  MOCK_CRITICAL_ASSET_HEALTH,
 } from "@/app/data/maintenance/mockData";
 import {
   MaintenanceRequest,
@@ -183,23 +175,7 @@ export function MaintenanceDashboardView() {
           </p>
         </div>
 
-        {/* Card 3: Critical Issues */}
-        <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 shadow-xs hover:border-rose-300 transition">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-rose-800">Critical Issues</span>
-            <span className="rounded-md bg-rose-100 p-1.5 text-rose-700">
-              <AlertTriangle className="h-4 w-4" />
-            </span>
-          </div>
-          <p className="mt-2 text-2xl font-bold text-rose-700">
-            {MOCK_MAINTENANCE_STATS.criticalIssues.total}
-          </p>
-          <p className="mt-1 text-[11px] font-medium text-rose-600">
-            {MOCK_MAINTENANCE_STATS.criticalIssues.safetyHazardCount} Safety Hazard active
-          </p>
-        </div>
-
-        {/* Card 4: PM Due Today */}
+        {/* Card 3: PM Due Today */}
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:border-emerald-300 transition">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">PM Due Today</span>
@@ -215,11 +191,11 @@ export function MaintenanceDashboardView() {
           </p>
         </div>
 
-        {/* Card 5: Rooms Blocked */}
-        <div className="col-span-2 sm:col-span-1 rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:border-purple-300 transition">
+        {/* Card 4: Rooms Blocked */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:border-emerald-300 transition">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">Rooms Blocked</span>
-            <span className="rounded-md bg-purple-50 p-1.5 text-purple-600">
+            <span className="rounded-md bg-emerald-50 p-1.5 text-emerald-600">
               <DoorClosed className="h-4 w-4" />
             </span>
           </div>
@@ -230,485 +206,351 @@ export function MaintenanceDashboardView() {
             <span className="font-bold text-rose-600">{MOCK_MAINTENANCE_STATS.roomsUnderMaintenance.oooCount} OOO</span> · <span className="font-bold text-amber-600">{MOCK_MAINTENANCE_STATS.roomsUnderMaintenance.oosCount} OOS</span>
           </p>
         </div>
+
+        {/* Card 5: Critical Issues */}
+        <div className="col-span-2 sm:col-span-1 rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:border-rose-300 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-600">Critical Issues</span>
+            <span className="rounded-md bg-rose-50 p-1.5 text-rose-600">
+              <AlertTriangle className="h-4 w-4" />
+            </span>
+          </div>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {MOCK_MAINTENANCE_STATS.criticalIssues.total}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-500">
+            <span className="font-bold text-rose-600">{MOCK_MAINTENANCE_STATS.criticalIssues.safetyHazardCount} Safety Hazard</span> active
+          </p>
+        </div>
       </div>
 
       {/* ───────────────────────────────────────────────────────────── */}
-      {/* 2. MAIN 2-COLUMN OPERATIONAL DASHBOARD */}
+      {/* 2. CRITICAL ISSUES REQUIRING IMMEDIATE ATTENTION */}
       {/* ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        
-        {/* LEFT 8 COLUMNS */}
-        <div className="space-y-5 lg:col-span-8">
-          
-          {/* SECTION 2.1: CRITICAL ISSUES TABLE */}
-          <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 bg-slate-50/50">
-              <div className="flex items-center gap-2">
-                <span className="flex h-2 w-2 rounded-full bg-rose-500" />
-                <h2 className="text-sm font-bold text-slate-900">
-                  Critical Issues Requiring Attention
-                </h2>
-                <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200">
-                  {MOCK_CRITICAL_ISSUES.length} Action Needed
-                </span>
-              </div>
-              <Link
-                href="/maintenance/requests"
-                className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800"
-              >
-                <span>All Requests</span>
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-500">
-                  <tr>
-                    <th className="py-2.5 px-4">Location</th>
-                    <th className="py-2.5 px-3">Issue & Category</th>
-                    <th className="py-2.5 px-3">Priority</th>
-                    <th className="py-2.5 px-3">Reported By</th>
-                    <th className="py-2.5 px-3">Work Order</th>
-                    <th className="py-2.5 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {filteredCritical.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-slate-50/80 transition-colors cursor-pointer"
-                      onClick={() => setActiveDrawerItem({ type: "request", data: item })}
-                    >
-                      <td className="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">
-                        {item.location}
-                        <span className="block text-[10px] font-normal text-slate-400">
-                          {item.locationType}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <p className="font-semibold text-slate-900 line-clamp-1">{item.issueTitle}</p>
-                        <p className="text-[10px] text-slate-500">{item.category}</p>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <div className="flex flex-col gap-1 items-start">
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 text-[10px] font-bold",
-                              item.priority === "Critical"
-                                ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                : "bg-amber-50 text-amber-700 border border-amber-200"
-                            )}
-                          >
-                            {item.priority}
-                          </span>
-                          {item.isSafetyHazard && (
-                            <span className="inline-flex items-center gap-1 rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white uppercase tracking-wider">
-                              <ShieldAlert className="h-2.5 w-2.5" />
-                              Safety Hazard
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap text-slate-600">
-                        <p className="font-medium text-slate-800">{item.reportedBy}</p>
-                        <p className="text-[10px] text-slate-400">{item.reportedDept} · {item.dateTime}</p>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        {item.workOrderNo ? (
-                          <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-800 border border-slate-200">
-                            {item.workOrderNo}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic">Not Assigned</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveDrawerItem({ type: "request", data: item });
-                          }}
-                        >
-                          View
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden mb-5">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 bg-slate-50/50">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-rose-500" />
+            <h2 className="text-sm font-bold text-slate-900">
+              Critical Issues Requiring Attention
+            </h2>
+            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200">
+              {MOCK_CRITICAL_ISSUES.length} Action Needed
+            </span>
           </div>
-
-          {/* SECTION 2.2: ACTIVE WORK ORDERS TABLE */}
-          <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-            <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 bg-slate-50/50 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">
-                  Active Work Orders in Progress
-                </h2>
-                <p className="text-[11px] text-slate-500">
-                  Job cards assigned to technicians or external AMC contractors
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search WO, room, tech..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="h-7.5 w-48 rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-500">
-                  <tr>
-                    <th className="py-2.5 px-4">WO #</th>
-                    <th className="py-2.5 px-3">Location</th>
-                    <th className="py-2.5 px-3">Issue</th>
-                    <th className="py-2.5 px-3">Technician / Vendor</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Target Due</th>
-                    <th className="py-2.5 px-4 text-right">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {filteredWorkOrders.map((wo) => (
-                    <tr
-                      key={wo.id}
-                      className="hover:bg-slate-50/80 transition-colors cursor-pointer"
-                      onClick={() => setActiveDrawerItem({ type: "work_order", data: wo })}
-                    >
-                      <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
-                        {wo.woNumber}
-                        <span className="block font-sans text-[10px] font-normal text-slate-400">
-                          {wo.woType}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 font-semibold text-slate-900 whitespace-nowrap">
-                        {wo.location}
-                      </td>
-                      <td className="py-3 px-3">
-                        <p className="font-semibold text-slate-900 line-clamp-1">{wo.issue}</p>
-                        {wo.assetName && (
-                          <p className="text-[10px] text-slate-400 line-clamp-1">{wo.assetName}</p>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <p className="font-medium text-slate-900">{wo.technicianName}</p>
-                        <p className="text-[10px] text-slate-400">
-                          {wo.assignedType === "External Vendor" ? "External AMC" : "In-House Eng."}
-                        </p>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[10px] font-bold",
-                            wo.status === "In Progress"
-                              ? "bg-amber-50 text-amber-700 border border-amber-200"
-                              : wo.status === "Awaiting Parts"
-                              ? "bg-purple-50 text-purple-700 border border-purple-200"
-                              : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          )}
-                        >
-                          {wo.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap text-[11px] text-slate-600">
-                        {wo.dueDate}
-                      </td>
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveDrawerItem({ type: "work_order", data: wo });
-                          }}
-                        >
-                          Open
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* ───────────────────────────────────────────────────────────── */}
-          {/* SECTION 2.3: BOTTOM-LEFT SUB-GRID (PLANT HEALTH & ROSTER) */}
-          {/* ───────────────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            
-            {/* WIDGET 1: CRITICAL PLANT & INFRASTRUCTURE HEALTH */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-emerald-700" />
-                  <h3 className="text-sm font-bold text-slate-900">
-                    Critical Plant & Infrastructure
-                  </h3>
-                </div>
-                <Link
-                  href="/maintenance/assets"
-                  className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
-                >
-                  Assets
-                </Link>
-              </div>
-
-              <div className="mt-3 space-y-2.5">
-                {MOCK_CRITICAL_ASSET_HEALTH.map((asset) => (
-                  <div
-                    key={asset.id}
-                    className="rounded-lg border border-slate-200/80 bg-slate-50/50 p-2.5 hover:bg-slate-50 transition"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-xs font-bold text-slate-900">{asset.name}</p>
-                        <p className="text-[10px] text-slate-400">{asset.location} · {asset.code}</p>
-                      </div>
-                      <span className={cn("rounded px-1.5 py-0.5 text-[9px] font-bold border", asset.statusColor)}>
-                        {asset.status}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-1.5 text-[10px] text-slate-600">
-                      <span className="font-medium text-slate-700">{asset.keyMetric}</span>
-                      <span className="text-slate-400">Log: {asset.lastService}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* WIDGET 2: ON-DUTY TECHNICIANS & CONTRACTORS ROSTER */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <Radio className="h-4 w-4 text-blue-600" />
-                  <h3 className="text-sm font-bold text-slate-900">
-                    On-Duty Technicians & AMC
-                  </h3>
-                </div>
-                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
-                  {MOCK_ON_DUTY_TECHNICIANS.length} Active
-                </span>
-              </div>
-
-              <div className="mt-3 space-y-2.5">
-                {MOCK_ON_DUTY_TECHNICIANS.map((tech) => (
-                  <div
-                    key={tech.id}
-                    className="rounded-lg border border-slate-200/80 bg-slate-50/50 p-2.5 hover:bg-slate-50 transition"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-700">
-                          {tech.name.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-900">{tech.name}</p>
-                          <p className="text-[10px] text-slate-400">{tech.role}</p>
-                        </div>
-                      </div>
-                      <span
-                        className={cn(
-                          "rounded px-1.5 py-0.5 text-[9px] font-bold border",
-                          tech.status.includes("On Job")
-                            ? "bg-amber-50 text-amber-800 border-amber-200"
-                            : tech.status.includes("Awaiting")
-                            ? "bg-purple-50 text-purple-800 border-purple-200"
-                            : tech.status.includes("On-Site")
-                            ? "bg-rose-50 text-rose-800 border-rose-200"
-                            : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        )}
-                      >
-                        {tech.status}
-                      </span>
-                    </div>
-
-                    <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-1.5 text-[10px] text-slate-600">
-                      <span className="truncate max-w-[140px] text-slate-500">
-                        {tech.currentTask}
-                      </span>
-                      <span className="font-mono text-slate-600 flex items-center gap-1">
-                        <Phone className="h-2.5 w-2.5 text-slate-400" />
-                        {tech.phone.split("/")[0]}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-
+          <Link
+            href="/maintenance/requests"
+            className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800"
+          >
+            <span>All Requests</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
 
-        {/* RIGHT 4 COLUMNS */}
-        <div className="space-y-5 lg:col-span-4">
-          
-          {/* SECTION 2.4: ROOMS UNDER MAINTENANCE (OOO / OOS) */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <DoorClosed className="h-4 w-4 text-purple-600" />
-                <h3 className="text-sm font-bold text-slate-900">
-                  Rooms Under Maintenance
-                </h3>
-              </div>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                {MOCK_ROOMS_UNDER_MAINTENANCE.length} Blocked
-              </span>
-            </div>
-
-            {/* Explanatory banner for OOO vs OOS */}
-            <div className="mt-2.5 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600 border border-slate-200/60">
-              <div className="flex items-start gap-1.5">
-                <Info className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                <span>
-                  <strong>OOO:</strong> Out of Order (Cannot Sell) <br />
-                  <strong>OOS:</strong> Out of Service (Short Repair)
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-3 space-y-2.5">
-              {MOCK_ROOMS_UNDER_MAINTENANCE.map((rm) => (
-                <div
-                  key={rm.id}
-                  className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 hover:bg-slate-100/60 transition-colors cursor-pointer"
-                  onClick={() => setActiveDrawerItem({ type: "room", data: rm })}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-500">
+              <tr>
+                <th className="py-2.5 px-4">Location</th>
+                <th className="py-2.5 px-3">Issue &amp; Category</th>
+                <th className="py-2.5 px-3">Priority</th>
+                <th className="py-2.5 px-3">Reported By</th>
+                <th className="py-2.5 px-3">Work Order</th>
+                <th className="py-2.5 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-slate-700">
+              {filteredCritical.map((item) => (
+                <tr
+                  key={item.id}
+                  className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                  onClick={() => setActiveDrawerItem({ type: "request", data: item })}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 text-sm">{rm.roomNumber}</span>
+                  <td className="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">
+                    {item.location}
+                    <span className="block text-[10px] font-normal text-slate-400">
+                      {item.locationType}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3">
+                    <p className="font-semibold text-slate-900 line-clamp-1">{item.issueTitle}</p>
+                    <p className="text-[10px] text-slate-500">{item.category}</p>
+                  </td>
+                  <td className="py-3 px-3 whitespace-nowrap">
+                    <div className="flex flex-col gap-1 items-start">
                       <span
                         className={cn(
-                          "rounded px-1.5 py-0.5 text-[10px] font-bold",
-                          rm.blockType === "OOO"
-                            ? "bg-rose-100 text-rose-800"
-                            : "bg-amber-100 text-amber-800"
+                          "rounded-full px-2 py-0.5 text-[10px] font-bold border",
+                          item.priority === "Critical"
+                            ? "bg-rose-50 text-rose-700 border border-rose-200"
+                            : "bg-amber-50 text-amber-700 border border-amber-200"
                         )}
                       >
-                        {rm.blockType}
+                        {item.priority}
                       </span>
+                      {item.isSafetyHazard && (
+                        <span className="inline-flex items-center gap-1 rounded bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold text-white uppercase tracking-wider">
+                          <ShieldAlert className="h-2.5 w-2.5" />
+                          Safety Hazard
+                        </span>
+                      )}
                     </div>
-                    <span className="font-mono text-[10px] font-semibold text-slate-500">
-                      {rm.workOrderNo}
-                    </span>
-                  </div>
-
-                  <p className="mt-1 text-xs text-slate-700 font-medium line-clamp-1">
-                    {rm.reason}
-                  </p>
-
-                  <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-2 text-[10px] text-slate-500">
-                    <span>Tech: <strong>{rm.technician}</strong></span>
-                    <span className="font-medium text-slate-700">
-                      ETA: {rm.expectedHandover}
-                    </span>
-                  </div>
-
-                  <div className="mt-1 text-[10px] font-semibold text-purple-700">
-                    HK Status: {rm.hkHandoverStatus}
-                  </div>
-                </div>
+                  </td>
+                  <td className="py-3 px-3 whitespace-nowrap text-slate-600">
+                    <p className="font-medium text-slate-800">{item.reportedBy}</p>
+                    <p className="text-[10px] text-slate-400">{item.reportedDept} · {item.dateTime}</p>
+                  </td>
+                  <td className="py-3 px-3 whitespace-nowrap">
+                    {item.workOrderNo ? (
+                      <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-800 border border-slate-200">
+                        {item.workOrderNo}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 italic">Not Assigned</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-right whitespace-nowrap">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveDrawerItem({ type: "request", data: item });
+                      }}
+                    >
+                      View
+                    </Button>
+                  </td>
+                </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* 3. MAIN 2-COLUMN OPERATIONAL GRID */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 mb-5">
+        {/* LEFT COLUMN: ACTIVE WORK ORDERS (7 COLUMNS) */}
+        <div className="lg:col-span-7 rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+          <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 bg-slate-50/50 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">
+                Active Work Orders
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                In-progress job cards and technician dispatches
+              </p>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search WO, room, tech..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-7.5 w-44 rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:outline-none"
+              />
             </div>
           </div>
 
-          {/* SECTION 2.5: TODAY'S PREVENTIVE MAINTENANCE CHECKLIST */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <CalendarClock className="h-4 w-4 text-emerald-600" />
-                <h3 className="text-sm font-bold text-slate-900">
-                  Today&apos;s PM Checklist
-                </h3>
-              </div>
-              <Link
-                href="/maintenance/preventive"
-                className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
-              >
-                View All
-              </Link>
-            </div>
-
-            {/* Compliance Progress Bar */}
-            <div className="mt-3">
-              <div className="flex justify-between text-[11px] font-medium text-slate-600">
-                <span>Compliance Progress</span>
-                <span className="font-bold text-slate-900">50% (2 of 4 done)</span>
-              </div>
-              <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full bg-emerald-600 transition-all rounded-full" style={{ width: "50%" }} />
-              </div>
-            </div>
-
-            <div className="mt-4 divide-y divide-slate-100">
-              {MOCK_PM_TASKS_TODAY.map((task) => (
-                <div key={task.id} className="py-2.5 first:pt-0 last:pb-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">{task.assetName}</p>
-                      <p className="text-[11px] text-slate-600">{task.taskTitle}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        {task.assignedTo} · {task.frequency}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-500">
+                <tr>
+                  <th className="py-2.5 px-4">WO #</th>
+                  <th className="py-2.5 px-3">Location</th>
+                  <th className="py-2.5 px-3">Issue</th>
+                  <th className="py-2.5 px-3">Technician / Vendor</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">Due</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {filteredWorkOrders.map((wo) => (
+                  <tr
+                    key={wo.id}
+                    className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                    onClick={() => setActiveDrawerItem({ type: "work_order", data: wo })}
+                  >
+                    <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
+                      {wo.woNumber}
+                    </td>
+                    <td className="py-3 px-3 font-semibold text-slate-900 whitespace-nowrap">
+                      {wo.location}
+                    </td>
+                    <td className="py-3 px-3">
+                      <p className="font-semibold text-slate-900 line-clamp-1">{wo.issue}</p>
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <p className="font-medium text-slate-900">{wo.technicianName}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {wo.assignedType === "External Vendor" ? "External AMC" : "In-House"}
                       </p>
-                    </div>
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-bold border",
+                          wo.status === "In Progress"
+                            ? "bg-amber-50 text-amber-700 border border-amber-200"
+                            : wo.status === "Awaiting Parts"
+                            ? "bg-slate-100 text-slate-700 border border-slate-200"
+                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        )}
+                      >
+                        {wo.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap text-[11px] text-slate-600">
+                      {wo.dueDate}
+                    </td>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveDrawerItem({ type: "work_order", data: wo });
+                        }}
+                      >
+                        Open
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: ROOMS UNDER MAINTENANCE (5 COLUMNS) */}
+        <div className="lg:col-span-5 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <DoorClosed className="h-4 w-4 text-emerald-600" />
+              <h3 className="text-sm font-bold text-slate-900">
+                Rooms Under Maintenance
+              </h3>
+            </div>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+              {MOCK_ROOMS_UNDER_MAINTENANCE.length} Blocked
+            </span>
+          </div>
+
+          <div className="mt-2.5 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600 border border-slate-200/60">
+            <div className="flex items-start gap-1.5">
+              <Info className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+              <span>
+                <strong>OOO:</strong> Out of Order (Cannot Sell) · <strong>OOS:</strong> Out of Service (Short Repair)
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-3 space-y-2.5">
+            {MOCK_ROOMS_UNDER_MAINTENANCE.map((rm) => (
+              <div
+                key={rm.id}
+                className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 hover:bg-slate-100/60 transition-colors cursor-pointer"
+                onClick={() => setActiveDrawerItem({ type: "room", data: rm })}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 text-sm">{rm.roomNumber}</span>
                     <span
                       className={cn(
-                        "rounded-full px-2 py-0.5 text-[10px] font-bold shrink-0",
-                        task.status === "Completed"
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : "bg-blue-50 text-blue-700 border border-blue-200"
+                        "rounded px-1.5 py-0.5 text-[10px] font-bold border",
+                        rm.blockType === "OOO"
+                          ? "bg-rose-100 text-rose-800 border-rose-200"
+                          : "bg-amber-100 text-amber-800 border-amber-200"
                       )}
                     >
-                      {task.status}
+                      {rm.blockType}
                     </span>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* SECTION 2.6: CROSS-MODULE HANDOVER LOG */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-            <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3">
-              Cross-Module Handover Log
-            </h3>
-            <div className="mt-3 space-y-3">
-              {MOCK_RECENT_MAINTENANCE_LOG.map((log) => (
-                <div key={log.id} className="flex gap-2.5 text-xs">
-                  <span className="font-mono text-[10px] font-medium text-slate-400 shrink-0 pt-0.5">
-                    {log.time}
+                  <span className="font-mono text-[10px] font-semibold text-slate-500">
+                    {rm.workOrderNo}
                   </span>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="font-semibold text-slate-900">{log.title}</p>
-                      <span className={cn("rounded px-1.5 py-0.2 text-[9px] font-semibold border", log.badgeColor)}>
-                        {log.badge}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{log.description}</p>
-                  </div>
                 </div>
-              ))}
+
+                <p className="mt-1 text-xs text-slate-700 font-medium line-clamp-1">
+                  {rm.reason}
+                </p>
+
+                <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-2 text-[10px] text-slate-500">
+                  <span>Tech: <strong>{rm.technician}</strong></span>
+                  <span className="font-medium text-slate-700">
+                    ETA: {rm.expectedHandover}
+                  </span>
+                </div>
+
+                <div className="mt-1 text-[10px] font-semibold text-emerald-700">
+                  HK Status: {rm.hkHandoverStatus}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* 4. TODAY'S PREVENTIVE MAINTENANCE CHECKLIST */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs mb-5">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="h-4 w-4 text-emerald-600" />
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">
+                Today&apos;s PM Checklist
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Scheduled routine asset inspections and service tasks
+              </p>
             </div>
           </div>
+          <Link
+            href="/maintenance/preventive"
+            className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+          >
+            <span>View All Tasks</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
 
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {MOCK_PM_TASKS_TODAY.map((task) => (
+            <div
+              key={task.id}
+              className="p-3 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-mono text-[10px] font-bold text-slate-500">
+                  {task.assetCode}
+                </span>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px] font-bold shrink-0 border",
+                    task.status === "Completed"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-blue-50 text-blue-700 border-blue-200"
+                  )}
+                >
+                  {task.status}
+                </span>
+              </div>
+              <p className="text-xs font-bold text-slate-900 mt-1 line-clamp-1">{task.assetName}</p>
+              <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-1">{task.taskTitle}</p>
+              <div className="mt-2 pt-1.5 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-500">
+                <span>{task.assignedTo}</span>
+                <span className="font-semibold text-slate-700">{task.frequency}</span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -890,9 +732,9 @@ export function MaintenanceDashboardView() {
                       <p className="rounded border border-slate-200 p-3 text-slate-700">{rm.reason}</p>
                     </div>
 
-                    <div className="rounded-lg bg-purple-50 border border-purple-200 p-3.5">
-                      <h4 className="font-bold text-purple-900 text-xs">Housekeeping Handshake</h4>
-                      <p className="text-[11px] text-purple-700 mt-1">
+                    <div className="rounded-lg bg-emerald-50 border border-emerald-200/80 p-3.5">
+                      <h4 className="font-bold text-emerald-950 text-xs">Housekeeping Handshake</h4>
+                      <p className="text-[11px] text-emerald-800 mt-1">
                         Current Status: <strong>{rm.hkHandoverStatus}</strong>. Front Office releases the room only after Housekeeping completes inspection.
                       </p>
                     </div>

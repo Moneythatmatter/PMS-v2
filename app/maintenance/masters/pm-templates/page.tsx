@@ -1,12 +1,5 @@
-import { MaintenanceBlankView } from "@/components/maintenance/MaintenanceBlankView";
+import { MaintenancePMTemplatesView } from "@/components/maintenance/MaintenancePMTemplatesView";
 
-export default function PMTemplatesPage() {
-  return (
-    <MaintenanceBlankView
-      title="PM Task Templates"
-      category="Masters"
-      description="Predefined inspection checklists for recurring servicing (e.g. Monthly DG test, Daily pool chlorine balancing)."
-      actionLabel="+ New Template"
-    />
-  );
+export default function PMTemplatesMasterPage() {
+  return <MaintenancePMTemplatesView />;
 }

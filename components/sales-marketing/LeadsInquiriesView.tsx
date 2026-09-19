@@ -269,8 +269,8 @@ export function LeadsInquiriesView() {
   const [movingLead, setMovingLead] = useState<LeadRecordItem | null>(null);
   const [moveForm, setMoveForm] = useState({
     dealName: "",
-    expectedRevenue: 500000,
-    assignedExecutive: "Vikram Malhotra",
+    expectedRevenue: 0,
+    assignedExecutive: "",
   });
 
   const loadLeads = async () => {
@@ -320,13 +320,35 @@ export function LeadsInquiriesView() {
     bookingType: defaultLeadBookingType,
     leadSource: "Google Ads" as LeadSource,
     campaignName: "",
-    eventDate: "2026-11-20",
-    guestCount: 150,
-    estimatedRevenue: 450000,
+    eventDate: "",
+    guestCount: 0,
+    estimatedRevenue: 0,
     priority: "Medium" as LeadPriority,
-    assignedExecutive: "Vikram Malhotra",
+    assignedExecutive: "",
     customerRequirements: "",
   });
+
+  const handleOpenCreateLeadModal = () => {
+    setCreateForm({
+      leadName: "",
+      contactPerson: "",
+      mobileNumber: "",
+      email: "",
+      companyName: "",
+      city: "",
+      preferredContactMethod: "Phone Call",
+      bookingType: defaultLeadBookingType,
+      leadSource: "Google Ads",
+      campaignName: "",
+      eventDate: "",
+      guestCount: 0,
+      estimatedRevenue: 0,
+      priority: "Medium",
+      assignedExecutive: "",
+      customerRequirements: "",
+    });
+    setIsCreateModalOpen(true);
+  };
 
   // Edit Form State (Progressive profiling)
   const [editForm, setEditForm] = useState<LeadRecordItem | null>(null);
@@ -394,6 +416,11 @@ export function LeadsInquiriesView() {
   const handleCreateLeadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createForm.leadName.trim() || !createForm.mobileNumber.trim() || !createForm.customerRequirements.trim()) return;
+
+    if (createForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(createForm.email.trim())) {
+      setToastMessage("Please enter a valid email address (e.g. name@example.com).");
+      return;
+    }
 
     const draft: LeadRecordItem = {
       id: "",
@@ -761,7 +788,7 @@ export function LeadsInquiriesView() {
           <Button
             type="button"
             size="sm"
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={handleOpenCreateLeadModal}
             className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
           >
             <Plus className="h-4 w-4" /> + Create Lead
@@ -1491,11 +1518,13 @@ export function LeadsInquiriesView() {
               <div>
                 <label className="block font-bold text-slate-700 mb-1 text-[11px]">Mobile Number *</label>
                 <input
-                  type="text"
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   required
-                  placeholder="+91 98000 00000"
+                  placeholder="e.g. 9800000000"
                   value={createForm.mobileNumber}
-                  onChange={(e) => setCreateForm({ ...createForm, mobileNumber: e.target.value })}
+                  onChange={(e) => setCreateForm({ ...createForm, mobileNumber: e.target.value.replace(/\D/g, "").slice(0, 15) })}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono text-xs text-slate-900"
                 />
               </div>
@@ -1508,7 +1537,7 @@ export function LeadsInquiriesView() {
                   type="email"
                   placeholder="client@domain.com"
                   value={createForm.email}
-                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value.trim() })}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-900"
                 />
               </div>
@@ -1580,8 +1609,8 @@ export function LeadsInquiriesView() {
                 <input
                   type="number"
                   placeholder="e.g. 150"
-                  value={createForm.guestCount}
-                  onChange={(e) => setCreateForm({ ...createForm, guestCount: Number(e.target.value) })}
+                  value={createForm.guestCount || ""}
+                  onChange={(e) => setCreateForm({ ...createForm, guestCount: Number(e.target.value) || 0 })}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono text-xs"
                 />
               </div>
@@ -1591,8 +1620,8 @@ export function LeadsInquiriesView() {
                 <input
                   type="number"
                   placeholder="e.g. 450000"
-                  value={createForm.estimatedRevenue}
-                  onChange={(e) => setCreateForm({ ...createForm, estimatedRevenue: Number(e.target.value) })}
+                  value={createForm.estimatedRevenue || ""}
+                  onChange={(e) => setCreateForm({ ...createForm, estimatedRevenue: Number(e.target.value) || 0 })}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-emerald-800 text-xs"
                 />
               </div>
@@ -1606,6 +1635,7 @@ export function LeadsInquiriesView() {
                   onChange={(e) => setCreateForm({ ...createForm, assignedExecutive: e.target.value })}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs"
                 >
+                  <option value="">-- Select Executive --</option>
                   <option value="Vikram Malhotra">Vikram Malhotra</option>
                   <option value="Ananya Roy">Ananya Roy</option>
                   <option value="Rohan Varma">Rohan Varma</option>

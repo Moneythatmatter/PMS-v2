@@ -1,12 +1,5 @@
-import { MaintenanceBlankView } from "@/components/maintenance/MaintenanceBlankView";
+import { MaintenanceAssetCategoriesView } from "@/components/maintenance/MaintenanceAssetCategoriesView";
 
 export default function AssetCategoriesPage() {
-  return (
-    <MaintenanceBlankView
-      title="Asset Categories"
-      category="Masters"
-      description="Define equipment groupings like HVAC, Electrical, Plumbing, Laundry, and Kitchen Machinery."
-      actionLabel="+ New Category"
-    />
-  );
+  return <MaintenanceAssetCategoriesView />;
 }

@@ -144,26 +144,26 @@ export function AddActivityModal({
   const [activityType, setActivityType] = useState<SharedActivityType>(initialActivityType);
   const [priority, setPriority] = useState<SharedActivityPriority>("Medium");
   const [subject, setSubject] = useState("");
-  const [activityDate, setActivityDate] = useState("2026-08-29");
-  const [activityTime, setActivityTime] = useState("03:00 PM");
-  const [assignedExecutive, setAssignedExecutive] = useState("Jay Kumar");
+  const [activityDate, setActivityDate] = useState("");
+  const [activityTime, setActivityTime] = useState("");
+  const [assignedExecutive, setAssignedExecutive] = useState("");
   const [status, setStatus] = useState<SharedActivityStatus>(initialStatus);
   const [notes, setNotes] = useState("");
   const [venue, setVenue] = useState("");
 
   // Target linking & manual selection states
-  const [selectedDealId, setSelectedDealId] = useState<string>(dealContext?.id || availableDeals[0]?.id || "NONE");
+  const [selectedDealId, setSelectedDealId] = useState<string>(dealContext?.id || "NONE");
   const [manualContactName, setManualContactName] = useState(
-    dealContext?.customerName || leadContext?.leadName || availableDeals[0]?.customerName || ""
+    dealContext?.customerName || leadContext?.leadName || ""
   );
   const [manualMobile, setManualMobile] = useState(
-    dealContext?.mobile || leadContext?.mobile || availableDeals[0]?.mobile || ""
+    dealContext?.mobile || leadContext?.mobile || ""
   );
   const [manualCompany, setManualCompany] = useState(
-    dealContext?.companyName || leadContext?.companyName || availableDeals[0]?.companyName || ""
+    dealContext?.companyName || leadContext?.companyName || ""
   );
   const [manualEmail, setManualEmail] = useState(
-    dealContext?.email || leadContext?.email || availableDeals[0]?.email || ""
+    dealContext?.email || leadContext?.email || ""
   );
 
   // Initialize selection when modal opens
@@ -182,29 +182,20 @@ export function AddActivityModal({
       setManualMobile(dealContext.mobile);
       setManualCompany(dealContext.companyName || "");
       setManualEmail(dealContext.email || "");
-      setAssignedExecutive(dealContext.assignedExecutive || "Jay Kumar");
+      setAssignedExecutive(dealContext.assignedExecutive || "");
     } else if (leadContext) {
       setSelectedDealId("NONE");
       setManualContactName(leadContext.leadName);
       setManualMobile(leadContext.mobile);
       setManualCompany(leadContext.companyName || "");
       setManualEmail(leadContext.email || "");
-    } else if (availableDeals.length > 0) {
-      const firstDeal = availableDeals[0];
-      setSelectedDealId(firstDeal.id);
-      setManualContactName(firstDeal.customerName);
-      setManualMobile(firstDeal.mobile);
-      setManualCompany(firstDeal.companyName || "");
-      setManualEmail(firstDeal.email || "");
-      if (firstDeal.assignedExecutive) {
-        setAssignedExecutive(firstDeal.assignedExecutive);
-      }
     } else {
       setSelectedDealId("NONE");
       setManualContactName("");
       setManualMobile("");
       setManualCompany("");
       setManualEmail("");
+      setAssignedExecutive("");
     }
   }, [dealContext, leadContext, isOpen, initialActivityType, initialStatus]);
 
@@ -447,6 +438,7 @@ export function AddActivityModal({
               onChange={(e) => setAssignedExecutive(e.target.value)}
               className="w-full p-2 rounded-lg border border-slate-200 font-semibold bg-white text-xs"
             >
+              <option value="">-- Select Executive --</option>
               <option value="Jay Kumar">Jay Kumar</option>
               <option value="Priya Singh">Priya Singh</option>
               <option value="Rohan Verma">Rohan Verma</option>
