@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   FileCog,
   Plus,
@@ -19,6 +19,7 @@ import {
   Check,
   Printer,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Modal } from "@/components/ui/Modal";
@@ -58,6 +59,9 @@ export function DocumentMastersView() {
   const [documentTypes, setDocumentTypes] = useState<MasterDocumentType[]>([]);
   const [activeTab, setActiveTab] = useState<"categories" | "types">("categories");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [typeError, setTypeError] = useState<string | null>(null);
 
   const loadDocumentMasters = async () => {
     try {
@@ -74,6 +78,7 @@ export function DocumentMastersView() {
         ),
       );
     } catch (e) {
+      setToastVariant("error");
       setToastMessage(e instanceof Error ? e.message : "Failed to load document masters");
       setCategories([]);
       setDocumentTypes([]);
@@ -100,12 +105,16 @@ export function DocumentMastersView() {
   const [catNameInput, setCatNameInput] = useState("");
   const [catDescInput, setCatDescInput] = useState("");
   const [catMandatoryInput, setCatMandatoryInput] = useState(true);
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const isSavingCategoryRef = useRef(false);
 
   // Document Type Form State
   const [typeNameInput, setTypeNameInput] = useState("");
   const [typeCatIdInput, setTypeCatIdInput] = useState("");
   const [typeExpiryInput, setTypeExpiryInput] = useState(false);
   const [typeMandatoryInput, setTypeMandatoryInput] = useState(true);
+  const [isSavingType, setIsSavingType] = useState(false);
+  const isSavingTypeRef = useRef(false);
 
   // Filtered Document Types
   const filteredDocTypes = useMemo(() => {
@@ -122,6 +131,7 @@ export function DocumentMastersView() {
     setCatNameInput("");
     setCatDescInput("");
     setCatMandatoryInput(true);
+    setCategoryError(null);
     setIsAddCatModalOpen(true);
   };
 
@@ -130,11 +140,13 @@ export function DocumentMastersView() {
     setCatNameInput(cat.name);
     setCatDescInput(cat.description);
     setCatMandatoryInput(cat.isMandatory);
+    setCategoryError(null);
     setIsAddCatModalOpen(true);
   };
 
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingCategoryRef.current) return;
     if (!catNameInput.trim()) return;
 
     // Check duplicate name
@@ -142,7 +154,7 @@ export function DocumentMastersView() {
       (c) => c.name.toLowerCase() === catNameInput.trim().toLowerCase() && c.id !== editingCategory?.id
     );
     if (exists) {
-      setToastMessage(`Category "${catNameInput.trim()}" already exists! No duplicate categories allowed.`);
+      setCategoryError(`Category "${catNameInput.trim()}" already exists! No duplicate categories allowed.`);
       return;
     }
 
@@ -152,12 +164,18 @@ export function DocumentMastersView() {
       isMandatory: catMandatoryInput,
     });
 
+    isSavingCategoryRef.current = true;
+    setIsSavingCategory(true);
+    setCategoryError(null);
+
     try {
       if (editingCategory) {
         await hrDocumentCategoryService.update(editingCategory.id, payload);
+        setToastVariant("success");
         setToastMessage(`Updated document category "${catNameInput.trim()}".`);
       } else {
         await hrDocumentCategoryService.create(payload);
+        setToastVariant("success");
         setToastMessage(
           `Created new category "${catNameInput.trim()}". Automatically available for all employees!`,
         );
@@ -165,7 +183,10 @@ export function DocumentMastersView() {
       await loadDocumentMasters();
       setIsAddCatModalOpen(false);
     } catch (err) {
-      setToastMessage(err instanceof Error ? err.message : "Failed to save category");
+      setCategoryError(err instanceof Error ? err.message : "Failed to save category");
+    } finally {
+      isSavingCategoryRef.current = false;
+      setIsSavingCategory(false);
     }
   };
 
@@ -173,8 +194,10 @@ export function DocumentMastersView() {
     try {
       await hrDocumentCategoryService.remove(catId);
       await loadDocumentMasters();
+      setToastVariant("success");
       setToastMessage(`Deleted category "${catName}" and associated document types.`);
     } catch (err) {
+      setToastVariant("error");
       setToastMessage(err instanceof Error ? err.message : "Failed to delete category");
     }
   };
@@ -186,6 +209,7 @@ export function DocumentMastersView() {
     setTypeCatIdInput(prefilledCatId || categories[0]?.id || "");
     setTypeExpiryInput(false);
     setTypeMandatoryInput(true);
+    setTypeError(null);
     setIsAddTypeModalOpen(true);
   };
 
@@ -195,11 +219,13 @@ export function DocumentMastersView() {
     setTypeCatIdInput(dt.categoryId);
     setTypeExpiryInput(dt.requiresExpiry);
     setTypeMandatoryInput(dt.isMandatory);
+    setTypeError(null);
     setIsAddTypeModalOpen(true);
   };
 
   const handleSaveDocumentType = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingTypeRef.current) return;
     if (!typeNameInput.trim() || !typeCatIdInput) return;
 
     const catObj = categories.find((c) => c.id === typeCatIdInput);
@@ -214,7 +240,7 @@ export function DocumentMastersView() {
     );
 
     if (exists) {
-      setToastMessage(`Document type "${typeNameInput.trim()}" already exists in ${catObj.name}.`);
+      setTypeError(`Document type "${typeNameInput.trim()}" already exists in ${catObj.name}.`);
       return;
     }
 
@@ -225,18 +251,27 @@ export function DocumentMastersView() {
       isMandatory: typeMandatoryInput,
     });
 
+    isSavingTypeRef.current = true;
+    setIsSavingType(true);
+    setTypeError(null);
+
     try {
       if (editingType) {
         await hrDocumentTypeService.update(editingType.id, payload);
+        setToastVariant("success");
         setToastMessage(`Updated document type "${typeNameInput.trim()}".`);
       } else {
         await hrDocumentTypeService.create(payload);
+        setToastVariant("success");
         setToastMessage(`Added "${typeNameInput.trim()}" to ${catObj.name}.`);
       }
       await loadDocumentMasters();
       setIsAddTypeModalOpen(false);
     } catch (err) {
-      setToastMessage(err instanceof Error ? err.message : "Failed to save document type");
+      setTypeError(err instanceof Error ? err.message : "Failed to save document type");
+    } finally {
+      isSavingTypeRef.current = false;
+      setIsSavingType(false);
     }
   };
 
@@ -244,8 +279,10 @@ export function DocumentMastersView() {
     try {
       await hrDocumentTypeService.remove(typeId);
       await loadDocumentMasters();
+      setToastVariant("success");
       setToastMessage(`Deleted document type "${typeName}".`);
     } catch (err) {
+      setToastVariant("error");
       setToastMessage(err instanceof Error ? err.message : "Failed to delete document type");
     }
   };
@@ -261,6 +298,7 @@ export function DocumentMastersView() {
         { label: "Document Masters" },
       ]}
       toast={toastMessage}
+      toastVariant={toastVariant}
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex flex-wrap items-center gap-2">
@@ -618,12 +656,29 @@ export function DocumentMastersView() {
       ───────────────────────────────────────────────────────────── */}
       <Modal
         isOpen={isAddCatModalOpen}
-        onClose={() => setIsAddCatModalOpen(false)}
+        onClose={() => {
+          setIsAddCatModalOpen(false);
+          setCategoryError(null);
+        }}
         title={editingCategory ? `Edit Category: ${editingCategory.name}` : "Add Master Category"}
         description="Categories automatically configure the document vault for all employees across the property."
         size="md"
       >
         <form onSubmit={handleSaveCategory} className="space-y-4">
+          {categoryError && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 animate-in fade-in">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
+              <div className="flex-1 font-semibold">{categoryError}</div>
+              <button
+                type="button"
+                onClick={() => setCategoryError(null)}
+                className="text-rose-400 hover:text-rose-700 cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Category Name <span className="text-rose-500">*</span>
@@ -632,9 +687,17 @@ export function DocumentMastersView() {
               type="text"
               placeholder="e.g. Identity Proof, Financial Documents"
               value={catNameInput}
-              onChange={(e) => setCatNameInput(e.target.value)}
+              onChange={(e) => {
+                setCatNameInput(e.target.value);
+                if (categoryError) setCategoryError(null);
+              }}
               required
-              className="w-full text-xs rounded-xl border border-slate-200 p-2.5 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+              className={cn(
+                "w-full text-xs rounded-xl border p-2.5 focus:ring-2 focus:outline-none",
+                categoryError
+                  ? "border-rose-300 focus:ring-rose-500 bg-rose-50/20"
+                  : "border-slate-200 focus:ring-emerald-600 bg-white"
+              )}
             />
           </div>
 
@@ -667,7 +730,11 @@ export function DocumentMastersView() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setIsAddCatModalOpen(false)}
+              onClick={() => {
+                setIsAddCatModalOpen(false);
+                setCategoryError(null);
+              }}
+              disabled={isSavingCategory}
               className="rounded-xl text-xs"
             >
               Cancel
@@ -675,9 +742,17 @@ export function DocumentMastersView() {
             <Button
               type="submit"
               size="sm"
+              disabled={isSavingCategory || !catNameInput.trim()}
               className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white"
             >
-              Save Category
+              {isSavingCategory ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Category"
+              )}
             </Button>
           </div>
         </form>
@@ -688,19 +763,39 @@ export function DocumentMastersView() {
       ───────────────────────────────────────────────────────────── */}
       <Modal
         isOpen={isAddTypeModalOpen}
-        onClose={() => setIsAddTypeModalOpen(false)}
+        onClose={() => {
+          setIsAddTypeModalOpen(false);
+          setTypeError(null);
+        }}
         title={editingType ? `Edit Document Type: ${editingType.name}` : "Add Document Type"}
         description="Add a specific required document item inside a category."
         size="md"
       >
         <form onSubmit={handleSaveDocumentType} className="space-y-4">
+          {typeError && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 animate-in fade-in">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
+              <div className="flex-1 font-semibold">{typeError}</div>
+              <button
+                type="button"
+                onClick={() => setTypeError(null)}
+                className="text-rose-400 hover:text-rose-700 cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Select Category <span className="text-rose-500">*</span>
             </label>
             <select
               value={typeCatIdInput}
-              onChange={(e) => setTypeCatIdInput(e.target.value)}
+              onChange={(e) => {
+                setTypeCatIdInput(e.target.value);
+                if (typeError) setTypeError(null);
+              }}
               required
               className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
             >
@@ -720,9 +815,17 @@ export function DocumentMastersView() {
               type="text"
               placeholder="e.g. Aadhaar Card, Passport, Medical Fitness"
               value={typeNameInput}
-              onChange={(e) => setTypeNameInput(e.target.value)}
+              onChange={(e) => {
+                setTypeNameInput(e.target.value);
+                if (typeError) setTypeError(null);
+              }}
               required
-              className="w-full text-xs rounded-xl border border-slate-200 p-2.5 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+              className={cn(
+                "w-full text-xs rounded-xl border p-2.5 focus:ring-2 focus:outline-none",
+                typeError
+                  ? "border-rose-300 focus:ring-rose-500 bg-rose-50/20"
+                  : "border-slate-200 focus:ring-emerald-600 bg-white"
+              )}
             />
           </div>
 
@@ -759,7 +862,11 @@ export function DocumentMastersView() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setIsAddTypeModalOpen(false)}
+              onClick={() => {
+                setIsAddTypeModalOpen(false);
+                setTypeError(null);
+              }}
+              disabled={isSavingType}
               className="rounded-xl text-xs"
             >
               Cancel
@@ -767,9 +874,17 @@ export function DocumentMastersView() {
             <Button
               type="submit"
               size="sm"
+              disabled={isSavingType || !typeNameInput.trim() || !typeCatIdInput}
               className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white"
             >
-              Save Document Type
+              {isSavingType ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Document Type"
+              )}
             </Button>
           </div>
         </form>
