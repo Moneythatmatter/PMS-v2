@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Package,
   ClipboardCheck,
@@ -36,6 +36,7 @@ import {
   FileCheck,
   Boxes,
   Lock,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -95,6 +96,8 @@ export default function GoodsReceiptNotePage() {
     [purchaseOrders],
   );
   const [saving, setSaving] = useState(false);
+  /** Sync lock — React state alone cannot block rapid double-clicks before re-render. */
+  const savingLockRef = useRef(false);
 
   // Search & Filters State
   const [search, setSearch] = useState("");
@@ -203,6 +206,7 @@ export default function GoodsReceiptNotePage() {
   }, [grnList, search, supplierFilter, warehouseFilter, statusFilter, inspectionFilter, dateFilter]);
 
   const handleSaveGRN = async (actionType: "Submit" | "Print" | "Inspection") => {
+    if (savingLockRef.current) return;
     if (!currentPO) {
       alert("Select an approved Purchase Order.");
       return;
@@ -265,6 +269,7 @@ export default function GoodsReceiptNotePage() {
       ],
     };
 
+    savingLockRef.current = true;
     setSaving(true);
     try {
       const created = await psGrnService.create(newRecord);
@@ -287,6 +292,7 @@ export default function GoodsReceiptNotePage() {
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to create GRN");
     } finally {
+      savingLockRef.current = false;
       setSaving(false);
     }
   };
@@ -596,31 +602,38 @@ export default function GoodsReceiptNotePage() {
               <Button
                 type="button"
                 variant="outline"
+                disabled={saving}
                 onClick={() => alert("Draft saved successfully!")}
-                className="h-9 px-3 text-xs font-semibold border-slate-300 text-slate-700 rounded-xl cursor-pointer"
+                className="h-9 px-3 text-xs font-semibold border-slate-300 text-slate-700 rounded-xl cursor-pointer disabled:opacity-50"
               >
                 Save Draft
               </Button>
               <Button
                 type="button"
-                onClick={() => handleSaveGRN("Submit")}
-                className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
+                disabled={saving}
+                onClick={() => void handleSaveGRN("Submit")}
+                className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
-                <Check className="h-4 w-4" /> Submit GRN
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                Submit GRN
               </Button>
               <Button
                 type="button"
-                onClick={() => handleSaveGRN("Print")}
-                className="h-9 px-4 text-xs font-bold !bg-emerald-800 text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
+                disabled={saving}
+                onClick={() => void handleSaveGRN("Print")}
+                className="h-9 px-4 text-xs font-bold !bg-emerald-800 text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
-                <Printer className="h-4 w-4" /> Submit & Print GRN
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                Submit & Print GRN
               </Button>
               <Button
                 type="button"
-                onClick={() => handleSaveGRN("Inspection")}
-                className="h-9 px-4 text-xs font-bold !bg-blue-800 text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
+                disabled={saving}
+                onClick={() => void handleSaveGRN("Inspection")}
+                className="h-9 px-4 text-xs font-bold !bg-blue-800 text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
-                <ShieldCheck className="h-4 w-4" /> Send to Quality Inspection
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                Send to Quality Inspection
               </Button>
             </div>
           </div>
