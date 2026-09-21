@@ -13,6 +13,7 @@ export type RequestStatus =
   | "Resolved";
 
 export type WorkOrderStatus =
+  | "New"
   | "Assigned"
   | "In Progress"
   | "Awaiting Parts"
@@ -315,6 +316,19 @@ export interface RootCauseMaster {
   status: "Active" | "Inactive";
 }
 
+export interface SparePartMaster {
+  id: string;
+  partCode: string;
+  partName: string;
+  category?: string;
+  unit?: string;
+  unitCost: number;
+  defaultStoresRef?: string;
+  description?: string;
+  status: "Active" | "Inactive";
+  createdAt?: string;
+}
+
 export interface AssetMaintenanceHistory {
   id: string;
   date: string;
@@ -357,7 +371,7 @@ export interface MaintenanceAsset {
   totalWorkOrdersCount?: number;
   decommissionDate?: string;
   decommissionReason?: string;
-  history: AssetMaintenanceHistory[];
+  history?: AssetMaintenanceHistory[];
   createdAt?: string;
 }
 

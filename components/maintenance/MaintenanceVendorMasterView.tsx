@@ -24,24 +24,16 @@ import {
   ChevronRight,
   ExternalLink,
   Clock,
+  Loader2,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Badge, Button, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { MOCK_MAINTENANCE_VENDORS } from "@/app/data/maintenance/mockData";
+import { SERVICE_CATEGORIES } from "@/app/data/maintenance/constants";
 import { MaintenanceVendor } from "@/app/data/maintenance/types";
-
-const SERVICE_CATEGORIES = [
-  "HVAC / Air Conditioning",
-  "Elevators & Escalators",
-  "Electrical & Lighting",
-  "Plumbing & Sanitary",
-  "Safety & Fire",
-  "Carpentry & Furniture",
-  "Appliances & TV/Electronics",
-  "Painting & Civil",
-  "General / Other",
-];
+import { usePsList } from "@/hooks/usePsResource";
+import { useSubmitLock } from "@/hooks/useSubmitLock";
+import { mntVendorService } from "@/services/maintenance/index";
 
 const SERVICE_TYPES: ("AMC" | "On-Demand" | "Rate Contract" | "Warranty")[] = [
   "AMC",
@@ -51,7 +43,8 @@ const SERVICE_TYPES: ("AMC" | "On-Demand" | "Rate Contract" | "Warranty")[] = [
 ];
 
 export function MaintenanceVendorMasterView() {
-  const [vendors, setVendors] = useState<MaintenanceVendor[]>(MOCK_MAINTENANCE_VENDORS);
+  const { data: vendors, loading, reload } = usePsList(() => mntVendorService.list(), []);
+  const { saving, runLocked } = useSubmitLock();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("ALL");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState("ALL");
@@ -140,71 +133,60 @@ export function MaintenanceVendorMasterView() {
     setFormStatus(v.status);
   };
 
-  const handleSaveVendor = (e: React.FormEvent) => {
+  const handleSaveVendor = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formVendorName.trim() || !formContactPerson.trim() || !formPhone.trim()) return;
+    if (!formVendorName.trim() || !formContactPerson.trim() || !formPhone.trim() || saving) return;
 
-    if (selectedVendorForEdit) {
-      // Edit mode
-      setVendors((prev) =>
-        prev.map((v) =>
-          v.id === selectedVendorForEdit.id
-            ? {
-                ...v,
-                vendorName: formVendorName,
-                vendorCode: formVendorCode,
-                serviceCategory: formServiceCategory,
-                contactPerson: formContactPerson,
-                phone: formPhone,
-                email: formEmail,
-                address: formAddress,
-                serviceType: formServiceType,
-                serviceReference: formServiceReference,
-                contractStartDate: formContractStartDate,
-                contractEndDate: formContractEndDate,
-                notes: formNotes,
-                status: formStatus,
-              }
-            : v
-        )
-      );
-      setSelectedVendorForEdit(null);
-    } else {
-      // Add mode
-      const newVendor: MaintenanceVendor = {
-        id: `vnd-${Date.now()}`,
-        vendorName: formVendorName,
-        vendorCode: formVendorCode || `MNT-V-00${vendors.length + 1}`,
-        serviceCategory: formServiceCategory,
-        contactPerson: formContactPerson,
-        phone: formPhone,
-        email: formEmail,
-        address: formAddress,
-        serviceType: formServiceType,
-        serviceReference: formServiceReference,
-        contractStartDate: formContractStartDate,
-        contractEndDate: formContractEndDate,
-        notes: formNotes,
-        status: formStatus,
-        createdAt: new Date().toISOString(),
-      };
-      setVendors((prev) => [newVendor, ...prev]);
-      setIsAddDrawerOpen(false);
+    const body = {
+      vendorName: formVendorName,
+      vendorCode: formVendorCode || `MNT-V-00${vendors.length + 1}`,
+      serviceCategory: formServiceCategory,
+      contactPerson: formContactPerson,
+      phone: formPhone,
+      email: formEmail,
+      address: formAddress,
+      serviceType: formServiceType,
+      serviceReference: formServiceReference,
+      contractStartDate: formContractStartDate,
+      contractEndDate: formContractEndDate,
+      notes: formNotes,
+      status: formStatus,
+    };
+
+    await runLocked(async () => {
+      try {
+        if (selectedVendorForEdit) {
+          await mntVendorService.update(selectedVendorForEdit.id, body);
+          setSelectedVendorForEdit(null);
+        } else {
+          await mntVendorService.create(body);
+          setIsAddDrawerOpen(false);
+        }
+        await reload();
+      } catch (err) {
+        console.error(err);
+        alert(err instanceof Error ? err.message : "Failed to save vendor.");
+      }
+    });
+  };
+
+  const handleToggleStatus = async (vendor: MaintenanceVendor) => {
+    try {
+      await mntVendorService.update(vendor.id, {
+        status: vendor.status === "Active" ? "Inactive" : "Active",
+      });
+      await reload();
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Failed to update vendor status.");
     }
   };
 
-  const handleToggleStatus = (vendorId: string) => {
-    setVendors((prev) =>
-      prev.map((v) =>
-        v.id === vendorId
-          ? {
-              ...v,
-              status: v.status === "Active" ? "Inactive" : "Active",
-            }
-          : v
-      )
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">Loading vendors...</div>
     );
-  };
+  }
 
   return (
     <ModulePageShell
@@ -477,7 +459,7 @@ export function MaintenanceVendorMasterView() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => handleToggleStatus(v.id)}
+                          onClick={() => handleToggleStatus(v)}
                           className={cn(
                             "h-7 px-2 text-[11px] font-bold rounded cursor-pointer",
                             v.status === "Active"
@@ -714,20 +696,27 @@ export function MaintenanceVendorMasterView() {
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={saving}
                 onClick={() => {
                   setIsAddDrawerOpen(false);
                   setSelectedVendorForEdit(null);
                 }}
-                className="rounded-lg text-xs"
+                className="rounded-lg text-xs disabled:opacity-50"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 size="sm"
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer"
+                disabled={saving}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
               >
-                {selectedVendorForEdit ? "Save Vendor Changes ✓" : "Register Service Vendor ✓"}
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving
+                  ? "Saving..."
+                  : selectedVendorForEdit
+                    ? "Save Vendor Changes ✓"
+                    : "Register Service Vendor ✓"}
               </Button>
             </div>
           </form>

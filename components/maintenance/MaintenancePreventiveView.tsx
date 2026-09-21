@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -24,29 +24,32 @@ import {
   CalendarDays,
   ShieldCheck,
   CheckSquare,
+  Loader2,
+  ChevronLeft,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Badge, Button, Drawer, Modal, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
-  MOCK_PM_SCHEDULES,
-  MOCK_PM_TEMPLATES,
-  MOCK_MAINTENANCE_VENDORS,
+  ON_DUTY_TECHNICIANS,
   MOCK_ON_DUTY_TECHNICIANS,
-  MOCK_CRITICAL_ASSET_HEALTH,
-  HOTEL_LOCATIONS,
-  PROBLEM_CATEGORIES,
-} from "@/app/data/maintenance/mockData";
+} from "@/app/data/maintenance/constants";
 import {
   PMSchedule,
   PMScheduleStatus,
   PMFrequency,
-  PMTaskTemplate,
   ExecutionMethod,
   WorkOrder,
-  MaintenanceVendor,
 } from "@/app/data/maintenance/types";
 import { currentUser } from "@/app/data/user";
+import { usePsList } from "@/hooks/usePsResource";
+import {
+  mntPmScheduleService,
+  mntPmTemplateService,
+  mntVendorService,
+  mntAssetService,
+  mntWorkOrderService,
+} from "@/services/maintenance";
 
 export const getPMStatusBadgeConfig = (status: PMScheduleStatus) => {
   switch (status) {
@@ -65,13 +68,20 @@ export const getPMStatusBadgeConfig = (status: PMScheduleStatus) => {
 
 export function MaintenancePreventiveView() {
   const router = useRouter();
-  const [pmSchedules, setPmSchedules] = useState<PMSchedule[]>(MOCK_PM_SCHEDULES);
-  const [templates] = useState<PMTaskTemplate[]>(MOCK_PM_TEMPLATES);
-  const [vendors] = useState<MaintenanceVendor[]>(MOCK_MAINTENANCE_VENDORS);
+  const { data: pmSchedules, loading, reload: reloadSchedules } = usePsList(() => mntPmScheduleService.list(), []);
+  const { data: templates } = usePsList(() => mntPmTemplateService.list(), []);
+  const { data: vendors } = usePsList(() => mntVendorService.list(), []);
+  const { data: assets } = usePsList(() => mntAssetService.list(), []);
+  const [saving, setSaving] = useState(false);
+  const savingLockRef = useRef(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // View Switcher: "list" | "calendar"
   const [activeView, setActiveView] = useState<"list" | "calendar">("list");
+  const [calendarCursor, setCalendarCursor] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() }; // month 0-11
+  });
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState("");
@@ -108,13 +118,13 @@ export function MaintenancePreventiveView() {
   };
 
   // Form State for Creating PM Schedule (Execution Method only; no preselected technician/vendor)
-  const [formAssetCode, setFormAssetCode] = useState(MOCK_CRITICAL_ASSET_HEALTH[0].code);
-  const [formAssetName, setFormAssetName] = useState(MOCK_CRITICAL_ASSET_HEALTH[0].name);
-  const [formLocation, setFormLocation] = useState(MOCK_CRITICAL_ASSET_HEALTH[0].location);
-  const [formTemplateId, setFormTemplateId] = useState(templates[0].id);
-  const [formTaskTitle, setFormTaskTitle] = useState(templates[0].templateTitle);
-  const [formCategory, setFormCategory] = useState(templates[0].category);
-  const [formFrequency, setFormFrequency] = useState<PMFrequency>(templates[0].defaultFrequency);
+  const [formAssetCode, setFormAssetCode] = useState("");
+  const [formAssetName, setFormAssetName] = useState("");
+  const [formLocation, setFormLocation] = useState("");
+  const [formTemplateId, setFormTemplateId] = useState("");
+  const [formTaskTitle, setFormTaskTitle] = useState("");
+  const [formCategory, setFormCategory] = useState("");
+  const [formFrequency, setFormFrequency] = useState<PMFrequency>("Monthly");
   const [formNextDueDate, setFormNextDueDate] = useState("2026-09-25");
   const [formExecutionMethod, setFormExecutionMethod] = useState<ExecutionMethod>("In-House");
   const [formNotes, setFormNotes] = useState("");
@@ -161,42 +171,83 @@ export function MaintenancePreventiveView() {
     });
   }, [pmSchedules, selectedStatusFilter, selectedFrequencyFilter, selectedExecutionFilter, searchTerm]);
 
+  const calendarMonthLabel = useMemo(() => {
+    return new Date(calendarCursor.year, calendarCursor.month, 1).toLocaleDateString("en-IN", {
+      month: "long",
+      year: "numeric",
+    });
+  }, [calendarCursor]);
+
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const calendarCells = useMemo(() => {
+    const { year, month } = calendarCursor;
+    const firstWeekday = new Date(year, month, 1).getDay(); // 0=Sun
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells: Array<{ day: number | null; dateStr: string | null }> = [];
+
+    for (let i = 0; i < firstWeekday; i++) {
+      cells.push({ day: null, dateStr: null });
+    }
+    for (let day = 1; day <= daysInMonth; day++) {
+      const mm = String(month + 1).padStart(2, "0");
+      const dd = String(day).padStart(2, "0");
+      cells.push({ day, dateStr: `${year}-${mm}-${dd}` });
+    }
+    // Pad to full weeks
+    while (cells.length % 7 !== 0) {
+      cells.push({ day: null, dateStr: null });
+    }
+    return cells;
+  }, [calendarCursor]);
+
+  const shiftCalendarMonth = (delta: number) => {
+    setCalendarCursor((prev) => {
+      const d = new Date(prev.year, prev.month + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+  };
+
+  const goToCurrentMonth = () => {
+    const now = new Date();
+    setCalendarCursor({ year: now.getFullYear(), month: now.getMonth() });
+  };
+
   // ─────────────────────────────────────────────────────────────
   // 3. CREATE PM SCHEDULE HANDLER
   // ─────────────────────────────────────────────────────────────
   const handleOpenScheduleDrawer = () => {
-    const asset = MOCK_CRITICAL_ASSET_HEALTH[0];
+    const asset = assets[0];
     const tmpl = templates[0];
-    setFormAssetCode(asset.code);
-    setFormAssetName(asset.name);
-    setFormLocation(asset.location);
-    setFormTemplateId(tmpl.id);
-    setFormTaskTitle(tmpl.templateTitle);
-    setFormCategory(tmpl.category);
-    setFormFrequency(tmpl.defaultFrequency);
+    setFormAssetCode(asset?.assetCode ?? "");
+    setFormAssetName(asset?.assetName ?? "");
+    setFormLocation(asset?.location ?? "");
+    setFormTemplateId(tmpl?.id ?? "");
+    setFormTaskTitle(tmpl?.templateTitle ?? "");
+    setFormCategory(tmpl?.category ?? "");
+    setFormFrequency(tmpl?.defaultFrequency ?? "Monthly");
     setFormNextDueDate("2026-09-25");
     setFormExecutionMethod("In-House");
     setFormNotes("");
     setIsScheduleDrawerOpen(true);
   };
 
-  const handleSaveSchedule = (e: React.FormEvent) => {
+  const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formTaskTitle.trim() || !formNextDueDate) return;
+    if (!formTaskTitle.trim() || !formNextDueDate || saving) return;
 
     const tmpl = templates.find((t) => t.id === formTemplateId) || templates[0];
     const nextPmNo = `PM-00${pmSchedules.length + 1}`;
 
-    const newSchedule: PMSchedule = {
-      id: `pms-${Date.now()}`,
+    const newSchedule: Partial<PMSchedule> = {
       pmNumber: nextPmNo,
       assetCode: formAssetCode,
       assetName: formAssetName,
       category: formCategory,
       location: formLocation,
-      templateId: tmpl.id,
+      templateId: tmpl?.id,
       taskTitle: formTaskTitle.trim(),
-      checklist: tmpl.checklist || [formTaskTitle.trim()],
+      checklist: tmpl?.checklist || [formTaskTitle.trim()],
       frequency: formFrequency,
       firstDueDate: formNextDueDate,
       nextDueDate: formNextDueDate,
@@ -208,15 +259,27 @@ export function MaintenancePreventiveView() {
       createdAt: new Date().toISOString(),
     };
 
-    setPmSchedules((prev) => [newSchedule, ...prev]);
-    setIsScheduleDrawerOpen(false);
-    setToastMessage(`✓ PM Schedule #${nextPmNo} created successfully.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      await mntPmScheduleService.create(newSchedule);
+      await reloadSchedules();
+      setIsScheduleDrawerOpen(false);
+      setToastMessage(`✓ PM Schedule #${nextPmNo} created successfully.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to create PM schedule");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
   // 4. GENERATE WORK ORDER FROM PM SCHEDULE (NO DUPLICATE ACTIVE WOs)
   // ─────────────────────────────────────────────────────────────
-  const handleGenerateWorkOrder = (pm: PMSchedule) => {
+  const handleGenerateWorkOrder = async (pm: PMSchedule) => {
+    if (saving) return;
     // Prevent duplicate active Work Order if already generated
     if (pm.activeWorkOrderNo) {
       setToastMessage(`⚠️ Active Work Order #${pm.activeWorkOrderNo} already exists for ${pm.pmNumber}. View it on the Work Orders page.`);
@@ -225,8 +288,7 @@ export function MaintenancePreventiveView() {
 
     const newWoNumber = `WO-${130 + Math.floor(Math.random() * 50)}`;
 
-    const createdWo: WorkOrder = {
-      id: `wo-${Date.now()}`,
+    const createdWo: Partial<WorkOrder> = {
       woNumber: newWoNumber,
       sourceRef: pm.pmNumber,
       woType: "Preventive",
@@ -239,16 +301,19 @@ export function MaintenancePreventiveView() {
       isSafetyHazard: false,
       executionMethod: pm.executionMethod,
       assignedType: pm.assignedType,
-      technicianName: pm.executionMethod === "In-House" ? "Unassigned In-House Tech" : "Unassigned Maintenance Vendor",
+      technicianName:
+        pm.technicianName ||
+        pm.maintenanceVendorName ||
+        (pm.executionMethod === "In-House" ? "Unassigned Staff" : "Pending Vendor Selection"),
       assetCode: pm.assetCode,
       assetName: pm.assetName,
       scheduledDate: pm.nextDueDate,
       dueDate: `${pm.nextDueDate}, 05:00 PM`,
-      status: "Assigned",
+      status: "New",
       partsCost: 0,
       externalServiceCost: 0,
       totalCost: 0,
-      checklistItems: pm.checklist.map((item, idx) => ({ id: `c-${idx}`, description: item, completed: false })),
+      checklistItems: (pm.checklist || []).map((item, idx) => ({ id: `c-${idx}`, description: item, completed: false })),
       progressUpdates: [],
       timeline: [
         { time: "Just now", action: `Preventive Work Order #${newWoNumber} Generated from ${pm.pmNumber}`, user: currentUser.name },
@@ -256,26 +321,50 @@ export function MaintenancePreventiveView() {
       ],
     };
 
-    // Update PM Schedule with active WO reference
-    const updatedSchedule: PMSchedule = {
-      ...pm,
-      activeWorkOrderNo: newWoNumber,
-    };
-
-    setPmSchedules((prev) => prev.map((s) => (s.id === pm.id ? updatedSchedule : s)));
-    if (selectedSchedule?.id === pm.id) setSelectedSchedule(updatedSchedule);
-
-    setToastMessage(`✓ Work Order #${newWoNumber} generated for ${pm.pmNumber} and sent to Work Orders page.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      await mntWorkOrderService.create(createdWo);
+      const updatedSchedule = await mntPmScheduleService.update(pm.id, {
+        activeWorkOrderNo: newWoNumber,
+      });
+      await reloadSchedules();
+      if (selectedSchedule?.id === pm.id) setSelectedSchedule(updatedSchedule);
+      setToastMessage(`✓ Work Order #${newWoNumber} generated for ${pm.pmNumber} and sent to Work Orders page.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to generate work order");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
   // Toggle Schedule Active / Inactive
-  const handleToggleScheduleActive = (pm: PMSchedule) => {
+  const handleToggleScheduleActive = async (pm: PMSchedule) => {
+    if (saving) return;
     const nextStatus: PMScheduleStatus = pm.status === "Inactive" ? "Upcoming" : "Inactive";
-    const updated: PMSchedule = { ...pm, status: nextStatus };
-    setPmSchedules((prev) => prev.map((s) => (s.id === pm.id ? updated : s)));
-    if (selectedSchedule?.id === pm.id) setSelectedSchedule(updated);
-    setToastMessage(`Schedule #${pm.pmNumber} marked as ${nextStatus}.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      const updated = await mntPmScheduleService.update(pm.id, { status: nextStatus });
+      await reloadSchedules();
+      if (selectedSchedule?.id === pm.id) setSelectedSchedule(updated);
+      setToastMessage(`Schedule #${pm.pmNumber} marked as ${nextStatus}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update schedule");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">Loading preventive schedules...</div>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -293,7 +382,7 @@ export function MaintenancePreventiveView() {
           type="button"
           size="sm"
           onClick={handleOpenScheduleDrawer}
-          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 h-9 px-3.5"
+          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 h-9 px-3.5 disabled:opacity-50 inline-flex items-center gap-1.5"
         >
           <Plus className="h-4 w-4" /> Schedule PM Task
         </Button>
@@ -595,10 +684,12 @@ export function MaintenancePreventiveView() {
                               <Button
                                 type="button"
                                 size="sm"
+                                disabled={saving}
                                 onClick={() => handleGenerateWorkOrder(pm)}
-                                className="h-7 px-2 text-xs font-semibold bg-emerald-700 text-white hover:bg-emerald-800 rounded-lg cursor-pointer flex items-center gap-1"
+                                className="h-7 px-2 text-xs font-semibold bg-emerald-700 text-white hover:bg-emerald-800 rounded-lg cursor-pointer flex items-center gap-1 disabled:opacity-50"
                               >
-                                <Plus className="h-3 w-3" /> Generate Work Order
+                                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                                {saving ? "Saving..." : "Generate Work Order"}
                               </Button>
                             ) : (
                               <Button
@@ -644,10 +735,42 @@ export function MaintenancePreventiveView() {
       ───────────────────────────────────────────────────────────── */}
       {activeView === "calendar" && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <CalendarIcon className="h-4 w-4 text-emerald-700" /> September 2026 PM Schedule Calendar
-            </h3>
+          <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => shiftCalendarMonth(-1)}
+                className="h-8 w-8 rounded-lg p-0 cursor-pointer"
+                aria-label="Previous month"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 min-w-[200px] justify-center">
+                <CalendarIcon className="h-4 w-4 text-emerald-700" />
+                {calendarMonthLabel} PM Schedule
+              </h3>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => shiftCalendarMonth(1)}
+                className="h-8 w-8 rounded-lg p-0 cursor-pointer"
+                aria-label="Next month"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={goToCurrentMonth}
+                className="h-8 rounded-lg px-2.5 text-xs font-semibold cursor-pointer"
+              >
+                Today
+              </Button>
+            </div>
             <div className="flex items-center gap-2 text-xs font-semibold">
               <span className="flex items-center gap-1.5 text-rose-700">
                 <span className="h-2.5 w-2.5 rounded-full bg-rose-500"></span> Overdue
@@ -661,7 +784,6 @@ export function MaintenancePreventiveView() {
             </div>
           </div>
 
-          {/* Calendar Grid Representation */}
           <div className="grid grid-cols-7 gap-2 text-center font-bold text-slate-600 text-xs mb-2">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
               <div key={day} className="py-1 bg-slate-50 rounded">
@@ -671,30 +793,39 @@ export function MaintenancePreventiveView() {
           </div>
 
           <div className="grid grid-cols-7 gap-2">
-            {Array.from({ length: 30 }).map((_, idx) => {
-              const dayNum = idx + 1;
-              const dateStr = `2026-09-${dayNum < 10 ? `0${dayNum}` : dayNum}`;
-              const itemsForDay = pmSchedules.filter((p) => p.nextDueDate === dateStr);
+            {calendarCells.map((cell, idx) => {
+              if (!cell.day || !cell.dateStr) {
+                return (
+                  <div
+                    key={`empty-${idx}`}
+                    className="min-h-[90px] p-1.5 rounded-xl border border-transparent bg-transparent"
+                  />
+                );
+              }
+
+              const itemsForDay = filteredSchedules.filter((p) => p.nextDueDate === cell.dateStr);
+              const isToday = cell.dateStr === todayIso;
 
               return (
                 <div
-                  key={dayNum}
+                  key={cell.dateStr}
                   className={cn(
                     "min-h-[90px] p-1.5 rounded-xl border flex flex-col justify-between text-left transition-colors",
-                    dayNum === 20
+                    isToday
                       ? "border-emerald-500 bg-emerald-50/20"
                       : itemsForDay.length > 0
-                      ? "border-slate-200 bg-white"
-                      : "border-slate-100 bg-slate-50/30"
+                        ? "border-slate-200 bg-white"
+                        : "border-slate-100 bg-slate-50/30",
                   )}
                 >
                   <span
                     className={cn(
                       "text-xs font-bold font-mono px-1 rounded w-max",
-                      dayNum === 20 ? "bg-emerald-700 text-white" : "text-slate-700"
+                      isToday ? "bg-emerald-700 text-white" : "text-slate-700",
                     )}
                   >
-                    {dayNum} {dayNum === 20 ? "(Today)" : ""}
+                    {cell.day}
+                    {isToday ? " (Today)" : ""}
                   </span>
 
                   <div className="space-y-1 mt-1">
@@ -707,7 +838,7 @@ export function MaintenancePreventiveView() {
                           className={cn(
                             "p-1 rounded text-[10px] font-bold truncate cursor-pointer transition hover:opacity-80 border",
                             b.bg,
-                            b.border
+                            b.border,
                           )}
                           title={`${item.pmNumber}: ${item.taskTitle} (${item.assetName})`}
                         >
@@ -744,19 +875,23 @@ export function MaintenancePreventiveView() {
                 onChange={(e) => {
                   const code = e.target.value;
                   setFormAssetCode(code);
-                  const a = MOCK_CRITICAL_ASSET_HEALTH.find((asset) => asset.code === code);
+                  const a = assets.find((asset) => asset.assetCode === code);
                   if (a) {
-                    setFormAssetName(a.name);
+                    setFormAssetName(a.assetName);
                     setFormLocation(a.location);
                   }
                 }}
                 className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs text-slate-900"
               >
-                {MOCK_CRITICAL_ASSET_HEALTH.map((asset) => (
-                  <option key={asset.id} value={asset.code}>
-                    {asset.code} — {asset.name} ({asset.location})
-                  </option>
-                ))}
+                {assets.length === 0 ? (
+                  <option value="">No assets registered</option>
+                ) : (
+                  assets.map((asset) => (
+                    <option key={asset.id} value={asset.assetCode}>
+                      {asset.assetCode} — {asset.assetName} ({asset.location})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
@@ -779,11 +914,15 @@ export function MaintenancePreventiveView() {
                 }}
                 className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs text-slate-900"
               >
-                {templates.map((tmpl) => (
-                  <option key={tmpl.id} value={tmpl.id}>
-                    {tmpl.templateTitle} ({tmpl.category} — {tmpl.defaultFrequency})
-                  </option>
-                ))}
+                {templates.length === 0 ? (
+                  <option value="">No PM templates available</option>
+                ) : (
+                  templates.map((tmpl) => (
+                    <option key={tmpl.id} value={tmpl.id}>
+                      {tmpl.templateTitle} ({tmpl.category} — {tmpl.defaultFrequency})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
@@ -894,10 +1033,12 @@ export function MaintenancePreventiveView() {
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 size="sm"
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                Save PM Schedule ✓
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Save PM Schedule ✓"}
               </Button>
             </div>
           </form>
@@ -939,10 +1080,12 @@ export function MaintenancePreventiveView() {
                 <Button
                   type="button"
                   size="sm"
+                  disabled={saving}
                   onClick={() => handleGenerateWorkOrder(selectedSchedule)}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer"
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-50"
                 >
-                  <Plus className="h-3.5 w-3.5" /> Generate Work Order →
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                  {saving ? "Saving..." : "Generate Work Order →"}
                 </Button>
               )}
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
   Boxes,
@@ -29,21 +29,28 @@ import {
   History,
   Tag,
   Ban,
+  Loader2,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { MaintenanceAsset, AssetStatus } from "@/app/data/maintenance/types";
+import { usePsList } from "@/hooks/usePsResource";
 import {
-  MOCK_MAINTENANCE_ASSETS,
-  MOCK_ASSET_CATEGORIES,
-  MOCK_MAINTENANCE_VENDORS,
-  HOTEL_LOCATIONS,
-  MOCK_PM_SCHEDULES,
-} from "@/app/data/maintenance/mockData";
-import { MaintenanceAsset, AssetStatus, MaintenanceVendor } from "@/app/data/maintenance/types";
+  mntAssetService,
+  mntAssetCategoryService,
+  mntVendorService,
+  mntPmScheduleService,
+} from "@/services/maintenance";
 
 export function MaintenanceAssetsView() {
-  const [assets, setAssets] = useState<MaintenanceAsset[]>(MOCK_MAINTENANCE_ASSETS);
+  const { data: assets, loading, reload: reloadAssets } = usePsList(() => mntAssetService.list(), []);
+  const { data: categories } = usePsList(() => mntAssetCategoryService.list(), []);
+  const { data: vendors } = usePsList(() => mntVendorService.list(), []);
+  const { data: pmSchedules } = usePsList(() => mntPmScheduleService.list(), []);
+  const [saving, setSaving] = useState(false);
+  const savingLockRef = useRef(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("ALL");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState("ALL");
@@ -82,12 +89,12 @@ export function MaintenanceAssetsView() {
   // Form State for Register / Edit
   const [formAssetCode, setFormAssetCode] = useState("");
   const [formAssetName, setFormAssetName] = useState("");
-  const [formCategory, setFormCategory] = useState(MOCK_ASSET_CATEGORIES[0]?.categoryName || "HVAC / Air Conditioning");
+  const [formCategory, setFormCategory] = useState("HVAC / Air Conditioning");
   const [formManufacturer, setFormManufacturer] = useState("");
   const [formModel, setFormModel] = useState("");
   const [formSerialNumber, setFormSerialNumber] = useState("");
   const [formLocationType, setFormLocationType] = useState<"Guest Room" | "F&B Area" | "Public Area" | "Back of House">("Back of House");
-  const [formLocation, setFormLocation] = useState(HOTEL_LOCATIONS[0]?.name || "Basement Utility Room");
+  const [formLocation, setFormLocation] = useState("");
   const [formPurchaseDate, setFormPurchaseDate] = useState("");
   const [formInstallationDate, setFormInstallationDate] = useState("");
   const [formPurchaseCost, setFormPurchaseCost] = useState<number | "">("");
@@ -174,21 +181,16 @@ export function MaintenanceAssetsView() {
     };
   }, [assets]);
 
-  // Locations available for selected locationType
-  const filteredLocations = useMemo(() => {
-    return HOTEL_LOCATIONS.filter((loc) => loc.type === formLocationType);
-  }, [formLocationType]);
-
   const handleOpenRegisterDrawer = () => {
     const nextCode = `AST-00${assets.length + 1}`;
     setFormAssetCode(nextCode);
     setFormAssetName("");
-    setFormCategory(MOCK_ASSET_CATEGORIES[0]?.categoryName || "HVAC / Air Conditioning");
+    setFormCategory(categories[0]?.categoryName || "HVAC / Air Conditioning");
     setFormManufacturer("");
     setFormModel("");
     setFormSerialNumber("");
     setFormLocationType("Back of House");
-    setFormLocation("Basement Utility Room");
+    setFormLocation("");
     setFormPurchaseDate("");
     setFormInstallationDate("");
     setFormPurchaseCost("");
@@ -233,9 +235,9 @@ export function MaintenanceAssetsView() {
     setFormNotes(ast.notes || "");
   };
 
-  const handleSaveAsset = (e: React.FormEvent) => {
+  const handleSaveAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (duplicateCodeWarning) return;
+    if (duplicateCodeWarning || saving) return;
     if (!formAssetCode.trim() || !formAssetName.trim()) return;
 
     // Calculate warranty status
@@ -246,112 +248,94 @@ export function MaintenanceAssetsView() {
     }
 
     // Get vendor info
-    const vendor = MOCK_MAINTENANCE_VENDORS.find((v) => v.id === formVendorId);
+    const vendor = vendors.find((v) => v.id === formVendorId);
 
-    if (selectedAssetForEdit) {
-      // Update
-      setAssets((prev) =>
-        prev.map((a) =>
-          a.id === selectedAssetForEdit.id
-            ? {
-                ...a,
-                assetCode: formAssetCode.trim().toUpperCase(),
-                assetName: formAssetName.trim(),
-                category: formCategory,
-                manufacturer: formManufacturer.trim(),
-                model: formModel.trim(),
-                serialNumber: formSerialNumber.trim(),
-                locationType: formLocationType,
-                location: formLocation,
-                purchaseDate: formPurchaseDate,
-                installationDate: formInstallationDate,
-                purchaseCost: typeof formPurchaseCost === "number" ? formPurchaseCost : undefined,
-                warrantyStartDate: formWarrantyStartDate,
-                warrantyEndDate: formWarrantyEndDate,
-                warrantyStatus: computedWarrantyStatus,
-                amcStatus: formAmcStatus,
-                maintenanceVendorId: vendor?.id,
-                maintenanceVendorName: vendor?.vendorName,
-                amcStartDate: formAmcStartDate,
-                amcEndDate: formAmcEndDate,
-                amcReference: formAmcReference,
-                status: formStatus,
-                notes: formNotes.trim(),
-              }
-            : a
-        )
-      );
-      setSelectedAssetForEdit(null);
-    } else {
-      // Register New
-      const newAsset: MaintenanceAsset = {
-        id: `ast-${Date.now()}`,
-        assetCode: formAssetCode.trim().toUpperCase(),
-        assetName: formAssetName.trim(),
-        category: formCategory,
-        manufacturer: formManufacturer.trim(),
-        model: formModel.trim(),
-        serialNumber: formSerialNumber.trim(),
-        locationType: formLocationType,
-        location: formLocation,
-        purchaseDate: formPurchaseDate,
-        installationDate: formInstallationDate,
-        purchaseCost: typeof formPurchaseCost === "number" ? formPurchaseCost : undefined,
-        warrantyStartDate: formWarrantyStartDate,
-        warrantyEndDate: formWarrantyEndDate,
-        warrantyStatus: computedWarrantyStatus,
-        amcStatus: formAmcStatus,
-        maintenanceVendorId: vendor?.id,
-        maintenanceVendorName: vendor?.vendorName,
-        amcStartDate: formAmcStartDate,
-        amcEndDate: formAmcEndDate,
-        amcReference: formAmcReference,
-        status: formStatus,
-        notes: formNotes.trim(),
-        totalMaintenanceCost: 0,
-        totalWorkOrdersCount: 0,
-        history: [],
-        createdAt: new Date().toISOString(),
-      };
-      setAssets((prev) => [newAsset, ...prev]);
-      setIsRegisterDrawerOpen(false);
+    const body: Partial<MaintenanceAsset> = {
+      assetCode: formAssetCode.trim().toUpperCase(),
+      assetName: formAssetName.trim(),
+      category: formCategory,
+      manufacturer: formManufacturer.trim(),
+      model: formModel.trim(),
+      serialNumber: formSerialNumber.trim(),
+      locationType: formLocationType,
+      location: formLocation,
+      purchaseDate: formPurchaseDate,
+      installationDate: formInstallationDate,
+      purchaseCost: typeof formPurchaseCost === "number" ? formPurchaseCost : undefined,
+      warrantyStartDate: formWarrantyStartDate,
+      warrantyEndDate: formWarrantyEndDate,
+      warrantyStatus: computedWarrantyStatus,
+      amcStatus: formAmcStatus,
+      maintenanceVendorId: vendor?.id,
+      maintenanceVendorName: vendor?.vendorName,
+      amcStartDate: formAmcStartDate,
+      amcEndDate: formAmcEndDate,
+      amcReference: formAmcReference,
+      status: formStatus,
+      notes: formNotes.trim(),
+    };
+
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      if (selectedAssetForEdit) {
+        await mntAssetService.update(selectedAssetForEdit.id, body);
+        setSelectedAssetForEdit(null);
+      } else {
+        await mntAssetService.create({
+          ...body,
+          totalMaintenanceCost: 0,
+          totalWorkOrdersCount: 0,
+          history: [],
+          createdAt: new Date().toISOString(),
+        });
+        setIsRegisterDrawerOpen(false);
+      }
+      await reloadAssets();
+      setToastMessage(selectedAssetForEdit ? "Asset updated." : "Asset registered.");
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save asset");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
     }
   };
 
-  const handleDecommissionAsset = (e: React.FormEvent) => {
+  const handleDecommissionAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedAssetForDecommission || !decommissionReason.trim()) return;
+    if (!selectedAssetForDecommission || !decommissionReason.trim() || saving) return;
 
-    setAssets((prev) =>
-      prev.map((a) =>
-        a.id === selectedAssetForDecommission.id
-          ? {
-              ...a,
-              status: "Decommissioned",
-              decommissionDate: decommissionDate,
-              decommissionReason: decommissionReason.trim(),
-            }
-          : a
-      )
-    );
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      const updated = await mntAssetService.update(selectedAssetForDecommission.id, {
+        status: "Decommissioned",
+        decommissionDate: decommissionDate,
+        decommissionReason: decommissionReason.trim(),
+      });
 
-    // If currently viewing in drawer, update view
-    if (selectedAssetForView && selectedAssetForView.id === selectedAssetForDecommission.id) {
-      setSelectedAssetForView((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: "Decommissioned",
-              decommissionDate: decommissionDate,
-              decommissionReason: decommissionReason.trim(),
-            }
-          : null
-      );
+      if (selectedAssetForView && selectedAssetForView.id === selectedAssetForDecommission.id) {
+        setSelectedAssetForView(updated);
+      }
+
+      await reloadAssets();
+      setSelectedAssetForDecommission(null);
+      setToastMessage(`Asset ${selectedAssetForDecommission.assetCode} decommissioned.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to decommission asset");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
     }
-
-    setSelectedAssetForDecommission(null);
-    setDecommissionReason("");
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">Loading assets...</div>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -362,6 +346,8 @@ export function MaintenanceAssetsView() {
         { label: "Maintenance", href: "/maintenance/dashboard" },
         { label: "Assets & Equipment" },
       ]}
+      toast={toastMessage}
+      onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <Button
           type="button"
@@ -491,7 +477,7 @@ export function MaintenanceAssetsView() {
               className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 focus:border-emerald-500 focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Categories</option>
-              {MOCK_ASSET_CATEGORIES.map((cat) => (
+              {categories.map((cat) => (
                 <option key={cat.id} value={cat.categoryName}>
                   {cat.categoryName}
                 </option>
@@ -753,7 +739,7 @@ export function MaintenanceAssetsView() {
                   onChange={(e) => setFormCategory(e.target.value)}
                   className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
                 >
-                  {MOCK_ASSET_CATEGORIES.map((cat) => (
+                  {categories.map((cat) => (
                     <option key={cat.id} value={cat.categoryName}>
                       {cat.categoryName}
                     </option>
@@ -811,16 +797,15 @@ export function MaintenanceAssetsView() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Location Type *
+                  Department *
                 </label>
                 <select
                   value={formLocationType}
-                  onChange={(e) => {
-                    const type = e.target.value as any;
-                    setFormLocationType(type);
-                    const firstMatch = HOTEL_LOCATIONS.find((l) => l.type === type);
-                    if (firstMatch) setFormLocation(firstMatch.name);
-                  }}
+                  onChange={(e) =>
+                    setFormLocationType(
+                      e.target.value as "Guest Room" | "F&B Area" | "Public Area" | "Back of House",
+                    )
+                  }
                   className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
                 >
                   <option value="Guest Room">Guest Room</option>
@@ -834,17 +819,14 @@ export function MaintenanceAssetsView() {
                 <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">
                   Specific Location *
                 </label>
-                <select
+                <input
+                  type="text"
+                  required
                   value={formLocation}
                   onChange={(e) => setFormLocation(e.target.value)}
-                  className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-                >
-                  {filteredLocations.map((loc, idx) => (
-                    <option key={idx} value={loc.name}>
-                      {loc.name} ({loc.floor})
-                    </option>
-                  ))}
-                </select>
+                  placeholder="e.g. Engineering Workshop (Basement 1)"
+                  className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
               </div>
             </div>
           </div>
@@ -950,7 +932,7 @@ export function MaintenanceAssetsView() {
                   className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
                 >
                   <option value="">-- None / In-House Maintenance --</option>
-                  {MOCK_MAINTENANCE_VENDORS.map((v) => (
+                  {vendors.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.vendorName} ({v.serviceType} - {v.vendorCode})
                     </option>
@@ -1029,11 +1011,12 @@ export function MaintenanceAssetsView() {
             <Button
               type="submit"
               size="sm"
-              disabled={!!duplicateCodeWarning}
-              className="bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
+              disabled={saving || !!duplicateCodeWarning}
+              className="bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-1.5"
             >
-              Register Asset
-            </Button>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Register Asset"}
+              </Button>
           </div>
         </form>
       </Drawer>
@@ -1085,7 +1068,7 @@ export function MaintenanceAssetsView() {
                 onChange={(e) => setFormCategory(e.target.value)}
                 className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
               >
-                {MOCK_ASSET_CATEGORIES.map((cat) => (
+                {categories.map((cat) => (
                   <option key={cat.id} value={cat.categoryName}>
                     {cat.categoryName}
                   </option>
@@ -1124,15 +1107,14 @@ export function MaintenanceAssetsView() {
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Location Type</label>
+              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Department</label>
               <select
                 value={formLocationType}
-                onChange={(e) => {
-                  const type = e.target.value as any;
-                  setFormLocationType(type);
-                  const firstMatch = HOTEL_LOCATIONS.find((l) => l.type === type);
-                  if (firstMatch) setFormLocation(firstMatch.name);
-                }}
+                onChange={(e) =>
+                  setFormLocationType(
+                    e.target.value as "Guest Room" | "F&B Area" | "Public Area" | "Back of House",
+                  )
+                }
                 className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
               >
                 <option value="Guest Room">Guest Room</option>
@@ -1144,17 +1126,14 @@ export function MaintenanceAssetsView() {
 
             <div>
               <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Specific Location</label>
-              <select
+              <input
+                type="text"
+                required
                 value={formLocation}
                 onChange={(e) => setFormLocation(e.target.value)}
-                className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-              >
-                {filteredLocations.map((loc, idx) => (
-                  <option key={idx} value={loc.name}>
-                    {loc.name} ({loc.floor})
-                  </option>
-                ))}
-              </select>
+                placeholder="e.g. Engineering Workshop (Basement 1)"
+                className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
             </div>
 
             <div>
@@ -1178,7 +1157,7 @@ export function MaintenanceAssetsView() {
                 className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
               >
                 <option value="">-- In-House Maintenance --</option>
-                {MOCK_MAINTENANCE_VENDORS.map((v) => (
+                {vendors.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.vendorName} ({v.vendorCode})
                   </option>
@@ -1194,11 +1173,12 @@ export function MaintenanceAssetsView() {
             <Button
               type="submit"
               size="sm"
-              disabled={!!duplicateCodeWarning}
-              className="bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
+              disabled={saving || !!duplicateCodeWarning}
+              className="bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-1.5"
             >
-              Update Asset
-            </Button>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Update Asset"}
+              </Button>
           </div>
         </form>
       </Drawer>
@@ -1345,7 +1325,7 @@ export function MaintenanceAssetsView() {
               <div className="bg-white border border-slate-200 p-3 rounded-lg text-center">
                 <div className="text-[10px] text-slate-500 uppercase font-semibold">Total WOs Handled</div>
                 <div className="text-lg font-bold text-slate-900 mt-0.5">
-                  {selectedAssetForView.history.length || selectedAssetForView.totalWorkOrdersCount || 0}
+                  {(selectedAssetForView.history?.length ?? 0) || selectedAssetForView.totalWorkOrdersCount || 0}
                 </div>
               </div>
               <div className="bg-white border border-slate-200 p-3 rounded-lg text-center">
@@ -1357,7 +1337,12 @@ export function MaintenanceAssetsView() {
               <div className="bg-white border border-slate-200 p-3 rounded-lg text-center">
                 <div className="text-[10px] text-slate-500 uppercase font-semibold">Next PM Due</div>
                 <div className="text-sm font-bold text-indigo-600 mt-1">
-                  {selectedAssetForView.nextPmDueDate || "Not Scheduled"}
+                  {selectedAssetForView.nextPmDueDate ||
+                    pmSchedules
+                      .filter((p) => p.assetCode === selectedAssetForView.assetCode && p.status !== "Inactive")
+                      .sort((a, b) => String(a.nextDueDate).localeCompare(String(b.nextDueDate)))[0]
+                      ?.nextDueDate ||
+                    "Not Scheduled"}
                 </div>
               </div>
             </div>
@@ -1381,14 +1366,14 @@ export function MaintenanceAssetsView() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {selectedAssetForView.history.length === 0 ? (
+                    {(selectedAssetForView.history ?? []).length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
                           No service history recorded for this asset yet.
                         </td>
                       </tr>
                     ) : (
-                      selectedAssetForView.history.map((h) => (
+                      (selectedAssetForView.history ?? []).map((h) => (
                         <tr key={h.id} className="hover:bg-slate-50">
                           <td className="px-3 py-2.5 text-slate-500 font-mono">{h.date}</td>
                           <td className="px-3 py-2.5 font-mono font-semibold text-slate-900">{h.workOrderNo}</td>
@@ -1514,9 +1499,11 @@ export function MaintenanceAssetsView() {
             >
               Cancel
             </Button>
-            <Button type="submit" size="sm" className="bg-rose-700 text-white hover:bg-rose-800">
-              Confirm Decommission
-            </Button>
+            <Button type="submit"
+                disabled={saving} size="sm" className="bg-rose-700 text-white hover:bg-rose-800 inline-flex items-center gap-1.5 disabled:opacity-50">
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Confirm Decommission"}
+              </Button>
           </div>
         </form>
       </Modal>

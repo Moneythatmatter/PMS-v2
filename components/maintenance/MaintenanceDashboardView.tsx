@@ -23,22 +23,34 @@ import {
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
 import { cn } from "@/lib/utils";
-import {
-  MOCK_MAINTENANCE_STATS,
-  MOCK_CRITICAL_ISSUES,
-  MOCK_ACTIVE_WORK_ORDERS,
-  MOCK_ROOMS_UNDER_MAINTENANCE,
-  MOCK_PM_TASKS_TODAY,
-} from "@/app/data/maintenance/mockData";
+import { usePsItem } from "@/hooks/usePsResource";
+import { mntDashboardService } from "@/services/maintenance";
 import {
   MaintenanceRequest,
   WorkOrder,
   RoomUnderMaintenance,
   PriorityLevel,
   EntryPreference,
+  MaintenanceDashboardStats,
+  PMSchedule,
 } from "@/app/data/maintenance/types";
 
+const EMPTY_STATS: MaintenanceDashboardStats = {
+  openRequests: { total: 0, newCount: 0, inReviewCount: 0 },
+  activeWorkOrders: { total: 0, inProgress: 0, awaitingParts: 0 },
+  criticalIssues: { total: 0, safetyHazardCount: 0 },
+  pmDueToday: { totalDue: 0, completed: 0, pending: 0 },
+  roomsUnderMaintenance: { total: 0, oooCount: 0, oosCount: 0 },
+};
+
 export function MaintenanceDashboardView() {
+  const { data: dashboard, loading } = usePsItem(() => mntDashboardService.get(), []);
+  const stats = dashboard?.stats ?? EMPTY_STATS;
+  const criticalIssues = dashboard?.criticalIssues ?? [];
+  const activeWorkOrders = dashboard?.activeWorkOrders ?? [];
+  const roomsUnderMaintenance = dashboard?.roomsUnderMaintenance ?? [];
+  const pmTasksToday = dashboard?.pmTasksToday ?? [];
+
   const [searchTerm, setSearchTerm] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -81,20 +93,28 @@ export function MaintenanceDashboardView() {
   };
 
   // Filtered lists based on search
-  const filteredCritical = MOCK_CRITICAL_ISSUES.filter(
+  const q = searchTerm.toLowerCase();
+  const filteredCritical = criticalIssues.filter(
     (item) =>
-      item.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.issueTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchTerm.toLowerCase())
+      item.location.toLowerCase().includes(q) ||
+      item.issue.toLowerCase().includes(q) ||
+      (item.problemCategory || "").toLowerCase().includes(q) ||
+      item.woNumber.toLowerCase().includes(q)
   );
 
-  const filteredWorkOrders = MOCK_ACTIVE_WORK_ORDERS.filter(
+  const filteredWorkOrders = activeWorkOrders.filter(
     (item) =>
-      item.woNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.issue.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.technicianName.toLowerCase().includes(searchTerm.toLowerCase())
+      item.woNumber.toLowerCase().includes(q) ||
+      item.location.toLowerCase().includes(q) ||
+      item.issue.toLowerCase().includes(q) ||
+      (item.technicianName || "").toLowerCase().includes(q)
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">Loading maintenance dashboard...</div>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -152,10 +172,10 @@ export function MaintenanceDashboardView() {
             </span>
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900">
-            {MOCK_MAINTENANCE_STATS.openRequests.total}
+            {stats.openRequests.total}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            <span className="font-semibold text-blue-600">{MOCK_MAINTENANCE_STATS.openRequests.newCount} new</span> · {MOCK_MAINTENANCE_STATS.openRequests.inReviewCount} in review
+            <span className="font-semibold text-blue-600">{stats.openRequests.newCount} new</span> · {stats.openRequests.inReviewCount} in review
           </p>
         </div>
 
@@ -168,10 +188,10 @@ export function MaintenanceDashboardView() {
             </span>
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900">
-            {MOCK_MAINTENANCE_STATS.activeWorkOrders.total}
+            {stats.activeWorkOrders.total}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            <span className="font-semibold text-amber-600">{MOCK_MAINTENANCE_STATS.activeWorkOrders.inProgress} in progress</span> · {MOCK_MAINTENANCE_STATS.activeWorkOrders.awaitingParts} parts wait
+            <span className="font-semibold text-amber-600">{stats.activeWorkOrders.inProgress} in progress</span> · {stats.activeWorkOrders.awaitingParts} parts wait
           </p>
         </div>
 
@@ -184,10 +204,10 @@ export function MaintenanceDashboardView() {
             </span>
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900">
-            {MOCK_MAINTENANCE_STATS.pmDueToday.totalDue}
+            {stats.pmDueToday.totalDue}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            <span className="font-semibold text-emerald-600">{MOCK_MAINTENANCE_STATS.pmDueToday.completed} done</span> · {MOCK_MAINTENANCE_STATS.pmDueToday.pending} pending
+            <span className="font-semibold text-emerald-600">{stats.pmDueToday.completed} done</span> · {stats.pmDueToday.pending} pending
           </p>
         </div>
 
@@ -200,10 +220,10 @@ export function MaintenanceDashboardView() {
             </span>
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900">
-            {MOCK_MAINTENANCE_STATS.roomsUnderMaintenance.total}
+            {stats.roomsUnderMaintenance.total}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            <span className="font-bold text-rose-600">{MOCK_MAINTENANCE_STATS.roomsUnderMaintenance.oooCount} OOO</span> · <span className="font-bold text-amber-600">{MOCK_MAINTENANCE_STATS.roomsUnderMaintenance.oosCount} OOS</span>
+            <span className="font-bold text-rose-600">{stats.roomsUnderMaintenance.oooCount} OOO</span> · <span className="font-bold text-amber-600">{stats.roomsUnderMaintenance.oosCount} OOS</span>
           </p>
         </div>
 
@@ -216,10 +236,10 @@ export function MaintenanceDashboardView() {
             </span>
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900">
-            {MOCK_MAINTENANCE_STATS.criticalIssues.total}
+            {stats.criticalIssues.total}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            <span className="font-bold text-rose-600">{MOCK_MAINTENANCE_STATS.criticalIssues.safetyHazardCount} Safety Hazard</span> active
+            <span className="font-bold text-rose-600">{stats.criticalIssues.safetyHazardCount} Safety Hazard</span> active
           </p>
         </div>
       </div>
@@ -235,14 +255,14 @@ export function MaintenanceDashboardView() {
               Critical Issues Requiring Attention
             </h2>
             <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200">
-              {MOCK_CRITICAL_ISSUES.length} Action Needed
+              {criticalIssues.length} Action Needed
             </span>
           </div>
           <Link
-            href="/maintenance/requests"
+            href="/maintenance/work-orders"
             className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800"
           >
-            <span>All Requests</span>
+            <span>All Work Orders</span>
             <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </div>
@@ -254,76 +274,80 @@ export function MaintenanceDashboardView() {
                 <th className="py-2.5 px-4">Location</th>
                 <th className="py-2.5 px-3">Issue &amp; Category</th>
                 <th className="py-2.5 px-3">Priority</th>
-                <th className="py-2.5 px-3">Reported By</th>
+                <th className="py-2.5 px-3">Technician / Due</th>
                 <th className="py-2.5 px-3">Work Order</th>
                 <th className="py-2.5 px-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
-              {filteredCritical.map((item) => (
-                <tr
-                  key={item.id}
-                  className="hover:bg-slate-50/80 transition-colors cursor-pointer"
-                  onClick={() => setActiveDrawerItem({ type: "request", data: item })}
-                >
-                  <td className="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">
-                    {item.location}
-                    <span className="block text-[10px] font-normal text-slate-400">
-                      {item.locationType}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3">
-                    <p className="font-semibold text-slate-900 line-clamp-1">{item.issueTitle}</p>
-                    <p className="text-[10px] text-slate-500">{item.category}</p>
-                  </td>
-                  <td className="py-3 px-3 whitespace-nowrap">
-                    <div className="flex flex-col gap-1 items-start">
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-bold border",
-                          item.priority === "Critical"
-                            ? "bg-rose-50 text-rose-700 border border-rose-200"
-                            : "bg-amber-50 text-amber-700 border border-amber-200"
-                        )}
-                      >
-                        {item.priority}
-                      </span>
-                      {item.isSafetyHazard && (
-                        <span className="inline-flex items-center gap-1 rounded bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold text-white uppercase tracking-wider">
-                          <ShieldAlert className="h-2.5 w-2.5" />
-                          Safety Hazard
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-3 whitespace-nowrap text-slate-600">
-                    <p className="font-medium text-slate-800">{item.reportedBy}</p>
-                    <p className="text-[10px] text-slate-400">{item.reportedDept} · {item.dateTime}</p>
-                  </td>
-                  <td className="py-3 px-3 whitespace-nowrap">
-                    {item.workOrderNo ? (
-                      <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-800 border border-slate-200">
-                        {item.workOrderNo}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-slate-400 italic">Not Assigned</span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-right whitespace-nowrap">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveDrawerItem({ type: "request", data: item });
-                      }}
-                    >
-                      View
-                    </Button>
+              {filteredCritical.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 px-4 text-center text-slate-500">
+                    No critical work orders requiring attention.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredCritical.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                    onClick={() => setActiveDrawerItem({ type: "work_order", data: item })}
+                  >
+                    <td className="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">
+                      {item.location}
+                      <span className="block text-[10px] font-normal text-slate-400">
+                        {item.locationType}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <p className="font-semibold text-slate-900 line-clamp-1">{item.issue}</p>
+                      <p className="text-[10px] text-slate-500">{item.problemCategory || item.woType}</p>
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <div className="flex flex-col gap-1 items-start">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-bold border",
+                            item.priority === "Critical"
+                              ? "bg-rose-50 text-rose-700 border border-rose-200"
+                              : "bg-amber-50 text-amber-700 border border-amber-200"
+                          )}
+                        >
+                          {item.priority}
+                        </span>
+                        {item.isSafetyHazard && (
+                          <span className="inline-flex items-center gap-1 rounded bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold text-white uppercase tracking-wider">
+                            <ShieldAlert className="h-2.5 w-2.5" />
+                            Safety Hazard
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap text-slate-600">
+                      <p className="font-medium text-slate-800">{item.technicianName || "Unassigned"}</p>
+                      <p className="text-[10px] text-slate-400">Due: {item.dueDate}</p>
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-800 border border-slate-200">
+                        {item.woNumber}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveDrawerItem({ type: "work_order", data: item });
+                        }}
+                      >
+                        View
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -370,7 +394,14 @@ export function MaintenanceDashboardView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredWorkOrders.map((wo) => (
+                {filteredWorkOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 px-4 text-center text-slate-500">
+                      No active work orders.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredWorkOrders.map((wo) => (
                   <tr
                     key={wo.id}
                     className="hover:bg-slate-50/80 transition-colors cursor-pointer"
@@ -422,7 +453,8 @@ export function MaintenanceDashboardView() {
                       </Button>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -438,7 +470,7 @@ export function MaintenanceDashboardView() {
               </h3>
             </div>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-              {MOCK_ROOMS_UNDER_MAINTENANCE.length} Blocked
+              {roomsUnderMaintenance.length} Blocked
             </span>
           </div>
 
@@ -452,7 +484,10 @@ export function MaintenanceDashboardView() {
           </div>
 
           <div className="mt-3 space-y-2.5">
-            {MOCK_ROOMS_UNDER_MAINTENANCE.map((rm) => (
+            {roomsUnderMaintenance.length === 0 ? (
+              <p className="py-6 text-center text-xs text-slate-500">No rooms currently blocked.</p>
+            ) : (
+              roomsUnderMaintenance.map((rm) => (
               <div
                 key={rm.id}
                 className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 hover:bg-slate-100/60 transition-colors cursor-pointer"
@@ -492,7 +527,8 @@ export function MaintenanceDashboardView() {
                   HK Status: {rm.hkHandoverStatus}
                 </div>
               </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -523,34 +559,42 @@ export function MaintenanceDashboardView() {
         </div>
 
         <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {MOCK_PM_TASKS_TODAY.map((task) => (
-            <div
-              key={task.id}
-              className="p-3 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="font-mono text-[10px] font-bold text-slate-500">
-                  {task.assetCode}
-                </span>
-                <span
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[10px] font-bold shrink-0 border",
-                    task.status === "Completed"
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : "bg-blue-50 text-blue-700 border-blue-200"
-                  )}
-                >
-                  {task.status}
-                </span>
+          {pmTasksToday.length === 0 ? (
+            <p className="col-span-full py-6 text-center text-xs text-slate-500">
+              No preventive tasks due today.
+            </p>
+          ) : (
+            pmTasksToday.map((task: PMSchedule) => (
+              <div
+                key={task.id}
+                className="p-3 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-mono text-[10px] font-bold text-slate-500">
+                    {task.assetCode}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-bold shrink-0 border",
+                      task.status === "Due" || task.status === "Overdue"
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-blue-50 text-blue-700 border-blue-200"
+                    )}
+                  >
+                    {task.status}
+                  </span>
+                </div>
+                <p className="text-xs font-bold text-slate-900 mt-1 line-clamp-1">{task.assetName}</p>
+                <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-1">{task.taskTitle}</p>
+                <div className="mt-2 pt-1.5 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-500">
+                  <span>
+                    {task.technicianName || task.maintenanceVendorName || "Unassigned"}
+                  </span>
+                  <span className="font-semibold text-slate-700">{task.frequency}</span>
+                </div>
               </div>
-              <p className="text-xs font-bold text-slate-900 mt-1 line-clamp-1">{task.assetName}</p>
-              <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-1">{task.taskTitle}</p>
-              <div className="mt-2 pt-1.5 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-500">
-                <span>{task.assignedTo}</span>
-                <span className="font-semibold text-slate-700">{task.frequency}</span>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 

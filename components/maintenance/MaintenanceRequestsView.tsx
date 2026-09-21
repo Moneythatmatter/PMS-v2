@@ -35,16 +35,14 @@ import {
   PlusCircle,
   Info,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Badge, Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
-  MOCK_MAINTENANCE_REQUESTS,
-  MOCK_ACTIVE_WORK_ORDERS,
   HOTEL_LOCATIONS,
-  PROBLEM_CATEGORIES,
-} from "@/app/data/maintenance/mockData";
+} from "@/app/data/maintenance/constants";
 import {
   MaintenanceRequest,
   PriorityLevel,
@@ -56,6 +54,8 @@ import {
   RequiredMaterialItem,
 } from "@/app/data/maintenance/types";
 import { currentUser } from "@/app/data/user";
+import { usePsList } from "@/hooks/usePsResource";
+import { mntProblemCategoryService, mntRequestService, mntWorkOrderService } from "@/services/maintenance";
 
 export const getStatusBadgeConfig = (status: string) => {
   switch (status) {
@@ -122,8 +122,19 @@ export const getStatusBadgeConfig = (status: string) => {
 
 export function MaintenanceRequestsView() {
   const router = useRouter();
-  const [requests, setRequests] = useState<MaintenanceRequest[]>(MOCK_MAINTENANCE_REQUESTS);
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(MOCK_ACTIVE_WORK_ORDERS);
+  const { data: requests, loading, reload: reloadRequests } = usePsList(() => mntRequestService.list(), []);
+  const { data: workOrders, reload: reloadWorkOrders } = usePsList(() => mntWorkOrderService.list(), []);
+  const { data: problemCategories } = usePsList(() => mntProblemCategoryService.list(), []);
+  const activeProblemCategories = useMemo(
+    () =>
+      problemCategories
+        .filter((c) => String(c.status ?? "Active") === "Active")
+        .map((c) => c.categoryName)
+        .filter(Boolean),
+    [problemCategories],
+  );
+  const [saving, setSaving] = useState(false);
+  const savingLockRef = useRef(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Search & Filter State
@@ -364,13 +375,12 @@ export function MaintenanceRequestsView() {
     setCreateSnagIssues((prev) => prev.filter((s) => s.id !== id));
   };
 
-  const handleSaveNewRequest = (e: React.FormEvent) => {
+  const handleSaveNewRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createIssueTitle.trim()) return;
+    if (!createIssueTitle.trim() || saving) return;
 
     const newReqNumber = `REQ-${1010 + requests.length + 1}`;
-    const newRequest: MaintenanceRequest = {
-      id: `req-${Date.now()}`,
+    const body: Partial<MaintenanceRequest> = {
       requestNo: newReqNumber,
       dateTime: "Just now",
       locationType: createLocationType,
@@ -393,9 +403,20 @@ export function MaintenanceRequestsView() {
       ],
     };
 
-    setRequests((prev) => [newRequest, ...prev]);
-    setIsCreateDrawerOpen(false);
-    setToastMessage(`✓ Request #${newReqNumber} created successfully and queued for verification.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      await mntRequestService.create(body);
+      await reloadRequests();
+      setIsCreateDrawerOpen(false);
+      setToastMessage(`✓ Request #${newReqNumber} created successfully and queued for verification.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to create request");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -442,9 +463,9 @@ export function MaintenanceRequestsView() {
     setVfMaterialsList((prev) => prev.filter((m) => m.id !== id));
   };
 
-  const handleSaveVerification = (e: React.FormEvent) => {
+  const handleSaveVerification = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!verifyTargetRequest || !vfFindings.trim() || !vfRecommendedWork.trim()) return;
+    if (!verifyTargetRequest || !vfFindings.trim() || !vfRecommendedWork.trim() || saving) return;
 
     const materialsSummary = vfMaterialsList.length > 0
       ? vfMaterialsList.map((m) => `${m.itemName} (${m.quantity} ${m.unit || "pcs"})`).join(", ")
@@ -452,8 +473,7 @@ export function MaintenanceRequestsView() {
 
     const numericBudget = typeof vfEstimatedBudget === "number" ? vfEstimatedBudget : 0;
 
-    const updated: MaintenanceRequest = {
-      ...verifyTargetRequest,
+    const updated: Partial<MaintenanceRequest> = {
       status: "Verified",
       verification: {
         problemConfirmed: vfProblemConfirmed,
@@ -478,36 +498,54 @@ export function MaintenanceRequestsView() {
       ],
     };
 
-    setRequests((prev) => prev.map((item) => (item.id === verifyTargetRequest.id ? updated : item)));
-    if (selectedRequest?.id === verifyTargetRequest.id) setSelectedRequest(updated);
-    setVerifyTargetRequest(null);
-    setToastMessage(`✓ Request #${verifyTargetRequest.requestNo} verified. Ready for Approval.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      const saved = await mntRequestService.update(verifyTargetRequest.id, updated);
+      await reloadRequests();
+      if (selectedRequest?.id === verifyTargetRequest.id) setSelectedRequest(saved);
+      setVerifyTargetRequest(null);
+      setToastMessage(`✓ Request #${verifyTargetRequest.requestNo} verified. Ready for Approval.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save verification");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
   // 5. APPROVAL & WORK ORDER CREATION HANDLER
   // ─────────────────────────────────────────────────────────────
-  const handleApproveAndCreateWO = (req: MaintenanceRequest) => {
+  const handleApproveAndCreateWO = async (req: MaintenanceRequest) => {
+    if (saving) return;
     const generatedWoNumber = `WO-${120 + workOrders.length + 1}`;
 
-    const newWorkOrder: WorkOrder = {
-      id: `wo-${Date.now()}`,
+    const newWorkOrder: Partial<WorkOrder> = {
       woNumber: generatedWoNumber,
       requestRef: req.requestNo,
       woType: req.isSafetyHazard || req.priority === "Critical" ? "Emergency" : "Corrective",
       location: req.location,
       locationType: req.locationType,
+      problemCategory: req.category,
       issue: req.issueTitle,
       description: req.verification?.recommendedWork || req.description,
       priority: req.priority,
       isSafetyHazard: req.isSafetyHazard,
       guestInRoom: req.guestInRoom,
       entryPreference: req.entryPreference,
+      executionMethod: req.verification?.executionMethod,
       assignedType: req.verification?.executionMethod === "Outsource" ? "External Vendor" : "In-House Staff",
       technicianName: req.verification?.executionMethod === "Outsource" ? "Pending Vendor Selection" : "Unassigned Staff",
       dueDate: "Today, 04:00 PM",
-      status: "Assigned",
+      status: "New",
       rootCause: req.verification?.findings,
+      verificationFindings: req.verification?.findings,
+      recommendedWork: req.verification?.recommendedWork,
+      requiredMaterials: req.verification?.requiredMaterials,
+      materialsList: req.verification?.materialsList,
+      estimatedBudget: req.verification?.estimatedBudget,
       partsCost: 0,
       externalServiceCost: req.verification?.executionMethod === "Outsource" ? req.verification.estimatedBudget || 0 : 0,
       totalCost: req.verification?.estimatedBudget || 0,
@@ -519,8 +557,7 @@ export function MaintenanceRequestsView() {
       ],
     };
 
-    const updatedRequest: MaintenanceRequest = {
-      ...req,
+    const updatedRequest: Partial<MaintenanceRequest> = {
       status: "Work Order Created",
       workOrderNo: generatedWoNumber,
       approvedBy: `${currentUser.name} (Engineering)`,
@@ -531,11 +568,21 @@ export function MaintenanceRequestsView() {
       ],
     };
 
-    setWorkOrders((prev) => [newWorkOrder, ...prev]);
-    setRequests((prev) => prev.map((item) => (item.id === req.id ? updatedRequest : item)));
-    if (selectedRequest?.id === req.id) setSelectedRequest(updatedRequest);
-
-    setToastMessage(`✓ Request #${req.requestNo} Approved! Work Order #${generatedWoNumber} generated.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      await mntWorkOrderService.create(newWorkOrder);
+      const savedReq = await mntRequestService.update(req.id, updatedRequest);
+      await Promise.all([reloadRequests(), reloadWorkOrders()]);
+      if (selectedRequest?.id === req.id) setSelectedRequest(savedReq);
+      setToastMessage(`✓ Request #${req.requestNo} Approved! Work Order #${generatedWoNumber} generated.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to approve and create work order");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -556,12 +603,11 @@ export function MaintenanceRequestsView() {
     }
   };
 
-  const handleConfirmCancel = (e: React.FormEvent) => {
+  const handleConfirmCancel = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cancelTargetRequest || cancelError || !cancelReason.trim()) return;
+    if (!cancelTargetRequest || cancelError || !cancelReason.trim() || saving) return;
 
-    const updatedRequest: MaintenanceRequest = {
-      ...cancelTargetRequest,
+    const updatedRequest: Partial<MaintenanceRequest> = {
       status: "Cancelled",
       cancellationReason: cancelReason.trim(),
       timeline: [
@@ -570,25 +616,42 @@ export function MaintenanceRequestsView() {
       ],
     };
 
-    if (cancelTargetRequest.workOrderNo) {
-      setWorkOrders((prev) =>
-        prev.map((w) =>
-          w.woNumber === cancelTargetRequest.workOrderNo && w.status === "Assigned"
-            ? {
-                ...w,
-                status: "Cancelled",
-                cancelReason: `Parent Request #${cancelTargetRequest.requestNo} was cancelled: ${cancelReason.trim()}`,
-              }
-            : w
-        )
-      );
-    }
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      if (cancelTargetRequest.workOrderNo) {
+        const linkedWO = workOrders.find(
+          (w) =>
+            w.woNumber === cancelTargetRequest.workOrderNo &&
+            (w.status === "Assigned" || w.status === "New")
+        );
+        if (linkedWO) {
+          await mntWorkOrderService.update(linkedWO.id, {
+            status: "Cancelled",
+            cancelReason: `Parent Request #${cancelTargetRequest.requestNo} was cancelled: ${cancelReason.trim()}`,
+          });
+        }
+      }
 
-    setRequests((prev) => prev.map((item) => (item.id === cancelTargetRequest.id ? updatedRequest : item)));
-    if (selectedRequest?.id === cancelTargetRequest.id) setSelectedRequest(updatedRequest);
-    setCancelTargetRequest(null);
-    setToastMessage(`Request #${cancelTargetRequest.requestNo} cancelled.`);
+      const savedReq = await mntRequestService.update(cancelTargetRequest.id, updatedRequest);
+      await Promise.all([reloadRequests(), reloadWorkOrders()]);
+      if (selectedRequest?.id === cancelTargetRequest.id) setSelectedRequest(savedReq);
+      setCancelTargetRequest(null);
+      setToastMessage(`Request #${cancelTargetRequest.requestNo} cancelled.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to cancel request");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">Loading maintenance requests...</div>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -606,9 +669,9 @@ export function MaintenanceRequestsView() {
           type="button"
           size="sm"
           onClick={handleOpenCreateDrawer}
-          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 h-9 px-3.5"
+          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 h-9 px-3.5 disabled:opacity-50 inline-flex items-center gap-1.5"
         >
-          <Plus className="h-4 w-4" /> + New Request
+          <Plus className="h-4 w-4" />  New Request
         </Button>
       }
     >
@@ -834,7 +897,7 @@ export function MaintenanceRequestsView() {
                   className="h-9 w-full px-3 rounded-lg border border-slate-200 text-xs bg-white text-slate-700 font-medium focus:border-emerald-500 focus:outline-none cursor-pointer"
                 >
                   <option value="ALL">All Categories</option>
-                  {PROBLEM_CATEGORIES.map((cat) => (
+                  {activeProblemCategories.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>
@@ -1154,10 +1217,12 @@ export function MaintenanceRequestsView() {
                               <Button
                                 type="button"
                                 size="sm"
+                                disabled={saving}
                                 onClick={() => handleApproveAndCreateWO(req)}
-                                className="h-7 px-2.5 text-xs font-semibold bg-emerald-700 text-white hover:bg-emerald-800 rounded-lg cursor-pointer flex items-center gap-1"
+                                className="h-7 px-2.5 text-xs font-semibold bg-emerald-700 text-white hover:bg-emerald-800 rounded-lg cursor-pointer flex items-center gap-1 disabled:opacity-50"
                               >
-                                <Check className="h-3 w-3" /> Approve
+                                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                {saving ? "Saving..." : "Approve"}
                               </Button>
                             ) : req.status === "Approved" || req.status === "Work Order Created" || req.workOrderNo ? (
                               <Link href="/maintenance/work-orders">
@@ -1382,9 +1447,11 @@ export function MaintenanceRequestsView() {
                 <select
                   value={createCategory}
                   onChange={(e) => setCreateCategory(e.target.value)}
+                  required
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs"
                 >
-                  {PROBLEM_CATEGORIES.map((cat) => (
+                  <option value="">Select category...</option>
+                  {activeProblemCategories.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>
@@ -1581,10 +1648,12 @@ export function MaintenanceRequestsView() {
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 size="sm"
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                Submit Request
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Submit Request"}
               </Button>
             </div>
           </form>
@@ -1643,10 +1712,12 @@ export function MaintenanceRequestsView() {
                   <Button
                     type="button"
                     size="sm"
+                    disabled={saving}
                     onClick={() => handleApproveAndCreateWO(selectedRequest)}
-                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 h-8 px-3.5 shadow-2xs cursor-pointer"
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 h-8 px-3.5 shadow-2xs cursor-pointer disabled:opacity-50"
                   >
-                    <Check className="h-3.5 w-3.5" /> Approve & Create Work Order
+                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    {saving ? "Saving..." : "Approve & Create Work Order"}
                   </Button>
                 )}
 
@@ -2187,10 +2258,12 @@ export function MaintenanceRequestsView() {
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 size="sm"
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs px-5 cursor-pointer shadow-2xs"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs px-5 cursor-pointer shadow-2xs inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                Save Verification Findings
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Save Verification Findings"}
               </Button>
             </div>
           </form>
@@ -2258,11 +2331,13 @@ export function MaintenanceRequestsView() {
                   </Button>
                   <Button
                     type="submit"
+                disabled={saving}
                     size="sm"
-                    className="bg-rose-700 hover:bg-rose-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer"
+                    className="bg-rose-700 hover:bg-rose-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
                   >
-                    Confirm Cancellation
-                  </Button>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Confirm Cancellation"}
+              </Button>
                 </div>
               </>
             )}

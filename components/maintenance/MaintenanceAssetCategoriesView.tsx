@@ -17,15 +17,20 @@ import {
   Boxes,
   Tag,
   Wrench,
+  Loader2,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { MOCK_ASSET_CATEGORIES, MOCK_MAINTENANCE_ASSETS } from "@/app/data/maintenance/mockData";
 import { AssetCategoryMaster } from "@/app/data/maintenance/types";
+import { usePsList } from "@/hooks/usePsResource";
+import { useSubmitLock } from "@/hooks/useSubmitLock";
+import { mntAssetCategoryService, mntAssetService } from "@/services/maintenance/index";
 
 export function MaintenanceAssetCategoriesView() {
-  const [categories, setCategories] = useState<AssetCategoryMaster[]>(MOCK_ASSET_CATEGORIES);
+  const { data: categories, loading, reload } = usePsList(() => mntAssetCategoryService.list(), []);
+  const { data: assets } = usePsList(() => mntAssetService.list(), []);
+  const { saving, runLocked } = useSubmitLock();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState("ALL");
 
@@ -42,7 +47,7 @@ export function MaintenanceAssetCategoriesView() {
   // Calculate live asset counts per category
   const categoriesWithAssetCounts = useMemo(() => {
     return categories.map((cat) => {
-      const count = MOCK_MAINTENANCE_ASSETS.filter(
+      const count = assets.filter(
         (ast) => ast.category.toLowerCase() === cat.categoryName.toLowerCase()
       ).length;
       return {
@@ -50,7 +55,7 @@ export function MaintenanceAssetCategoriesView() {
         assetCount: count > 0 ? count : cat.assetCount || 0,
       };
     });
-  }, [categories]);
+  }, [categories, assets]);
 
   // Filtered list
   const filteredCategories = useMemo(() => {
@@ -91,38 +96,39 @@ export function MaintenanceAssetCategoriesView() {
     setFormStatus(cat.status);
   };
 
-  const handleSaveCategory = (e: React.FormEvent) => {
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formCategoryName.trim() || !formCategoryCode.trim()) return;
+    if (!formCategoryName.trim() || !formCategoryCode.trim() || saving) return;
 
-    if (selectedCategoryForEdit) {
-      setCategories((prev) =>
-        prev.map((c) =>
-          c.id === selectedCategoryForEdit.id
-            ? {
-                ...c,
-                categoryCode: formCategoryCode.trim().toUpperCase(),
-                categoryName: formCategoryName.trim(),
-                description: formDescription.trim(),
-                status: formStatus,
-              }
-            : c
-        )
-      );
-      setSelectedCategoryForEdit(null);
-    } else {
-      const newCat: AssetCategoryMaster = {
-        id: `cat-${Date.now()}`,
-        categoryCode: formCategoryCode.trim().toUpperCase(),
-        categoryName: formCategoryName.trim(),
-        description: formDescription.trim(),
-        assetCount: 0,
-        status: formStatus,
-      };
-      setCategories((prev) => [newCat, ...prev]);
-      setIsAddDrawerOpen(false);
-    }
+    const body = {
+      categoryCode: formCategoryCode.trim().toUpperCase(),
+      categoryName: formCategoryName.trim(),
+      description: formDescription.trim(),
+      status: formStatus,
+    };
+
+    await runLocked(async () => {
+      try {
+        if (selectedCategoryForEdit) {
+          await mntAssetCategoryService.update(selectedCategoryForEdit.id, body);
+          setSelectedCategoryForEdit(null);
+        } else {
+          await mntAssetCategoryService.create({ ...body, assetCount: 0 });
+          setIsAddDrawerOpen(false);
+        }
+        await reload();
+      } catch (err) {
+        console.error(err);
+        alert(err instanceof Error ? err.message : "Failed to save category.");
+      }
+    });
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">Loading asset categories...</div>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -322,11 +328,12 @@ export function MaintenanceAssetCategoriesView() {
           </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
-            <Button type="button" variant="outline" size="sm" onClick={() => setIsAddDrawerOpen(false)}>
+            <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => setIsAddDrawerOpen(false)} className="disabled:opacity-50">
               Cancel
             </Button>
-            <Button type="submit" size="sm" className="bg-slate-900 text-white hover:bg-slate-800">
-              Save Category
+            <Button type="submit" size="sm" disabled={saving} className="bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-1.5">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {saving ? "Saving..." : "Save Category"}
             </Button>
           </div>
         </form>
@@ -393,11 +400,12 @@ export function MaintenanceAssetCategoriesView() {
           </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
-            <Button type="button" variant="outline" size="sm" onClick={() => setSelectedCategoryForEdit(null)}>
+            <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => setSelectedCategoryForEdit(null)} className="disabled:opacity-50">
               Cancel
             </Button>
-            <Button type="submit" size="sm" className="bg-slate-900 text-white hover:bg-slate-800">
-              Update Category
+            <Button type="submit" size="sm" disabled={saving} className="bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-1.5">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {saving ? "Saving..." : "Update Category"}
             </Button>
           </div>
         </form>

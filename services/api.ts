@@ -98,3 +98,6 @@ export const foPath = (segment: string) =>
 
 export const psPath = (segment: string) =>
   `/api/purchase-stores${segment.startsWith("/") ? segment : `/${segment}`}`;
+
+export const mntPath = (segment: string) =>
+  `/api/maintenance${segment.startsWith("/") ? segment : `/${segment}`}`;

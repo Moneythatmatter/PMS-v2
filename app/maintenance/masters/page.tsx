@@ -8,6 +8,7 @@ import {
   CheckSquare,
   Repeat,
   Truck,
+  Package,
   ArrowRight,
   Database,
 } from "lucide-react";
@@ -42,6 +43,13 @@ const MASTERS_LIST = [
     href: "/maintenance/masters/pm-templates",
     icon: Repeat,
     badge: "Schedules",
+  },
+  {
+    title: "Spare Parts Catalog",
+    description: "Parts and materials catalog used when recording spare part usage on Work Orders.",
+    href: "/maintenance/masters/spare-parts",
+    icon: Package,
+    badge: "Materials",
   },
   {
     title: "Vendor Master",

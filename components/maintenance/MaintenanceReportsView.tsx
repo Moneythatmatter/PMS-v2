@@ -10,57 +10,73 @@ import {
   CheckCircle2,
   AlertTriangle,
   DollarSign,
-  Calendar,
-  Filter,
-  ArrowLeft,
-  Wrench,
-  Boxes,
   Building2,
-  BarChart3,
-  TrendingUp,
+  Boxes,
   FileSpreadsheet,
-  Check,
-  ChevronRight,
   ShieldCheck,
+  ArrowLeft,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Button, Card, Drawer, Modal } from "@/components/ui";
+import { Button, Card, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { usePsItem } from "@/hooks/usePsResource";
+import { mntReportsService, type MntReportsData } from "@/services/maintenance";
 
-// Mock Data for Reports
-const MOCK_WO_TURNAROUND_REPORT = [
-  { category: "HVAC / Air Conditioning", totalLogged: 14, resolvedOnTime: 13, overdue: 1, avgHours: 1.6, totalCost: 18400, compliancePct: 92.8 },
-  { category: "Electrical & Lighting", totalLogged: 18, resolvedOnTime: 18, overdue: 0, avgHours: 0.8, totalCost: 6200, compliancePct: 100.0 },
-  { category: "Plumbing & Sanitary", totalLogged: 12, resolvedOnTime: 11, overdue: 1, avgHours: 1.2, totalCost: 9800, compliancePct: 91.6 },
-  { category: "Kitchen Equipment", totalLogged: 6, resolvedOnTime: 5, overdue: 1, avgHours: 3.4, totalCost: 12500, compliancePct: 83.3 },
-  { category: "Lifts & Escalators", totalLogged: 3, resolvedOnTime: 3, overdue: 0, avgHours: 2.1, totalCost: 14000, compliancePct: 100.0 },
-  { category: "Civil & Carpentry", totalLogged: 8, resolvedOnTime: 8, overdue: 0, avgHours: 1.5, totalCost: 3100, compliancePct: 100.0 },
-];
+type TurnaroundRow = {
+  woNumber?: string;
+  location?: string;
+  category?: string;
+  priority?: string;
+  status?: string;
+  technician?: string;
+  dueDate?: string;
+  totalCost?: number;
+};
 
-const MOCK_PM_COMPLIANCE_REPORT = [
-  { pmNumber: "PM-001", title: "Monthly Generator Inspection & Service", category: "Power & Backup", asset: "Cummins 250 kVA DG", frequency: "Monthly", target: 100, actual: 100, status: "Compliant" },
-  { pmNumber: "PM-002", title: "Quarterly Chiller Plant Overhaul", category: "HVAC Plant", asset: "Daikin 120TR Chiller", frequency: "Quarterly", target: 100, actual: 100, status: "Compliant" },
-  { pmNumber: "PM-003", title: "Monthly Swimming Pool Filtration & Pump Service", category: "Water & Pool", asset: "Pool Filtration & Pump #2", frequency: "Monthly", target: 100, actual: 80, status: "Action Required" },
-  { pmNumber: "PM-004", title: "Monthly Elevator Safety & Traction Cable Test", category: "Lifts & Escalators", asset: "Schindler Elevator #1", frequency: "Monthly", target: 100, actual: 100, status: "Compliant" },
-  { pmNumber: "PM-005", title: "Kitchen Exhaust Hood & Duct Degreasing", category: "Kitchen F&B", asset: "Commercial Kitchen Exhaust Hood", frequency: "Monthly", target: 100, actual: 100, status: "Compliant" },
-];
+type PmComplianceRow = {
+  pmNumber?: string;
+  assetCode?: string;
+  assetName?: string;
+  taskTitle?: string;
+  frequency?: string;
+  nextDueDate?: string;
+  status?: string;
+  lastCompletedDate?: string;
+};
 
-const MOCK_ROOM_DOWNTIME_REPORT = [
-  { room: "Room 305 (Deluxe Suite)", blockType: "OOO", reason: "AC Compressor & Capacitor Replacement", downtimeHours: 18.5, reportedDate: "2026-09-18", handoverStatus: "Inspected / Ready", cost: 4500 },
-  { room: "Room 412 (Standard King)", blockType: "OOS", reason: "Shower Mixer Cartridge Jam & Dripping", downtimeHours: 6.0, reportedDate: "2026-09-18", handoverStatus: "Post-Maintenance Cleaning Req.", cost: 750 },
-  { room: "Room 205 (Executive Room)", blockType: "OOO", reason: "Flush Valve & Concealed Cistern Repair", downtimeHours: 12.0, reportedDate: "2026-09-17", handoverStatus: "Under Repair", cost: 2800 },
-  { room: "Room 108 (Junior Suite)", blockType: "OOS", reason: "Balcony Sliding Door Track Alignment", downtimeHours: 5.5, reportedDate: "2026-09-16", handoverStatus: "Inspected / Ready", cost: 400 },
-];
+type RoomDowntimeRow = {
+  room?: string;
+  blockType?: string;
+  workOrderNo?: string;
+  reason?: string;
+  status?: string;
+  technician?: string;
+};
 
-const MOCK_SPARE_PARTS_REPORT = [
-  { code: "GAS-R32-CYL", name: "R32 Refrigerant Gas Cylinder (1kg refill)", category: "HVAC", qty: 4, unitCost: 1200, totalCost: 4800, workOrders: "WO-102, WO-105" },
-  { code: "ENG-FLTR-LF9009", name: "Cummins Oil Filter LF9009", category: "Power & Backup", qty: 2, unitCost: 1850, totalCost: 3700, workOrders: "WO-110" },
-  { code: "PLUMB-FLUSH-GEB", name: "Geberit Concealed Dual Flush Cistern Assembly", category: "Plumbing", qty: 1, unitCost: 2800, totalCost: 2800, workOrders: "WO-108" },
-  { code: "PLUMB-TAP-CARTRIDGE", name: "Jaquar 35mm Ceramic Disc Cartridge", category: "Plumbing", qty: 2, unitCost: 750, totalCost: 1500, workOrders: "WO-103" },
-  { code: "ENG-CAP-45UF", name: "Motor Run Capacitor 45uF 440V", category: "HVAC", qty: 3, unitCost: 450, totalCost: 1350, workOrders: "WO-102, WO-109" },
-];
+type SparePartsRow = {
+  partName?: string;
+  productCode?: string;
+  quantity?: number;
+  totalCost?: number;
+  woNumber?: string;
+};
+
+const EMPTY_REPORTS: MntReportsData = {
+  turnaround: [],
+  pmCompliance: [],
+  roomDowntime: [],
+  spareParts: [],
+};
 
 export function MaintenanceReportsView() {
+  const { data: reportsData, loading } = usePsItem(() => mntReportsService.get(), []);
+  const reports = reportsData ?? EMPTY_REPORTS;
+
+  const turnaround = (reports.turnaround ?? []) as TurnaroundRow[];
+  const pmCompliance = (reports.pmCompliance ?? []) as PmComplianceRow[];
+  const roomDowntime = (reports.roomDowntime ?? []) as RoomDowntimeRow[];
+  const spareParts = (reports.spareParts ?? []) as SparePartsRow[];
+
   const [activeTab, setActiveTab] = useState<"turnaround" | "pm_compliance" | "downtime" | "spare_parts">("turnaround");
   const [searchTerm, setSearchTerm] = useState("");
   const [dateRange, setDateRange] = useState("THIS_MONTH");
@@ -68,47 +84,75 @@ export function MaintenanceReportsView() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<"pdf" | "excel" | "csv">("pdf");
 
-  // Filtered turn around data
+  const q = searchTerm.toLowerCase();
+
   const filteredTurnaround = useMemo(() => {
-    return MOCK_WO_TURNAROUND_REPORT.filter((item) =>
-      item.category.toLowerCase().includes(searchTerm.toLowerCase())
+    return turnaround.filter((item) =>
+      [item.woNumber, item.location, item.category, item.technician, item.status, item.priority]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
     );
-  }, [searchTerm]);
+  }, [turnaround, q]);
 
-  // Filtered PM compliance data
   const filteredPm = useMemo(() => {
-    return MOCK_PM_COMPLIANCE_REPORT.filter(
-      (item) =>
-        item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.asset.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.pmNumber.toLowerCase().includes(searchTerm.toLowerCase())
+    return pmCompliance.filter((item) =>
+      [item.pmNumber, item.assetCode, item.assetName, item.taskTitle, item.status, item.frequency]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
     );
-  }, [searchTerm]);
+  }, [pmCompliance, q]);
 
-  // Filtered Downtime data
   const filteredDowntime = useMemo(() => {
-    return MOCK_ROOM_DOWNTIME_REPORT.filter(
-      (item) =>
-        item.room.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.reason.toLowerCase().includes(searchTerm.toLowerCase())
+    return roomDowntime.filter((item) =>
+      [item.room, item.reason, item.workOrderNo, item.technician, item.status]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
     );
-  }, [searchTerm]);
+  }, [roomDowntime, q]);
 
-  // Filtered Spare parts data
   const filteredParts = useMemo(() => {
-    return MOCK_SPARE_PARTS_REPORT.filter(
-      (item) =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.category.toLowerCase().includes(searchTerm.toLowerCase())
+    return spareParts.filter((item) =>
+      [item.partName, item.productCode, item.woNumber]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
     );
-  }, [searchTerm]);
+  }, [spareParts, q]);
+
+  const kpis = useMemo(() => {
+    const closedStatuses = new Set(["Completed", "Verified", "Closed"]);
+    const completedWos = turnaround.filter((w) => closedStatuses.has(String(w.status ?? "")));
+    const totalCost = turnaround.reduce((sum, w) => sum + Number(w.totalCost ?? 0), 0);
+    const partsCost = spareParts.reduce((sum, p) => sum + Number(p.totalCost ?? 0), 0);
+    const partsQty = spareParts.reduce((sum, p) => sum + Number(p.quantity ?? 0), 0);
+    const dueOrOverdue = pmCompliance.filter((p) => p.status === "Due" || p.status === "Overdue").length;
+    const compliant = pmCompliance.filter((p) => p.status === "Upcoming" || Boolean(p.lastCompletedDate)).length;
+    const compliancePct =
+      pmCompliance.length === 0 ? null : Math.round((compliant / pmCompliance.length) * 1000) / 10;
+
+    return {
+      completedCount: completedWos.length,
+      openCount: turnaround.length - completedWos.length,
+      totalCost,
+      partsCost,
+      partsQty,
+      downtimeRooms: roomDowntime.length,
+      compliancePct,
+      dueOrOverdue,
+      pmTotal: pmCompliance.length,
+    };
+  }, [turnaround, pmCompliance, roomDowntime, spareParts]);
 
   const handleTriggerExport = (e: React.FormEvent) => {
     e.preventDefault();
     setIsExportModalOpen(false);
     setToastMessage(`✓ Maintenance Report (${exportFormat.toUpperCase()}) generated and downloaded.`);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">Loading maintenance reports...</div>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -144,29 +188,26 @@ export function MaintenanceReportsView() {
         </div>
       }
     >
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 1: OPERATIONAL SUMMARY CARDS (KPIS)
-      ───────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-5 mb-5">
-        {/* Card 1: Avg Turnaround Time */}
         <Card className="h-full min-w-0 p-3 sm:p-4.5 bg-white border border-slate-200/80 rounded-xl shadow-xs">
           <div className="flex items-start justify-between gap-2">
             <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
-              Avg Turnaround Time
+              Work Orders Logged
             </p>
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
               <Clock className="h-4 w-4" />
             </span>
           </div>
           <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
-            1.8 Hours
+            {turnaround.length === 0 ? "—" : turnaround.length}
           </p>
           <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-            Target benchmark: &lt; 2.5 Hours
+            {turnaround.length === 0
+              ? "No work orders in range"
+              : `${kpis.completedCount} closed · ${kpis.openCount} open`}
           </p>
         </Card>
 
-        {/* Card 2: PM Compliance Rate */}
         <Card className="h-full min-w-0 p-3 sm:p-4.5 bg-white border border-slate-200/80 rounded-xl shadow-xs">
           <div className="flex items-start justify-between gap-2">
             <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
@@ -177,14 +218,15 @@ export function MaintenanceReportsView() {
             </span>
           </div>
           <p className="mt-2 text-lg font-bold text-emerald-700 sm:text-2xl">
-            94.2%
+            {kpis.compliancePct === null ? "—" : `${kpis.compliancePct}%`}
           </p>
           <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-            28 of 30 tasks completed on schedule
+            {kpis.pmTotal === 0
+              ? "No PM schedules"
+              : `${kpis.dueOrOverdue} due/overdue of ${kpis.pmTotal}`}
           </p>
         </Card>
 
-        {/* Card 3: Room Downtime */}
         <Card className="h-full min-w-0 p-3 sm:p-4.5 bg-white border border-slate-200/80 rounded-xl shadow-xs">
           <div className="flex items-start justify-between gap-2">
             <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
@@ -195,14 +237,13 @@ export function MaintenanceReportsView() {
             </span>
           </div>
           <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
-            42.0 Hours
+            {kpis.downtimeRooms === 0 ? "—" : kpis.downtimeRooms}
           </p>
           <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-            4 rooms impacted this month
+            {kpis.downtimeRooms === 0 ? "No blocked rooms" : "rooms with OOO/OOS blocks"}
           </p>
         </Card>
 
-        {/* Card 4: Spare Parts Consumption */}
         <Card className="h-full min-w-0 p-3 sm:p-4.5 bg-white border border-slate-200/80 rounded-xl shadow-xs">
           <div className="flex items-start justify-between gap-2">
             <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
@@ -213,20 +254,18 @@ export function MaintenanceReportsView() {
             </span>
           </div>
           <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl">
-            ₹14,150
+            {spareParts.length === 0 ? "—" : `₹${kpis.partsCost.toLocaleString("en-IN")}`}
           </p>
           <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-            12 items issued from stores
+            {spareParts.length === 0
+              ? "No parts issued"
+              : `${kpis.partsQty} items · WO cost ₹${kpis.totalCost.toLocaleString("en-IN")}`}
           </p>
         </Card>
       </div>
 
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 2: REPORT CATEGORY TAB SWITCHER & FILTERS TOOLBAR
-      ───────────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5 mb-5">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
-          {/* Report Tabs */}
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto w-full sm:w-auto">
             <button
               type="button"
@@ -277,20 +316,19 @@ export function MaintenanceReportsView() {
               onChange={(e) => setDateRange(e.target.value)}
               className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 focus:border-emerald-500 focus:outline-none cursor-pointer"
             >
-              <option value="THIS_MONTH">This Month (Sep 2026)</option>
-              <option value="LAST_MONTH">Last Month (Aug 2026)</option>
-              <option value="THIS_QUARTER">Q3 2026</option>
-              <option value="YTD">Year to Date (2026)</option>
+              <option value="THIS_MONTH">This Month</option>
+              <option value="LAST_MONTH">Last Month</option>
+              <option value="THIS_QUARTER">This Quarter</option>
+              <option value="YTD">Year to Date</option>
             </select>
           </div>
         </div>
 
-        {/* Search Input */}
         <div className="mt-3.5 relative">
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search report by category, asset, code, or keyword..."
+            placeholder="Search report by WO, room, asset, part, or keyword..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="h-10 w-full rounded-full border border-slate-200 bg-white pl-10 pr-4 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
@@ -298,87 +336,69 @@ export function MaintenanceReportsView() {
         </div>
       </div>
 
-      {/* ─────────────────────────────────────────────────────────────
-          SECTION 3: REPORT DATA TABLES & ANALYTICS
-      ───────────────────────────────────────────────────────────── */}
-      {/* REPORT TAB 1: WORK ORDER TURNAROUND & RESOLUTION */}
       {activeTab === "turnaround" && (
         <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Work Order Resolution &amp; Turnaround Times</h3>
-              <p className="text-xs text-slate-500">Breakdown of maintenance response times, resolution on-time rates, and service costs by category.</p>
+              <h3 className="text-sm font-bold text-slate-900">Work Order Resolution &amp; Turnaround</h3>
+              <p className="text-xs text-slate-500">Live work orders with priority, status, assignee, due date, and cost.</p>
             </div>
             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-              Overall SLA: 94.6%
+              {filteredTurnaround.length} WOs
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  <th className="py-3 px-4">Problem Category</th>
-                  <th className="py-3 px-3 text-center">Logged WOs</th>
-                  <th className="py-3 px-3 text-center">Resolved On-Time</th>
-                  <th className="py-3 px-3 text-center">Overdue WOs</th>
-                  <th className="py-3 px-3 text-center">Avg Resolution Time</th>
-                  <th className="py-3 px-3 text-center">On-Time SLA Rate</th>
-                  <th className="py-3 px-4 text-right">Total Maintenance Cost</th>
+                  <th className="py-3 px-4">WO #</th>
+                  <th className="py-3 px-3">Location</th>
+                  <th className="py-3 px-3">Category</th>
+                  <th className="py-3 px-3">Priority</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3">Technician</th>
+                  <th className="py-3 px-3">Due Date</th>
+                  <th className="py-3 px-4 text-right">Total Cost</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredTurnaround.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      {row.category}
-                    </td>
-                    <td className="py-3.5 px-3 text-center font-mono font-semibold text-slate-800">
-                      {row.totalLogged}
-                    </td>
-                    <td className="py-3.5 px-3 text-center font-mono font-semibold text-emerald-700">
-                      {row.resolvedOnTime}
-                    </td>
-                    <td className="py-3.5 px-3 text-center font-mono font-semibold text-rose-600">
-                      {row.overdue}
-                    </td>
-                    <td className="py-3.5 px-3 text-center font-mono font-semibold text-slate-900">
-                      {row.avgHours} hrs
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border",
-                          row.compliancePct >= 95
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : row.compliancePct >= 85
-                            ? "bg-blue-50 text-blue-700 border-blue-200"
-                            : "bg-amber-50 text-amber-700 border-amber-200"
-                        )}
-                      >
-                        {row.compliancePct}%
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
-                      ₹{row.totalCost.toLocaleString("en-IN")}
+                {filteredTurnaround.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-10 px-4 text-center text-slate-500">
+                      No turnaround data available.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredTurnaround.map((row, idx) => (
+                    <tr key={`${row.woNumber}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900">{row.woNumber || "—"}</td>
+                      <td className="py-3.5 px-3 font-semibold text-slate-800">{row.location || "—"}</td>
+                      <td className="py-3.5 px-3 text-slate-600">{row.category || "—"}</td>
+                      <td className="py-3.5 px-3 font-semibold">{row.priority || "—"}</td>
+                      <td className="py-3.5 px-3">{row.status || "—"}</td>
+                      <td className="py-3.5 px-3">{row.technician || "Unassigned"}</td>
+                      <td className="py-3.5 px-3 font-mono text-slate-600">{row.dueDate || "—"}</td>
+                      <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
+                        ₹{Number(row.totalCost ?? 0).toLocaleString("en-IN")}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* REPORT TAB 2: PREVENTIVE MAINTENANCE COMPLIANCE */}
       {activeTab === "pm_compliance" && (
         <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Preventive Maintenance (PM) Compliance Audit</h3>
-              <p className="text-xs text-slate-500">Tracking execution performance and adherence to recurring asset servicing schedules.</p>
+              <h3 className="text-sm font-bold text-slate-900">Preventive Maintenance Compliance</h3>
+              <p className="text-xs text-slate-500">Scheduled PM tasks with due dates and completion history.</p>
             </div>
             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-              Audit Score: 94.2%
+              {filteredPm.length} Schedules
             </span>
           </div>
           <div className="overflow-x-auto">
@@ -386,183 +406,176 @@ export function MaintenanceReportsView() {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                   <th className="py-3 px-4">PM Number</th>
-                  <th className="py-3 px-4">PM Title &amp; Asset</th>
-                  <th className="py-3 px-3">Category</th>
+                  <th className="py-3 px-3">Asset</th>
+                  <th className="py-3 px-3">Task Title</th>
                   <th className="py-3 px-3 text-center">Frequency</th>
-                  <th className="py-3 px-3 text-center">Target SLA</th>
-                  <th className="py-3 px-3 text-center">Actual Completion</th>
-                  <th className="py-3 px-4 text-right">Audit Status</th>
+                  <th className="py-3 px-3">Next Due</th>
+                  <th className="py-3 px-3">Last Completed</th>
+                  <th className="py-3 px-4 text-right">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredPm.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                      #{row.pmNumber}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="font-bold text-slate-900 block">{row.title}</span>
-                      <span className="text-[10px] text-slate-400 block">{row.asset}</span>
-                    </td>
-                    <td className="py-3.5 px-3 text-slate-600 font-medium">
-                      {row.category}
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span className="px-2 py-0.5 rounded bg-slate-100 font-bold text-[10px] text-slate-700">
-                        {row.frequency}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-center font-mono font-semibold text-slate-700">
-                      {row.target}%
-                    </td>
-                    <td className="py-3.5 px-3 text-center font-mono font-bold text-slate-900">
-                      {row.actual}%
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border",
-                          row.status === "Compliant"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-amber-50 text-amber-700 border-amber-200"
-                        )}
-                      >
-                        {row.status === "Compliant" ? <ShieldCheck className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-                        {row.status}
-                      </span>
+                {filteredPm.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-10 px-4 text-center text-slate-500">
+                      No PM compliance data available.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredPm.map((row, idx) => (
+                    <tr key={`${row.pmNumber}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900">{row.pmNumber || "—"}</td>
+                      <td className="py-3.5 px-3">
+                        <span className="font-bold text-slate-900 block">{row.assetCode || "—"}</span>
+                        <span className="text-[10px] text-slate-400 block">{row.assetName}</span>
+                      </td>
+                      <td className="py-3.5 px-3 font-medium text-slate-800">{row.taskTitle || "—"}</td>
+                      <td className="py-3.5 px-3 text-center">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 font-bold text-[10px] text-slate-700">
+                          {row.frequency || "—"}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3 font-mono text-slate-600">{row.nextDueDate || "—"}</td>
+                      <td className="py-3.5 px-3 font-mono text-slate-600">{row.lastCompletedDate || "—"}</td>
+                      <td className="py-3.5 px-4 text-right">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border",
+                            row.status === "Overdue"
+                              ? "bg-rose-50 text-rose-700 border-rose-200"
+                              : row.status === "Due"
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          )}
+                        >
+                          {row.status === "Overdue" || row.status === "Due" ? (
+                            <AlertTriangle className="h-3 w-3" />
+                          ) : (
+                            <ShieldCheck className="h-3 w-3" />
+                          )}
+                          {row.status || "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* REPORT TAB 3: ROOM DOWNTIME & OOO/OOS ANALYTICS */}
       {activeTab === "downtime" && (
         <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Room Downtime (OOO / OOS) Log</h3>
-              <p className="text-xs text-slate-500">Tracking room revenue impact, repair hours, and Housekeeping handover readiness.</p>
+              <h3 className="text-sm font-bold text-slate-900">Room Downtime (OOO / OOS)</h3>
+              <p className="text-xs text-slate-500">Guest rooms blocked for maintenance with linked work orders.</p>
             </div>
             <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
-              42.0 Total Downtime Hrs
+              {filteredDowntime.length} Rooms
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  <th className="py-3 px-4">Room Number</th>
+                  <th className="py-3 px-4">Room</th>
                   <th className="py-3 px-3 text-center">Block Type</th>
-                  <th className="py-3 px-4">Primary Maintenance Reason</th>
-                  <th className="py-3 px-3 text-center">Downtime Hours</th>
-                  <th className="py-3 px-3">Reported Date</th>
-                  <th className="py-3 px-3">HK Handover Status</th>
-                  <th className="py-3 px-4 text-right">Repair Cost</th>
+                  <th className="py-3 px-3">Work Order</th>
+                  <th className="py-3 px-4">Reason</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-4 text-right">Technician</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredDowntime.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      {row.room}
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span
-                        className={cn(
-                          "px-2.5 py-0.5 rounded-full font-bold text-[10px] border",
-                          row.blockType === "OOO"
-                            ? "bg-rose-50 text-rose-700 border-rose-200"
-                            : "bg-amber-50 text-amber-700 border-amber-200"
-                        )}
-                      >
-                        {row.blockType}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-800 font-medium">
-                      {row.reason}
-                    </td>
-                    <td className="py-3.5 px-3 text-center font-mono font-bold text-slate-900">
-                      {row.downtimeHours} hrs
-                    </td>
-                    <td className="py-3.5 px-3 text-slate-600 font-mono">
-                      {row.reportedDate}
-                    </td>
-                    <td className="py-3.5 px-3 font-semibold text-slate-700">
-                      {row.handoverStatus}
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
-                      ₹{row.cost.toLocaleString("en-IN")}
+                {filteredDowntime.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-10 px-4 text-center text-slate-500">
+                      No room downtime data available.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredDowntime.map((row, idx) => (
+                    <tr key={`${row.workOrderNo}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-slate-900">{row.room || "—"}</td>
+                      <td className="py-3.5 px-3 text-center">
+                        <span
+                          className={cn(
+                            "px-2.5 py-0.5 rounded-full font-bold text-[10px] border",
+                            row.blockType === "OOO"
+                              ? "bg-rose-50 text-rose-700 border-rose-200"
+                              : "bg-amber-50 text-amber-700 border-amber-200"
+                          )}
+                        >
+                          {row.blockType || "—"}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3 font-mono font-bold text-slate-800">{row.workOrderNo || "—"}</td>
+                      <td className="py-3.5 px-4 text-slate-800 font-medium">{row.reason || "—"}</td>
+                      <td className="py-3.5 px-3 font-semibold text-slate-700">{row.status || "—"}</td>
+                      <td className="py-3.5 px-4 text-right">{row.technician || "Unassigned"}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* REPORT TAB 4: SPARE PARTS CONSUMPTION */}
       {activeTab === "spare_parts" && (
         <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Spare Parts Consumption &amp; Material Expenditure</h3>
-              <p className="text-xs text-slate-500">Record of store inventory issued to Maintenance Work Orders.</p>
+              <h3 className="text-sm font-bold text-slate-900">Spare Parts Consumption</h3>
+              <p className="text-xs text-slate-500">Parts issued against maintenance work orders.</p>
             </div>
             <span className="text-xs font-bold text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
-              Total Spent: ₹14,150
+              Total: ₹{kpis.partsCost.toLocaleString("en-IN")}
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  <th className="py-3 px-4">Part Code</th>
-                  <th className="py-3 px-4">Item Name &amp; Description</th>
-                  <th className="py-3 px-3">Category</th>
-                  <th className="py-3 px-3 text-center">Issued Qty</th>
-                  <th className="py-3 px-3 text-right">Unit Cost</th>
+                  <th className="py-3 px-4">Part Name</th>
+                  <th className="py-3 px-3">Product Code</th>
+                  <th className="py-3 px-3 text-center">Quantity</th>
                   <th className="py-3 px-3 text-right">Total Cost</th>
-                  <th className="py-3 px-4 text-right">Linked Work Orders</th>
+                  <th className="py-3 px-4 text-right">Work Order</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredParts.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                      {row.code}
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      {row.name}
-                    </td>
-                    <td className="py-3.5 px-3 text-slate-600 font-medium">
-                      {row.category}
-                    </td>
-                    <td className="py-3.5 px-3 text-center font-mono font-bold text-slate-900">
-                      {row.qty}
-                    </td>
-                    <td className="py-3.5 px-3 text-right font-mono text-slate-700">
-                      ₹{row.unitCost.toLocaleString("en-IN")}
-                    </td>
-                    <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-900">
-                      ₹{row.totalCost.toLocaleString("en-IN")}
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono text-xs text-emerald-700 font-bold">
-                      {row.workOrders}
+                {filteredParts.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-10 px-4 text-center text-slate-500">
+                      No spare parts consumption data available.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredParts.map((row, idx) => (
+                    <tr key={`${row.productCode}-${row.woNumber}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-slate-900">{row.partName || "—"}</td>
+                      <td className="py-3.5 px-3 font-mono text-slate-700">{row.productCode || "—"}</td>
+                      <td className="py-3.5 px-3 text-center font-mono font-bold text-slate-900">
+                        {Number(row.quantity ?? 0)}
+                      </td>
+                      <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-900">
+                        ₹{Number(row.totalCost ?? 0).toLocaleString("en-IN")}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono text-xs text-emerald-700 font-bold">
+                        {row.woNumber || "—"}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Export Report Modal */}
       <Modal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
@@ -626,10 +639,10 @@ export function MaintenanceReportsView() {
               onChange={(e) => setDateRange(e.target.value)}
               className="w-full h-9 p-2 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:border-emerald-500 focus:outline-none"
             >
-              <option value="THIS_MONTH">This Month (Sep 2026)</option>
-              <option value="LAST_MONTH">Last Month (Aug 2026)</option>
-              <option value="THIS_QUARTER">Q3 2026</option>
-              <option value="YTD">Year to Date (2026)</option>
+              <option value="THIS_MONTH">This Month</option>
+              <option value="LAST_MONTH">Last Month</option>
+              <option value="THIS_QUARTER">This Quarter</option>
+              <option value="YTD">Year to Date</option>
             </select>
           </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Wrench,
@@ -28,18 +28,16 @@ import {
   Sparkles,
   SlidersHorizontal,
   Download,
+  Loader2,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Badge, Button, Card, Drawer, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
-  MOCK_ACTIVE_WORK_ORDERS,
-  MOCK_MAINTENANCE_REQUESTS,
-  MOCK_MAINTENANCE_VENDORS,
+  ON_DUTY_TECHNICIANS,
   MOCK_ON_DUTY_TECHNICIANS,
   HOTEL_LOCATIONS,
-  PROBLEM_CATEGORIES,
-} from "@/app/data/maintenance/mockData";
+} from "@/app/data/maintenance/constants";
 import {
   WorkOrder,
   WorkOrderType,
@@ -55,10 +53,10 @@ import {
   SnagIssue,
 } from "@/app/data/maintenance/types";
 import { currentUser } from "@/app/data/user";
+import { usePsList } from "@/hooks/usePsResource";
+import { mntWorkOrderService, mntRequestService, mntVendorService, mntProblemCategoryService, mntSparePartService } from "@/services/maintenance";
 
-// ─────────────────────────────────────────────────────────────
-// STORES SPARE PARTS REFERENCE CATALOG (FOR USAGE RECORDING ONLY)
-// ─────────────────────────────────────────────────────────────
+// Legacy fallback if spare-parts master is empty (until seeded).
 export const STORES_SPARE_PARTS_CATALOG = [
   { id: "sp-1", partName: "Run Capacitor 45uF 440V", productCode: "ELEC-CAP-45UF", unitCost: 450, ref: "STORES-REQ-401" },
   { id: "sp-2", partName: "High-Temp Bearings 6204-2RS", productCode: "MECH-BRG-6204", unitCost: 600, ref: "STORES-REQ-402" },
@@ -72,6 +70,8 @@ export const STORES_SPARE_PARTS_CATALOG = [
 
 export const getWorkOrderStatusBadgeConfig = (status: WorkOrderStatus) => {
   switch (status) {
+    case "New":
+      return { bg: "bg-indigo-50 text-indigo-800", border: "border-indigo-200", label: "New" };
     case "Assigned":
       return { bg: "bg-slate-100 text-slate-700", border: "border-slate-200", label: "Assigned" };
     case "In Progress":
@@ -91,11 +91,45 @@ export const getWorkOrderStatusBadgeConfig = (status: WorkOrderStatus) => {
   }
 };
 
+function isTechnicianUnassigned(wo: Pick<WorkOrder, "technicianName">): boolean {
+  const name = String(wo.technicianName ?? "").trim().toLowerCase();
+  return !name || name.includes("unassigned") || name.includes("pending vendor");
+}
+
+function needsTechnicianAssignment(wo: WorkOrder): boolean {
+  return wo.status === "New" || (wo.status === "Assigned" && isTechnicianUnassigned(wo));
+}
+
+function canStartWork(wo: WorkOrder): boolean {
+  return wo.status === "Assigned" && !isTechnicianUnassigned(wo);
+}
+
 export function MaintenanceWorkOrdersView() {
   const searchParams = useSearchParams();
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(MOCK_ACTIVE_WORK_ORDERS);
-  const [requests] = useState<MaintenanceRequest[]>(MOCK_MAINTENANCE_REQUESTS);
-  const [vendors] = useState<MaintenanceVendor[]>(MOCK_MAINTENANCE_VENDORS);
+  const { data: workOrders, loading, reload: reloadWorkOrders } = usePsList(() => mntWorkOrderService.list(), []);
+  const { data: requests } = usePsList(() => mntRequestService.list(), []);
+  const { data: vendors } = usePsList(() => mntVendorService.list(), []);
+  const { data: problemCategories } = usePsList(() => mntProblemCategoryService.list(), []);
+  const { data: sparePartsMaster } = usePsList(() => mntSparePartService.list(), []);
+  const sparePartsCatalog = useMemo(() => {
+    const active = sparePartsMaster.filter((p) => String(p.status ?? "Active") === "Active");
+    if (active.length > 0) {
+      return active.map((p) => ({
+        id: p.id,
+        partName: p.partName,
+        productCode: p.partCode,
+        unitCost: Number(p.unitCost) || 0,
+        ref: p.defaultStoresRef || "",
+      }));
+    }
+    return STORES_SPARE_PARTS_CATALOG;
+  }, [sparePartsMaster]);
+  const defaultProblemCategory = useMemo(() => {
+    const active = problemCategories.find((c) => String(c.status ?? "Active") === "Active");
+    return active?.categoryName || "General / Other";
+  }, [problemCategories]);
+  const [saving, setSaving] = useState(false);
+  const savingLockRef = useRef(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Search & Filter State
@@ -141,11 +175,11 @@ export function MaintenanceWorkOrdersView() {
 
   // 4. Add Spare Part Modal (Stores Reference Usage Only)
   const [addPartTargetWO, setAddPartTargetWO] = useState<WorkOrder | null>(null);
-  const [selectedCatalogPartId, setSelectedCatalogPartId] = useState(STORES_SPARE_PARTS_CATALOG[0].id);
+  const [selectedCatalogPartId, setSelectedCatalogPartId] = useState("");
   const [customPartName, setCustomPartName] = useState("");
   const [customProductCode, setCustomProductCode] = useState("");
   const [partQuantity, setPartQuantity] = useState<number>(1);
-  const [partUnitCost, setPartUnitCost] = useState<number>(450);
+  const [partUnitCost, setPartUnitCost] = useState<number>(0);
   const [storesReference, setStoresReference] = useState("");
 
   // 5. Reopen Work Order Modal
@@ -156,6 +190,13 @@ export function MaintenanceWorkOrdersView() {
   const [cancelTargetWO, setCancelTargetWO] = useState<WorkOrder | null>(null);
   const [cancelReason, setCancelReason] = useState("");
 
+  // 7. Assign Technician Modal
+  const [assignTargetWO, setAssignTargetWO] = useState<WorkOrder | null>(null);
+  const [assignExecutionMethod, setAssignExecutionMethod] = useState<ExecutionMethod>("In-House");
+  const [assignTechnicianName, setAssignTechnicianName] = useState(ON_DUTY_TECHNICIANS[0]?.name ?? "");
+  const [assignVendorId, setAssignVendorId] = useState("");
+  const [assignExternalTechName, setAssignExternalTechName] = useState("");
+
   // ─────────────────────────────────────────────────────────────
   // CREATE WORK ORDER FORM STATE (Inherits from Request if selected)
   // ─────────────────────────────────────────────────────────────
@@ -164,7 +205,7 @@ export function MaintenanceWorkOrdersView() {
   const [createRequestRef, setCreateRequestRef] = useState<string>("");
   const [createLocationType, setCreateLocationType] = useState<"Guest Room" | "F&B Area" | "Public Area" | "Back of House">("Guest Room");
   const [createLocation, setCreateLocation] = useState<string>(HOTEL_LOCATIONS[0].name);
-  const [createProblemCategory, setCreateProblemCategory] = useState<string>(PROBLEM_CATEGORIES[0]);
+  const [createProblemCategory, setCreateProblemCategory] = useState<string>("");
   const [createIssueTitle, setCreateIssueTitle] = useState<string>("");
   const [createDescription, setCreateDescription] = useState<string>("");
   const [createAssetCode, setCreateAssetCode] = useState<string>("");
@@ -183,16 +224,16 @@ export function MaintenanceWorkOrdersView() {
 
   // Execution Method & Assignment
   const [createExecutionMethod, setCreateExecutionMethod] = useState<ExecutionMethod>("In-House");
-  const [createTechnicianName, setCreateTechnicianName] = useState<string>(MOCK_ON_DUTY_TECHNICIANS[0].name);
+  const [createTechnicianName, setCreateTechnicianName] = useState<string>(ON_DUTY_TECHNICIANS[0]?.name ?? "");
 
   // Outsource Maintenance Vendor Master selection
-  const [createVendorId, setCreateVendorId] = useState<string>(MOCK_MAINTENANCE_VENDORS[0].id);
+  const [createVendorId, setCreateVendorId] = useState<string>("");
   const [createExternalTechName, setCreateExternalTechName] = useState<string>("");
-  const [createVendorContact, setCreateVendorContact] = useState<string>(MOCK_MAINTENANCE_VENDORS[0].phone);
+  const [createVendorContact, setCreateVendorContact] = useState<string>("");
   const [createAgreedAmount, setCreateAgreedAmount] = useState<number | "">(2500);
   const [createExpectedCompletionDate, setCreateExpectedCompletionDate] = useState<string>("Today");
   const [createExpectedCompletionTime, setCreateExpectedCompletionTime] = useState<string>("05:00 PM");
-  const [createServiceReference, setCreateServiceReference] = useState<string>(MOCK_MAINTENANCE_VENDORS[0].serviceReference || "");
+  const [createServiceReference, setCreateServiceReference] = useState<string>("");
   const [createVendorNotes, setCreateVendorNotes] = useState<string>("");
   const [createScheduledDate, setCreateScheduledDate] = useState<string>("Today");
   const [createScheduledTime, setCreateScheduledTime] = useState<string>("03:00 PM");
@@ -257,7 +298,8 @@ export function MaintenanceWorkOrdersView() {
     return workOrders.filter((wo) => {
       // Status Tab Filter
       if (selectedStatusTab !== "ALL") {
-        if (selectedStatusTab === "New" && wo.status !== "Assigned") return false;
+        if (selectedStatusTab === "New" && !needsTechnicianAssignment(wo)) return false;
+        if (selectedStatusTab === "Assigned" && !(wo.status === "Assigned" && !isTechnicianUnassigned(wo))) return false;
         if (selectedStatusTab === "In Progress" && wo.status !== "In Progress") return false;
         if (selectedStatusTab === "Awaiting Parts" && wo.status !== "Awaiting Parts") return false;
         if (selectedStatusTab === "Pending Verification" && wo.status !== "Completed") return false;
@@ -373,7 +415,7 @@ export function MaintenanceWorkOrdersView() {
     setCreateRequestRef("");
     setCreateLocationType("Guest Room");
     setCreateLocation(HOTEL_LOCATIONS[0].name);
-    setCreateProblemCategory(PROBLEM_CATEGORIES[0]);
+    setCreateProblemCategory(defaultProblemCategory);
     setCreateIssueTitle("");
     setCreateDescription("");
     setCreateAssetCode("");
@@ -388,14 +430,14 @@ export function MaintenanceWorkOrdersView() {
     setInheritedRequiredMaterials("");
     setInheritedEstimatedBudget("");
     setCreateExecutionMethod("In-House");
-    setCreateTechnicianName(MOCK_ON_DUTY_TECHNICIANS[0].name);
-    setCreateVendorId(MOCK_MAINTENANCE_VENDORS[0].id);
+    setCreateTechnicianName(ON_DUTY_TECHNICIANS[0]?.name ?? "");
+    setCreateVendorId(vendors[0]?.id ?? "");
     setCreateExternalTechName("");
-    setCreateVendorContact(MOCK_MAINTENANCE_VENDORS[0].phone);
+    setCreateVendorContact(vendors[0]?.phone ?? "");
     setCreateAgreedAmount(2500);
     setCreateExpectedCompletionDate("Today");
     setCreateExpectedCompletionTime("05:00 PM");
-    setCreateServiceReference(MOCK_MAINTENANCE_VENDORS[0].serviceReference || "");
+    setCreateServiceReference(vendors[0]?.serviceReference || "");
     setCreateVendorNotes("");
     setCreateScheduledDate("Today");
     setCreateScheduledTime("03:00 PM");
@@ -404,15 +446,14 @@ export function MaintenanceWorkOrdersView() {
     setIsCreateDrawerOpen(true);
   };
 
-  const handleSaveWorkOrder = (e: React.FormEvent) => {
+  const handleSaveWorkOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createIssueTitle.trim()) return;
+    if (!createIssueTitle.trim() || saving) return;
 
     const selectedVendor = vendors.find((v) => v.id === createVendorId) || vendors[0];
     const newWoNumber = `WO-${120 + workOrders.length + 1}`;
 
-    const newWorkOrder: WorkOrder = {
-      id: `wo-${Date.now()}`,
+    const newWorkOrder: Partial<WorkOrder> = {
       woNumber: newWoNumber,
       requestRef: createRequestRef.trim() || undefined,
       woType: createType,
@@ -429,12 +470,14 @@ export function MaintenanceWorkOrdersView() {
       entryPreference: createLocationType === "Guest Room" ? createEntryPreference : "Coordinate with Duty Manager",
       executionMethod: createExecutionMethod,
       assignedType: createExecutionMethod === "In-House" ? "In-House Staff" : "External Vendor",
-      technicianName: createExecutionMethod === "In-House" ? createTechnicianName : (createExternalTechName.trim() || selectedVendor.contactPerson),
+      technicianName: createExecutionMethod === "In-House"
+        ? createTechnicianName
+        : (createExternalTechName.trim() || selectedVendor?.contactPerson || "Unassigned"),
       technicianContact: createExecutionMethod === "Outsource" ? createVendorContact : undefined,
-      maintenanceVendorId: createExecutionMethod === "Outsource" ? selectedVendor.id : undefined,
-      maintenanceVendorName: createExecutionMethod === "Outsource" ? selectedVendor.vendorName : undefined,
+      maintenanceVendorId: createExecutionMethod === "Outsource" ? selectedVendor?.id : undefined,
+      maintenanceVendorName: createExecutionMethod === "Outsource" ? selectedVendor?.vendorName : undefined,
       externalTechnicianName: createExecutionMethod === "Outsource" ? createExternalTechName.trim() : undefined,
-      serviceReference: createExecutionMethod === "Outsource" ? (createServiceReference.trim() || selectedVendor.serviceReference) : undefined,
+      serviceReference: createExecutionMethod === "Outsource" ? (createServiceReference.trim() || selectedVendor?.serviceReference) : undefined,
       agreedAmount: createExecutionMethod === "Outsource" && createAgreedAmount !== "" ? Number(createAgreedAmount) : undefined,
       expectedCompletionDate: createExecutionMethod === "Outsource" ? createExpectedCompletionDate : undefined,
       expectedCompletionTime: createExecutionMethod === "Outsource" ? createExpectedCompletionTime : undefined,
@@ -463,34 +506,134 @@ export function MaintenanceWorkOrdersView() {
           time: "Just now",
           action: createExecutionMethod === "In-House"
             ? `Assigned to In-House Technician: ${createTechnicianName}`
-            : `Assigned to Maintenance Vendor: ${selectedVendor.vendorName} (Agreed Amount: ₹${createAgreedAmount || 0})`,
+            : `Assigned to Maintenance Vendor: ${selectedVendor?.vendorName || "Unassigned"} (Agreed Amount: ₹${createAgreedAmount || 0})`,
           user: currentUser.name,
         },
       ],
     };
 
-    setWorkOrders((prev) => [newWorkOrder, ...prev]);
-    setIsCreateDrawerOpen(false);
-    setToastMessage(`✓ Work Order #${newWoNumber} created and assigned successfully!`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      await mntWorkOrderService.create(newWorkOrder);
+      await reloadWorkOrders();
+      setIsCreateDrawerOpen(false);
+      setToastMessage(`✓ Work Order #${newWoNumber} created and assigned successfully!`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to create work order");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
   // 4. ACTION HANDLERS (CONTROLLED WORKFLOW TRANSITIONS)
   // ─────────────────────────────────────────────────────────────
-  const handleStartWork = (wo: WorkOrder) => {
-    const updated: WorkOrder = {
-      ...wo,
+  const handleStartWork = async (wo: WorkOrder) => {
+    if (saving) return;
+    // Assignment is only required when leaving New/Assigned to start work —
+    // not when resuming from Awaiting Parts ("Parts Received").
+    if (wo.status !== "Awaiting Parts" && !canStartWork(wo)) {
+      setToastMessage("Assign a technician before starting work.");
+      handleOpenAssignModal(wo);
+      return;
+    }
+    const updated: Partial<WorkOrder> = {
       status: "In Progress",
-      startTime: "Just now",
+      startTime: wo.startTime || "Just now",
       timeline: [
-        ...wo.timeline,
-        { time: "Just now", action: "Work started by technician", user: currentUser.name },
+        ...(wo.timeline || []),
+        {
+          time: "Just now",
+          action:
+            wo.status === "Awaiting Parts"
+              ? "Parts received — work resumed"
+              : "Work started by technician",
+          user: currentUser.name,
+        },
       ],
     };
 
-    setWorkOrders((prev) => prev.map((item) => (item.id === wo.id ? updated : item)));
-    if (selectedWorkOrder?.id === wo.id) setSelectedWorkOrder(updated);
-    setToastMessage(`Work Order #${wo.woNumber} status updated to In Progress.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      const saved = await mntWorkOrderService.update(wo.id, updated);
+      await reloadWorkOrders();
+      if (selectedWorkOrder?.id === wo.id) setSelectedWorkOrder(saved);
+      setToastMessage(
+        wo.status === "Awaiting Parts"
+          ? `Parts received for #${wo.woNumber}. Status set to In Progress.`
+          : `Work Order #${wo.woNumber} status updated to In Progress.`,
+      );
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update work order");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const handleOpenAssignModal = (wo: WorkOrder) => {
+    setAssignTargetWO(wo);
+    setAssignExecutionMethod(wo.executionMethod === "Outsource" ? "Outsource" : "In-House");
+    setAssignTechnicianName(ON_DUTY_TECHNICIANS[0]?.name ?? "");
+    setAssignVendorId(vendors[0]?.id ?? "");
+    setAssignExternalTechName("");
+  };
+
+  const handleAssignTechnician = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignTargetWO || saving) return;
+
+    const selectedVendor = vendors.find((v) => v.id === assignVendorId) || vendors[0];
+    const isInHouse = assignExecutionMethod === "In-House";
+    const techName = isInHouse
+      ? assignTechnicianName
+      : assignExternalTechName.trim() || selectedVendor?.contactPerson || selectedVendor?.vendorName || "";
+
+    if (!techName.trim()) {
+      setToastMessage("Select a technician or vendor before assigning.");
+      return;
+    }
+
+    const updated: Partial<WorkOrder> = {
+      status: "Assigned",
+      executionMethod: assignExecutionMethod,
+      assignedType: isInHouse ? "In-House Staff" : "External Vendor",
+      technicianName: techName,
+      maintenanceVendorId: isInHouse ? undefined : selectedVendor?.id,
+      maintenanceVendorName: isInHouse ? undefined : selectedVendor?.vendorName,
+      externalTechnicianName: isInHouse ? undefined : assignExternalTechName.trim() || undefined,
+      timeline: [
+        ...(assignTargetWO.timeline || []),
+        {
+          time: "Just now",
+          action: isInHouse
+            ? `Technician assigned: ${techName}`
+            : `Vendor assigned: ${selectedVendor?.vendorName || techName}`,
+          user: currentUser.name,
+        },
+      ],
+    };
+
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      const saved = await mntWorkOrderService.update(assignTargetWO.id, updated);
+      await reloadWorkOrders();
+      if (selectedWorkOrder?.id === assignTargetWO.id) setSelectedWorkOrder(saved);
+      setAssignTargetWO(null);
+      setToastMessage(`✓ Work Order #${assignTargetWO.woNumber} assigned to ${techName}. You can now Start Work.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to assign technician");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
   // Progress Update Modal
@@ -502,9 +645,9 @@ export function MaintenanceWorkOrdersView() {
     setProgressAttachment(null);
   };
 
-  const handleSaveProgressUpdate = (e: React.FormEvent) => {
+  const handleSaveProgressUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!progressTargetWO || !progressRemarks.trim()) return;
+    if (!progressTargetWO || !progressRemarks.trim() || saving) return;
 
     const newUpdate: WorkOrderProgressUpdate = {
       id: `prog-${Date.now()}`,
@@ -521,8 +664,7 @@ export function MaintenanceWorkOrdersView() {
       ? `Progress Update: Awaiting Parts (${partsWaiting.trim() || "Material required"})`
       : `Progress Update logged: ${progressRemarks.trim()}`;
 
-    const updated: WorkOrder = {
-      ...progressTargetWO,
+    const updated: Partial<WorkOrder> = {
       status: progressStatus,
       progressUpdates: [...(progressTargetWO.progressUpdates || []), newUpdate],
       timeline: [
@@ -531,10 +673,21 @@ export function MaintenanceWorkOrdersView() {
       ],
     };
 
-    setWorkOrders((prev) => prev.map((item) => (item.id === progressTargetWO.id ? updated : item)));
-    if (selectedWorkOrder?.id === progressTargetWO.id) setSelectedWorkOrder(updated);
-    setProgressTargetWO(null);
-    setToastMessage(`✓ Progress update recorded for Work Order #${progressTargetWO.woNumber}.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      const saved = await mntWorkOrderService.update(progressTargetWO.id, updated);
+      await reloadWorkOrders();
+      if (selectedWorkOrder?.id === progressTargetWO.id) setSelectedWorkOrder(saved);
+      setProgressTargetWO(null);
+      setToastMessage(`✓ Progress update recorded for Work Order #${progressTargetWO.woNumber}.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to save progress update");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
   // Complete Work Order Modal (Explicit Completion)
@@ -546,12 +699,11 @@ export function MaintenanceWorkOrdersView() {
     setCompletionAttachment(null);
   };
 
-  const handleConfirmComplete = (e: React.FormEvent) => {
+  const handleConfirmComplete = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!completeTargetWO || !completionRootCause.trim() || !completionActionTaken.trim()) return;
+    if (!completeTargetWO || !completionRootCause.trim() || !completionActionTaken.trim() || saving) return;
 
-    const updated: WorkOrder = {
-      ...completeTargetWO,
+    const updated: Partial<WorkOrder> = {
       status: "Completed",
       completionTime: "Just now",
       rootCause: completionRootCause.trim(),
@@ -571,10 +723,21 @@ export function MaintenanceWorkOrdersView() {
       ],
     };
 
-    setWorkOrders((prev) => prev.map((item) => (item.id === completeTargetWO.id ? updated : item)));
-    if (selectedWorkOrder?.id === completeTargetWO.id) setSelectedWorkOrder(updated);
-    setCompleteTargetWO(null);
-    setToastMessage(`✓ Work Order #${completeTargetWO.woNumber} marked as Completed. Ready for Maintenance verification.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      const saved = await mntWorkOrderService.update(completeTargetWO.id, updated);
+      await reloadWorkOrders();
+      if (selectedWorkOrder?.id === completeTargetWO.id) setSelectedWorkOrder(saved);
+      setCompleteTargetWO(null);
+      setToastMessage(`✓ Work Order #${completeTargetWO.woNumber} marked as Completed. Ready for Maintenance verification.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to complete work order");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
   // Verify & Sign-off Modal (Auto-captures Verifier)
@@ -584,71 +747,88 @@ export function MaintenanceWorkOrdersView() {
     setVerificationNotes("");
   };
 
-  const handleConfirmVerify = (e: React.FormEvent) => {
+  const handleConfirmVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!verifyTargetWO) return;
+    if (!verifyTargetWO || saving) return;
 
     const verifierName = currentUser.name || "Chief Engineer";
     const verifierTimestamp = "Today, " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-    if (verificationResult === "Pass") {
-      const updated: WorkOrder = {
-        ...verifyTargetWO,
-        status: "Closed",
-        verifiedBy: verifierName,
-        verifiedAt: verifierTimestamp,
-        verificationResult: "Pass",
-        verificationNotes: verificationNotes.trim() || "Work inspected and verified acceptable. Work order closed.",
-        timeline: [
-          ...verifyTargetWO.timeline,
-          { time: "Just now", action: `Verification PASSED by ${verifierName}`, user: verifierName },
-          { time: "Just now", action: "Work Order Closed", user: verifierName },
-        ],
-      };
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      if (verificationResult === "Pass") {
+        const updated: Partial<WorkOrder> = {
+          status: "Closed",
+          verifiedBy: verifierName,
+          verifiedAt: verifierTimestamp,
+          verificationResult: "Pass",
+          verificationNotes: verificationNotes.trim() || "Work inspected and verified acceptable. Work order closed.",
+          timeline: [
+            ...verifyTargetWO.timeline,
+            { time: "Just now", action: `Verification PASSED by ${verifierName}`, user: verifierName },
+            { time: "Just now", action: "Work Order Closed", user: verifierName },
+          ],
+        };
 
-      setWorkOrders((prev) => prev.map((item) => (item.id === verifyTargetWO.id ? updated : item)));
-      if (selectedWorkOrder?.id === verifyTargetWO.id) setSelectedWorkOrder(updated);
-      setVerifyTargetWO(null);
-      setToastMessage(`✓ Work Order #${verifyTargetWO.woNumber} verified (Pass) and Closed.`);
-    } else {
-      // Needs Rework → Reopens job to In Progress
-      const updated: WorkOrder = {
-        ...verifyTargetWO,
-        status: "In Progress",
-        verifiedBy: verifierName,
-        verifiedAt: verifierTimestamp,
-        verificationResult: "Needs Rework",
-        verificationNotes: verificationNotes.trim() || "Verification failed. Sent back for technician rework.",
-        reopenedReason: `Verification Needs Rework: ${verificationNotes.trim()}`,
-        timeline: [
-          ...verifyTargetWO.timeline,
-          { time: "Just now", action: `Verification FAILED (Needs Rework) by ${verifierName}`, user: verifierName, remark: verificationNotes.trim() },
-          { time: "Just now", action: "Work Order Reopened for Rework", user: verifierName },
-        ],
-      };
+        const saved = await mntWorkOrderService.update(verifyTargetWO.id, updated);
+        await reloadWorkOrders();
+        if (selectedWorkOrder?.id === verifyTargetWO.id) setSelectedWorkOrder(saved);
+        setVerifyTargetWO(null);
+        setToastMessage(`✓ Work Order #${verifyTargetWO.woNumber} verified (Pass) and Closed.`);
+      } else {
+        const updated: Partial<WorkOrder> = {
+          status: "In Progress",
+          verifiedBy: verifierName,
+          verifiedAt: verifierTimestamp,
+          verificationResult: "Needs Rework",
+          verificationNotes: verificationNotes.trim() || "Verification failed. Sent back for technician rework.",
+          reopenedReason: `Verification Needs Rework: ${verificationNotes.trim()}`,
+          timeline: [
+            ...verifyTargetWO.timeline,
+            { time: "Just now", action: `Verification FAILED (Needs Rework) by ${verifierName}`, user: verifierName, remark: verificationNotes.trim() },
+            { time: "Just now", action: "Work Order Reopened for Rework", user: verifierName },
+          ],
+        };
 
-      setWorkOrders((prev) => prev.map((item) => (item.id === verifyTargetWO.id ? updated : item)));
-      if (selectedWorkOrder?.id === verifyTargetWO.id) setSelectedWorkOrder(updated);
-      setVerifyTargetWO(null);
-      setToastMessage(`⚠️ Work Order #${verifyTargetWO.woNumber} marked Needs Rework and reopened.`);
+        const saved = await mntWorkOrderService.update(verifyTargetWO.id, updated);
+        await reloadWorkOrders();
+        if (selectedWorkOrder?.id === verifyTargetWO.id) setSelectedWorkOrder(saved);
+        setVerifyTargetWO(null);
+        setToastMessage(`⚠️ Work Order #${verifyTargetWO.woNumber} marked Needs Rework and reopened.`);
+      }
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to verify work order");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
     }
   };
 
   // Add Spare Part Modal (Stores Reference Usage Recording)
   const handleOpenAddPartModal = (wo: WorkOrder) => {
     setAddPartTargetWO(wo);
-    const firstCat = STORES_SPARE_PARTS_CATALOG[0];
-    setSelectedCatalogPartId(firstCat.id);
-    setCustomPartName(firstCat.partName);
-    setCustomProductCode(firstCat.productCode);
+    const firstCat = sparePartsCatalog[0];
+    if (firstCat) {
+      setSelectedCatalogPartId(firstCat.id);
+      setCustomPartName(firstCat.partName);
+      setCustomProductCode(firstCat.productCode);
+      setPartUnitCost(firstCat.unitCost);
+      setStoresReference(firstCat.ref);
+    } else {
+      setSelectedCatalogPartId("");
+      setCustomPartName("");
+      setCustomProductCode("");
+      setPartUnitCost(0);
+      setStoresReference("");
+    }
     setPartQuantity(1);
-    setPartUnitCost(firstCat.unitCost);
-    setStoresReference(firstCat.ref);
   };
 
-  const handleConfirmAddPart = (e: React.FormEvent) => {
+  const handleConfirmAddPart = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addPartTargetWO) return;
+    if (!addPartTargetWO || saving) return;
 
     const finalPartName = customPartName.trim() || "Spare Part";
     const finalProductCode = customProductCode.trim() || "MNT-PART";
@@ -668,8 +848,7 @@ export function MaintenanceWorkOrdersView() {
     const updatedParts = [...existingParts, newPartItem];
     const newPartsCost = updatedParts.reduce((sum, p) => sum + p.totalCost, 0);
 
-    const updated: WorkOrder = {
-      ...addPartTargetWO,
+    const updated: Partial<WorkOrder> = {
       partsUsed: updatedParts,
       partsCost: newPartsCost,
       totalCost: newPartsCost + (addPartTargetWO.externalServiceCost || 0),
@@ -683,10 +862,21 @@ export function MaintenanceWorkOrdersView() {
       ],
     };
 
-    setWorkOrders((prev) => prev.map((item) => (item.id === addPartTargetWO.id ? updated : item)));
-    if (selectedWorkOrder?.id === addPartTargetWO.id) setSelectedWorkOrder(updated);
-    setAddPartTargetWO(null);
-    setToastMessage(`✓ Recorded spare part "${finalPartName}" usage.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      const saved = await mntWorkOrderService.update(addPartTargetWO.id, updated);
+      await reloadWorkOrders();
+      if (selectedWorkOrder?.id === addPartTargetWO.id) setSelectedWorkOrder(saved);
+      setAddPartTargetWO(null);
+      setToastMessage(`✓ Recorded spare part "${finalPartName}" usage.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to add spare part");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
   // Reopen Modal
@@ -695,12 +885,11 @@ export function MaintenanceWorkOrdersView() {
     setReopenReason("");
   };
 
-  const handleConfirmReopen = (e: React.FormEvent) => {
+  const handleConfirmReopen = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reopenTargetWO || !reopenReason.trim()) return;
+    if (!reopenTargetWO || !reopenReason.trim() || saving) return;
 
-    const updated: WorkOrder = {
-      ...reopenTargetWO,
+    const updated: Partial<WorkOrder> = {
       status: "In Progress",
       reopenedReason: reopenReason.trim(),
       timeline: [
@@ -709,10 +898,21 @@ export function MaintenanceWorkOrdersView() {
       ],
     };
 
-    setWorkOrders((prev) => prev.map((item) => (item.id === reopenTargetWO.id ? updated : item)));
-    if (selectedWorkOrder?.id === reopenTargetWO.id) setSelectedWorkOrder(updated);
-    setReopenTargetWO(null);
-    setToastMessage(`✓ Work Order #${reopenTargetWO.woNumber} reopened to In Progress.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      const saved = await mntWorkOrderService.update(reopenTargetWO.id, updated);
+      await reloadWorkOrders();
+      if (selectedWorkOrder?.id === reopenTargetWO.id) setSelectedWorkOrder(saved);
+      setReopenTargetWO(null);
+      setToastMessage(`✓ Work Order #${reopenTargetWO.woNumber} reopened to In Progress.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to reopen work order");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
   // Cancel Modal
@@ -721,12 +921,11 @@ export function MaintenanceWorkOrdersView() {
     setCancelReason("");
   };
 
-  const handleConfirmCancel = (e: React.FormEvent) => {
+  const handleConfirmCancel = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cancelTargetWO || !cancelReason.trim()) return;
+    if (!cancelTargetWO || !cancelReason.trim() || saving) return;
 
-    const updated: WorkOrder = {
-      ...cancelTargetWO,
+    const updated: Partial<WorkOrder> = {
       status: "Cancelled",
       cancelReason: cancelReason.trim(),
       timeline: [
@@ -735,25 +934,53 @@ export function MaintenanceWorkOrdersView() {
       ],
     };
 
-    setWorkOrders((prev) => prev.map((item) => (item.id === cancelTargetWO.id ? updated : item)));
-    if (selectedWorkOrder?.id === cancelTargetWO.id) setSelectedWorkOrder(updated);
-    setCancelTargetWO(null);
-    setToastMessage(`Work Order #${cancelTargetWO.woNumber} cancelled.`);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      const saved = await mntWorkOrderService.update(cancelTargetWO.id, updated);
+      await reloadWorkOrders();
+      if (selectedWorkOrder?.id === cancelTargetWO.id) setSelectedWorkOrder(saved);
+      setCancelTargetWO(null);
+      setToastMessage(`Work Order #${cancelTargetWO.woNumber} cancelled.`);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to cancel work order");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
 
-  const handleToggleChecklistItem = (wo: WorkOrder, itemId: string) => {
+  const handleToggleChecklistItem = async (wo: WorkOrder, itemId: string) => {
+    if (saving) return;
     const updatedChecklist = (wo.checklistItems || []).map((item) =>
       item.id === itemId ? { ...item, completed: !item.completed } : item
     );
 
-    const updated: WorkOrder = {
-      ...wo,
+    const updated: Partial<WorkOrder> = {
       checklistItems: updatedChecklist,
     };
 
-    setWorkOrders((prev) => prev.map((item) => (item.id === wo.id ? updated : item)));
-    if (selectedWorkOrder?.id === wo.id) setSelectedWorkOrder(updated);
+    if (savingLockRef.current) return;
+    savingLockRef.current = true;
+    setSaving(true);
+    try {
+      const saved = await mntWorkOrderService.update(wo.id, updated);
+      await reloadWorkOrders();
+      if (selectedWorkOrder?.id === wo.id) setSelectedWorkOrder(saved);
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "Failed to update checklist");
+    } finally {
+      savingLockRef.current = false;
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">Loading work orders...</div>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -770,8 +997,8 @@ export function MaintenanceWorkOrdersView() {
         <Button
           type="button"
           size="sm"
-          onClick={() => setIsCreateDrawerOpen(true)}
-          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 h-9 px-3.5"
+          onClick={handleOpenCreateDrawer}
+          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 h-9 px-3.5 disabled:opacity-50 inline-flex items-center gap-1.5"
         >
           <Plus className="h-4 w-4" /> Create Work Order
         </Button>
@@ -889,7 +1116,8 @@ export function MaintenanceWorkOrdersView() {
         <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
           {[
             { id: "ALL", label: "All", count: workOrders.length },
-            { id: "New", label: "New", count: workOrders.filter((w) => w.status === "Assigned").length },
+            { id: "New", label: "New", count: workOrders.filter((w) => needsTechnicianAssignment(w)).length },
+            { id: "Assigned", label: "Assigned", count: workOrders.filter((w) => w.status === "Assigned" && !isTechnicianUnassigned(w)).length },
             { id: "In Progress", label: "In Progress", count: workOrders.filter((w) => w.status === "In Progress").length },
             { id: "Awaiting Parts", label: "Awaiting Parts", count: workOrders.filter((w) => w.status === "Awaiting Parts").length },
             { id: "Pending Verification", label: "Pending Verification", count: workOrders.filter((w) => w.status === "Completed").length },
@@ -1198,6 +1426,8 @@ export function MaintenanceWorkOrdersView() {
                               ? "bg-amber-50 text-amber-700 ring-amber-200"
                               : wo.status === "Awaiting Parts"
                               ? "bg-sky-50 text-sky-700 ring-sky-200"
+                              : wo.status === "New"
+                              ? "bg-indigo-50 text-indigo-700 ring-indigo-200"
                               : wo.status === "Assigned"
                               ? "bg-slate-100 text-slate-700 ring-slate-200"
                               : wo.status === "Closed"
@@ -1212,13 +1442,27 @@ export function MaintenanceWorkOrdersView() {
                       {/* 8. Contextual Action Column */}
                       <td className="w-32 px-4 py-3.5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
-                          {wo.status === "Assigned" && (
+                          {needsTechnicianAssignment(wo) && (
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
+                              disabled={saving}
+                              onClick={() => handleOpenAssignModal(wo)}
+                              className="h-8 rounded-full border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-medium cursor-pointer disabled:opacity-50"
+                            >
+                              Assign Tech
+                            </Button>
+                          )}
+
+                          {canStartWork(wo) && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={saving}
                               onClick={() => handleStartWork(wo)}
-                              className="h-8 rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-medium cursor-pointer"
+                              className="h-8 rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-medium cursor-pointer disabled:opacity-50"
                             >
                               Start Work
                             </Button>
@@ -1731,10 +1975,12 @@ export function MaintenanceWorkOrdersView() {
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 size="sm"
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                Dispatch Work Order ✓
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Dispatch Work Order ✓"}
               </Button>
             </div>
           </form>
@@ -1767,12 +2013,25 @@ export function MaintenanceWorkOrdersView() {
               </div>
 
               <div className="flex items-center gap-2">
-                {selectedWorkOrder.status === "Assigned" && (
+                {needsTechnicianAssignment(selectedWorkOrder) && (
                   <Button
                     type="button"
                     size="sm"
+                    disabled={saving}
+                    onClick={() => handleOpenAssignModal(selectedWorkOrder)}
+                    className="bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <UserCheck className="h-3.5 w-3.5" /> Assign Technician →
+                  </Button>
+                )}
+
+                {canStartWork(selectedWorkOrder) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={saving}
                     onClick={() => handleStartWork(selectedWorkOrder)}
-                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer"
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-50"
                   >
                     <Wrench className="h-3.5 w-3.5" /> Start Work →
                   </Button>
@@ -2283,10 +2542,12 @@ export function MaintenanceWorkOrdersView() {
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 size="sm"
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                Save Progress Update ✓
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Save Progress Update ✓"}
               </Button>
             </div>
           </form>
@@ -2361,10 +2622,12 @@ export function MaintenanceWorkOrdersView() {
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 size="sm"
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                Submit Completion ✓
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Submit Completion ✓"}
               </Button>
             </div>
           </form>
@@ -2445,13 +2708,19 @@ export function MaintenanceWorkOrdersView() {
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 size="sm"
                 className={cn(
                   "text-white font-bold rounded-lg text-xs px-4 cursor-pointer",
                   verificationResult === "Pass" ? "bg-blue-700 hover:bg-blue-800" : "bg-rose-700 hover:bg-rose-800"
                 )}
               >
-                {verificationResult === "Pass" ? "Sign-off & Close ✓" : "Reopen for Rework ⚠️"}
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving
+                  ? "Saving..."
+                  : verificationResult === "Pass"
+                    ? "Sign-off & Close ✓"
+                    : "Reopen for Rework ⚠️"}
               </Button>
             </div>
           </form>
@@ -2479,10 +2748,11 @@ export function MaintenanceWorkOrdersView() {
               </label>
               <select
                 value={selectedCatalogPartId}
+                required
                 onChange={(e) => {
                   const pid = e.target.value;
                   setSelectedCatalogPartId(pid);
-                  const p = STORES_SPARE_PARTS_CATALOG.find((part) => part.id === pid);
+                  const p = sparePartsCatalog.find((part) => part.id === pid);
                   if (p) {
                     setCustomPartName(p.partName);
                     setCustomProductCode(p.productCode);
@@ -2492,12 +2762,20 @@ export function MaintenanceWorkOrdersView() {
                 }}
                 className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs text-slate-900"
               >
-                {STORES_SPARE_PARTS_CATALOG.map((part) => (
+                {sparePartsCatalog.length === 0 && (
+                  <option value="">No active spare parts — add in Masters</option>
+                )}
+                {sparePartsCatalog.map((part) => (
                   <option key={part.id} value={part.id}>
                     {part.partName} ({part.productCode}) — ₹{part.unitCost}
                   </option>
                 ))}
               </select>
+              {sparePartsMaster.length === 0 && (
+                <p className="mt-1 text-[10px] text-amber-700">
+                  Catalog is empty. Add parts under Masters → Spare Parts Catalog.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2">
@@ -2548,10 +2826,12 @@ export function MaintenanceWorkOrdersView() {
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 size="sm"
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                Record Usage ✓
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Record Usage ✓"}
               </Button>
             </div>
           </form>
@@ -2599,10 +2879,12 @@ export function MaintenanceWorkOrdersView() {
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 size="sm"
-                className="bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer"
+                className="bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                Confirm Reopen
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Confirm Reopen"}
               </Button>
             </div>
           </form>
@@ -2650,10 +2932,136 @@ export function MaintenanceWorkOrdersView() {
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 size="sm"
-                className="bg-rose-700 hover:bg-rose-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer"
+                className="bg-rose-700 hover:bg-rose-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                Confirm Cancellation
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Confirm Cancellation"}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SECTION 13: ASSIGN TECHNICIAN MODAL
+      ───────────────────────────────────────────────────────────── */}
+      {assignTargetWO && (
+        <Modal
+          isOpen={Boolean(assignTargetWO)}
+          onClose={() => !saving && setAssignTargetWO(null)}
+          title={`Assign Technician — #${assignTargetWO.woNumber}`}
+          maxWidth="sm"
+        >
+          <form onSubmit={handleAssignTechnician} className="space-y-3.5 p-1 text-xs">
+            <p className="text-slate-600 leading-relaxed">
+              Assign an in-house technician or outsourced vendor before starting work on{" "}
+              <strong>#{assignTargetWO.woNumber}</strong>.
+            </p>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1.5 text-[11px]">Execution Method</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAssignExecutionMethod("In-House")}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-xs font-semibold cursor-pointer",
+                    assignExecutionMethod === "In-House"
+                      ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  In-House Tech
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignExecutionMethod("Outsource")}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-xs font-semibold cursor-pointer",
+                    assignExecutionMethod === "Outsource"
+                      ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  External Vendor
+                </button>
+              </div>
+            </div>
+
+            {assignExecutionMethod === "In-House" ? (
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 text-[11px]">
+                  On-Duty Technician <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  required
+                  value={assignTechnicianName}
+                  onChange={(e) => setAssignTechnicianName(e.target.value)}
+                  className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs"
+                >
+                  {(MOCK_ON_DUTY_TECHNICIANS.length ? MOCK_ON_DUTY_TECHNICIANS : ON_DUTY_TECHNICIANS)
+                    .filter((t) => t.type === "In-House Staff")
+                    .map((tech) => (
+                      <option key={tech.id} value={tech.name}>
+                        {tech.name} — {tech.role}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1 text-[11px]">
+                    Maintenance Vendor <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={assignVendorId}
+                    onChange={(e) => setAssignVendorId(e.target.value)}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs"
+                  >
+                    {vendors.length === 0 && <option value="">No vendors available</option>}
+                    {vendors.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.vendorName} — {v.serviceCategory}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1 text-[11px]">External Technician Name</label>
+                  <input
+                    type="text"
+                    placeholder="Optional field tech name"
+                    value={assignExternalTechName}
+                    onChange={(e) => setAssignExternalTechName(e.target.value)}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={saving}
+                onClick={() => setAssignTargetWO(null)}
+                className="rounded-lg text-xs disabled:opacity-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={saving}
+                size="sm"
+                className="bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded-lg text-xs px-4 cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
+                {saving ? "Assigning..." : "Assign & Continue"}
               </Button>
             </div>
           </form>

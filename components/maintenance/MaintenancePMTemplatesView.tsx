@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import {
   Repeat,
@@ -13,15 +13,28 @@ import {
   Clock,
   Layers,
   ShieldAlert,
+  Loader2,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Badge, Button, Drawer, Modal, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { MOCK_PM_TEMPLATES, PROBLEM_CATEGORIES } from "@/app/data/maintenance/mockData";
+import { PROBLEM_CATEGORIES } from "@/app/data/maintenance/constants";
 import { PMTaskTemplate, PMFrequency } from "@/app/data/maintenance/types";
+import { usePsList } from "@/hooks/usePsResource";
+import { useSubmitLock } from "@/hooks/useSubmitLock";
+import { mntPmTemplateService, mntProblemCategoryService } from "@/services/maintenance/index";
 
 export function MaintenancePMTemplatesView() {
-  const [templates, setTemplates] = useState<PMTaskTemplate[]>(MOCK_PM_TEMPLATES);
+  const { data: templates, loading, reload } = usePsList(() => mntPmTemplateService.list(), []);
+  const { data: problemCategories } = usePsList(() => mntProblemCategoryService.list(), []);
+  const categoryOptions = useMemo(() => {
+    const fromMaster = problemCategories
+      .filter((c) => String(c.status ?? "Active") === "Active")
+      .map((c) => c.categoryName)
+      .filter(Boolean);
+    return fromMaster.length > 0 ? fromMaster : PROBLEM_CATEGORIES;
+  }, [problemCategories]);
+  const { saving, runLocked } = useSubmitLock();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("ALL");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -33,7 +46,7 @@ export function MaintenancePMTemplatesView() {
   // Form State
   const [formCode, setFormCode] = useState("");
   const [formTitle, setFormTitle] = useState("");
-  const [formCategory, setFormCategory] = useState(PROBLEM_CATEGORIES[0]);
+  const [formCategory, setFormCategory] = useState("");
   const [formFrequency, setFormFrequency] = useState<PMFrequency>("Monthly");
   const [formChecklistItems, setFormChecklistItems] = useState<string[]>([""]);
   const [formEstimatedHours, setFormEstimatedHours] = useState<number | "">(2);
@@ -44,14 +57,14 @@ export function MaintenancePMTemplatesView() {
     const matchSearch =
       tmpl.templateTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
       tmpl.templateCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tmpl.category.toLowerCase().includes(searchTerm.toLowerCase());
+      String(tmpl.category ?? "").toLowerCase().includes(searchTerm.toLowerCase());
     return matchCat && matchSearch;
   });
 
   const handleOpenAddDrawer = () => {
     setFormCode(`PMT-CUSTOM-${templates.length + 1}`);
     setFormTitle("");
-    setFormCategory(PROBLEM_CATEGORIES[0]);
+    setFormCategory(categoryOptions[0] || "");
     setFormFrequency("Monthly");
     setFormChecklistItems(["Inspect and clean unit", "Test safety switches"]);
     setFormEstimatedHours(2);
@@ -75,14 +88,13 @@ export function MaintenancePMTemplatesView() {
     setFormChecklistItems((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSaveTemplate = (e: React.FormEvent) => {
+  const handleSaveTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formTitle.trim()) return;
+    if (!formTitle.trim() || saving) return;
 
     const cleanedChecklist = formChecklistItems.map((i) => i.trim()).filter(Boolean);
 
-    const newTemplate: PMTaskTemplate = {
-      id: `pmt-${Date.now()}`,
+    const body = {
       templateCode: formCode.trim() || `PMT-${Date.now()}`,
       templateTitle: formTitle.trim(),
       category: formCategory,
@@ -90,13 +102,27 @@ export function MaintenancePMTemplatesView() {
       checklist: cleanedChecklist.length > 0 ? cleanedChecklist : [formTitle.trim()],
       estimatedHours: formEstimatedHours !== "" ? Number(formEstimatedHours) : undefined,
       safetyNote: formSafetyNote.trim() || undefined,
-      status: "Active",
+      status: "Active" as const,
     };
 
-    setTemplates((prev) => [newTemplate, ...prev]);
-    setIsAddDrawerOpen(false);
-    setToastMessage(`✓ PM Task Template "${newTemplate.templateTitle}" created.`);
+    await runLocked(async () => {
+      try {
+        await mntPmTemplateService.create(body);
+        setIsAddDrawerOpen(false);
+        setToastMessage(`✓ PM Task Template "${body.templateTitle}" created.`);
+        await reload();
+      } catch (err) {
+        console.error(err);
+        alert(err instanceof Error ? err.message : "Failed to save template.");
+      }
+    });
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">Loading PM templates...</div>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -148,7 +174,7 @@ export function MaintenancePMTemplatesView() {
               className="h-8.5 w-full px-2.5 rounded-lg border border-slate-200 text-xs bg-white text-slate-700 font-medium focus:border-emerald-500 focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Categories</option>
-              {PROBLEM_CATEGORIES.map((cat) => (
+              {categoryOptions.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
                 </option>
@@ -267,7 +293,7 @@ export function MaintenancePMTemplatesView() {
                 onChange={(e) => setFormCategory(e.target.value)}
                 className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs"
               >
-                {PROBLEM_CATEGORIES.map((cat) => (
+                {categoryOptions.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>
@@ -332,17 +358,20 @@ export function MaintenancePMTemplatesView() {
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={saving}
                 onClick={() => setIsAddDrawerOpen(false)}
-                className="rounded-lg text-xs"
+                className="rounded-lg text-xs disabled:opacity-50"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 size="sm"
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4"
+                disabled={saving}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs px-4 disabled:opacity-50 inline-flex items-center gap-1.5"
               >
-                Save Template ✓
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {saving ? "Saving..." : "Save Template ✓"}
               </Button>
             </div>
           </form>

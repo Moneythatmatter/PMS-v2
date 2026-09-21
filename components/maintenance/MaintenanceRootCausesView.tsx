@@ -12,15 +12,20 @@ import {
   AlertCircle,
   Wrench,
   HelpCircle,
+  Loader2,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { MOCK_ROOT_CAUSES_MASTER, MOCK_ACTIVE_WORK_ORDERS } from "@/app/data/maintenance/mockData";
 import { RootCauseMaster } from "@/app/data/maintenance/types";
+import { usePsList } from "@/hooks/usePsResource";
+import { useSubmitLock } from "@/hooks/useSubmitLock";
+import { mntRootCauseService, mntWorkOrderService } from "@/services/maintenance/index";
 
 export function MaintenanceRootCausesView() {
-  const [rootCauses, setRootCauses] = useState<RootCauseMaster[]>(MOCK_ROOT_CAUSES_MASTER);
+  const { data: rootCauses, loading, reload } = usePsList(() => mntRootCauseService.list(), []);
+  const { data: workOrders } = usePsList(() => mntWorkOrderService.list(), []);
+  const { saving, runLocked } = useSubmitLock();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState("ALL");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -39,7 +44,7 @@ export function MaintenanceRootCausesView() {
   // Calculate live usage count in Work Orders per Root Cause
   const causesWithCounts = useMemo(() => {
     return rootCauses.map((cause) => {
-      const count = MOCK_ACTIVE_WORK_ORDERS.filter(
+      const count = workOrders.filter(
         (wo) => wo.rootCause && wo.rootCause.toLowerCase().includes(cause.rootCauseName.toLowerCase())
       ).length;
       return {
@@ -47,7 +52,7 @@ export function MaintenanceRootCausesView() {
         usedInWorkOrders: count > 0 ? count : cause.usedInWorkOrders || 0,
       };
     });
-  }, [rootCauses]);
+  }, [rootCauses, workOrders]);
 
   // Filtered List
   const filteredCauses = useMemo(() => {
@@ -82,7 +87,7 @@ export function MaintenanceRootCausesView() {
     setIsDrawerOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -111,44 +116,49 @@ export function MaintenanceRootCausesView() {
       return;
     }
 
-    if (editingCause) {
-      setRootCauses((prev) =>
-        prev.map((c) =>
-          c.id === editingCause.id
-            ? {
-                ...c,
-                rootCauseCode: codeTrimmed,
-                rootCauseName: nameTrimmed,
-                description: formDescription.trim() || undefined,
-                status: formStatus,
-              }
-            : c
-        )
-      );
-      setToastMessage(`Root cause "${nameTrimmed}" updated successfully.`);
-    } else {
-      const newCause: RootCauseMaster = {
-        id: `rc-${Date.now()}`,
-        rootCauseCode: codeTrimmed,
-        rootCauseName: nameTrimmed,
-        description: formDescription.trim() || undefined,
-        usedInWorkOrders: 0,
-        status: formStatus,
-      };
-      setRootCauses((prev) => [newCause, ...prev]);
-      setToastMessage(`Root cause "${nameTrimmed}" created successfully.`);
-    }
+    const body = {
+      rootCauseCode: codeTrimmed,
+      rootCauseName: nameTrimmed,
+      description: formDescription.trim() || undefined,
+      status: formStatus,
+    };
 
-    setIsDrawerOpen(false);
+    if (saving) return;
+    await runLocked(async () => {
+      try {
+        if (editingCause) {
+          await mntRootCauseService.update(editingCause.id, body);
+          setToastMessage(`Root cause "${nameTrimmed}" updated successfully.`);
+        } else {
+          await mntRootCauseService.create({ ...body, usedInWorkOrders: 0 });
+          setToastMessage(`Root cause "${nameTrimmed}" created successfully.`);
+        }
+        setIsDrawerOpen(false);
+        await reload();
+      } catch (err) {
+        console.error(err);
+        setFormError(err instanceof Error ? err.message : "Failed to save root cause.");
+      }
+    });
   };
 
-  const handleToggleStatus = (cause: RootCauseMaster) => {
+  const handleToggleStatus = async (cause: RootCauseMaster) => {
     const nextStatus = cause.status === "Active" ? "Inactive" : "Active";
-    setRootCauses((prev) =>
-      prev.map((c) => (c.id === cause.id ? { ...c, status: nextStatus } : c))
-    );
-    setToastMessage(`Root Cause "${cause.rootCauseName}" set to ${nextStatus}.`);
+    try {
+      await mntRootCauseService.update(cause.id, { status: nextStatus });
+      setToastMessage(`Root Cause "${cause.rootCauseName}" set to ${nextStatus}.`);
+      await reload();
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Failed to update status.");
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 text-sm text-slate-600">Loading root causes...</div>
+    );
+  }
 
   return (
     <ModulePageShell
@@ -358,17 +368,20 @@ export function MaintenanceRootCausesView() {
               type="button"
               variant="outline"
               size="sm"
+              disabled={saving}
               onClick={() => setIsDrawerOpen(false)}
-              className="rounded-xl text-xs"
+              className="rounded-xl text-xs disabled:opacity-50"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               size="sm"
-              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs px-4"
+              disabled={saving}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs px-4 disabled:opacity-50 inline-flex items-center gap-1.5"
             >
-              {editingCause ? "Save Changes" : "Create Root Cause"}
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {saving ? "Saving..." : editingCause ? "Save Changes" : "Create Root Cause"}
             </Button>
           </div>
         </form>
