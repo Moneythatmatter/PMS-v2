@@ -5,7 +5,7 @@ import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { ProductForm } from "./ProductForm";
 import { validateProductForm, type ProductValidationError } from "./productValidation";
-import type { ProductItem, MasterCategory, MasterUnit, MasterSupplier } from "@/app/data/productMasterData";
+import type { ProductItem, MasterCategory, MasterUnit } from "@/app/data/productMasterData";
 
 interface ProductDrawerProps {
   open: boolean;
@@ -14,7 +14,6 @@ interface ProductDrawerProps {
   initialProduct?: ProductItem | null;
   categoryOptions: MasterCategory[];
   unitOptions: MasterUnit[];
-  supplierOptions: MasterSupplier[];
 }
 
 const defaultProductState: Partial<ProductItem> = {
@@ -24,11 +23,6 @@ const defaultProductState: Partial<ProductItem> = {
   unit: "",
   brand: "",
   description: "",
-  preferredSupplier: "",
-  purchasePrice: 0,
-  gstPercent: 18,
-  hsnCode: "",
-  taxType: "Exclusive",
   minimumStock: 10,
   maximumStock: 100,
   parStock: 50,
@@ -45,7 +39,6 @@ export function ProductDrawer({
   initialProduct,
   categoryOptions,
   unitOptions,
-  supplierOptions,
 }: ProductDrawerProps) {
   const [formData, setFormData] = useState<Partial<ProductItem>>(defaultProductState);
   const [errors, setErrors] = useState<ProductValidationError>({});
@@ -57,7 +50,6 @@ export function ProductDrawer({
       if (initialProduct) {
         setFormData(initialProduct);
       } else {
-        // Auto-generate initial code for new product
         const randomNum = Math.floor(100 + Math.random() * 900);
         setFormData({
           ...defaultProductState,
@@ -99,11 +91,6 @@ export function ProductDrawer({
       unit: formData.unit || "",
       brand: formData.brand?.trim() || undefined,
       description: formData.description?.trim() || undefined,
-      preferredSupplier: formData.preferredSupplier || "Unassigned",
-      purchasePrice: Number(formData.purchasePrice),
-      gstPercent: Number(formData.gstPercent),
-      hsnCode: formData.hsnCode?.trim() || undefined,
-      taxType: formData.taxType || "Exclusive",
       minimumStock: Number(formData.minimumStock ?? 0),
       maximumStock: Number(formData.maximumStock ?? 0),
       parStock: Number(formData.parStock ?? 0),
@@ -126,7 +113,7 @@ export function ProductDrawer({
       title={isEditing ? `Edit Product: ${initialProduct?.productCode}` : "Add New Product"}
       description={
         isEditing
-          ? "Modify product specification, pricing, and inventory control parameters."
+          ? "Modify product specification and inventory control parameters."
           : "Register a new master product into the Hotel PMS purchase & stores catalog."
       }
       width="2xl"
@@ -155,7 +142,6 @@ export function ProductDrawer({
           onAutoGenerateCode={handleAutoGenerateCode}
           categoryOptions={categoryOptions}
           unitOptions={unitOptions}
-          supplierOptions={supplierOptions}
         />
       </form>
     </Drawer>

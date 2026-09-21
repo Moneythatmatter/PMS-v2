@@ -1,5 +1,4 @@
 export type StorageType = "Dry Storage" | "Cold Room" | "Room Temp" | "Freezer" | "Hazardous Material";
-export type TaxType = "Exclusive" | "Inclusive" | "Exempt";
 export type ProductStatus = "Active" | "Inactive";
 
 export interface ProductItem {
@@ -11,11 +10,6 @@ export interface ProductItem {
   brand?: string;
   description?: string;
   productImage?: string;
-  preferredSupplier: string;
-  purchasePrice: number;
-  gstPercent: number;
-  hsnCode?: string;
-  taxType: TaxType;
   minimumStock: number;
   maximumStock: number;
   parStock: number;
@@ -57,5 +51,3 @@ export const STORAGE_TYPE_OPTIONS: StorageType[] = [
   "Freezer",
   "Hazardous Material",
 ];
-
-export const TAX_TYPE_OPTIONS: TaxType[] = ["Exclusive", "Inclusive", "Exempt"];

@@ -245,7 +245,7 @@ export function AddEmployeeView() {
 
   // Form State initialized for fresh employee creation
   const [formData, setFormData] = useState({
-    empCode: "EMP-0111",
+    empCode: `EMP-${Date.now().toString(36).slice(-5).toUpperCase()}`,
     firstName: "",
     lastName: "",
     gender: "Male",
@@ -404,7 +404,7 @@ export function AddEmployeeView() {
   const resetFormForAnother = () => {
         setFormData({
           ...formData,
-          empCode: `EMP-0${Math.floor(100 + Math.random() * 900)}`,
+          empCode: `EMP-${Date.now().toString(36).slice(-5).toUpperCase()}`,
           firstName: "",
           lastName: "",
           phone: "",

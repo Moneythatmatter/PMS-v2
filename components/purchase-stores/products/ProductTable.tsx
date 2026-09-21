@@ -9,15 +9,12 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
-  AlertCircle,
   Tag,
-  Building2,
 } from "lucide-react";
-import { formatINR } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
 import type { ProductItem } from "@/app/data/productMasterData";
 
-export type SortField = "productCode" | "productName" | "category" | "purchasePrice" | "status" | "createdDate";
+export type SortField = "productCode" | "productName" | "category" | "status" | "createdDate";
 export type SortOrder = "asc" | "desc";
 
 interface ProductTableProps {
@@ -69,7 +66,6 @@ export function ProductTable({
     currentPage * itemsPerPage
   );
 
-  // Skeleton Loading State
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -87,7 +83,6 @@ export function ProductTable({
     );
   }
 
-  // Empty State
   if (products.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-xs">
@@ -113,7 +108,6 @@ export function ProductTable({
 
   return (
     <div className="space-y-4">
-      {/* Mobile View: Cards */}
       <div className="grid grid-cols-1 gap-3 md:hidden">
         {paginatedProducts.map((product) => (
           <div
@@ -150,19 +144,16 @@ export function ProductTable({
                 <span className="font-medium text-slate-800">{product.category}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Supplier</span>
-                <span className="font-medium text-slate-800 truncate block">{product.preferredSupplier}</span>
+                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Unit</span>
+                <span className="font-medium text-slate-800">{product.unit}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Price / Unit</span>
-                <span className="font-bold text-slate-900">
-                  {formatINR(product.purchasePrice)}{" "}
-                  <span className="text-[10px] text-slate-500 font-normal">/ {product.unit}</span>
-                </span>
+                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Par Stock</span>
+                <span className="font-medium text-slate-800">{product.parStock}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-semibold">GST Rate</span>
-                <span className="font-medium text-slate-800">{product.gstPercent}%</span>
+                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Storage</span>
+                <span className="font-medium text-slate-800">{product.storageType}</span>
               </div>
             </div>
 
@@ -199,7 +190,6 @@ export function ProductTable({
         ))}
       </div>
 
-      {/* Desktop & Tablet Table View */}
       <div className="hidden md:block overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
         <div className="max-h-[620px] overflow-y-auto">
           <table className="w-full text-left text-sm border-collapse">
@@ -236,18 +226,7 @@ export function ProductTable({
                   </button>
                 </th>
                 <th className="py-3.5 px-4 font-semibold">Unit</th>
-                <th className="py-3.5 px-4 font-semibold">Preferred Supplier</th>
-                <th className="py-3.5 px-4 text-right font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("purchasePrice")}
-                    className="flex items-center gap-1 ml-auto hover:text-slate-900"
-                  >
-                    Price (INR)
-                    <ArrowUpDown className="h-3 w-3" />
-                  </button>
-                </th>
-                <th className="py-3.5 px-4 text-center font-semibold">GST %</th>
+                <th className="py-3.5 px-4 text-center font-semibold">Par Stock</th>
                 <th className="py-3.5 px-4 text-center font-semibold">
                   <button
                     type="button"
@@ -293,17 +272,8 @@ export function ProductTable({
                   <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">
                     {product.unit}
                   </td>
-                  <td className="py-3.5 px-4 text-slate-600 max-w-[180px] truncate">
-                    <span className="flex items-center gap-1" title={product.preferredSupplier}>
-                      <Building2 className="h-3 w-3 text-slate-400 shrink-0" />
-                      <span className="truncate">{product.preferredSupplier}</span>
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 text-right font-bold text-slate-900 whitespace-nowrap">
-                    {formatINR(product.purchasePrice)}
-                  </td>
-                  <td className="py-3.5 px-4 text-center font-medium text-slate-600 whitespace-nowrap">
-                    {product.gstPercent}%
+                  <td className="py-3.5 px-4 text-center text-slate-700 whitespace-nowrap">
+                    {product.parStock}
                   </td>
                   <td className="py-3.5 px-4 text-center whitespace-nowrap">
                     <span
@@ -355,7 +325,6 @@ export function ProductTable({
         </div>
       </div>
 
-      {/* Pagination Footer */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-1 py-2 text-xs text-slate-500">
         <div>
           Showing{" "}

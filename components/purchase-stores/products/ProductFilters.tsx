@@ -4,20 +4,17 @@ import React from "react";
 import { Search, RotateCcw, Filter } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SelectInput } from "@/components/frontoffice/ui";
-import type { MasterCategory, MasterSupplier } from "@/app/data/productMasterData";
+import type { MasterCategory } from "@/app/data/productMasterData";
 
 interface ProductFiltersProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
   selectedCategory: string;
   onCategoryChange: (value: string) => void;
-  selectedSupplier: string;
-  onSupplierChange: (value: string) => void;
   selectedStatus: string;
   onStatusChange: (value: string) => void;
   onResetFilters: () => void;
   categoryOptions: MasterCategory[];
-  supplierOptions: MasterSupplier[];
 }
 
 export function ProductFilters({
@@ -25,18 +22,14 @@ export function ProductFilters({
   onSearchChange,
   selectedCategory,
   onCategoryChange,
-  selectedSupplier,
-  onSupplierChange,
   selectedStatus,
   onStatusChange,
   onResetFilters,
   categoryOptions,
-  supplierOptions,
 }: ProductFiltersProps) {
   const hasActiveFilters =
     Boolean(searchQuery.trim()) ||
     selectedCategory !== "all" ||
-    selectedSupplier !== "all" ||
     selectedStatus !== "all";
 
   return (
@@ -46,9 +39,8 @@ export function ProductFilters({
         <span>Search & Filter Products</span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 items-center">
-        {/* Search Input */}
-        <div className="relative sm:col-span-2 lg:col-span-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 items-center">
+        <div className="relative sm:col-span-2">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -59,7 +51,6 @@ export function ProductFilters({
           />
         </div>
 
-        {/* Category Dropdown */}
         <div>
           <SelectInput
             value={selectedCategory}
@@ -76,24 +67,6 @@ export function ProductFilters({
           </SelectInput>
         </div>
 
-        {/* Supplier Dropdown */}
-        <div>
-          <SelectInput
-            value={selectedSupplier}
-            onChange={(e) => onSupplierChange(e.target.value)}
-            aria-label="Filter by Supplier"
-            className="h-9.5 text-xs sm:text-sm"
-          >
-            <option value="all">All Suppliers</option>
-            {supplierOptions.map((sup) => (
-              <option key={sup.id} value={sup.name}>
-                {sup.name}
-              </option>
-            ))}
-          </SelectInput>
-        </div>
-
-        {/* Status Dropdown */}
         <div className="flex items-center gap-2">
           <SelectInput
             value={selectedStatus}

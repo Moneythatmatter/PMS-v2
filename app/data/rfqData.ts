@@ -31,7 +31,10 @@ export interface RFQAttachment {
 }
 
 export interface VendorQuotationComparison {
-  vendorName: string;
+  /** Supplier master id — primary key for bids (names are not unique). */
+  vendorId: string;
+  /** Display-only / legacy; prefer resolving from supplier master. */
+  vendorName?: string;
   unitPrice: number;
   deliveryDays: number;
   paymentTerms: string;
@@ -40,6 +43,13 @@ export interface VendorQuotationComparison {
   totalAmount: number;
   isRecommended: boolean;
 }
+
+/** Persisted invited-vendor row: id + RFQ-specific status only (no denormalized contact fields). */
+export type StoredRfqVendor = {
+  id: string;
+  status: RFQVendorItem["status"];
+  invitationSentOn?: string;
+};
 
 export interface RFQRecord {
   id: string;
@@ -126,6 +136,48 @@ export function normalizeRfqVendor(
   };
 }
 
+/** Persist only vendor id + RFQ invite status (resolve name/email/phone from supplier master). */
+export function toStoredRfqVendor(vendor: Pick<RFQVendorItem, "id" | "status" | "invitationSentOn">): StoredRfqVendor {
+  return {
+    id: vendor.id,
+    status: vendor.status,
+    ...(vendor.invitationSentOn ? { invitationSentOn: vendor.invitationSentOn } : {}),
+  };
+}
+
+type ComparisonInput = Partial<VendorQuotationComparison> & {
+  vendor_id?: string;
+  name?: string;
+};
+
+/** Normalize comparison bids; prefer vendorId, fall back to matching invited vendor by name. */
+export function normalizeComparisonBid(
+  raw: ComparisonInput,
+  index: number,
+  invitedVendors: RFQVendorItem[] = [],
+  sameNameOffset = 0,
+): VendorQuotationComparison {
+  const r = raw as Record<string, any>;
+  const legacyName = String(r.vendorName ?? r.name ?? "");
+  let vendorId = String(r.vendorId ?? r.vendor_id ?? "");
+  if (!vendorId && legacyName) {
+    const matches = invitedVendors.filter((v) => v.vendorName === legacyName);
+    vendorId = matches[sameNameOffset]?.id ?? matches[0]?.id ?? `legacy-${legacyName}-${index}`;
+  }
+  if (!vendorId) vendorId = `comparison-vendor-${index}`;
+  return {
+    vendorId,
+    vendorName: legacyName || undefined,
+    unitPrice: Number(r.unitPrice ?? 0),
+    deliveryDays: Number(r.deliveryDays ?? 0),
+    paymentTerms: String(r.paymentTerms ?? ""),
+    warranty: String(r.warranty ?? ""),
+    rating: String(r.rating ?? ""),
+    totalAmount: Number(r.totalAmount ?? 0),
+    isRecommended: Boolean(r.isRecommended),
+  };
+}
+
 /** Normalize a full RFQ record from API (handles field aliases and missing ids). */
 export function normalizeRfqRecord(rfq: RFQRecord): RFQRecord {
   const linked =
@@ -133,11 +185,22 @@ export function normalizeRfqRecord(rfq: RFQRecord): RFQRecord {
     (rfq as RFQRecord & { linkedPr?: string }).linkedPr ??
     "";
 
+  const invitedVendors = (rfq.invitedVendors ?? []).map(normalizeRfqVendor);
+
+  const nameOccurrence = new Map<string, number>();
+  const comparisonData = (rfq.comparisonData ?? []).map((b, i) => {
+    const legacyName = String((b as any).vendorName ?? (b as any).name ?? "");
+    const offset = nameOccurrence.get(legacyName) ?? 0;
+    if (legacyName) nameOccurrence.set(legacyName, offset + 1);
+    return normalizeComparisonBid(b, i, invitedVendors, offset);
+  });
+
   return {
     ...rfq,
     linkedPR: linked || undefined,
     requestedItems: (rfq.requestedItems ?? []).map(normalizeRfqRequestedItem),
-    invitedVendors: (rfq.invitedVendors ?? []).map(normalizeRfqVendor),
+    invitedVendors,
+    comparisonData,
     attachments: (rfq.attachments ?? []).map((att, i) => ({
       ...att,
       id: att.id ?? `rfq-att-${i}`,

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Sparkles, Package, ShoppingCart, Boxes, ShieldCheck } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import {
   FormField,
   TextInput,
@@ -11,14 +11,11 @@ import {
 } from "@/components/frontoffice/ui";
 import {
   STORAGE_TYPE_OPTIONS,
-  TAX_TYPE_OPTIONS,
   type ProductItem,
   type ProductStatus,
   type StorageType,
-  type TaxType,
   type MasterCategory,
   type MasterUnit,
-  type MasterSupplier,
 } from "@/app/data/productMasterData";
 import type { ProductValidationError } from "./productValidation";
 
@@ -29,7 +26,6 @@ interface ProductFormProps {
   onAutoGenerateCode: () => void;
   categoryOptions: MasterCategory[];
   unitOptions: MasterUnit[];
-  supplierOptions: MasterSupplier[];
 }
 
 export function ProductForm({
@@ -39,9 +35,8 @@ export function ProductForm({
   onAutoGenerateCode,
   categoryOptions,
   unitOptions,
-  supplierOptions,
 }: ProductFormProps) {
-  const handleChange = (field: keyof ProductItem, value: any) => {
+  const handleChange = (field: keyof ProductItem, value: unknown) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -50,7 +45,6 @@ export function ProductForm({
 
   return (
     <div className="space-y-6">
-      {/* SECTION 1: Basic Information */}
       <FormSection title="Section 1: Basic Information" columns={2}>
         <FormField label="Product Name" required className="sm:col-span-2">
           <TextInput
@@ -138,78 +132,7 @@ export function ProductForm({
         </FormField>
       </FormSection>
 
-      {/* SECTION 2: Purchase Information */}
-      <FormSection title="Section 2: Purchase & Financial Information" columns={2}>
-        <FormField label="Preferred Supplier">
-          <SelectInput
-            value={formData.preferredSupplier ?? ""}
-            onChange={(e) => handleChange("preferredSupplier", e.target.value)}
-          >
-            <option value="">Select Supplier Master…</option>
-            {supplierOptions.map((sup) => (
-              <option key={sup.id} value={sup.name}>
-                {sup.name}
-              </option>
-            ))}
-          </SelectInput>
-        </FormField>
-
-        <FormField label="Purchase Price (₹)" required>
-          <TextInput
-            type="number"
-            min="0"
-            step="0.01"
-            value={formData.purchasePrice ?? ""}
-            onChange={(e) => handleChange("purchasePrice", e.target.value === "" ? "" : Number(e.target.value))}
-            placeholder="0.00"
-            className={errors.purchasePrice ? "border-red-400 focus:border-red-500 focus:ring-red-200 font-semibold" : "font-semibold"}
-          />
-          {errors.purchasePrice && (
-            <p className="mt-1 text-[11px] font-medium text-red-500">{errors.purchasePrice}</p>
-          )}
-        </FormField>
-
-        <FormField label="GST Rate (%)" required>
-          <TextInput
-            type="number"
-            min="0"
-            max="100"
-            step="0.1"
-            value={formData.gstPercent ?? ""}
-            onChange={(e) => handleChange("gstPercent", e.target.value === "" ? "" : Number(e.target.value))}
-            placeholder="e.g. 18"
-            className={errors.gstPercent ? "border-red-400 focus:border-red-500 focus:ring-red-200" : ""}
-          />
-          {errors.gstPercent && (
-            <p className="mt-1 text-[11px] font-medium text-red-500">{errors.gstPercent}</p>
-          )}
-        </FormField>
-
-        <FormField label="HSN / SAC Code">
-          <TextInput
-            value={formData.hsnCode ?? ""}
-            onChange={(e) => handleChange("hsnCode", e.target.value)}
-            placeholder="e.g. 63022100"
-            className="font-mono text-xs"
-          />
-        </FormField>
-
-        <FormField label="Tax Type">
-          <SelectInput
-            value={formData.taxType ?? "Exclusive"}
-            onChange={(e) => handleChange("taxType", e.target.value as TaxType)}
-          >
-            {TAX_TYPE_OPTIONS.map((tax) => (
-              <option key={tax} value={tax}>
-                {tax}
-              </option>
-            ))}
-          </SelectInput>
-        </FormField>
-      </FormSection>
-
-      {/* SECTION 3: Inventory Controls & Storage */}
-      <FormSection title="Section 3: Inventory Controls & Storage" columns={2}>
+      <FormSection title="Section 2: Inventory Controls & Storage" columns={2}>
         <FormField label="Minimum Stock Level">
           <TextInput
             type="number"
@@ -280,8 +203,7 @@ export function ProductForm({
         </FormField>
       </FormSection>
 
-      {/* SECTION 4: Status */}
-      <FormSection title="Section 4: Master Status" columns={1}>
+      <FormSection title="Section 3: Master Status" columns={1}>
         <div className="flex items-center gap-6 py-1">
           <label className="flex items-center gap-2 cursor-pointer">
             <input

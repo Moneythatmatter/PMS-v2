@@ -144,9 +144,9 @@ export default function PurchaseRequisitionsPage() {
   // Form State for New/Edit Requisition
   const [newDept, setNewDept] = useState("Housekeeping");
   const [newRequester, setNewRequester] = useState("Amit Sharma");
-  const [newReqDate, setNewReqDate] = useState("2026-07-25");
+  const [newReqDate, setNewReqDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [newPriority, setNewPriority] = useState<PurchaseRequisition["priority"]>("High");
-  const [newCostCenter, setNewCostCenter] = useState("CC-HK-LINEN");
+  const [newCostCenter, setNewCostCenter] = useState("");
   const [newJustification, setNewJustification] = useState(
     "Current linen inventory has fallen below the minimum stock level before the upcoming holiday season. Additional stock is required to maintain operational readiness."
   );
@@ -162,6 +162,8 @@ export default function PurchaseRequisitionsPage() {
   const openCreateRequisition = () => {
     setEditPR(null);
     setNewItems([]);
+    setNewReqDate(new Date().toISOString().slice(0, 10));
+    setNewCostCenter("");
     revokeAttachmentUrls(formAttachments);
     setFormAttachments([]);
     setCreateModalOpen(true);
@@ -212,10 +214,26 @@ export default function PurchaseRequisitionsPage() {
     }
   }, [toast]);
 
-  // Filtered Inventory Catalog inside Selection Modal
+  // Filtered Inventory Catalog inside Selection Modal (exclude items already on the PR)
   const filteredInventoryCatalog = useMemo(() => {
+    const addedKeys = new Set(
+      newItems.flatMap((row) => {
+        const keys: string[] = [];
+        if (row.materialId) keys.push(`id:${row.materialId}`);
+        if (row.productCode) keys.push(`code:${row.productCode.toLowerCase()}`);
+        if (row.item) keys.push(`name:${row.item.trim().toLowerCase()}`);
+        return keys;
+      }),
+    );
     return inventoryCatalog.filter((item) => {
+      const alreadyAdded =
+        addedKeys.has(`id:${item.materialId}`) ||
+        addedKeys.has(`code:${item.productCode.toLowerCase()}`) ||
+        addedKeys.has(`code:${item.itemCode.toLowerCase()}`) ||
+        addedKeys.has(`name:${item.itemName.trim().toLowerCase()}`);
+      if (alreadyAdded) return false;
       const query = inventorySearch.toLowerCase();
+      if (!query) return true;
       return (
         item.itemCode.toLowerCase().includes(query) ||
         item.itemName.toLowerCase().includes(query) ||
@@ -223,7 +241,7 @@ export default function PurchaseRequisitionsPage() {
         item.category.toLowerCase().includes(query)
       );
     });
-  }, [inventoryCatalog, inventorySearch]);
+  }, [inventoryCatalog, inventorySearch, newItems]);
 
   // Dynamic Summary Metrics Calculation
   const metrics = useMemo(() => {
@@ -283,7 +301,7 @@ export default function PurchaseRequisitionsPage() {
         requesterFilter === "all" || pr.requestedBy.toLowerCase().includes(requesterFilter.toLowerCase());
 
       const matchCostCenter =
-        costCenterFilter === "all" || pr.costCenter.toLowerCase() === costCenterFilter.toLowerCase();
+        costCenterFilter === "all" || (pr.costCenter ?? "").toLowerCase() === costCenterFilter.toLowerCase();
 
       const matchApprover =
         approverFilter === "all" || pr.currentApprover.toLowerCase().includes(approverFilter.toLowerCase());
@@ -488,7 +506,16 @@ export default function PurchaseRequisitionsPage() {
   // OPEN INVENTORY SELECTION MODAL
   const handleOpenInventoryModal = () => {
     setInventorySearch("");
-    setSelectedCatalogItem(inventoryCatalog[0] ?? null);
+    const available = inventoryCatalog.filter((item) => {
+      return !newItems.some(
+        (row) =>
+          (row.materialId && row.materialId === item.materialId) ||
+          (row.productCode &&
+            row.productCode.toLowerCase() === item.productCode.toLowerCase()) ||
+          row.item.trim().toLowerCase() === item.itemName.trim().toLowerCase(),
+      );
+    });
+    setSelectedCatalogItem(available[0] ?? null);
     setIsInventoryModalOpen(true);
   };
 
@@ -496,12 +523,31 @@ export default function PurchaseRequisitionsPage() {
   const handleConfirmAddInventoryItem = () => {
     if (!selectedCatalogItem) return;
 
-    const newItem = prItemFromCatalog(selectedCatalogItem, 1);
+    const alreadyAdded = newItems.some(
+      (row) =>
+        (row.materialId && row.materialId === selectedCatalogItem.materialId) ||
+        (row.productCode &&
+          row.productCode.toLowerCase() === selectedCatalogItem.productCode.toLowerCase()) ||
+        row.item.trim().toLowerCase() === selectedCatalogItem.itemName.trim().toLowerCase(),
+    );
+    if (alreadyAdded) {
+      setToast({
+        message: `"${selectedCatalogItem.itemName}" is already in the requested items list.`,
+        variant: "info",
+      });
+      return;
+    }
+
+    const newItem = {
+      ...prItemFromCatalog(selectedCatalogItem, 1),
+      estimatedPrice: 0,
+      total: 0,
+    };
 
     setNewItems((prev) => [...prev, newItem]);
     setIsInventoryModalOpen(false);
     setToast({
-      message: `Added ${selectedCatalogItem.itemName} to requested items.`,
+      message: `Added ${selectedCatalogItem.itemName} to requested items. Enter estimated price if needed.`,
       variant: "success",
     });
   };
@@ -511,25 +557,40 @@ export default function PurchaseRequisitionsPage() {
   };
 
   // UPDATE FIELD IN ITEM ROW HANDLER
-  const handleItemFieldChange = (id: string, field: "quantity" | "remarks", value: any) => {
+  const handleItemFieldChange = (
+    id: string,
+    field: "quantity" | "remarks" | "estimatedPrice",
+    value: any,
+  ) => {
     setNewItems((prev) =>
       prev.map((item) => {
-        if (item.id === id) {
-          const updated = { ...item, [field]: value };
-          if (field === "quantity") {
-            const qty = Math.max(1, parseInt(value, 10) || 1);
-            updated.quantity = qty;
-            updated.total = qty * item.estimatedPrice;
-          }
-          return updated;
+        if (item.id !== id) return item;
+        const updated = { ...item, [field]: value };
+        if (field === "quantity") {
+          const qty = Math.max(1, parseInt(value, 10) || 1);
+          updated.quantity = qty;
+          updated.total = qty * item.estimatedPrice;
         }
-        return item;
-      })
+        if (field === "estimatedPrice") {
+          const price = Math.max(0, Number(value) || 0);
+          updated.estimatedPrice = price;
+          updated.total = item.quantity * price;
+        }
+        return updated;
+      }),
     );
   };
 
   // SAVE / SUBMIT REQUISITION
   const handleSaveRequisition = async (isDraft: boolean) => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (!newReqDate || newReqDate < today) {
+      setToast({
+        message: "Required Date must be today or a future date.",
+        variant: "info",
+      });
+      return;
+    }
     if (newItems.length === 0) {
       setToast({ message: "Add at least one item before saving the requisition.", variant: "info" });
       return;
@@ -540,7 +601,7 @@ export default function PurchaseRequisitionsPage() {
       requestedBy: newRequester,
       requiredDate: newReqDate,
       priority: newPriority,
-      costCenter: newCostCenter,
+      costCenter: newCostCenter.trim(),
       justification: newJustification,
       estimatedAmount: totalAmt,
       requestedItems: newItems,
@@ -980,7 +1041,7 @@ export default function PurchaseRequisitionsPage() {
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 font-bold uppercase">Cost Center</span>
-                    <p className="font-mono font-bold text-slate-800">{selectedPR.costCenter}</p>
+                    <p className="font-mono font-bold text-slate-800">{selectedPR.costCenter || "—"}</p>
                   </div>
                 </div>
 
@@ -1251,6 +1312,7 @@ export default function PurchaseRequisitionsPage() {
               <FormField label="Required Date" required>
                 <TextInput
                   type="date"
+                  min={new Date().toISOString().slice(0, 10)}
                   value={newReqDate}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewReqDate(e.target.value)}
                   className="h-9 text-xs focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
@@ -1271,12 +1333,13 @@ export default function PurchaseRequisitionsPage() {
               </FormField>
 
               <div className="md:col-span-2">
-                <FormField label="Cost Center" required>
+                <FormField label="Cost Center">
                   <SelectInput
                     value={newCostCenter}
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewCostCenter(e.target.value)}
                     className="h-9 text-xs focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
                   >
+                    <option value="">Select cost center (optional)</option>
                     <option value="CC-HK-LINEN">CC-HK-LINEN (Housekeeping Linen Dept)</option>
                     <option value="CC-ENG-HVAC">CC-ENG-HVAC (Engineering HVAC Maintenance)</option>
                     <option value="CC-FB-[#001]">CC-FB-[#001] (F&B Main Kitchen Operating)</option>
@@ -1354,8 +1417,18 @@ export default function PurchaseRequisitionsPage() {
                           <td className="px-3 py-2 text-slate-600 font-medium text-[11px] whitespace-nowrap">
                             {item.unit || "Pcs"}
                           </td>
-                          <td className="px-3 py-2 text-slate-700 font-bold whitespace-nowrap">
-                            ₹{item.estimatedPrice.toLocaleString("en-IN")}
+                          <td className="px-2 py-1.5 w-28">
+                            <TextInput
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={item.estimatedPrice}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                handleItemFieldChange(item.id, "estimatedPrice", e.target.value)
+                              }
+                              placeholder="0"
+                              className="h-7 text-xs font-bold text-right border-slate-300"
+                            />
                           </td>
                           <td className="px-3 py-2 font-extrabold text-emerald-800 whitespace-nowrap">
                             ₹{estTotal.toLocaleString("en-IN")}
@@ -1423,6 +1496,20 @@ export default function PurchaseRequisitionsPage() {
                         />
                       </div>
                       <div>
+                        <span className="text-slate-500 block text-[10px]">Est. Price (₹)</span>
+                        <TextInput
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={item.estimatedPrice}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            handleItemFieldChange(item.id, "estimatedPrice", e.target.value)
+                          }
+                          placeholder="0"
+                          className="h-7 text-xs font-bold text-right border-slate-300"
+                        />
+                      </div>
+                      <div className="col-span-2">
                         <span className="text-slate-500 block text-[10px]">Est. Total</span>
                         <span className="font-extrabold text-emerald-800 text-xs block mt-1">
                           ₹{estTotal.toLocaleString("en-IN")}
@@ -1588,7 +1675,6 @@ export default function PurchaseRequisitionsPage() {
                   <th className="px-3 py-2">Item Name</th>
                   <th className="px-3 py-2">Category</th>
                   <th className="px-3 py-2">Unit</th>
-                  <th className="px-3 py-2 text-right">Est. Price</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
@@ -1626,15 +1712,12 @@ export default function PurchaseRequisitionsPage() {
                         <td className="px-3 py-2.5 text-slate-500 font-medium">
                           {catalogItem.unit}
                         </td>
-                        <td className="px-3 py-2.5 text-right font-extrabold text-emerald-800">
-                          ₹{catalogItem.estimatedPrice.toLocaleString("en-IN")}
-                        </td>
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-slate-400 font-medium">
+                    <td colSpan={5} className="px-4 py-8 text-center text-slate-400 font-medium">
                       No matching inventory items found.
                     </td>
                   </tr>

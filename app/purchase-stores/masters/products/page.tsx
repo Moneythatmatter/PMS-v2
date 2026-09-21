@@ -8,8 +8,6 @@ import {
   AlertTriangle,
   Plus,
   Download,
-  UploadCloud,
-  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -25,22 +23,19 @@ import { ProductFilters } from "@/components/purchase-stores/products/ProductFil
 import { ProductTable } from "@/components/purchase-stores/products/ProductTable";
 import { ProductDrawer } from "@/components/purchase-stores/products/ProductDrawer";
 import { ProductDetailsDrawer } from "@/components/purchase-stores/products/ProductDetailsDrawer";
-import { ProductImportModal } from "@/components/purchase-stores/products/ProductImportModal";
 import { usePsList } from "@/hooks/usePsResource";
 import {
   psProductService,
   psCategoryService,
   psUnitService,
-  psSupplierService,
 } from "@/services/purchase-stores/index";
 
 export default function ProductMasterPage() {
   const { data: products, loading: productsLoading, reload: reloadProducts } = usePsList(() => psProductService.list());
   const { data: categories, loading: categoriesLoading } = usePsList(() => psCategoryService.list());
   const { data: units, loading: unitsLoading } = usePsList(() => psUnitService.list());
-  const { data: suppliers, loading: suppliersLoading } = usePsList(() => psSupplierService.list());
 
-  const loading = productsLoading || categoriesLoading || unitsLoading || suppliersLoading;
+  const loading = productsLoading || categoriesLoading || unitsLoading;
 
   const categoryOptions = useMemo(
     () =>
@@ -63,22 +58,8 @@ export default function ProductMasterPage() {
       })),
     [units],
   );
-
-  const supplierOptions = useMemo(
-    () =>
-      suppliers.map((s) => ({
-        id: s.id,
-        code: s.supplierCode,
-        name: s.supplierName,
-        contactPerson: s.contactPerson,
-        phone: s.phone,
-        email: s.email,
-      })),
-    [suppliers],
-  );
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [selectedSupplier, setSelectedSupplier] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
 
   // Drawer & Modal States
@@ -86,7 +67,6 @@ export default function ProductMasterPage() {
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [viewingProduct, setViewingProduct] = useState<ProductItem | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<ProductItem | null>(null);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Toast Feedback State
   const [toastMessage, setToastMessage] = useState<{
@@ -116,17 +96,13 @@ export default function ProductMasterPage() {
       const matchesCategory =
         selectedCategory === "all" || product.category === selectedCategory;
 
-      // Supplier match
-      const matchesSupplier =
-        selectedSupplier === "all" || product.preferredSupplier === selectedSupplier;
-
       // Status match
       const matchesStatus =
         selectedStatus === "all" || product.status === selectedStatus;
 
-      return matchesSearch && matchesCategory && matchesSupplier && matchesStatus;
+      return matchesSearch && matchesCategory && matchesStatus;
     });
-  }, [products, searchQuery, selectedCategory, selectedSupplier, selectedStatus]);
+  }, [products, searchQuery, selectedCategory, selectedStatus]);
 
   // Statistics Calculations
   const stats = useMemo(() => {
@@ -144,7 +120,6 @@ export default function ProductMasterPage() {
   const handleResetFilters = () => {
     setSearchQuery("");
     setSelectedCategory("all");
-    setSelectedSupplier("all");
     setSelectedStatus("all");
   };
 
@@ -197,11 +172,6 @@ export default function ProductMasterPage() {
       "Category",
       "Unit",
       "Brand",
-      "Preferred Supplier",
-      "Purchase Price (INR)",
-      "GST %",
-      "HSN Code",
-      "Tax Type",
       "Min Stock",
       "Max Stock",
       "Par Stock",
@@ -218,11 +188,6 @@ export default function ProductMasterPage() {
       `"${p.category}"`,
       `"${p.unit}"`,
       `"${p.brand || ""}"`,
-      `"${p.preferredSupplier}"`,
-      p.purchasePrice,
-      p.gstPercent,
-      `"${p.hsnCode || ""}"`,
-      `"${p.taxType}"`,
       p.minimumStock,
       p.maximumStock,
       p.parStock,
@@ -268,17 +233,6 @@ export default function ProductMasterPage() {
         description="Manage all inventory products used throughout the hotel across Purchase Requisition, RFQ, Purchase Order, Direct Store Purchase, Stock Register, Purchase Return and Inventory modules."
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsImportModalOpen(true)}
-              className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100"
-            >
-              <UploadCloud className="h-4 w-4" />
-              Import
-            </Button>
-
             <Button
               type="button"
               variant="outline"
@@ -340,13 +294,10 @@ export default function ProductMasterPage() {
         onSearchChange={setSearchQuery}
         selectedCategory={selectedCategory}
         onCategoryChange={setSelectedCategory}
-        selectedSupplier={selectedSupplier}
-        onSupplierChange={setSelectedSupplier}
         selectedStatus={selectedStatus}
         onStatusChange={setSelectedStatus}
         onResetFilters={handleResetFilters}
         categoryOptions={categoryOptions}
-        supplierOptions={supplierOptions}
       />
 
       {/* DATA TABLE */}
@@ -366,7 +317,6 @@ export default function ProductMasterPage() {
         initialProduct={editingProduct}
         categoryOptions={categoryOptions}
         unitOptions={unitOptions}
-        supplierOptions={supplierOptions}
       />
 
       {/* VIEW PRODUCT DETAILS DRAWER */}
@@ -386,15 +336,6 @@ export default function ProductMasterPage() {
         message={`Are you sure you want to delete "${deletingProduct?.productName}" (${deletingProduct?.productCode})? This action will permanently remove the product from the Hotel PMS master registry.`}
         confirmLabel="Delete Product"
         variant="danger"
-      />
-
-      {/* CSV IMPORT MODAL */}
-      <ProductImportModal
-        open={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        onImportComplete={(count) => {
-          showToast(`Bulk imported ${count} new products successfully.`);
-        }}
       />
     </div>
   );

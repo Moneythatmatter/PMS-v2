@@ -1264,6 +1264,12 @@ export function mapComplaintToStatusTicket(
   };
 }
 
+function nullIfBlank(value: unknown): string | null {
+  if (value == null) return null;
+  const s = String(value).trim();
+  return s === "" ? null : s;
+}
+
 export function mapEmployeeToApi(form: Record<string, unknown>, lookups?: {
   departmentNameToId?: Map<string, string>;
   designationNameToId?: Map<string, string>;
@@ -1292,27 +1298,27 @@ export function mapEmployeeToApi(form: Record<string, unknown>, lookups?: {
     firstName: form.firstName,
     lastName: form.lastName,
     email: form.personalEmail ?? form.email,
-    phone: form.phone,
-    departmentId,
-    designationId,
-    employmentTypeId,
-    shiftTypeId,
-    leavePolicyId,
-    joinDate: form.joinDate,
-    salaryStructureId: form.salaryStructureId ?? form.salaryStructure ?? undefined,
+    phone: nullIfBlank(form.phone),
+    departmentId: nullIfBlank(departmentId),
+    designationId: nullIfBlank(designationId),
+    employmentTypeId: nullIfBlank(employmentTypeId),
+    shiftTypeId: nullIfBlank(shiftTypeId),
+    leavePolicyId: nullIfBlank(leavePolicyId),
+    joinDate: nullIfBlank(form.joinDate),
+    salaryStructureId: nullIfBlank(form.salaryStructureId ?? form.salaryStructure),
     status: form.status ?? "Active",
-    gender: form.gender,
-    dob: form.dob,
-    address: form.address,
-    bloodGroup: form.bloodGroup,
-    emergencyContact: form.emergencyPhone ?? form.emergencyContact,
-    reportingManager: form.reportingManager,
-    bankAccount: form.accountNumber ?? form.bankAccount,
-    bankName: form.bankName,
-    ifscCode: form.ifscCode,
-    panNumber: form.panNumber,
-    uanNumber: form.uanNumber,
-    esicNumber: form.esicNumber,
+    gender: nullIfBlank(form.gender),
+    dob: nullIfBlank(form.dob),
+    address: nullIfBlank(form.address),
+    bloodGroup: nullIfBlank(form.bloodGroup),
+    emergencyContact: nullIfBlank(form.emergencyPhone ?? form.emergencyContact),
+    reportingManager: nullIfBlank(form.reportingManager),
+    bankAccount: nullIfBlank(form.accountNumber ?? form.bankAccount),
+    bankName: nullIfBlank(form.bankName),
+    ifscCode: nullIfBlank(form.ifscCode),
+    panNumber: nullIfBlank(form.panNumber),
+    uanNumber: nullIfBlank(form.uanNumber),
+    esicNumber: nullIfBlank(form.esicNumber),
   };
 }
 

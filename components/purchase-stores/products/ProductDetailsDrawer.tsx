@@ -3,20 +3,13 @@
 import React from "react";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { Button } from "@/components/ui/Button";
-import { formatINR } from "@/components/frontoffice/ui";
 import {
   Package,
-  ShoppingCart,
   Boxes,
   ShieldCheck,
-  Building2,
   Tag,
   MapPin,
-  FileText,
   Edit,
-  Clock,
-  CheckCircle2,
-  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ProductItem } from "@/app/data/productMasterData";
@@ -35,8 +28,6 @@ export function ProductDetailsDrawer({
   onEdit,
 }: ProductDetailsDrawerProps) {
   if (!product) return null;
-
-  const isLowStock = product.parStock > 0 && product.reorderLevel >= product.parStock;
 
   return (
     <Drawer
@@ -105,8 +96,8 @@ export function ProductDetailsDrawer({
               <span>Category: <strong className="text-white">{product.category}</strong></span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Building2 className="h-3.5 w-3.5 text-emerald-400" />
-              <span>Supplier: <strong className="text-white">{product.preferredSupplier}</strong></span>
+              <MapPin className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Storage: <strong className="text-white">{product.storageType}</strong></span>
             </div>
           </div>
         </div>
@@ -146,38 +137,7 @@ export function ProductDetailsDrawer({
           </div>
         </div>
 
-        {/* Group 2: Purchase & Financial Details */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
-          <div className="flex items-center gap-2 pb-3 border-b border-slate-100 text-slate-900 font-semibold text-sm">
-            <ShoppingCart className="h-4 w-4 text-emerald-700" />
-            <span>Purchase & Financial Details</span>
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-            <div className="bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100">
-              <span className="text-slate-500 block font-medium">Purchase Price</span>
-              <span className="text-base font-bold text-emerald-800">{formatINR(product.purchasePrice)}</span>
-            </div>
-            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span className="text-slate-500 block font-medium">GST Rate (%)</span>
-              <span className="text-base font-bold text-slate-900">{product.gstPercent}%</span>
-            </div>
-            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span className="text-slate-500 block font-medium">Tax Type</span>
-              <span className="text-base font-bold text-slate-900">{product.taxType}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block font-medium">Preferred Supplier</span>
-              <span className="font-semibold text-slate-900">{product.preferredSupplier}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block font-medium">HSN / SAC Code</span>
-              <span className="font-mono font-medium text-slate-800">{product.hsnCode || "—"}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Group 3: Inventory Controls */}
+        {/* Group 2: Inventory Controls */}
         <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100 text-slate-900 font-semibold text-sm">
             <Boxes className="h-4 w-4 text-emerald-700" />

@@ -38,6 +38,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { platformService, type ManagedUserDto } from "@/services/platform";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { Modal } from "@/components/frontoffice/ui/Modal";
 import {
@@ -60,7 +62,7 @@ import type {
 import {
   normalizeRfqRecord,
   normalizeRfqRequestedItem,
-  normalizeRfqVendor,
+  toStoredRfqVendor,
 } from "@/app/data/rfqData";
 import type { PurchaseRequisition } from "@/app/data/purchaseRequisitionsData";
 import { PurchaseAttachmentPreviewModal } from "@/components/purchase-stores/ui/PurchaseAttachmentPreviewModal";
@@ -93,6 +95,7 @@ function prOptionLabel(pr: PurchaseRequisition): string {
 }
 
 export default function RequestForQuotationsPage() {
+  const { user } = useAuth();
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
     setIsMounted(true);
@@ -107,8 +110,27 @@ export default function RequestForQuotationsPage() {
   const { data: products } = usePsList(() => psProductService.list(), []);
   const { data: suppliers } = usePsList(() => psSupplierService.list(), []);
 
+  const [platformUsers, setPlatformUsers] = useState<ManagedUserDto[]>([]);
+  useEffect(() => {
+    void platformService
+      .listUsers()
+      .then(setPlatformUsers)
+      .catch(() => setPlatformUsers([]));
+  }, []);
+
+  const resolveBuyerName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const u of platformUsers) map.set(u.id, u.name);
+    if (user?.id) map.set(user.id, user.name);
+    return (buyerIdOrName: string | null | undefined) => {
+      const key = String(buyerIdOrName ?? "").trim();
+      if (!key) return "—";
+      return map.get(key) ?? key;
+    };
+  }, [platformUsers, user]);
+
   const eligiblePRs = useMemo(
-    () => requisitions.filter((pr) => pr.status === "Approved" || pr.status === "Pending Approval"),
+    () => requisitions.filter((pr) => pr.status === "Approved"),
     [requisitions],
   );
   const vendorOptions = useMemo(
@@ -121,6 +143,28 @@ export default function RequestForQuotationsPage() {
       })),
     [suppliers],
   );
+
+  /** Resolve supplier master fields by id (RFQ stores ids only). */
+  const resolveVendor = (vendorId: string | undefined | null) => {
+    if (!vendorId) return null;
+    return suppliers.find((s) => s.id === vendorId) ?? null;
+  };
+
+  const resolveVendorName = (vendorId: string | undefined | null, fallback = "") => {
+    const s = resolveVendor(vendorId);
+    return s?.supplierName || fallback || vendorId || "Unknown vendor";
+  };
+
+  const enrichInvitedVendor = (v: RFQVendorItem): RFQVendorItem => {
+    const s = resolveVendor(v.id);
+    return {
+      ...v,
+      vendorName: s?.supplierName || v.vendorName || "Unknown vendor",
+      email: s?.email || v.email || "",
+      phone: s?.phone || v.phone || "",
+    };
+  };
+
   const [saving, setSaving] = useState(false);
 
   // Search & Filter State
@@ -196,7 +240,7 @@ export default function RequestForQuotationsPage() {
   const [vendorSelectReason, setVendorSelectReason] = useState(
     "Lowest evaluated cost with acceptable delivery lead time and 12M warranty."
   );
-  const [pickedVendorName, setPickedVendorName] = useState("");
+  const [pickedVendorId, setPickedVendorId] = useState("");
 
   // Record vendor quotation modal
   const [recordQuoteRFQ, setRecordQuoteRFQ] = useState<RFQRecord | null>(null);
@@ -240,7 +284,7 @@ export default function RequestForQuotationsPage() {
   const openCreateDrawer = () => {
     setEditRFQ(null);
     setFormPR("");
-    setFormBuyer("");
+    setFormBuyer(user?.id ?? "");
     setFormRFQDate("");
     setFormClosingDate("");
     setFormPriority("Medium");
@@ -278,6 +322,13 @@ export default function RequestForQuotationsPage() {
     }
   }, [editRFQ]);
 
+  // Keep buyer bound to logged-in user for new RFQs
+  useEffect(() => {
+    if (!editRFQ && createDrawerOpen && user?.id) {
+      setFormBuyer(user.id);
+    }
+  }, [user?.id, editRFQ, createDrawerOpen]);
+
   // Dynamic 6 KPI Cards Metrics
   const metrics = useMemo(() => {
     const total = rfqList.length;
@@ -289,6 +340,16 @@ export default function RequestForQuotationsPage() {
 
     return { total, draft, sent, pendingResponse, vendorSelected, closed };
   }, [rfqList]);
+
+  const displaySelectedVendor = (rfq: RFQRecord) => {
+    if (!rfq.selectedVendor) return null;
+    // Prefer id lookup; fall back to legacy stored name
+    const byId = resolveVendor(rfq.selectedVendor);
+    if (byId) return byId.supplierName;
+    const invited = rfq.invitedVendors.find((v) => v.id === rfq.selectedVendor);
+    if (invited) return resolveVendorName(invited.id, invited.vendorName);
+    return rfq.selectedVendor;
+  };
 
   // Filter Active Count
   const activeFilterCount = useMemo(() => {
@@ -310,8 +371,12 @@ export default function RequestForQuotationsPage() {
         (rfq.linkedPR ?? "").toLowerCase().includes(search.toLowerCase()) ||
         rfq.department.toLowerCase().includes(search.toLowerCase()) ||
         rfq.buyer.toLowerCase().includes(search.toLowerCase()) ||
-        (rfq.selectedVendor && rfq.selectedVendor.toLowerCase().includes(search.toLowerCase())) ||
-        rfq.invitedVendors.some((v) => v.vendorName.toLowerCase().includes(search.toLowerCase()));
+        resolveBuyerName(rfq.buyer).toLowerCase().includes(search.toLowerCase()) ||
+        (rfq.selectedVendor &&
+          displaySelectedVendor(rfq)?.toLowerCase().includes(search.toLowerCase())) ||
+        rfq.invitedVendors.some((v) =>
+          enrichInvitedVendor(v).vendorName.toLowerCase().includes(search.toLowerCase()),
+        );
 
       const matchDept =
         departmentFilter === "all" || rfq.department.toLowerCase() === departmentFilter.toLowerCase();
@@ -323,14 +388,19 @@ export default function RequestForQuotationsPage() {
         priorityFilter === "all" || rfq.priority.toLowerCase() === priorityFilter.toLowerCase();
 
       const matchBuyer =
-        buyerFilter === "all" || rfq.buyer.toLowerCase().includes(buyerFilter.toLowerCase());
+        buyerFilter === "all" ||
+        rfq.buyer.toLowerCase().includes(buyerFilter.toLowerCase()) ||
+        resolveBuyerName(rfq.buyer).toLowerCase().includes(buyerFilter.toLowerCase());
 
       const matchVendor =
-        vendorFilter === "all" || rfq.invitedVendors.some((v) => v.vendorName.toLowerCase().includes(vendorFilter.toLowerCase()));
+        vendorFilter === "all" ||
+        rfq.invitedVendors.some((v) =>
+          enrichInvitedVendor(v).vendorName.toLowerCase().includes(vendorFilter.toLowerCase()),
+        );
 
       return matchSearch && matchDept && matchStatus && matchPriority && matchBuyer && matchVendor;
     });
-  }, [rfqList, search, departmentFilter, statusFilter, priorityFilter, buyerFilter, vendorFilter]);
+  }, [rfqList, search, departmentFilter, statusFilter, priorityFilter, buyerFilter, vendorFilter, resolveBuyerName, suppliers]);
 
   // Status Badge Helper
   const renderStatusBadge = (status: RFQRecord["status"]) => {
@@ -383,46 +453,52 @@ export default function RequestForQuotationsPage() {
   // Vendor Confirmation Handler
   const handleConfirmVendorSelection = async () => {
     if (!selectVendorModalRFQ) return;
-    const vendorName =
-      pickedVendorName ||
-      selectVendorModalRFQ.comparisonData.find((c) => c.isRecommended)?.vendorName ||
-      selectVendorModalRFQ.comparisonData[0]?.vendorName;
-    if (!vendorName) {
+    const vendorId =
+      pickedVendorId ||
+      selectVendorModalRFQ.comparisonData.find((c) => c.isRecommended)?.vendorId ||
+      selectVendorModalRFQ.comparisonData[0]?.vendorId;
+    if (!vendorId) {
       setToast({ message: "Select a vendor from the comparison table first.", variant: "info" });
       return;
     }
+    const vendorLabel = resolveVendorName(
+      vendorId,
+      selectVendorModalRFQ.comparisonData.find((c) => c.vendorId === vendorId)?.vendorName,
+    );
     try {
       await psRfqService.update(selectVendorModalRFQ.id, {
             status: "Vendor Selected",
-        selectedVendor: vendorName,
+        selectedVendor: vendorId,
         activityTimeline: [
           ...selectVendorModalRFQ.activityTimeline,
           {
             stage: "Vendor Selected",
             timestamp: new Date().toISOString().slice(0, 10),
-            note: vendorSelectReason || `Selected ${vendorName}`,
-            author: selectVendorModalRFQ.buyer,
+            note: vendorSelectReason || `Selected ${vendorLabel}`,
+            author: resolveBuyerName(selectVendorModalRFQ.buyer),
           },
         ],
       });
       await reload();
-      setToast({ message: `${vendorName} selected successfully`, variant: "success" });
+      setToast({ message: `${vendorLabel} selected successfully`, variant: "success" });
       setSelectVendorModalRFQ(null);
-      setPickedVendorName("");
+      setPickedVendorId("");
     } catch (e) {
       setToast({ message: e instanceof Error ? e.message : "Selection failed", variant: "info" });
     }
   };
 
   const openRecordQuoteModal = (rfq: RFQRecord, vendor: RFQVendorItem) => {
+    const enriched = enrichInvitedVendor(vendor);
+    const existing = rfq.comparisonData?.find((b) => b.vendorId === vendor.id);
     setRecordQuoteRFQ(rfq);
-    setRecordQuoteVendor(vendor);
-    setQuoteUnitPrice("");
-    setQuoteDeliveryDays("7");
-    setQuotePaymentTerms(rfq.commercialTerms.paymentTerms || "Net 30");
-    setQuoteWarranty("12 Months");
-    setQuoteRating("4");
-    setQuoteTotalAmount("");
+    setRecordQuoteVendor(enriched);
+    setQuoteUnitPrice(existing?.unitPrice ? String(existing.unitPrice) : "");
+    setQuoteDeliveryDays(existing?.deliveryDays ? String(existing.deliveryDays) : "7");
+    setQuotePaymentTerms(existing?.paymentTerms || rfq.commercialTerms.paymentTerms || "Net 30");
+    setQuoteWarranty(existing?.warranty || "12 Months");
+    setQuoteRating(existing?.rating?.replace(/[^\d.]/g, "") || "4");
+    setQuoteTotalAmount(existing?.totalAmount ? String(existing.totalAmount) : "");
   };
 
   const quoteTotalQty = useMemo(() => {
@@ -445,8 +521,9 @@ export default function RequestForQuotationsPage() {
       return;
     }
 
+    const vendorLabel = resolveVendorName(recordQuoteVendor.id, recordQuoteVendor.vendorName);
     const newBid = {
-      vendorName: recordQuoteVendor.vendorName,
+      vendorId: recordQuoteVendor.id,
       unitPrice,
       deliveryDays: Number(quoteDeliveryDays) || 7,
       paymentTerms: quotePaymentTerms,
@@ -457,7 +534,7 @@ export default function RequestForQuotationsPage() {
     };
 
     const comparisonData = [
-      ...(recordQuoteRFQ.comparisonData ?? []).filter((b) => b.vendorName !== recordQuoteVendor.vendorName),
+      ...(recordQuoteRFQ.comparisonData ?? []).filter((b) => b.vendorId !== recordQuoteVendor.id),
       newBid,
     ];
     const lowestTotal = Math.min(...comparisonData.map((b) => b.totalAmount));
@@ -466,13 +543,15 @@ export default function RequestForQuotationsPage() {
     });
 
     const invitedVendors = recordQuoteRFQ.invitedVendors.map((v) =>
-      v.vendorName === recordQuoteVendor.vendorName ? { ...v, status: "Responded" as const } : v,
+      toStoredRfqVendor(
+        v.id === recordQuoteVendor.id ? { ...v, status: "Responded" as const } : v,
+      ),
     );
 
     setSavingQuote(true);
     try {
       await psRfqService.update(recordQuoteRFQ.id, {
-        invitedVendors,
+        invitedVendors: invitedVendors as unknown as RFQVendorItem[],
         comparisonData,
         status: recordQuoteRFQ.status === "Sent" ? "Pending Response" : recordQuoteRFQ.status,
         activityTimeline: [
@@ -480,15 +559,15 @@ export default function RequestForQuotationsPage() {
           {
             stage: "Quotation Received",
             timestamp: new Date().toISOString().slice(0, 10),
-            note: `${recordQuoteVendor.vendorName} submitted quotation (₹${totalAmount.toLocaleString("en-IN")})`,
-            author: recordQuoteVendor.vendorName,
+            note: `${vendorLabel} submitted quotation (₹${totalAmount.toLocaleString("en-IN")})`,
+            author: vendorLabel,
           },
         ],
       });
       await reload();
       setRecordQuoteRFQ(null);
       setRecordQuoteVendor(null);
-      setToast({ message: `Quotation recorded for ${recordQuoteVendor.vendorName}`, variant: "success" });
+      setToast({ message: `Quotation recorded for ${vendorLabel}`, variant: "success" });
     } catch (e) {
       setToast({ message: e instanceof Error ? e.message : "Failed to save quotation", variant: "info" });
     } finally {
@@ -498,24 +577,29 @@ export default function RequestForQuotationsPage() {
 
   const openCompareForRfq = (rfq: RFQRecord) => {
     const recommended = rfq.comparisonData.find((c) => c.isRecommended);
-    setPickedVendorName(recommended?.vendorName ?? rfq.comparisonData[0]?.vendorName ?? "");
+    setPickedVendorId(recommended?.vendorId ?? rfq.comparisonData[0]?.vendorId ?? "");
     setCompareModalRFQ(rfq);
   };
 
   const handleExecuteCreatePO = async () => {
     if (!convertPOModalRFQ) return;
     const rfq = convertPOModalRFQ;
-    const vendorName =
+    const vendorId =
       rfq.selectedVendor ||
-      pickedVendorName ||
-      rfq.comparisonData.find((c) => c.isRecommended)?.vendorName ||
-      rfq.comparisonData[0]?.vendorName;
-    if (!vendorName) {
+      pickedVendorId ||
+      rfq.comparisonData.find((c) => c.isRecommended)?.vendorId ||
+      rfq.comparisonData[0]?.vendorId;
+    if (!vendorId) {
       setToast({ message: "Select a vendor before converting to PO.", variant: "info" });
       return;
     }
 
-    const bid = rfq.comparisonData.find((c) => c.vendorName === vendorName);
+    const supplier = resolveVendor(vendorId);
+    const vendorName = resolveVendorName(
+      vendorId,
+      rfq.comparisonData.find((c) => c.vendorId === vendorId)?.vendorName,
+    );
+    const bid = rfq.comparisonData.find((c) => c.vendorId === vendorId);
     const unitRateOverride = bid?.unitPrice;
     const items = poLinesFromRfq(rfq.requestedItems, products, unitRateOverride);
     const missingMaterial = items.filter((line) => !line.materialId);
@@ -537,12 +621,12 @@ export default function RequestForQuotationsPage() {
         linkedPR: rfq.linkedPR?.trim() || undefined,
         linkedRFQ: rfq.rfqNumber,
         department: rfq.department,
-        buyerName: rfq.buyer,
+        buyerName: resolveBuyerName(rfq.buyer),
         vendorName,
-        contactPerson: vendorName,
-        gstin: "—",
-        vendorAddress: ct.deliveryAddress || "—",
-        vendorPhone: "—",
+        contactPerson: supplier?.contactPerson || vendorName,
+        gstin: supplier?.gstin || "—",
+        vendorAddress: supplier?.address || ct.deliveryAddress || "—",
+        vendorPhone: supplier?.phone || "—",
         shipToWarehouse: ct.deliveryLocation || "Central Stores",
         dockGate: "Receiving Dock",
         expectedDeliveryDate: rfq.closingDate || new Date().toISOString().slice(0, 10),
@@ -561,7 +645,7 @@ export default function RequestForQuotationsPage() {
         approvalHistory: [
           {
             level: "Level 1",
-            approver: rfq.buyer,
+            approver: resolveBuyerName(rfq.buyer),
             action: "Submitted",
             timestamp: new Date().toISOString().slice(0, 10),
             comments: `Auto-generated from ${rfq.rfqNumber}`,
@@ -574,7 +658,7 @@ export default function RequestForQuotationsPage() {
             note: rfq.linkedPR?.trim()
               ? `Converted from ${rfq.rfqNumber} · linked PR ${rfq.linkedPR}`
               : `Converted from ${rfq.rfqNumber} · direct procurement (no PR)`,
-            author: rfq.buyer,
+            author: resolveBuyerName(rfq.buyer),
           },
         ],
       });
@@ -582,7 +666,7 @@ export default function RequestForQuotationsPage() {
       await psRfqService.update(rfq.id, {
               status: "Converted to PO",
         poNumber: created.poNumber,
-        selectedVendor: vendorName,
+        selectedVendor: vendorId,
       });
       await reload();
       setConvertPOModalRFQ(null);
@@ -642,7 +726,7 @@ export default function RequestForQuotationsPage() {
     try {
       const newAtts = await Promise.all(
         Array.from(files).map((file) =>
-          createAttachmentFromFile(file, formBuyer || "Purchase Executive"),
+          createAttachmentFromFile(file, resolveBuyerName(formBuyer || user?.id) || "Buyer"),
         ),
       );
       setFormAttachments((prev) => [...prev, ...(newAtts as RFQAttachment[])]);
@@ -682,16 +766,18 @@ export default function RequestForQuotationsPage() {
 
   // Confirm Vendors Selection from Vendor Modal
   const handleConfirmVendorModal = () => {
-    const selected = vendorOptions.filter((v) => selectedVendorIds.includes(v.id)).map(
-      (v) => ({
-        id: v.id,
-        vendorName: v.name,
-        email: v.email,
-        phone: v.phone,
-        invitationSentOn: "18 Jul 2026",
-        status: "Pending" as const,
-      })
-    );
+    const selected = selectedVendorIds.map((id) => ({
+      id,
+      vendorName: "",
+      email: "",
+      phone: "",
+      invitationSentOn: new Date().toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      status: "Pending" as const,
+    }));
     setFormVendors(selected);
     setVendorModalOpen(false);
     setToast({ message: `Added ${selected.length} vendors to RFQ.`, variant: "success" });
@@ -708,7 +794,11 @@ export default function RequestForQuotationsPage() {
       return;
     }
 
-    const effectiveBuyer = formBuyer || "Purchase Executive";
+    const effectiveBuyer = formBuyer || user?.id || "";
+    if (!effectiveBuyer) {
+      setToast({ message: "Buyer is required. Please sign in again.", variant: "info" });
+      return;
+    }
     const effectiveRfqDate = formRFQDate || todayStr;
     const effectiveClosingDate = formClosingDate || effectiveRfqDate;
 
@@ -716,7 +806,7 @@ export default function RequestForQuotationsPage() {
       linkedPR: formPR || undefined,
       department: selectedPR?.department ?? "General",
       buyer: effectiveBuyer,
-      invitedVendors: formVendors.map((v, i) => normalizeRfqVendor(v, i)),
+      invitedVendors: formVendors.map((v) => toStoredRfqVendor(v)) as unknown as RFQVendorItem[],
       closingDate: effectiveClosingDate,
       rfqDate: effectiveRfqDate,
       priority: formPriority || "Medium",
@@ -1127,14 +1217,14 @@ export default function RequestForQuotationsPage() {
                     <td className="px-3.5 py-3 font-mono font-bold text-slate-900">{rfq.rfqNumber}</td>
                     <td className="px-3.5 py-3 font-mono text-emerald-700 font-bold">{rfq.linkedPR?.trim() || "—"}</td>
                     <td className="px-3.5 py-3 font-extrabold text-slate-800">{rfq.department}</td>
-                    <td className="px-3.5 py-3 text-slate-700 font-medium">{rfq.buyer}</td>
+                    <td className="px-3.5 py-3 text-slate-700 font-medium">{resolveBuyerName(rfq.buyer)}</td>
                     <td className="px-3.5 py-3 text-slate-600 font-bold">
                       {rfq.invitedVendors.length} Vendors Invited
                     </td>
                     <td className="px-3.5 py-3 text-slate-600 font-normal">{rfq.closingDate}</td>
                     <td className="px-3.5 py-3">
                       {rfq.selectedVendor ? (
-                        <span className="font-extrabold text-slate-900">{rfq.selectedVendor}</span>
+                        <span className="font-extrabold text-slate-900">{displaySelectedVendor(rfq)}</span>
                       ) : (
                         <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold text-slate-500 bg-slate-100 rounded-full">
                           Awaiting Evaluation
@@ -1224,7 +1314,7 @@ export default function RequestForQuotationsPage() {
                 {renderStatusBadge(selectedRFQ.status)}
               </div>
               <h3 className="text-base font-extrabold text-slate-900">{selectedRFQ.department} Department RFQ</h3>
-              <p className="text-xs text-slate-500 font-medium">Linked PR: {selectedRFQ.linkedPR?.trim() || "Direct Procurement"} · Buyer: {selectedRFQ.buyer}</p>
+              <p className="text-xs text-slate-500 font-medium">Linked PR: {selectedRFQ.linkedPR?.trim() || "Direct Procurement"} · Buyer: {resolveBuyerName(selectedRFQ.buyer)}</p>
             </div>
 
             {/* SECTION 1: BASIC INFORMATION */}
@@ -1240,7 +1330,7 @@ export default function RequestForQuotationsPage() {
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 font-bold uppercase">Buyer</span>
-                    <p className="font-bold text-slate-800">{selectedRFQ.buyer}</p>
+                    <p className="font-bold text-slate-800">{resolveBuyerName(selectedRFQ.buyer)}</p>
                   </div>
                 </div>
 
@@ -1258,7 +1348,7 @@ export default function RequestForQuotationsPage() {
                 <div className="flex justify-between items-center pt-1">
                   <span className="text-slate-500 font-medium">Selected Vendor:</span>
                   {selectedRFQ.selectedVendor ? (
-                    <span className="font-extrabold text-slate-900">{selectedRFQ.selectedVendor}</span>
+                    <span className="font-extrabold text-slate-900">{displaySelectedVendor(selectedRFQ)}</span>
                   ) : (
                     <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold text-slate-500 bg-slate-100 rounded-full">
                       Awaiting Evaluation
@@ -1322,12 +1412,14 @@ export default function RequestForQuotationsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
-                      {selectedRFQ.invitedVendors.map((v, idx) => (
+                      {selectedRFQ.invitedVendors.map((raw, idx) => {
+                        const v = enrichInvitedVendor(raw);
+                        return (
                         <tr key={v.id || `vendor-${idx}`}>
                           <td className="px-3 py-2 font-bold text-slate-900">{v.vendorName}</td>
                           <td className="px-3 py-2 text-slate-500">{v.email}</td>
                           <td className="px-3 py-2 text-slate-500">{v.phone}</td>
-                          <td className="px-3 py-2 text-slate-600 font-medium">{v.invitationSentOn || "18 Jul 2026"}</td>
+                          <td className="px-3 py-2 text-slate-600 font-medium">{v.invitationSentOn || "—"}</td>
                           <td className="px-3 py-2 text-right">
                             <span className={cn(
                               "px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-full border",
@@ -1360,7 +1452,8 @@ export default function RequestForQuotationsPage() {
                             </td>
                           )}
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1541,11 +1634,12 @@ export default function RequestForQuotationsPage() {
                   </span>
                 </>
               )}
-              {formBuyer && (
+              {(formBuyer || user?.id) && (
                 <>
                   <span className="text-slate-300">•</span>
                   <span className="truncate">
-                    <strong className="text-slate-700 font-semibold">Buyer:</strong> {formBuyer}
+                    <strong className="text-slate-700 font-semibold">Buyer:</strong>{" "}
+                    {resolveBuyerName(formBuyer || user?.id)}
                   </span>
                 </>
               )}
@@ -1628,15 +1722,11 @@ export default function RequestForQuotationsPage() {
               </FormField>
 
               <FormField label="Buyer" required>
-                <SelectInput
-                  value={formBuyer}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormBuyer(e.target.value)}
-                  className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                >
-                  <option value="">Select Buyer</option>
-                  <option value="Purchase Executive">Purchase Executive</option>
-                  <option value="Purchase Manager">Purchase Manager</option>
-                </SelectInput>
+                <TextInput
+                  value={resolveBuyerName(formBuyer || user?.id)}
+                  readOnly
+                  className="h-9 text-xs font-medium border-slate-300 rounded-lg bg-slate-50 text-slate-800"
+                />
               </FormField>
 
               <FormField label="RFQ Date" required>
@@ -1782,7 +1872,10 @@ export default function RequestForQuotationsPage() {
 
               <Button
                 type="button"
-                onClick={() => setVendorModalOpen(true)}
+                onClick={() => {
+                  setSelectedVendorIds(formVendors.map((v) => v.id));
+                  setVendorModalOpen(true);
+                }}
                 className="h-8 px-3 text-xs font-bold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
               >
                 <Plus className="h-3.5 w-3.5" /> Add Vendor
@@ -1792,7 +1885,9 @@ export default function RequestForQuotationsPage() {
             {/* VENDOR CARDS GRID */}
             {formVendors.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {formVendors.map((v) => (
+                {formVendors.map((raw) => {
+                  const v = enrichInvitedVendor(raw);
+                  return (
                   <div
                     key={v.id}
                     className="p-4 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors flex items-start justify-between gap-3 shadow-2xs"
@@ -1808,14 +1903,14 @@ export default function RequestForQuotationsPage() {
                       </div>
                       <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 truncate">
                         <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{v.email}</span>
+                        <span className="truncate">{v.email || "—"}</span>
                       </p>
                       <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
                         <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span>{v.phone}</span>
+                        <span>{v.phone || "—"}</span>
                       </p>
                       <p className="text-[10px] text-slate-400 font-medium pt-0.5">
-                        Invitation Date: {v.invitationSentOn || "18 Jul 2026"}
+                        Invitation Date: {v.invitationSentOn || "—"}
                       </p>
                     </div>
 
@@ -1828,7 +1923,8 @@ export default function RequestForQuotationsPage() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-5 text-center text-xs space-y-1">
@@ -2197,7 +2293,7 @@ export default function RequestForQuotationsPage() {
               </Button>
               <Button
                 type="button"
-                disabled={(compareModalRFQ.comparisonData?.length ?? 0) === 0 || !pickedVendorName}
+                disabled={(compareModalRFQ.comparisonData?.length ?? 0) === 0 || !pickedVendorId}
                 onClick={() => {
                   setSelectVendorModalRFQ(compareModalRFQ);
                   setCompareModalRFQ(null);
@@ -2226,20 +2322,22 @@ export default function RequestForQuotationsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
-                    {(compareModalRFQ.comparisonData ?? []).map((bid) => (
+                    {(compareModalRFQ.comparisonData ?? []).map((bid) => {
+                      const bidName = resolveVendorName(bid.vendorId, bid.vendorName);
+                      return (
                       <tr
-                        key={bid.vendorName}
-                        onClick={() => setPickedVendorName(bid.vendorName)}
+                        key={bid.vendorId}
+                        onClick={() => setPickedVendorId(bid.vendorId)}
                         className={cn(
                           "transition-colors cursor-pointer",
-                          pickedVendorName === bid.vendorName
+                          pickedVendorId === bid.vendorId
                             ? "bg-emerald-50/80 border-l-4 border-l-emerald-600"
                             : bid.isRecommended
                               ? "bg-emerald-50/40 hover:bg-slate-50/50"
                               : "hover:bg-slate-50/50",
                         )}
                       >
-                        <td className="px-3.5 py-3 font-extrabold text-slate-900">{bid.vendorName}</td>
+                        <td className="px-3.5 py-3 font-extrabold text-slate-900">{bidName}</td>
                         <td className="px-3.5 py-3 font-bold text-slate-800">₹{bid.unitPrice}</td>
                         <td className="px-3.5 py-3 text-slate-600">{bid.deliveryDays} Days</td>
                         <td className="px-3.5 py-3 text-slate-600">{bid.paymentTerms}</td>
@@ -2258,7 +2356,8 @@ export default function RequestForQuotationsPage() {
                           )}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -2305,17 +2404,18 @@ export default function RequestForQuotationsPage() {
           <div className="space-y-4 select-none py-2 text-xs">
             {(() => {
               const bid =
-                selectVendorModalRFQ.comparisonData.find((c) => c.vendorName === pickedVendorName) ??
+                selectVendorModalRFQ.comparisonData.find((c) => c.vendorId === pickedVendorId) ??
                 selectVendorModalRFQ.comparisonData.find((c) => c.isRecommended) ??
                 selectVendorModalRFQ.comparisonData[0];
               if (!bid) return null;
+              const bidName = resolveVendorName(bid.vendorId, bid.vendorName);
               return (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-[10px] text-emerald-700 font-bold uppercase">Selected Vendor</span>
                     <span className="text-amber-500 font-bold">{bid.rating}</span>
               </div>
-                  <p className="text-base font-extrabold text-slate-900">{bid.vendorName}</p>
+                  <p className="text-base font-extrabold text-slate-900">{bidName}</p>
                   <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-700 pt-1 border-t border-emerald-100">
                     <span>Delivery: {bid.deliveryDays} days</span>
                     <span>Rate: ₹{bid.unitPrice.toLocaleString("en-IN")}/unit</span>
@@ -2389,7 +2489,7 @@ export default function RequestForQuotationsPage() {
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase">Selected Vendor</span>
-                  <p className="font-extrabold text-slate-900">{convertPOModalRFQ.selectedVendor || "ABC Linen Pvt Ltd"}</p>
+                  <p className="font-extrabold text-slate-900">{displaySelectedVendor(convertPOModalRFQ) || "—"}</p>
                 </div>
               </div>
 
@@ -2442,7 +2542,7 @@ export default function RequestForQuotationsPage() {
                 </span>
               </div>
               <h3 className="text-base font-extrabold text-slate-900">
-                Vendor: {viewPODrawerRFQ.selectedVendor || "ABC Linen Pvt Ltd"}
+                Vendor: {displaySelectedVendor(viewPODrawerRFQ) || "—"}
               </h3>
               <p className="text-xs text-slate-500 font-medium">
                 Linked RFQ: {viewPODrawerRFQ.rfqNumber} · Linked PR: {viewPODrawerRFQ.linkedPR}
@@ -2462,7 +2562,7 @@ export default function RequestForQuotationsPage() {
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase">Buyer</span>
-                  <p className="font-bold text-slate-800">{viewPODrawerRFQ.buyer}</p>
+                  <p className="font-bold text-slate-800">{resolveBuyerName(viewPODrawerRFQ.buyer)}</p>
                 </div>
               </div>
 

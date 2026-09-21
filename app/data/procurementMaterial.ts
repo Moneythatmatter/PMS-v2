@@ -10,6 +10,7 @@ export interface MaterialCatalogItem {
   productName: string;
   category: string;
   unit: string;
+  /** Estimated unit price entered on the PR/RFQ line (not stored on product master). */
   purchasePrice: number;
 }
 
@@ -22,7 +23,7 @@ export function productsToCatalog(products: ProductItem[]): MaterialCatalogItem[
       productName: p.productName,
       category: p.category,
       unit: p.unit,
-      purchasePrice: p.purchasePrice,
+      purchasePrice: 0,
     }));
 }
 
@@ -79,8 +80,8 @@ export function normalizePoLineItem(
   });
 
   const quantity = Number(raw.quantity ?? 0);
-  const unitRate = Number(raw.unitRate ?? product?.purchasePrice ?? 0);
-  const taxPercent = Number(raw.taxPercent ?? product?.gstPercent ?? 18);
+  const unitRate = Number(raw.unitRate ?? 0);
+  const taxPercent = Number(raw.taxPercent ?? 18);
 
   return {
     id: String(raw.id ?? `pli-${index}`),
@@ -105,7 +106,7 @@ export function normalizePoItems(items: unknown[], products: ProductItem[] = [])
 }
 
 export function poLineFromProduct(product: ProductItem, quantity = 1): POLineItem {
-  const unitRate = product.purchasePrice;
+  const unitRate = 0;
   return {
     id: `pli-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     materialId: product.id,
@@ -117,7 +118,7 @@ export function poLineFromProduct(product: ProductItem, quantity = 1): POLineIte
     quantity,
     unit: product.unit,
     unitRate,
-    taxPercent: product.gstPercent,
+    taxPercent: 18,
     totalAmount: quantity * unitRate,
   };
 }
@@ -148,7 +149,7 @@ export function normalizePrRequestedItem(
     item: String(raw.item ?? ""),
   });
   const qty = Number(raw.quantity ?? 1);
-  const price = Number(raw.estimatedPrice ?? product?.purchasePrice ?? 0);
+  const price = Number(raw.estimatedPrice ?? 0);
   return {
     id: String(raw.id ?? `item-${index}`),
     materialId: product?.id ?? String(raw.materialId ?? ""),
@@ -182,7 +183,7 @@ export function poLinesFromPr(
 ): POLineItem[] {
   return items.map((item, idx) => {
     const product = resolveProductForLine(products, item);
-    const unitRate = item.estimatedPrice || product?.purchasePrice || 0;
+    const unitRate = item.estimatedPrice || 0;
     const qty = item.quantity;
     return {
       id: `pli-pr-${idx}-${Date.now()}`,
@@ -195,7 +196,7 @@ export function poLinesFromPr(
       quantity: qty,
       unit: item.unit,
       unitRate,
-      taxPercent: product?.gstPercent ?? 18,
+      taxPercent: 18,
       totalAmount: qty * unitRate,
     };
   });
@@ -208,7 +209,7 @@ export function poLinesFromRfq(
 ): POLineItem[] {
   return items.map((item, idx) => {
     const product = resolveProductForLine(products, item);
-    const unitRate = unitRateOverride ?? item.estimatedRate ?? product?.purchasePrice ?? 0;
+    const unitRate = unitRateOverride ?? item.estimatedRate ?? 0;
     const qty = item.quantity;
     return {
       id: `pli-rfq-${idx}`,
@@ -221,7 +222,7 @@ export function poLinesFromRfq(
       quantity: qty,
       unit: item.unit,
       unitRate,
-      taxPercent: product?.gstPercent ?? 18,
+      taxPercent: 18,
       totalAmount: qty * unitRate,
     };
   });
