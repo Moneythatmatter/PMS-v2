@@ -99,18 +99,6 @@ export function MaintenanceDashboardView() {
             <span className="text-slate-300">|</span>
             <span>Duty Eng: <strong>Amit Patel</strong></span>
           </div>
-
-
-
-          <Link href="/maintenance/work-orders">
-            <Button
-              size="sm"
-              className="h-9 gap-1.5 bg-emerald-700 text-xs font-bold text-white hover:bg-emerald-800 shadow-xs"
-            >
-              <ClipboardList className="h-3.5 w-3.5" />
-              <span>Work Orders</span>
-            </Button>
-          </Link>
         </div>
       }
     >
@@ -213,13 +201,6 @@ export function MaintenanceDashboardView() {
               {criticalIssues.length} Action Needed
             </span>
           </div>
-          <Link
-            href="/maintenance/work-orders"
-            className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            <span>All Work Orders</span>
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Link>
         </div>
 
         <div className="overflow-x-auto">
