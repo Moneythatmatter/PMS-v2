@@ -63,7 +63,7 @@ export interface RequestVerification {
   requiredMaterials?: string;
   materialsList?: RequiredMaterialItem[];
   estimatedBudget?: number;
-  executionMethod: ExecutionMethod;
+  executionMethod?: ExecutionMethod;
   notes?: string;
   attachmentName?: string;
   verifiedBy: string;
@@ -271,7 +271,7 @@ export interface PMSchedule {
   locationType?: "Guest Room" | "F&B Area" | "Public Area" | "Back of House";
   templateId?: string;
   taskTitle: string;
-  checklist: string[];
+  checklist?: string[];
   frequency: PMFrequency;
   firstDueDate: string;
   nextDueDate: string;

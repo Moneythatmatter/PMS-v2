@@ -120,6 +120,30 @@ export const getStatusBadgeConfig = (status: string) => {
   }
 };
 
+/** Linked WO is done when verified/closed (UI label: Completed). */
+function isLinkedWorkOrderCompleted(
+  req: { status?: string; workOrderNo?: string },
+  workOrders: Array<{ woNumber?: string; status?: string }>,
+): boolean {
+  // Cancelled/rejected/closed requests stay in Closed — never treat as Completed.
+  if (req.status === "Cancelled" || req.status === "Rejected" || req.status === "Closed") return false;
+  if (!req.workOrderNo) return false;
+  const wo = workOrders.find((w) => w.woNumber === req.workOrderNo);
+  if (!wo) return false;
+  return wo.status === "Verified" || wo.status === "Closed";
+}
+
+function getRequestDisplayStatus(
+  req: { status: string; workOrderNo?: string },
+  workOrders: Array<{ woNumber?: string; status?: string }>,
+): string {
+  if (req.status === "Cancelled" || req.status === "Rejected") return req.status;
+  if (req.status === "Closed") return "Closed";
+  if (isLinkedWorkOrderCompleted(req, workOrders)) return "Completed";
+  if (req.status === "Work Order Created") return "WO Created";
+  return req.status;
+}
+
 export function MaintenanceRequestsView() {
   const router = useRouter();
   const { data: requests, loading, reload: reloadRequests } = usePsList(() => mntRequestService.list(), []);
@@ -133,6 +157,15 @@ export function MaintenanceRequestsView() {
         .filter(Boolean),
     [problemCategories],
   );
+
+  const completedRequestIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const req of requests) {
+      if (isLinkedWorkOrderCompleted(req, workOrders)) ids.add(req.id);
+    }
+    return ids;
+  }, [requests, workOrders]);
+
   const [saving, setSaving] = useState(false);
   const savingLockRef = useRef(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -218,7 +251,11 @@ export function MaintenanceRequestsView() {
     const total = requests.length;
     const pendingVerification = requests.filter((r) => r.status === "New" || r.status === "Verification").length;
     const verifiedReady = requests.filter((r) => r.status === "Verified").length;
-    const activeWorkOrders = requests.filter((r) => r.status === "Work Order Created" || r.status === "Approved").length;
+    const activeWorkOrders = requests.filter(
+      (r) =>
+        (r.status === "Work Order Created" || r.status === "Approved") &&
+        !completedRequestIds.has(r.id),
+    ).length;
 
     return {
       total,
@@ -226,19 +263,27 @@ export function MaintenanceRequestsView() {
       verifiedReady,
       activeWorkOrders,
     };
-  }, [requests]);
+  }, [requests, completedRequestIds]);
 
   // ─────────────────────────────────────────────────────────────
   // 2. FILTERING LOGIC
   // ─────────────────────────────────────────────────────────────
   const filteredRequests = useMemo(() => {
     return requests.filter((req) => {
+      const woCompleted = completedRequestIds.has(req.id);
+
       // Status Tab Filter
       if (selectedStatusTab !== "ALL") {
         if (selectedStatusTab === "Open" && !(req.status === "New" || req.status === "Verification" || req.status === "In Review")) return false;
         if (selectedStatusTab === "Verified" && req.status !== "Verified") return false;
-        if (selectedStatusTab === "Approved" && !(req.status === "Approved" || req.status === "Work Order Created")) return false;
-        if (selectedStatusTab === "Closed" && !(req.status === "Closed" || req.status === "Resolved" || req.status === "Cancelled" || req.status === "Rejected")) return false;
+        if (
+          selectedStatusTab === "Approved" &&
+          (!(req.status === "Approved" || req.status === "Work Order Created") || woCompleted)
+        ) {
+          return false;
+        }
+        if (selectedStatusTab === "Completed" && !woCompleted) return false;
+        if (selectedStatusTab === "Closed" && !(req.status === "Cancelled" || req.status === "Closed")) return false;
       }
 
       // Priority Filter
@@ -275,7 +320,15 @@ export function MaintenanceRequestsView() {
 
       return true;
     });
-  }, [requests, selectedStatusTab, selectedPriority, selectedLocationType, selectedCategory, searchTerm]);
+  }, [
+    requests,
+    completedRequestIds,
+    selectedStatusTab,
+    selectedPriority,
+    selectedLocationType,
+    selectedCategory,
+    searchTerm,
+  ]);
 
   // Pagination Slice
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
@@ -465,7 +518,11 @@ export function MaintenanceRequestsView() {
 
   const handleSaveVerification = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!verifyTargetRequest || !vfFindings.trim() || !vfRecommendedWork.trim() || saving) return;
+    if (!verifyTargetRequest || saving) return;
+
+    const noDefect = vfProblemConfirmed === "No";
+    if (!vfFindings.trim()) return;
+    if (!noDefect && !vfRecommendedWork.trim()) return;
 
     const materialsSummary = vfMaterialsList.length > 0
       ? vfMaterialsList.map((m) => `${m.itemName} (${m.quantity} ${m.unit || "pcs"})`).join(", ")
@@ -473,30 +530,52 @@ export function MaintenanceRequestsView() {
 
     const numericBudget = typeof vfEstimatedBudget === "number" ? vfEstimatedBudget : 0;
 
-    const updated: Partial<MaintenanceRequest> = {
-      status: "Verified",
-      verification: {
-        problemConfirmed: vfProblemConfirmed,
-        findings: vfFindings.trim(),
-        recommendedWork: vfRecommendedWork.trim(),
-        requiredMaterials: materialsSummary || undefined,
-        materialsList: vfMaterialsList.length > 0 ? vfMaterialsList : undefined,
-        estimatedBudget: numericBudget,
-        executionMethod: vfExecutionMethod,
-        notes: vfNotes.trim() || undefined,
-        attachmentName: vfAttachmentName || undefined,
-        verifiedBy: `${currentUser.name} (Engineering)`,
-        verifiedAt: "Just now",
-      },
-      timeline: [
-        ...(verifyTargetRequest.timeline || []),
-        {
-          time: "Just now",
-          action: `Physical Verification Completed (${vfExecutionMethod} / ₹${numericBudget.toLocaleString()})`,
-          user: currentUser.name,
-        },
-      ],
-    };
+    const updated: Partial<MaintenanceRequest> = noDefect
+      ? {
+          status: "Closed",
+          cancellationReason: "No defect found during physical verification",
+          verification: {
+            problemConfirmed: "No",
+            findings: vfFindings.trim(),
+            recommendedWork: "N/A — No defect found",
+            notes: vfNotes.trim() || undefined,
+            attachmentName: vfAttachmentName || undefined,
+            verifiedBy: `${currentUser.name} (Engineering)`,
+            verifiedAt: "Just now",
+          },
+          timeline: [
+            ...(verifyTargetRequest.timeline || []),
+            {
+              time: "Just now",
+              action: "Physical Verification: No defect found — Request Closed",
+              user: currentUser.name,
+            },
+          ],
+        }
+      : {
+          status: "Verified",
+          verification: {
+            problemConfirmed: vfProblemConfirmed,
+            findings: vfFindings.trim(),
+            recommendedWork: vfRecommendedWork.trim(),
+            requiredMaterials: materialsSummary || undefined,
+            materialsList: vfMaterialsList.length > 0 ? vfMaterialsList : undefined,
+            estimatedBudget: numericBudget,
+            executionMethod: vfExecutionMethod,
+            notes: vfNotes.trim() || undefined,
+            attachmentName: vfAttachmentName || undefined,
+            verifiedBy: `${currentUser.name} (Engineering)`,
+            verifiedAt: "Just now",
+          },
+          timeline: [
+            ...(verifyTargetRequest.timeline || []),
+            {
+              time: "Just now",
+              action: `Physical Verification Completed (${vfExecutionMethod} / ₹${numericBudget.toLocaleString()})`,
+              user: currentUser.name,
+            },
+          ],
+        };
 
     if (savingLockRef.current) return;
     savingLockRef.current = true;
@@ -506,7 +585,11 @@ export function MaintenanceRequestsView() {
       await reloadRequests();
       if (selectedRequest?.id === verifyTargetRequest.id) setSelectedRequest(saved);
       setVerifyTargetRequest(null);
-      setToastMessage(`✓ Request #${verifyTargetRequest.requestNo} verified. Ready for Approval.`);
+      setToastMessage(
+        noDefect
+          ? `✓ Request #${verifyTargetRequest.requestNo} closed — no defect found.`
+          : `✓ Request #${verifyTargetRequest.requestNo} verified. Ready for Approval.`,
+      );
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : "Failed to save verification");
     } finally {
@@ -592,6 +675,13 @@ export function MaintenanceRequestsView() {
     setCancelTargetRequest(req);
     setCancelReason("");
     setCancelError(null);
+
+    if (isLinkedWorkOrderCompleted(req, workOrders)) {
+      setCancelError(
+        `This request is linked to a completed work order and cannot be cancelled.`,
+      );
+      return;
+    }
 
     if (req.workOrderNo) {
       const linkedWO = workOrders.find((w) => w.woNumber === req.workOrderNo);
@@ -803,12 +893,21 @@ export function MaintenanceRequestsView() {
             {
               id: "Approved",
               label: "Approved",
-              count: requests.filter((r) => r.status === "Approved" || r.status === "Work Order Created").length,
+              count: requests.filter(
+                (r) =>
+                  (r.status === "Approved" || r.status === "Work Order Created") &&
+                  !completedRequestIds.has(r.id),
+              ).length,
+            },
+            {
+              id: "Completed",
+              label: "Completed",
+              count: completedRequestIds.size,
             },
             {
               id: "Closed",
               label: "Closed",
-              count: requests.filter((r) => r.status === "Closed" || r.status === "Resolved" || r.status === "Cancelled" || r.status === "Rejected").length,
+              count: requests.filter((r) => r.status === "Cancelled" || r.status === "Closed").length,
             },
           ].map((tab) => (
             <button
@@ -1001,7 +1100,9 @@ export function MaintenanceRequestsView() {
                           <span
                             className={cn(
                               "inline-flex items-center justify-center min-w-[85px] rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset text-center",
-                              req.status === "Approved" || req.status === "Work Order Created"
+                              getRequestDisplayStatus(req, workOrders) === "Completed"
+                                ? "bg-emerald-50 text-emerald-800 ring-emerald-200"
+                                : req.status === "Approved" || req.status === "Work Order Created"
                                 ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
                                 : req.status === "Verified"
                                 ? "bg-sky-50 text-sky-700 ring-sky-200"
@@ -1014,7 +1115,7 @@ export function MaintenanceRequestsView() {
                                 : "bg-red-50 text-red-700 ring-red-200"
                             )}
                           >
-                            {req.status === "Work Order Created" ? "WO Created" : req.status}
+                            {getRequestDisplayStatus(req, workOrders)}
                           </span>
                         </div>
                         <p className="mt-1.5 text-xs font-medium text-slate-800 line-clamp-1">
@@ -1174,7 +1275,9 @@ export function MaintenanceRequestsView() {
                           <span
                             className={cn(
                               "inline-flex items-center justify-center min-w-[96px] rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset text-center",
-                              req.status === "Approved" || req.status === "Work Order Created"
+                              getRequestDisplayStatus(req, workOrders) === "Completed"
+                                ? "bg-emerald-50 text-emerald-800 ring-emerald-200"
+                                : req.status === "Approved" || req.status === "Work Order Created"
                                 ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
                                 : req.status === "Verified"
                                 ? "bg-sky-50 text-sky-700 ring-sky-200"
@@ -1187,7 +1290,7 @@ export function MaintenanceRequestsView() {
                                 : "bg-red-50 text-red-700 ring-red-200"
                             )}
                           >
-                            {req.status === "Work Order Created" ? "WO Created" : req.status}
+                            {getRequestDisplayStatus(req, workOrders)}
                           </span>
                           {req.workOrderNo && (
                             <Link
@@ -1224,6 +1327,12 @@ export function MaintenanceRequestsView() {
                                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                                 {saving ? "Saving..." : "Approve"}
                               </Button>
+                            ) : completedRequestIds.has(req.id) ? (
+                              <Link href="/maintenance/work-orders">
+                                <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100">
+                                  <CheckCircle2 className="h-3 w-3" /> Completed
+                                </span>
+                              </Link>
                             ) : req.status === "Approved" || req.status === "Work Order Created" || req.workOrderNo ? (
                               <Link href="/maintenance/work-orders">
                                 <span className="inline-flex items-center gap-1 rounded-lg bg-teal-50 border border-teal-200 px-2 py-1 text-[11px] font-bold text-teal-800 hover:bg-teal-100">
@@ -1231,7 +1340,7 @@ export function MaintenanceRequestsView() {
                                 </span>
                               </Link>
                             ) : (
-                              <span className="text-[11px] font-medium text-slate-400">Completed</span>
+                              <span className="text-[11px] font-medium text-slate-400">—</span>
                             )}
 
                             {/* Context Menu (3-dots) */}
@@ -1308,7 +1417,9 @@ export function MaintenanceRequestsView() {
                                     </Link>
                                   )}
 
-                                  {req.status !== "Closed" && req.status !== "Cancelled" && (
+                                  {req.status !== "Closed" &&
+                                    req.status !== "Cancelled" &&
+                                    !completedRequestIds.has(req.id) && (
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -1672,7 +1783,9 @@ export function MaintenanceRequestsView() {
           footer={
             <div className="flex items-center justify-between w-full pt-1">
               <div>
-                {selectedRequest.status !== "Closed" && selectedRequest.status !== "Cancelled" && (
+                {selectedRequest.status !== "Closed" &&
+                  selectedRequest.status !== "Cancelled" &&
+                  !completedRequestIds.has(selectedRequest.id) && (
                   <Button
                     type="button"
                     variant="outline"
@@ -1721,7 +1834,17 @@ export function MaintenanceRequestsView() {
                   </Button>
                 )}
 
-                {(selectedRequest.status === "Approved" || selectedRequest.status === "Work Order Created") && selectedRequest.workOrderNo && (
+                {completedRequestIds.has(selectedRequest.id) ? (
+                  <Link href="/maintenance/work-orders">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 h-8 px-3.5 shadow-2xs cursor-pointer"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Completed — View WO #{selectedRequest.workOrderNo}
+                    </Button>
+                  </Link>
+                ) : (selectedRequest.status === "Approved" || selectedRequest.status === "Work Order Created") && selectedRequest.workOrderNo ? (
                   <Link href="/maintenance/work-orders">
                     <Button
                       type="button"
@@ -1731,7 +1854,7 @@ export function MaintenanceRequestsView() {
                       View Work Order #{selectedRequest.workOrderNo}
                     </Button>
                   </Link>
-                )}
+                ) : null}
               </div>
             </div>
           }
@@ -1744,7 +1867,9 @@ export function MaintenanceRequestsView() {
                 <span
                   className={cn(
                     "inline-flex items-center justify-center min-w-[85px] rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset text-center",
-                    selectedRequest.status === "Approved" || selectedRequest.status === "Work Order Created"
+                    getRequestDisplayStatus(selectedRequest, workOrders) === "Completed"
+                      ? "bg-emerald-50 text-emerald-800 ring-emerald-200"
+                      : selectedRequest.status === "Approved" || selectedRequest.status === "Work Order Created"
                       ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
                       : selectedRequest.status === "Verified"
                       ? "bg-sky-50 text-sky-700 ring-sky-200"
@@ -1757,7 +1882,7 @@ export function MaintenanceRequestsView() {
                       : "bg-red-50 text-red-700 ring-red-200"
                   )}
                 >
-                  {selectedRequest.status === "Work Order Created" ? "WO Created" : selectedRequest.status}
+                  {getRequestDisplayStatus(selectedRequest, workOrders)}
                 </span>
               </div>
 
@@ -2063,7 +2188,8 @@ export function MaintenanceRequestsView() {
               />
             </div>
 
-            {/* Recommended Work */}
+            {/* Recommended Work — hidden when no defect found */}
+            {vfProblemConfirmed !== "No" && (
             <div>
               <label className="block font-bold text-slate-700 mb-1 text-[11px]">
                 Recommended Scope of Work <span className="text-rose-500">*</span>
@@ -2077,8 +2203,10 @@ export function MaintenanceRequestsView() {
                 className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-xs leading-relaxed focus:border-slate-900 focus:outline-hidden"
               />
             </div>
+            )}
 
-            {/* Structured Required Parts / Materials List */}
+            {/* Structured Required Parts / Materials List — hidden when no defect */}
+            {vfProblemConfirmed !== "No" && (
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-800">
@@ -2158,8 +2286,10 @@ export function MaintenanceRequestsView() {
                 />
               )}
             </div>
+            )}
 
-            {/* Execution Method & Estimated Budget */}
+            {/* Execution Method & Estimated Budget — hidden when no defect found */}
+            {vfProblemConfirmed !== "No" && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block font-bold text-slate-700 mb-1 text-[11px]">
@@ -2193,6 +2323,7 @@ export function MaintenanceRequestsView() {
                 <span className="text-[10px] text-slate-400 mt-1 block">Approximate total cost for parts & labor</span>
               </div>
             </div>
+            )}
 
             {/* Notes / Constraints */}
             <div>
@@ -2263,7 +2394,11 @@ export function MaintenanceRequestsView() {
                 className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs px-5 cursor-pointer shadow-2xs inline-flex items-center gap-1.5 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                {saving ? "Saving..." : "Save Verification Findings"}
+                {saving
+                  ? "Saving..."
+                  : vfProblemConfirmed === "No"
+                    ? "Close Request — No Defect Found"
+                    : "Save Verification Findings"}
               </Button>
             </div>
           </form>

@@ -51,6 +51,15 @@ import {
   mntWorkOrderService,
 } from "@/services/maintenance";
 
+/** API payload may omit arrays — keep UI safe. */
+function normalizePmSchedule(pm: PMSchedule): PMSchedule {
+  return {
+    ...pm,
+    checklist: Array.isArray(pm.checklist) ? pm.checklist : [],
+    pmHistory: Array.isArray(pm.pmHistory) ? pm.pmHistory : [],
+  };
+}
+
 export const getPMStatusBadgeConfig = (status: PMScheduleStatus) => {
   switch (status) {
     case "Upcoming":
@@ -68,7 +77,8 @@ export const getPMStatusBadgeConfig = (status: PMScheduleStatus) => {
 
 export function MaintenancePreventiveView() {
   const router = useRouter();
-  const { data: pmSchedules, loading, reload: reloadSchedules } = usePsList(() => mntPmScheduleService.list(), []);
+  const { data: pmSchedulesRaw, loading, reload: reloadSchedules } = usePsList(() => mntPmScheduleService.list(), []);
+  const pmSchedules = useMemo(() => pmSchedulesRaw.map(normalizePmSchedule), [pmSchedulesRaw]);
   const { data: templates } = usePsList(() => mntPmTemplateService.list(), []);
   const { data: vendors } = usePsList(() => mntVendorService.list(), []);
   const { data: assets } = usePsList(() => mntAssetService.list(), []);
@@ -330,7 +340,7 @@ export function MaintenancePreventiveView() {
         activeWorkOrderNo: newWoNumber,
       });
       await reloadSchedules();
-      if (selectedSchedule?.id === pm.id) setSelectedSchedule(updatedSchedule);
+      if (selectedSchedule?.id === pm.id) setSelectedSchedule(normalizePmSchedule(updatedSchedule));
       setToastMessage(`✓ Work Order #${newWoNumber} generated for ${pm.pmNumber} and sent to Work Orders page.`);
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : "Failed to generate work order");
@@ -350,7 +360,7 @@ export function MaintenancePreventiveView() {
     try {
       const updated = await mntPmScheduleService.update(pm.id, { status: nextStatus });
       await reloadSchedules();
-      if (selectedSchedule?.id === pm.id) setSelectedSchedule(updated);
+      if (selectedSchedule?.id === pm.id) setSelectedSchedule(normalizePmSchedule(updated));
       setToastMessage(`Schedule #${pm.pmNumber} marked as ${nextStatus}.`);
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : "Failed to update schedule");
@@ -591,7 +601,7 @@ export function MaintenancePreventiveView() {
                     return (
                       <tr
                         key={pm.id}
-                        onClick={() => setSelectedSchedule(pm)}
+                        onClick={() => setSelectedSchedule(normalizePmSchedule(pm))}
                         className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
                       >
                         {/* 0. Row Select Checkbox */}
@@ -696,7 +706,7 @@ export function MaintenancePreventiveView() {
                                 type="button"
                                 size="sm"
                                 variant="ghost"
-                                onClick={() => setSelectedSchedule(pm)}
+                                onClick={() => setSelectedSchedule(normalizePmSchedule(pm))}
                                 className="h-7 px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
                               >
                                 View Details
@@ -834,7 +844,7 @@ export function MaintenancePreventiveView() {
                       return (
                         <div
                           key={item.id}
-                          onClick={() => setSelectedSchedule(item)}
+                          onClick={() => setSelectedSchedule(normalizePmSchedule(item))}
                           className={cn(
                             "p-1 rounded text-[10px] font-bold truncate cursor-pointer transition hover:opacity-80 border",
                             b.bg,
@@ -1159,12 +1169,16 @@ export function MaintenancePreventiveView() {
                 <CheckSquare className="h-3.5 w-3.5 text-slate-500" /> 2. PM Checklist (Inherited from Master Template)
               </strong>
               <ul className="space-y-1 text-xs">
-                {selectedSchedule.checklist.map((step, idx) => (
-                  <li key={idx} className="flex items-start gap-2 p-1 bg-slate-50 rounded text-slate-800 font-medium">
-                    <span className="font-mono text-[10px] text-emerald-700 font-bold">{idx + 1}.</span>
-                    <span>{step}</span>
-                  </li>
-                ))}
+                {(selectedSchedule.checklist ?? []).length === 0 ? (
+                  <li className="text-[11px] text-slate-400 italic p-1">No checklist items on this schedule.</li>
+                ) : (
+                  (selectedSchedule.checklist ?? []).map((step, idx) => (
+                    <li key={idx} className="flex items-start gap-2 p-1 bg-slate-50 rounded text-slate-800 font-medium">
+                      <span className="font-mono text-[10px] text-emerald-700 font-bold">{idx + 1}.</span>
+                      <span>{step}</span>
+                    </li>
+                  ))
+                )}
               </ul>
             </div>
 

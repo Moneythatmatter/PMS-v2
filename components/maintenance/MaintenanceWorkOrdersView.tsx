@@ -83,7 +83,7 @@ export const getWorkOrderStatusBadgeConfig = (status: WorkOrderStatus) => {
     case "Verified":
       return { bg: "bg-teal-50 text-teal-800", border: "border-teal-200", label: "Verified" };
     case "Closed":
-      return { bg: "bg-slate-100 text-slate-600", border: "border-slate-200", label: "Closed" };
+      return { bg: "bg-slate-100 text-slate-600", border: "border-slate-200", label: "Completed" };
     case "Cancelled":
       return { bg: "bg-rose-50 text-rose-700", border: "border-rose-200", label: "Cancelled" };
     default:
@@ -1121,7 +1121,7 @@ export function MaintenanceWorkOrdersView() {
             { id: "In Progress", label: "In Progress", count: workOrders.filter((w) => w.status === "In Progress").length },
             { id: "Awaiting Parts", label: "Awaiting Parts", count: workOrders.filter((w) => w.status === "Awaiting Parts").length },
             { id: "Pending Verification", label: "Pending Verification", count: workOrders.filter((w) => w.status === "Completed").length },
-            { id: "Closed", label: "Closed", count: workOrders.filter((w) => w.status === "Verified" || w.status === "Closed").length },
+            { id: "Closed", label: "Completed", count: workOrders.filter((w) => w.status === "Verified" || w.status === "Closed").length },
             { id: "Cancelled", label: "Cancelled", count: workOrders.filter((w) => w.status === "Cancelled").length },
           ].map((tab) => (
             <button
@@ -1177,7 +1177,7 @@ export function MaintenanceWorkOrdersView() {
                   <option value="In Progress">In Progress</option>
                   <option value="Awaiting Parts">Awaiting Parts</option>
                   <option value="Pending Verification">Pending Verification</option>
-                  <option value="Closed">Closed</option>
+                  <option value="Closed">Completed</option>
                   <option value="Cancelled">Cancelled</option>
                 </select>
               </div>
@@ -1435,7 +1435,7 @@ export function MaintenanceWorkOrdersView() {
                               : "bg-red-50 text-red-700 ring-red-200"
                           )}
                         >
-                          {wo.status === "Completed" ? "Completed" : wo.status}
+                          {wo.status === "Closed" ? "Completed" : wo.status}
                         </span>
                       </td>
 

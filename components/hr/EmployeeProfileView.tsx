@@ -1270,7 +1270,7 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                   role="tab"
                   aria-selected={activeTab === tab.id}
                   onClick={() => handleTabChange(tab.id)}
-                  className={cn(
+                      className={cn(
                     "whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
                     activeTab === tab.id
                       ? "bg-emerald-700 text-white shadow-sm"
@@ -1280,8 +1280,8 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                   {tab.label}
                 </button>
               ))}
-            </div>
-          </div>
+                </div>
+              </div>
 
           {/* TAB PANELS CONTAINER */}
           <div ref={tabPanelRef} className="space-y-5 scroll-mt-24">
@@ -1290,16 +1290,16 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                 <div className="flex items-start sm:items-center gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 font-bold border border-amber-300">
                     <Clock className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
                       <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-extrabold text-[10px] tracking-wide uppercase border border-amber-300">
                         Upcoming Shift Change
                       </span>
                       <span className="font-bold text-slate-900">
                         {String(upcomingShiftChange.shiftName || upcomingShiftChange.shift_name || "New Shift")}
-                      </span>
-                    </div>
+                    </span>
+                  </div>
                     <p className="mt-0.5 text-[11px] text-slate-600">
                       Effective from{" "}
                       <strong className="font-semibold text-slate-900">
@@ -1309,16 +1309,16 @@ export function EmployeeProfileView({ initialEmpId }: { initialEmpId?: string })
                       <strong className="font-semibold text-slate-900">
                         {String(upcomingShiftChange.effectiveTo || upcomingShiftChange.effective_to || "Until Further Notice")}
                       </strong>
-                    </p>
-                  </div>
+                  </p>
                 </div>
+              </div>
                 <a
                   href="/human-resources/attendance-leave/shift-management"
                   className="inline-flex items-center gap-1 font-bold text-amber-800 hover:text-amber-950 hover:underline shrink-0 text-[11px]"
                 >
                   Manage Shifts →
                 </a>
-              </div>
+            </div>
             )}
 
             {/* ─────────────────────────────────────────────────────────────
