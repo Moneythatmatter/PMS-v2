@@ -8,17 +8,12 @@ import {
   ClipboardList,
   CalendarClock,
   DoorClosed,
-  Plus,
-  Clock,
-  CheckCircle2,
   Search,
   ChevronRight,
   ShieldAlert,
   Check,
   X,
   Info,
-  Layers,
-  Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
@@ -29,8 +24,6 @@ import {
   MaintenanceRequest,
   WorkOrder,
   RoomUnderMaintenance,
-  PriorityLevel,
-  EntryPreference,
   MaintenanceDashboardStats,
   PMSchedule,
 } from "@/app/data/maintenance/types";
@@ -60,37 +53,7 @@ export function MaintenanceDashboardView() {
     data: MaintenanceRequest | WorkOrder | RoomUnderMaintenance;
   } | null>(null);
 
-  // State for Quick Create Request Modal
-  const [isQuickRequestOpen, setIsQuickRequestOpen] = useState(false);
-  const [quickLocation, setQuickLocation] = useState("");
-  const [quickCategory, setQuickCategory] = useState("HVAC / Air Conditioning");
-  const [quickPriority, setQuickPriority] = useState<PriorityLevel>("High");
-  const [quickSafetyHazard, setQuickSafetyHazard] = useState(false);
-  const [quickGuestInRoom, setQuickGuestInRoom] = useState<"Yes" | "No" | "Unknown">("Yes");
-  const [quickEntryPref, setQuickEntryPref] = useState<EntryPreference>("Call Guest First");
-  const [quickTitle, setQuickTitle] = useState("");
-  const [quickDescription, setQuickDescription] = useState("");
 
-  // Multi-issue snagging state
-  const [snagItems, setSnagItems] = useState<{ id: string; issue: string; category: string }[]>([]);
-  const [newSnagText, setNewSnagText] = useState("");
-
-  const handleAddSnag = () => {
-    if (!newSnagText.trim()) return;
-    setSnagItems((prev) => [
-      ...prev,
-      {
-        id: `snag-${Date.now()}`,
-        issue: newSnagText.trim(),
-        category: quickCategory,
-      },
-    ]);
-    setNewSnagText("");
-  };
-
-  const handleRemoveSnag = (id: string) => {
-    setSnagItems((prev) => prev.filter((item) => item.id !== id));
-  };
 
   // Filtered lists based on search
   const q = searchTerm.toLowerCase();
@@ -137,15 +100,7 @@ export function MaintenanceDashboardView() {
             <span>Duty Eng: <strong>Amit Patel</strong></span>
           </div>
 
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-9 gap-1.5 border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs"
-            onClick={() => setIsQuickRequestOpen(true)}
-          >
-            <Plus className="h-3.5 w-3.5 text-slate-500" />
-            <span>New Request</span>
-          </Button>
+
 
           <Link href="/maintenance/work-orders">
             <Button
@@ -402,57 +357,57 @@ export function MaintenanceDashboardView() {
                   </tr>
                 ) : (
                   filteredWorkOrders.map((wo) => (
-                  <tr
-                    key={wo.id}
-                    className="hover:bg-slate-50/80 transition-colors cursor-pointer"
-                    onClick={() => setActiveDrawerItem({ type: "work_order", data: wo })}
-                  >
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
-                      {wo.woNumber}
-                    </td>
-                    <td className="py-3 px-3 font-semibold text-slate-900 whitespace-nowrap">
-                      {wo.location}
-                    </td>
-                    <td className="py-3 px-3">
-                      <p className="font-semibold text-slate-900 line-clamp-1">{wo.issue}</p>
-                    </td>
-                    <td className="py-3 px-3 whitespace-nowrap">
-                      <p className="font-medium text-slate-900">{wo.technicianName}</p>
-                      <p className="text-[10px] text-slate-400">
-                        {wo.assignedType === "External Vendor" ? "External AMC" : "In-House"}
-                      </p>
-                    </td>
-                    <td className="py-3 px-3 whitespace-nowrap">
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-bold border",
-                          wo.status === "In Progress"
-                            ? "bg-amber-50 text-amber-700 border border-amber-200"
-                            : wo.status === "Awaiting Parts"
-                            ? "bg-slate-100 text-slate-700 border border-slate-200"
-                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        )}
-                      >
-                        {wo.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 whitespace-nowrap text-[11px] text-slate-600">
-                      {wo.dueDate}
-                    </td>
-                    <td className="py-3 px-4 text-right whitespace-nowrap">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveDrawerItem({ type: "work_order", data: wo });
-                        }}
-                      >
-                        Open
-                      </Button>
-                    </td>
-                  </tr>
+                    <tr
+                      key={wo.id}
+                      className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                      onClick={() => setActiveDrawerItem({ type: "work_order", data: wo })}
+                    >
+                      <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
+                        {wo.woNumber}
+                      </td>
+                      <td className="py-3 px-3 font-semibold text-slate-900 whitespace-nowrap">
+                        {wo.location}
+                      </td>
+                      <td className="py-3 px-3">
+                        <p className="font-semibold text-slate-900 line-clamp-1">{wo.issue}</p>
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <p className="font-medium text-slate-900">{wo.technicianName}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {wo.assignedType === "External Vendor" ? "External AMC" : "In-House"}
+                        </p>
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-bold border",
+                            wo.status === "In Progress"
+                              ? "bg-amber-50 text-amber-700 border border-amber-200"
+                              : wo.status === "Awaiting Parts"
+                                ? "bg-slate-100 text-slate-700 border border-slate-200"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          )}
+                        >
+                          {wo.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap text-[11px] text-slate-600">
+                        {wo.dueDate}
+                      </td>
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveDrawerItem({ type: "work_order", data: wo });
+                          }}
+                        >
+                          Open
+                        </Button>
+                      </td>
+                    </tr>
                   ))
                 )}
               </tbody>
@@ -488,45 +443,45 @@ export function MaintenanceDashboardView() {
               <p className="py-6 text-center text-xs text-slate-500">No rooms currently blocked.</p>
             ) : (
               roomsUnderMaintenance.map((rm) => (
-              <div
-                key={rm.id}
-                className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 hover:bg-slate-100/60 transition-colors cursor-pointer"
-                onClick={() => setActiveDrawerItem({ type: "room", data: rm })}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 text-sm">{rm.roomNumber}</span>
-                    <span
-                      className={cn(
-                        "rounded px-1.5 py-0.5 text-[10px] font-bold border",
-                        rm.blockType === "OOO"
-                          ? "bg-rose-100 text-rose-800 border-rose-200"
-                          : "bg-amber-100 text-amber-800 border-amber-200"
-                      )}
-                    >
-                      {rm.blockType}
+                <div
+                  key={rm.id}
+                  className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 hover:bg-slate-100/60 transition-colors cursor-pointer"
+                  onClick={() => setActiveDrawerItem({ type: "room", data: rm })}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 text-sm">{rm.roomNumber}</span>
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 text-[10px] font-bold border",
+                          rm.blockType === "OOO"
+                            ? "bg-rose-100 text-rose-800 border-rose-200"
+                            : "bg-amber-100 text-amber-800 border-amber-200"
+                        )}
+                      >
+                        {rm.blockType}
+                      </span>
+                    </div>
+                    <span className="font-mono text-[10px] font-semibold text-slate-500">
+                      {rm.workOrderNo}
                     </span>
                   </div>
-                  <span className="font-mono text-[10px] font-semibold text-slate-500">
-                    {rm.workOrderNo}
-                  </span>
-                </div>
 
-                <p className="mt-1 text-xs text-slate-700 font-medium line-clamp-1">
-                  {rm.reason}
-                </p>
+                  <p className="mt-1 text-xs text-slate-700 font-medium line-clamp-1">
+                    {rm.reason}
+                  </p>
 
-                <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-2 text-[10px] text-slate-500">
-                  <span>Tech: <strong>{rm.technician}</strong></span>
-                  <span className="font-medium text-slate-700">
-                    ETA: {rm.expectedHandover}
-                  </span>
-                </div>
+                  <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-2 text-[10px] text-slate-500">
+                    <span>Tech: <strong>{rm.technician}</strong></span>
+                    <span className="font-medium text-slate-700">
+                      ETA: {rm.expectedHandover}
+                    </span>
+                  </div>
 
-                <div className="mt-1 text-[10px] font-semibold text-emerald-700">
-                  HK Status: {rm.hkHandoverStatus}
+                  <div className="mt-1 text-[10px] font-semibold text-emerald-700">
+                    HK Status: {rm.hkHandoverStatus}
+                  </div>
                 </div>
-              </div>
               ))
             )}
           </div>
@@ -611,15 +566,15 @@ export function MaintenanceDashboardView() {
                   {activeDrawerItem.type === "request"
                     ? (activeDrawerItem.data as MaintenanceRequest).requestNo
                     : activeDrawerItem.type === "work_order"
-                    ? (activeDrawerItem.data as WorkOrder).woNumber
-                    : (activeDrawerItem.data as RoomUnderMaintenance).roomNumber}
+                      ? (activeDrawerItem.data as WorkOrder).woNumber
+                      : (activeDrawerItem.data as RoomUnderMaintenance).roomNumber}
                 </h3>
                 <p className="text-xs text-slate-500">
                   {activeDrawerItem.type === "request"
                     ? "Maintenance Request Details & Status"
                     : activeDrawerItem.type === "work_order"
-                    ? "Work Order & Technician Job Card"
-                    : "Room Maintenance & Handover Status"}
+                      ? "Work Order & Technician Job Card"
+                      : "Room Maintenance & Handover Status"}
                 </p>
               </div>
               <button
@@ -791,181 +746,6 @@ export function MaintenanceDashboardView() {
             <div className="border-t border-slate-200 px-6 py-3 flex justify-end gap-2 bg-slate-50">
               <Button variant="outline" size="sm" onClick={() => setActiveDrawerItem(null)}>
                 Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ───────────────────────────────────────────────────────────── */}
-      {/* 4. MODAL: QUICK NEW REQUEST (MULTI-SNAG CAPABILITY) */}
-      {/* ───────────────────────────────────────────────────────────── */}
-      {isQuickRequestOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Create Maintenance Request</h3>
-                <p className="text-xs text-slate-500">Quick-entry for front desk, housekeeping & F&B</p>
-              </div>
-              <button onClick={() => setIsQuickRequestOpen(false)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-3.5 text-xs text-slate-700 max-h-[70vh] overflow-y-auto pr-1">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-900 block mb-1">Location / Room #</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Room 305 or Main Kitchen"
-                    value={quickLocation}
-                    onChange={(e) => setQuickLocation(e.target.value)}
-                    className="w-full h-8 rounded-lg border border-slate-200 px-2.5 text-xs focus:border-emerald-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-900 block mb-1">Problem Category</label>
-                  <select
-                    value={quickCategory}
-                    onChange={(e) => setQuickCategory(e.target.value)}
-                    className="w-full h-8 rounded-lg border border-slate-200 px-2 text-xs focus:border-emerald-500 focus:outline-none"
-                  >
-                    <option>HVAC / Air Conditioning</option>
-                    <option>Electrical / Lighting</option>
-                    <option>Plumbing & Sanitary</option>
-                    <option>Carpentry & Furniture</option>
-                    <option>Kitchen Machinery</option>
-                    <option>Civil / Paint / Glass</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-900 block mb-1">Priority</label>
-                  <select
-                    value={quickPriority}
-                    onChange={(e) => setQuickPriority(e.target.value as PriorityLevel)}
-                    className="w-full h-8 rounded-lg border border-slate-200 px-2 text-xs focus:border-emerald-500 focus:outline-none"
-                  >
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                    <option value="Critical">Critical</option>
-                  </select>
-                </div>
-                <div className="flex items-center pt-5">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={quickSafetyHazard}
-                      onChange={(e) => setQuickSafetyHazard(e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
-                    />
-                    <span className="font-bold text-rose-700">Safety Hazard Flag</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3 border border-slate-200/80">
-                <div>
-                  <label className="font-semibold text-slate-900 block mb-1">Guest in Room?</label>
-                  <select
-                    value={quickGuestInRoom}
-                    onChange={(e) => setQuickGuestInRoom(e.target.value as "Yes" | "No" | "Unknown")}
-                    className="w-full h-8 rounded-lg border border-slate-200 px-2 text-xs focus:border-emerald-500 focus:outline-none bg-white"
-                  >
-                    <option value="Yes">Yes (Occupied)</option>
-                    <option value="No">No (Vacant)</option>
-                    <option value="Unknown">Unknown</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-900 block mb-1">Entry Preference</label>
-                  <select
-                    value={quickEntryPref}
-                    onChange={(e) => setQuickEntryPref(e.target.value as EntryPreference)}
-                    className="w-full h-8 rounded-lg border border-slate-200 px-2 text-xs focus:border-emerald-500 focus:outline-none bg-white"
-                  >
-                    <option value="Call Guest First">Call Guest First</option>
-                    <option value="Guest Permission Confirmed">Guest Permission Confirmed</option>
-                    <option value="Enter When Guest Absent">Enter When Guest Absent</option>
-                    <option value="Coordinate with Duty Manager">Coordinate with Duty Manager</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-900 block mb-1">Primary Issue Title</label>
-                <input
-                  type="text"
-                  placeholder="e.g. AC blowing warm air or bathroom tap leak"
-                  value={quickTitle}
-                  onChange={(e) => setQuickTitle(e.target.value)}
-                  className="w-full h-8 rounded-lg border border-slate-200 px-2.5 text-xs focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-900 block mb-1">Description / Notes</label>
-                <textarea
-                  rows={2}
-                  placeholder="Additional details reported by guest or room attendant..."
-                  value={quickDescription}
-                  onChange={(e) => setQuickDescription(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 p-2 text-xs focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="rounded-lg border border-dashed border-slate-300 p-3 bg-slate-50/50">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-slate-800 text-[11px]">Multi-Issue Snagging (Room Audits)</span>
-                  <span className="text-[10px] text-slate-400">Add multiple small items to 1 ticket</span>
-                </div>
-
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="e.g. Wardrobe handle loose, bulb flickering"
-                    value={newSnagText}
-                    onChange={(e) => setNewSnagText(e.target.value)}
-                    className="flex-1 h-7 rounded border border-slate-200 px-2 text-xs bg-white"
-                  />
-                  <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={handleAddSnag}>
-                    + Add
-                  </Button>
-                </div>
-
-                {snagItems.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {snagItems.map((item, idx) => (
-                      <div key={item.id} className="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 text-[11px]">
-                        <span>{idx + 1}. {item.issue}</span>
-                        <button onClick={() => handleRemoveSnag(item.id)} className="text-rose-500 hover:text-rose-700">
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-5 border-t border-slate-100 pt-3 flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setIsQuickRequestOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                className="bg-emerald-700 text-white hover:bg-emerald-800"
-                onClick={() => {
-                  setToastMessage("Maintenance request logged and dispatched to Engineering!");
-                  setIsQuickRequestOpen(false);
-                }}
-              >
-                Submit Request
               </Button>
             </div>
           </div>
