@@ -38,11 +38,9 @@ import {
   Loader2,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
-import { Badge, Button, Card, Drawer, Modal } from "@/components/ui";
+import { Badge, Button, Card, Drawer, DropdownSelect, Modal } from "@/components/ui";
+import type { DropdownSelectOption } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import {
-  HOTEL_LOCATIONS,
-} from "@/app/data/maintenance/constants";
 import {
   MaintenanceRequest,
   PriorityLevel,
@@ -55,7 +53,28 @@ import {
 } from "@/app/data/maintenance/types";
 import { currentUser } from "@/app/data/user";
 import { usePsList } from "@/hooks/usePsResource";
-import { mntProblemCategoryService, mntRequestService, mntWorkOrderService } from "@/services/maintenance";
+import {
+  mntProblemCategoryService,
+  mntPublicAreaService,
+  mntRequestService,
+  mntRoomService,
+  mntWorkOrderService,
+} from "@/services/maintenance";
+import { roomService } from "@/services/front-office/rooms";
+import { reservationService } from "@/services/front-office/reservations";
+import {
+  getFoRoomStatusConfig,
+  getFoRoomStatusListBadge,
+} from "@/lib/frontoffice/room-status-colors";
+import { isActiveRoomBookingStatus } from "@/lib/frontoffice/active-booking";
+
+type RequestLocationType = "Guest Room" | "Public Area";
+
+const mntStatusListBadge: Record<string, string> = {
+  Operational: "bg-emerald-100 text-emerald-800",
+  "Under Maintenance": "bg-amber-100 text-amber-800",
+  "Out of Service": "bg-rose-100 text-rose-800",
+};
 
 export const getStatusBadgeConfig = (status: string) => {
   switch (status) {
@@ -149,6 +168,34 @@ export function MaintenanceRequestsView() {
   const { data: requests, loading, reload: reloadRequests } = usePsList(() => mntRequestService.list(), []);
   const { data: workOrders, reload: reloadWorkOrders } = usePsList(() => mntWorkOrderService.list(), []);
   const { data: problemCategories } = usePsList(() => mntProblemCategoryService.list(), []);
+  const { data: mntRooms } = usePsList(() => mntRoomService.list(), []);
+  const { data: mntPublicAreas } = usePsList(() => mntPublicAreaService.list(), []);
+  const [roomStatusByKey, setRoomStatusByKey] = useState<
+    Record<string, { status: string; guestName?: string }>
+  >({});
+
+  useEffect(() => {
+    let cancelled = false;
+    void roomService
+      .status()
+      .then((cards) => {
+        if (cancelled) return;
+        const next: Record<string, { status: string; guestName?: string }> = {};
+        for (const card of cards) {
+          const entry = { status: card.status, guestName: card.guestName };
+          if (card.id) next[card.id] = entry;
+          next[card.roomNo] = entry;
+        }
+        setRoomStatusByKey(next);
+      })
+      .catch(() => {
+        if (!cancelled) setRoomStatusByKey({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const activeProblemCategories = useMemo(
     () =>
       problemCategories
@@ -157,6 +204,57 @@ export function MaintenanceRequestsView() {
         .filter(Boolean),
     [problemCategories],
   );
+
+  const guestRoomLocationOptions = useMemo((): DropdownSelectOption[] => {
+    return mntRooms
+      .filter((r) => r.isActive !== false)
+      .map((r) => {
+        const roomNo = String(r.roomNo ?? "").trim() || "—";
+        const type = String(r.roomType ?? "Standard").trim();
+        const floor = r.floor ? ` (${r.floor})` : "";
+        const statusCard =
+          roomStatusByKey[String(r.roomId ?? "")] ?? roomStatusByKey[roomNo];
+        const status = statusCard?.status ?? "Vacant";
+        const statusConfig = getFoRoomStatusConfig(status);
+        const hintParts = [r.bedType, statusCard?.guestName].filter(Boolean);
+        return {
+          value: `Room ${roomNo}`,
+          label: `${roomNo} — ${type}${floor}`,
+          hint: hintParts.join(" · ") || undefined,
+          tag: {
+            label: statusConfig.label.toUpperCase(),
+            className: getFoRoomStatusListBadge(status),
+          },
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  }, [mntRooms, roomStatusByKey]);
+
+  const publicAreaLocationOptions = useMemo((): DropdownSelectOption[] => {
+    return mntPublicAreas
+      .filter((a) => a.isActive !== false)
+      .map((a) => {
+        const name = String(a.name ?? a.areaCode ?? "Public Area").trim();
+        const code = String(a.areaCode ?? "").trim();
+        const floor =
+          a.floorNumber != null
+            ? ` (Floor ${a.floorNumber})`
+            : a.location
+              ? ` (${a.location})`
+              : "";
+        const status = a.status || "Operational";
+        return {
+          value: name,
+          label: `${code && code !== name ? `${code} — ` : ""}${name}${floor}`,
+          hint: a.areaType || undefined,
+          tag: {
+            label: String(status).toUpperCase(),
+            className: mntStatusListBadge[status] ?? "bg-slate-100 text-slate-700",
+          },
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [mntPublicAreas]);
 
   const completedRequestIds = useMemo(() => {
     const ids = new Set<string>();
@@ -231,19 +329,74 @@ export function MaintenanceRequestsView() {
   const [cancelError, setCancelError] = useState<string | null>(null);
 
   // Create Request Form State (Form 1)
-  const [createLocationType, setCreateLocationType] = useState<"Guest Room" | "F&B Area" | "Public Area" | "Back of House">("Guest Room");
+  const [createLocationType, setCreateLocationType] = useState<RequestLocationType>("Guest Room");
   const [createLocation, setCreateLocation] = useState<string>("");
   const [createCategory, setCreateCategory] = useState<string>("");
   const [createPriorityVal, setCreatePriorityVal] = useState<PriorityLevel>("Medium");
   const [createIsSafetyHazard, setCreateIsSafetyHazard] = useState<boolean>(false);
-  const [createIssueTitle, setCreateIssueTitle] = useState<string>("");
   const [createDescription, setCreateDescription] = useState<string>("");
   const [createGuestInRoom, setCreateGuestInRoom] = useState<"Yes" | "No" | "Unknown">("No");
   const [createEntryPreference, setCreateEntryPreference] = useState<EntryPreference>("Call Guest First");
   const [createAttachmentName, setCreateAttachmentName] = useState<string | null>(null);
-  const [createSnagIssues, setCreateSnagIssues] = useState<SnagIssue[]>([]);
-  const [snagInputTitle, setSnagInputTitle] = useState<string>("");
+  const [createIssues, setCreateIssues] = useState<SnagIssue[]>([]);
+  const [issueInputTitle, setIssueInputTitle] = useState<string>("");
+  const [createRoomStatusLabel, setCreateRoomStatusLabel] = useState<string | null>(null);
+  const [loadingRoomBooking, setLoadingRoomBooking] = useState(false);
 
+  const createLocationOptions =
+    createLocationType === "Guest Room"
+      ? guestRoomLocationOptions
+      : publicAreaLocationOptions;
+
+  // Auto-fill guest occupancy + FO room status from booking when a guest room is selected
+  useEffect(() => {
+    if (createLocationType !== "Guest Room" || !createLocation.trim()) {
+      setCreateGuestInRoom("No");
+      setCreateRoomStatusLabel(null);
+      return;
+    }
+
+    const roomNo = createLocation.replace(/^Room\s+/i, "").trim();
+    const mntRoom = mntRooms.find(
+      (r) =>
+        String(r.roomNo ?? "").trim() === roomNo ||
+        `Room ${r.roomNo}` === createLocation,
+    );
+    const roomId = String(mntRoom?.roomId ?? roomNo).trim();
+    const statusCard =
+      roomStatusByKey[String(mntRoom?.roomId ?? "")] ?? roomStatusByKey[roomNo];
+    const foStatus = statusCard?.status ?? null;
+    if (foStatus) {
+      setCreateRoomStatusLabel(foStatus);
+    }
+
+    let cancelled = false;
+    setLoadingRoomBooking(true);
+    void reservationService
+      .getCurrentForRoom(roomId)
+      .then((booking) => {
+        if (cancelled) return;
+        const occupied = isActiveRoomBookingStatus(booking?.status);
+        setCreateGuestInRoom(occupied ? "Yes" : "No");
+        if (!foStatus) {
+          setCreateRoomStatusLabel(occupied ? "Occupied" : "Vacant");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Fall back to FO status board occupancy signals
+        const occupied =
+          foStatus === "Occupied" || foStatus === "Reserved";
+        setCreateGuestInRoom(occupied ? "Yes" : "No");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRoomBooking(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [createLocation, createLocationType, mntRooms, roomStatusByKey]);
   // ─────────────────────────────────────────────────────────────
   // 1. KPI SUMMARY METRICS (MATCHING SALES & MARKETING DESIGN)
   // ─────────────────────────────────────────────────────────────
@@ -397,51 +550,79 @@ export function MaintenanceRequestsView() {
   // ─────────────────────────────────────────────────────────────
   const handleOpenCreateDrawer = () => {
     setCreateLocationType("Guest Room");
-    setCreateLocation("");
+    setCreateLocation(guestRoomLocationOptions[0]?.value ?? "");
     setCreateCategory("");
     setCreatePriorityVal("Medium");
     setCreateIsSafetyHazard(false);
-    setCreateIssueTitle("");
     setCreateDescription("");
     setCreateGuestInRoom("No");
     setCreateEntryPreference("Call Guest First");
     setCreateAttachmentName(null);
-    setCreateSnagIssues([]);
-    setSnagInputTitle("");
+    setCreateIssues([]);
+    setIssueInputTitle("");
+    setCreateRoomStatusLabel(null);
     setIsCreateDrawerOpen(true);
   };
 
-  const handleAddSnagIssue = () => {
-    if (!snagInputTitle.trim()) return;
-    const newSnag: SnagIssue = {
-      id: `snag-${Date.now()}`,
+  const handleAddIssue = () => {
+    if (!issueInputTitle.trim()) return;
+    const newIssue: SnagIssue = {
+      id: `issue-${Date.now()}`,
       category: createCategory || "General",
-      issue: snagInputTitle.trim(),
+      issue: issueInputTitle.trim(),
       priority: createPriorityVal,
       isResolved: false,
     };
-    setCreateSnagIssues((prev) => [...prev, newSnag]);
-    setSnagInputTitle("");
+    setCreateIssues((prev) => [...prev, newIssue]);
+    setIssueInputTitle("");
   };
 
-  const handleRemoveSnagIssue = (id: string) => {
-    setCreateSnagIssues((prev) => prev.filter((s) => s.id !== id));
+  const handleRemoveIssue = (id: string) => {
+    setCreateIssues((prev) => prev.filter((s) => s.id !== id));
   };
 
   const handleSaveNewRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createIssueTitle.trim() || saving) return;
+    if (saving) return;
+    if (!createLocation.trim()) {
+      setToastMessage(
+        createLocationType === "Guest Room"
+          ? "Select a guest room from the room master."
+          : "Select a public area from the public area master.",
+      );
+      return;
+    }
+
+    const pendingIssue = issueInputTitle.trim();
+    const issues =
+      pendingIssue.length > 0
+        ? [
+            ...createIssues,
+            {
+              id: `issue-${Date.now()}`,
+              category: createCategory || "General",
+              issue: pendingIssue,
+              priority: createPriorityVal,
+              isResolved: false,
+            } satisfies SnagIssue,
+          ]
+        : createIssues;
+
+    if (issues.length === 0) {
+      setToastMessage("Add at least one issue.");
+      return;
+    }
 
     const newReqNumber = `REQ-${1010 + requests.length + 1}`;
     const body: Partial<MaintenanceRequest> = {
       requestNo: newReqNumber,
       dateTime: "Just now",
       locationType: createLocationType,
-      location: createLocation.trim() || (createLocationType === "Guest Room" ? "Room 101" : "Main Lobby"),
+      location: createLocation.trim() || (createLocationType === "Guest Room" ? "Guest Room" : "Public Area"),
       category: createCategory || "HVAC / Air Conditioning",
-      issueTitle: createIssueTitle.trim(),
+      issueTitle: issues[0].issue,
       description: createDescription.trim(),
-      snagIssues: createSnagIssues.length > 0 ? createSnagIssues : undefined,
+      snagIssues: issues,
       reportedBy: currentUser.name || "Duty Manager",
       reportedDept: "Front Office / Housekeeping",
       priority: createPriorityVal,
@@ -979,9 +1160,7 @@ export function MaintenanceRequestsView() {
                 >
                   <option value="ALL">All Locations</option>
                   <option value="Guest Room">Guest Rooms</option>
-                  <option value="F&B Area">F&B Areas</option>
                   <option value="Public Area">Public Areas</option>
-                  <option value="Back of House">Back of House</option>
                 </select>
               </div>
 
@@ -1231,7 +1410,7 @@ export function MaintenanceRequestsView() {
                             <span className="text-xs text-slate-500">{req.category}</span>
                             {req.snagIssues && req.snagIssues.length > 0 && (
                               <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 border border-slate-200/60">
-                                {req.snagIssues.length} snags
+                                {req.snagIssues.length} issues
                               </span>
                             )}
                           </div>
@@ -1511,7 +1690,7 @@ export function MaintenanceRequestsView() {
         >
           <form onSubmit={handleSaveNewRequest} className="space-y-4 p-1 text-xs">
             {/* Location Type & Specific Location */}
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="space-y-2.5">
               <div>
                 <label className="block font-bold text-slate-700 mb-1 text-[11px]">
                   Location Type <span className="text-rose-500">*</span>
@@ -1519,17 +1698,18 @@ export function MaintenanceRequestsView() {
                 <select
                   value={createLocationType}
                   onChange={(e) => {
-                    const nextType = e.target.value as any;
+                    const nextType = e.target.value as RequestLocationType;
                     setCreateLocationType(nextType);
-                    const defaultLoc = HOTEL_LOCATIONS.find((l) => l.type === nextType)?.name || HOTEL_LOCATIONS[0].name;
-                    setCreateLocation(defaultLoc);
+                    const options =
+                      nextType === "Guest Room"
+                        ? guestRoomLocationOptions
+                        : publicAreaLocationOptions;
+                    setCreateLocation(options[0]?.value ?? "");
                   }}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs text-slate-900"
                 >
                   <option value="Guest Room">Guest Room</option>
-                  <option value="F&B Area">F&B Area</option>
                   <option value="Public Area">Public Area</option>
-                  <option value="Back of House">Back of House</option>
                 </select>
               </div>
 
@@ -1537,17 +1717,52 @@ export function MaintenanceRequestsView() {
                 <label className="block font-bold text-slate-700 mb-1 text-[11px]">
                   Specific Room / Area <span className="text-rose-500">*</span>
                 </label>
-                <select
+                <DropdownSelect
                   value={createLocation}
-                  onChange={(e) => setCreateLocation(e.target.value)}
-                  className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs text-slate-900"
-                >
-                  {HOTEL_LOCATIONS.filter((l) => l.type === createLocationType).map((loc) => (
-                    <option key={loc.name} value={loc.name}>
-                      {loc.name} ({loc.floor})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setCreateLocation}
+                  options={createLocationOptions}
+                  placeholder={
+                    createLocationType === "Guest Room"
+                      ? createLocationOptions.length
+                        ? "Select room…"
+                        : "No rooms in master yet"
+                      : createLocationOptions.length
+                        ? "Select public area…"
+                        : "No public areas in master yet"
+                  }
+                  searchable
+                  disabled={createLocationOptions.length === 0}
+                  aria-label="Select room or area"
+                  triggerClassName="h-9 rounded-lg text-xs font-semibold"
+                />
+                {createLocationType === "Guest Room" && createLocation && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                    {createRoomStatusLabel && (
+                      <span
+                        className={cn(
+                          "rounded-md px-1.5 py-0.5 font-bold uppercase tracking-wide",
+                          getFoRoomStatusListBadge(createRoomStatusLabel),
+                        )}
+                      >
+                        {getFoRoomStatusConfig(createRoomStatusLabel).label}
+                      </span>
+                    )}
+                    <span
+                      className={cn(
+                        "rounded-md px-1.5 py-0.5 font-semibold",
+                        createGuestInRoom === "Yes"
+                          ? "bg-sky-100 text-sky-800"
+                          : "bg-slate-100 text-slate-600",
+                      )}
+                    >
+                      {loadingRoomBooking
+                        ? "Checking booking…"
+                        : createGuestInRoom === "Yes"
+                          ? "Guest in room (from booking)"
+                          : "Room vacant (from booking)"}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1599,19 +1814,61 @@ export function MaintenanceRequestsView() {
               </div>
             </label>
 
-            {/* Issue Title */}
-            <div>
-              <label className="block font-bold text-slate-700 mb-1 text-[11px]">
-                Reported Issue Summary <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Shower mixer knob stuck & dripping hot water"
-                value={createIssueTitle}
-                onChange={(e) => setCreateIssueTitle(e.target.value)}
-                className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs text-slate-900"
-              />
+            {/* Issues (multi-add) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block font-bold text-slate-700 text-[11px]">
+                  Issue <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[10px] text-slate-400">Add one or more issues</span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  placeholder="e.g. Shower mixer dripping / Wardrobe handle loose"
+                  value={issueInputTitle}
+                  onChange={(e) => setIssueInputTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddIssue();
+                    }
+                  }}
+                  className="flex-1 p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs text-slate-900"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAddIssue}
+                  className="h-9 px-2.5 text-xs font-semibold rounded cursor-pointer"
+                >
+                  + Add Issue
+                </Button>
+              </div>
+
+              {createIssues.length > 0 && (
+                <ul className="space-y-1">
+                  {createIssues.map((issue, idx) => (
+                    <li
+                      key={issue.id}
+                      className="flex items-center justify-between p-1.5 bg-slate-50 border border-slate-200 rounded text-xs"
+                    >
+                      <span>
+                        {idx + 1}. {issue.issue}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveIssue(issue.id)}
+                        className="text-slate-400 hover:text-rose-600"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* Description */}
@@ -1626,84 +1883,22 @@ export function MaintenanceRequestsView() {
               />
             </div>
 
-            {/* Multi-Issue / Room Snag Section */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-800 block">
-                  Multiple Room Snags (Optional)
-                </span>
-                <span className="text-[10px] text-slate-400">Combine into 1 single request</span>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="text"
-                  placeholder="e.g. Wardrobe handle loose / Balcony door squeak..."
-                  value={snagInputTitle}
-                  onChange={(e) => setSnagInputTitle(e.target.value)}
-                  className="flex-1 p-1.5 rounded border border-slate-200 bg-white text-xs"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleAddSnagIssue}
-                  className="h-8 px-2.5 text-xs font-semibold rounded cursor-pointer"
-                >
-                  + Add Issue
-                </Button>
-              </div>
-
-              {createSnagIssues.length > 0 && (
-                <ul className="space-y-1 pt-1">
-                  {createSnagIssues.map((snag, idx) => (
-                    <li key={snag.id} className="flex items-center justify-between p-1.5 bg-white border border-slate-200 rounded text-xs">
-                      <span>{idx + 1}. {snag.issue}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSnagIssue(snag.id)}
-                        className="text-slate-400 hover:text-rose-600"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
             {/* CONDITIONAL GUEST ROOM RULES */}
             {createLocationType === "Guest Room" && (
               <div className="p-3 bg-amber-50/40 border border-amber-200 rounded-xl space-y-2.5">
                 <strong className="text-xs font-bold text-amber-950 block">Guest Room Access Rules</strong>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1 text-[11px]">Guest in Room?</label>
-                    <select
-                      value={createGuestInRoom}
-                      onChange={(e) => setCreateGuestInRoom(e.target.value as any)}
-                      className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs"
-                    >
-                      <option value="Yes">Yes (Guest in Room)</option>
-                      <option value="No">No (Room Vacant)</option>
-                      <option value="Unknown">Unknown</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1 text-[11px]">Entry Preference</label>
-                    <select
-                      value={createEntryPreference}
-                      onChange={(e) => setCreateEntryPreference(e.target.value as EntryPreference)}
-                      className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs"
-                    >
-                      <option value="Call Guest First">Call Guest First</option>
-                      <option value="Guest Permission Confirmed">Guest Permission Confirmed</option>
-                      <option value="Enter When Guest Absent">Enter When Guest Absent</option>
-                      <option value="Coordinate with Duty Manager">Coordinate with Duty Manager</option>
-                    </select>
-                  </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1 text-[11px]">Entry Preference</label>
+                  <select
+                    value={createEntryPreference}
+                    onChange={(e) => setCreateEntryPreference(e.target.value as EntryPreference)}
+                    className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs"
+                  >
+                    <option value="Call Guest First">Call Guest First</option>
+                    <option value="Guest Permission Confirmed">Guest Permission Confirmed</option>
+                    <option value="Enter When Guest Absent">Enter When Guest Absent</option>
+                    <option value="Coordinate with Duty Manager">Coordinate with Duty Manager</option>
+                  </select>
                 </div>
               </div>
             )}
@@ -1944,7 +2139,7 @@ export function MaintenanceRequestsView() {
             {selectedRequest.snagIssues && selectedRequest.snagIssues.length > 0 && (
               <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 space-y-2">
                 <strong className="text-xs font-bold text-slate-900 block border-b border-slate-100 pb-1.5">
-                  Multi-Issue Room Snag List ({selectedRequest.snagIssues.length} items)
+                  Issues ({selectedRequest.snagIssues.length})
                 </strong>
                 <ul className="space-y-1.5">
                   {selectedRequest.snagIssues.map((snag, idx) => (

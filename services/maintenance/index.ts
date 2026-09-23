@@ -12,6 +12,8 @@ import type {
   PMSchedule,
   MaintenanceDashboardStats,
   RoomUnderMaintenance,
+  MntRoom,
+  MntPublicArea,
 } from "@/app/data/maintenance/types";
 
 function crud<T>(base: string) {
@@ -54,6 +56,9 @@ export const mntRootCauseService = crud<RootCauseMaster>("/masters/root-causes")
 export const mntPmTemplateService = crud<PMTaskTemplate>("/masters/pm-templates");
 export const mntVendorService = crud<MaintenanceVendor>("/masters/vendors");
 export const mntSparePartService = crud<SparePartMaster>("/masters/spare-parts");
+export const mntRoomService = crud<MntRoom>("/rooms");
+export const mntRoomMasterService = crud<MntRoom>("/masters/rooms");
+export const mntPublicAreaService = crud<MntPublicArea>("/masters/public-areas");
 export const mntAssetService = crud<MaintenanceAsset>("/assets");
 export const mntRequestService = crud<MaintenanceRequest>("/requests");
 export const mntWorkOrderService = crud<WorkOrder>("/work-orders");

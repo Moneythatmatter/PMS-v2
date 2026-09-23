@@ -10,12 +10,29 @@ import {
   Truck,
   Package,
   ArrowRight,
-  Database,
+  Bed,
+  Trees,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Card } from "@/components/ui";
 
 const MASTERS_LIST = [
+  {
+    title: "Rooms",
+    description: "Guest rooms linked from Front Office for engineering status and downtime tracking.",
+    href: "/maintenance/masters/rooms",
+    icon: Bed,
+    badge: "Synced from FO",
+    highlight: true,
+  },
+  {
+    title: "Public Areas",
+    description: "Public areas synced from Housekeeping master — update engineering status here.",
+    href: "/maintenance/masters/public-areas",
+    icon: Trees,
+    badge: "Synced from HK",
+    highlight: true,
+  },
   {
     title: "Asset Categories",
     description: "Define categories for property assets, HVAC plants, electrical grids, and room machinery.",
@@ -57,7 +74,6 @@ const MASTERS_LIST = [
     href: "/maintenance/masters/vendors",
     icon: Truck,
     badge: "Maintenance Only",
-    highlight: true,
   },
 ];
 
@@ -66,7 +82,7 @@ export default function MastersPage() {
     <ModulePageShell
       eyebrow="Maintenance & Engineering"
       title="Maintenance Masters"
-      description="System taxonomies, asset classifications, root cause libraries, PM templates, and Maintenance Vendor Master."
+      description="System taxonomies, room & public area locations, asset classifications, root cause libraries, PM templates, and Maintenance Vendor Master."
       breadcrumbs={[
         { label: "Maintenance", href: "/maintenance" },
         { label: "Masters" },

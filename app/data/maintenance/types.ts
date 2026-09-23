@@ -405,6 +405,44 @@ export interface RoomUnderMaintenance {
   hkHandoverStatus: "Under Repair" | "Post-Maintenance Cleaning Req." | "HK Cleaning" | "Inspected / Ready";
 }
 
+export type MntLocationStatus =
+  | "Operational"
+  | "Under Maintenance"
+  | "Out of Service";
+
+export interface MntRoom {
+  id: string;
+  roomId: string;
+  status: MntLocationStatus;
+  notes?: string | null;
+  lastServicedAt?: string | null;
+  roomNo?: string;
+  floor?: string;
+  roomType?: string;
+  bedType?: string;
+  maxOccupancy?: number;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MntPublicArea {
+  id: string;
+  publicAreaId: string;
+  status: MntLocationStatus;
+  notes?: string | null;
+  lastServicedAt?: string | null;
+  areaCode?: string;
+  name?: string;
+  areaType?: string;
+  location?: string | null;
+  floorNumber?: number | null;
+  priority?: string;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface MaintenanceDashboardStats {
   openRequests: {
     total: number;
