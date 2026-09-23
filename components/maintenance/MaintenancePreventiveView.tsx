@@ -1085,7 +1085,7 @@ export function MaintenancePreventiveView() {
                   className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                  {saving ? "Saving..." : "Generate Work Order →"}
+                  {saving ? "Saving..." : "Generate Work Order"}
                 </Button>
               )}
             </div>
