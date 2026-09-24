@@ -628,7 +628,10 @@ export function MaintenanceRequestsView() {
       priority: createPriorityVal,
       isSafetyHazard: createIsSafetyHazard,
       guestInRoom: createLocationType === "Guest Room" ? createGuestInRoom : "No",
-      entryPreference: createLocationType === "Guest Room" ? createEntryPreference : "Coordinate with Duty Manager",
+      entryPreference:
+        createLocationType === "Guest Room" && createGuestInRoom === "Yes"
+          ? createEntryPreference
+          : "Coordinate with Duty Manager",
       attachmentName: createAttachmentName || undefined,
       status: "New",
       createdAt: new Date().toISOString(),
@@ -1884,7 +1887,7 @@ export function MaintenanceRequestsView() {
             </div>
 
             {/* CONDITIONAL GUEST ROOM RULES */}
-            {createLocationType === "Guest Room" && (
+            {createLocationType === "Guest Room" && createGuestInRoom === "Yes" && (
               <div className="p-3 bg-amber-50/40 border border-amber-200 rounded-xl space-y-2.5">
                 <strong className="text-xs font-bold text-amber-950 block">Guest Room Access Rules</strong>
                 <div>
