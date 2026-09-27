@@ -143,6 +143,89 @@ export function MaintenanceAssetsView() {
     return null;
   }, [formSerialNumber, assets, selectedAssetForEdit]);
 
+  // Form Field Validation Rules
+  const formValidationErrors = useMemo(() => {
+    const errors: Record<string, string> = {};
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    // Basic required validations
+    if (!formAssetCode.trim()) {
+      errors.assetCode = "Asset Code is required.";
+    }
+    if (!formAssetName.trim()) {
+      errors.assetName = "Asset Name / Title is required.";
+    }
+    if (!formLocation.trim()) {
+      errors.location = "Specific Location is required.";
+    }
+
+    // Purchase Date validation (cannot be in the future)
+    if (formPurchaseDate) {
+      if (formPurchaseDate > todayStr) {
+        errors.purchaseDate = "Purchase date cannot be in the future.";
+      }
+    }
+
+    // Installation Date validation (cannot be in future, cannot be before purchase date)
+    if (formInstallationDate) {
+      if (formInstallationDate > todayStr) {
+        errors.installationDate = "Installation date cannot be in the future.";
+      } else if (formPurchaseDate && formInstallationDate < formPurchaseDate) {
+        errors.installationDate = "Installation date cannot be earlier than purchase date.";
+      }
+    }
+
+    // Purchase Cost validation (cannot be negative)
+    if (formPurchaseCost !== "" && typeof formPurchaseCost === "number") {
+      if (formPurchaseCost < 0 || isNaN(formPurchaseCost)) {
+        errors.purchaseCost = "Purchase cost cannot be negative.";
+      }
+    }
+
+    // Warranty Dates validation
+    if (formWarrantyStartDate && formPurchaseDate && formWarrantyStartDate < formPurchaseDate) {
+      errors.warrantyStartDate = "Warranty start date cannot be earlier than purchase date.";
+    }
+    if (formWarrantyEndDate) {
+      if (formWarrantyStartDate && formWarrantyEndDate < formWarrantyStartDate) {
+        errors.warrantyEndDate = "Warranty end date cannot be earlier than warranty start date.";
+      } else if (!formWarrantyStartDate && formPurchaseDate && formWarrantyEndDate < formPurchaseDate) {
+        errors.warrantyEndDate = "Warranty end date cannot be earlier than purchase date.";
+      }
+    }
+
+    // AMC Dates and Requirements validation
+    if (formAmcStartDate && formPurchaseDate && formAmcStartDate < formPurchaseDate) {
+      errors.amcStartDate = "AMC start date cannot be earlier than purchase date.";
+    }
+    if (formAmcStartDate && formAmcEndDate && formAmcEndDate < formAmcStartDate) {
+      errors.amcEndDate = "AMC expiry date cannot be earlier than AMC start date.";
+    }
+    if (formAmcStatus === "Active") {
+      if (!formVendorId) {
+        errors.vendorId = "Please select a Maintenance Service Vendor for active AMC contract.";
+      }
+      if (!formAmcEndDate) {
+        errors.amcEndDate = "AMC Expiry Date is required for active AMC contract.";
+      }
+    }
+
+    return errors;
+  }, [
+    formAssetCode,
+    formAssetName,
+    formLocation,
+    formPurchaseDate,
+    formInstallationDate,
+    formPurchaseCost,
+    formWarrantyStartDate,
+    formWarrantyEndDate,
+    formAmcStartDate,
+    formAmcEndDate,
+    formAmcStatus,
+    formVendorId,
+  ]);
+
   // Filtered Assets
   const filteredAssets = useMemo(() => {
     return assets.filter((ast) => {
@@ -237,8 +320,20 @@ export function MaintenanceAssetsView() {
 
   const handleSaveAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (duplicateCodeWarning || saving) return;
-    if (!formAssetCode.trim() || !formAssetName.trim()) return;
+    if (saving) return;
+
+    if (duplicateCodeWarning) {
+      setToastMessage(duplicateCodeWarning);
+      return;
+    }
+
+    const errorKeys = Object.keys(formValidationErrors);
+    if (errorKeys.length > 0) {
+      setToastMessage(formValidationErrors[errorKeys[0]]);
+      return;
+    }
+
+    if (!formAssetCode.trim() || !formAssetName.trim() || !formLocation.trim()) return;
 
     // Calculate warranty status
     let computedWarrantyStatus: "Active" | "Expired" | "Not Specified" = "Not Specified";
@@ -258,19 +353,19 @@ export function MaintenanceAssetsView() {
       model: formModel.trim(),
       serialNumber: formSerialNumber.trim(),
       locationType: formLocationType,
-      location: formLocation,
-      purchaseDate: formPurchaseDate,
-      installationDate: formInstallationDate,
-      purchaseCost: typeof formPurchaseCost === "number" ? formPurchaseCost : undefined,
-      warrantyStartDate: formWarrantyStartDate,
-      warrantyEndDate: formWarrantyEndDate,
+      location: formLocation.trim(),
+      purchaseDate: formPurchaseDate || undefined,
+      installationDate: formInstallationDate || undefined,
+      purchaseCost: typeof formPurchaseCost === "number" && !isNaN(formPurchaseCost) ? formPurchaseCost : undefined,
+      warrantyStartDate: formWarrantyStartDate || undefined,
+      warrantyEndDate: formWarrantyEndDate || undefined,
       warrantyStatus: computedWarrantyStatus,
       amcStatus: formAmcStatus,
       maintenanceVendorId: vendor?.id,
       maintenanceVendorName: vendor?.vendorName,
-      amcStartDate: formAmcStartDate,
-      amcEndDate: formAmcEndDate,
-      amcReference: formAmcReference,
+      amcStartDate: formAmcStartDate || undefined,
+      amcEndDate: formAmcEndDate || undefined,
+      amcReference: formAmcReference.trim() || undefined,
       status: formStatus,
       notes: formNotes.trim(),
     };
@@ -305,6 +400,12 @@ export function MaintenanceAssetsView() {
   const handleDecommissionAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAssetForDecommission || !decommissionReason.trim() || saving) return;
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (decommissionDate && decommissionDate > todayStr) {
+      setToastMessage("Decommission date cannot be in the future.");
+      return;
+    }
 
     if (savingLockRef.current) return;
     savingLockRef.current = true;
@@ -712,8 +813,14 @@ export function MaintenanceAssetsView() {
                   value={formAssetCode}
                   onChange={(e) => setFormAssetCode(e.target.value)}
                   placeholder="e.g. AST-HVAC-032"
-                  className="w-full border border-slate-200 rounded-md p-2 font-mono uppercase focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className={cn(
+                    "w-full border rounded-md p-2 font-mono uppercase focus:outline-none focus:ring-2",
+                    formValidationErrors.assetCode ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
                 />
+                {formValidationErrors.assetCode && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.assetCode}</p>
+                )}
               </div>
 
               <div>
@@ -726,8 +833,14 @@ export function MaintenanceAssetsView() {
                   value={formAssetName}
                   onChange={(e) => setFormAssetName(e.target.value)}
                   placeholder="e.g. Daikin 1.5 Ton Inverter Split AC"
-                  className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.assetName ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
                 />
+                {formValidationErrors.assetName && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.assetName}</p>
+                )}
               </div>
 
               <div>
@@ -825,8 +938,14 @@ export function MaintenanceAssetsView() {
                   value={formLocation}
                   onChange={(e) => setFormLocation(e.target.value)}
                   placeholder="e.g. Engineering Workshop (Basement 1)"
-                  className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.location ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
                 />
+                {formValidationErrors.location && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.location}</p>
+                )}
               </div>
             </div>
           </div>
@@ -844,10 +963,17 @@ export function MaintenanceAssetsView() {
                 </label>
                 <input
                   type="date"
+                  max={new Date().toISOString().split("T")[0]}
                   value={formPurchaseDate}
                   onChange={(e) => setFormPurchaseDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.purchaseDate ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
                 />
+                {formValidationErrors.purchaseDate && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.purchaseDate}</p>
+                )}
               </div>
 
               <div>
@@ -856,10 +982,18 @@ export function MaintenanceAssetsView() {
                 </label>
                 <input
                   type="date"
+                  max={new Date().toISOString().split("T")[0]}
+                  min={formPurchaseDate || undefined}
                   value={formInstallationDate}
                   onChange={(e) => setFormInstallationDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.installationDate ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
                 />
+                {formValidationErrors.installationDate && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.installationDate}</p>
+                )}
               </div>
 
               <div>
@@ -868,11 +1002,19 @@ export function MaintenanceAssetsView() {
                 </label>
                 <input
                   type="number"
+                  min="0"
+                  step="any"
                   value={formPurchaseCost}
                   onChange={(e) => setFormPurchaseCost(e.target.value ? parseFloat(e.target.value) : "")}
                   placeholder="e.g. 48500"
-                  className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.purchaseCost ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
                 />
+                {formValidationErrors.purchaseCost && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.purchaseCost}</p>
+                )}
               </div>
 
               <div>
@@ -881,10 +1023,17 @@ export function MaintenanceAssetsView() {
                 </label>
                 <input
                   type="date"
+                  min={formPurchaseDate || undefined}
                   value={formWarrantyStartDate}
                   onChange={(e) => setFormWarrantyStartDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.warrantyStartDate ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
                 />
+                {formValidationErrors.warrantyStartDate && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.warrantyStartDate}</p>
+                )}
               </div>
 
               <div>
@@ -893,10 +1042,17 @@ export function MaintenanceAssetsView() {
                 </label>
                 <input
                   type="date"
+                  min={formWarrantyStartDate || formPurchaseDate || undefined}
                   value={formWarrantyEndDate}
                   onChange={(e) => setFormWarrantyEndDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.warrantyEndDate ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
                 />
+                {formValidationErrors.warrantyEndDate && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.warrantyEndDate}</p>
+                )}
               </div>
             </div>
           </div>
@@ -918,18 +1074,21 @@ export function MaintenanceAssetsView() {
                   className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
                 >
                   <option value="Inactive">No Active AMC</option>
-                  <option value="Active font-semibold">Active AMC Contract</option>
+                  <option value="Active">Active AMC Contract</option>
                 </select>
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Maintenance Service Vendor Master
+                  Maintenance Service Vendor Master {formAmcStatus === "Active" ? "*" : ""}
                 </label>
                 <select
                   value={formVendorId}
                   onChange={(e) => setFormVendorId(e.target.value)}
-                  className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className={cn(
+                    "w-full border rounded-md p-2 bg-white focus:outline-none focus:ring-2",
+                    formValidationErrors.vendorId ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
                 >
                   <option value="">-- None / In-House Maintenance --</option>
                   {vendors.map((v) => (
@@ -938,6 +1097,9 @@ export function MaintenanceAssetsView() {
                     </option>
                   ))}
                 </select>
+                {formValidationErrors.vendorId && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.vendorId}</p>
+                )}
               </div>
 
               <div>
@@ -955,14 +1117,21 @@ export function MaintenanceAssetsView() {
 
               <div>
                 <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  AMC Expiry Date
+                  AMC Expiry Date {formAmcStatus === "Active" ? "*" : ""}
                 </label>
                 <input
                   type="date"
+                  min={formAmcStartDate || formInstallationDate || formPurchaseDate || undefined}
                   value={formAmcEndDate}
                   onChange={(e) => setFormAmcEndDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.amcEndDate ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
                 />
+                {formValidationErrors.amcEndDate && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.amcEndDate}</p>
+                )}
               </div>
             </div>
           </div>
@@ -1011,12 +1180,12 @@ export function MaintenanceAssetsView() {
             <Button
               type="submit"
               size="sm"
-              disabled={saving || !!duplicateCodeWarning}
+              disabled={saving || !!duplicateCodeWarning || Object.keys(formValidationErrors).length > 0}
               className="bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-1.5"
             >
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                {saving ? "Saving..." : "Register Asset"}
-              </Button>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {saving ? "Saving..." : "Register Asset"}
+            </Button>
           </div>
         </form>
       </Drawer>
@@ -1036,133 +1205,328 @@ export function MaintenanceAssetsView() {
               <span>{duplicateCodeWarning}</span>
             </div>
           )}
-
-          {/* Basic Details */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Asset Code *</label>
-              <input
-                type="text"
-                required
-                value={formAssetCode}
-                onChange={(e) => setFormAssetCode(e.target.value)}
-                className="w-full border border-slate-200 rounded-md p-2 font-mono uppercase focus:outline-none focus:ring-2 focus:ring-slate-900"
-              />
+          {duplicateSerialWarning && (
+            <div className="p-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>{duplicateSerialWarning}</span>
             </div>
+          )}
 
-            <div>
-              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Asset Name *</label>
-              <input
-                type="text"
-                required
-                value={formAssetName}
-                onChange={(e) => setFormAssetName(e.target.value)}
-                className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
-              />
+          {/* Section 1: Basic Details */}
+          <div>
+            <h4 className="font-semibold text-slate-900 uppercase tracking-wider text-[11px] border-b border-slate-200 pb-1.5 mb-3 flex items-center gap-1.5">
+              <Boxes className="h-4 w-4 text-slate-600" />
+              1. Basic Details
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Asset Code *</label>
+                <input
+                  type="text"
+                  required
+                  value={formAssetCode}
+                  onChange={(e) => setFormAssetCode(e.target.value)}
+                  className={cn(
+                    "w-full border rounded-md p-2 font-mono uppercase focus:outline-none focus:ring-2",
+                    formValidationErrors.assetCode ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
+                />
+                {formValidationErrors.assetCode && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.assetCode}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Asset Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={formAssetName}
+                  onChange={(e) => setFormAssetName(e.target.value)}
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.assetName ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
+                />
+                {formValidationErrors.assetName && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.assetName}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Category *</label>
+                <select
+                  value={formCategory}
+                  onChange={(e) => setFormCategory(e.target.value)}
+                  className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+                >
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.categoryName}>
+                      {cat.categoryName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Serial Number</label>
+                <input
+                  type="text"
+                  value={formSerialNumber}
+                  onChange={(e) => setFormSerialNumber(e.target.value)}
+                  className="w-full border border-slate-200 rounded-md p-2 font-mono focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Manufacturer</label>
+                <input
+                  type="text"
+                  value={formManufacturer}
+                  onChange={(e) => setFormManufacturer(e.target.value)}
+                  className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Model</label>
+                <input
+                  type="text"
+                  value={formModel}
+                  onChange={(e) => setFormModel(e.target.value)}
+                  className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
             </div>
+          </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Category *</label>
-              <select
-                value={formCategory}
-                onChange={(e) => setFormCategory(e.target.value)}
-                className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-              >
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.categoryName}>
-                    {cat.categoryName}
-                  </option>
-                ))}
-              </select>
+          {/* Section 2: Location & Status */}
+          <div>
+            <h4 className="font-semibold text-slate-900 uppercase tracking-wider text-[11px] border-b border-slate-200 pb-1.5 mb-3 flex items-center gap-1.5">
+              <MapPin className="h-4 w-4 text-slate-600" />
+              2. Location & Status
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Department</label>
+                <select
+                  value={formLocationType}
+                  onChange={(e) =>
+                    setFormLocationType(
+                      e.target.value as "Guest Room" | "F&B Area" | "Public Area" | "Back of House",
+                    )
+                  }
+                  className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+                >
+                  <option value="Guest Room">Guest Room</option>
+                  <option value="F&B Area">F&B Area</option>
+                  <option value="Public Area">Public Area</option>
+                  <option value="Back of House">Back of House</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Specific Location *</label>
+                <input
+                  type="text"
+                  required
+                  value={formLocation}
+                  onChange={(e) => setFormLocation(e.target.value)}
+                  placeholder="e.g. Engineering Workshop (Basement 1)"
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.location ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
+                />
+                {formValidationErrors.location && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.location}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Operational Status</label>
+                <select
+                  value={formStatus}
+                  onChange={(e) => setFormStatus(e.target.value as AssetStatus)}
+                  className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+                >
+                  <option value="Operational">Operational</option>
+                  <option value="Under Maintenance">Under Maintenance</option>
+                  <option value="Out of Service">Out of Service</option>
+                </select>
+              </div>
             </div>
+          </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Serial Number</label>
-              <input
-                type="text"
-                value={formSerialNumber}
-                onChange={(e) => setFormSerialNumber(e.target.value)}
-                className="w-full border border-slate-200 rounded-md p-2 font-mono focus:outline-none focus:ring-2 focus:ring-slate-900"
-              />
+          {/* Section 3: Financials & Warranty */}
+          <div>
+            <h4 className="font-semibold text-slate-900 uppercase tracking-wider text-[11px] border-b border-slate-200 pb-1.5 mb-3 flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4 text-slate-600" />
+              3. Financials & Warranty
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Purchase Date</label>
+                <input
+                  type="date"
+                  max={new Date().toISOString().split("T")[0]}
+                  value={formPurchaseDate}
+                  onChange={(e) => setFormPurchaseDate(e.target.value)}
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.purchaseDate ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
+                />
+                {formValidationErrors.purchaseDate && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.purchaseDate}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Installation Date</label>
+                <input
+                  type="date"
+                  max={new Date().toISOString().split("T")[0]}
+                  min={formPurchaseDate || undefined}
+                  value={formInstallationDate}
+                  onChange={(e) => setFormInstallationDate(e.target.value)}
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.installationDate ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
+                />
+                {formValidationErrors.installationDate && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.installationDate}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Purchase Cost (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={formPurchaseCost}
+                  onChange={(e) => setFormPurchaseCost(e.target.value ? parseFloat(e.target.value) : "")}
+                  placeholder="e.g. 48500"
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.purchaseCost ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
+                />
+                {formValidationErrors.purchaseCost && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.purchaseCost}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Warranty Start Date</label>
+                <input
+                  type="date"
+                  min={formPurchaseDate || undefined}
+                  value={formWarrantyStartDate}
+                  onChange={(e) => setFormWarrantyStartDate(e.target.value)}
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.warrantyStartDate ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
+                />
+                {formValidationErrors.warrantyStartDate && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.warrantyStartDate}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Warranty End Date</label>
+                <input
+                  type="date"
+                  min={formWarrantyStartDate || formPurchaseDate || undefined}
+                  value={formWarrantyEndDate}
+                  onChange={(e) => setFormWarrantyEndDate(e.target.value)}
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.warrantyEndDate ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
+                />
+                {formValidationErrors.warrantyEndDate && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.warrantyEndDate}</p>
+                )}
+              </div>
             </div>
+          </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Manufacturer</label>
-              <input
-                type="text"
-                value={formManufacturer}
-                onChange={(e) => setFormManufacturer(e.target.value)}
-                className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
-              />
-            </div>
+          {/* Section 4: AMC & Service Vendor */}
+          <div>
+            <h4 className="font-semibold text-slate-900 uppercase tracking-wider text-[11px] border-b border-slate-200 pb-1.5 mb-3 flex items-center gap-1.5">
+              <Truck className="h-4 w-4 text-slate-600" />
+              4. Service Vendor & AMC Contract
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">AMC Status</label>
+                <select
+                  value={formAmcStatus}
+                  onChange={(e) => setFormAmcStatus(e.target.value as "Active" | "Inactive")}
+                  className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+                >
+                  <option value="Inactive">No Active AMC</option>
+                  <option value="Active">Active AMC Contract</option>
+                </select>
+              </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Model</label>
-              <input
-                type="text"
-                value={formModel}
-                onChange={(e) => setFormModel(e.target.value)}
-                className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
-              />
-            </div>
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Maintenance Service Vendor Master {formAmcStatus === "Active" ? "*" : ""}
+                </label>
+                <select
+                  value={formVendorId}
+                  onChange={(e) => setFormVendorId(e.target.value)}
+                  className={cn(
+                    "w-full border rounded-md p-2 bg-white focus:outline-none focus:ring-2",
+                    formValidationErrors.vendorId ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
+                >
+                  <option value="">-- In-House Maintenance --</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.vendorName} ({v.vendorCode})
+                    </option>
+                  ))}
+                </select>
+                {formValidationErrors.vendorId && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.vendorId}</p>
+                )}
+              </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Department</label>
-              <select
-                value={formLocationType}
-                onChange={(e) =>
-                  setFormLocationType(
-                    e.target.value as "Guest Room" | "F&B Area" | "Public Area" | "Back of House",
-                  )
-                }
-                className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-              >
-                <option value="Guest Room">Guest Room</option>
-                <option value="F&B Area">F&B Area</option>
-                <option value="Public Area">Public Area</option>
-                <option value="Back of House">Back of House</option>
-              </select>
-            </div>
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">AMC Contract / Reference No.</label>
+                <input
+                  type="text"
+                  value={formAmcReference}
+                  onChange={(e) => setFormAmcReference(e.target.value)}
+                  placeholder="e.g. AMC-VLT-2026-089"
+                  className="w-full border border-slate-200 rounded-md p-2 font-mono focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Specific Location</label>
-              <input
-                type="text"
-                required
-                value={formLocation}
-                onChange={(e) => setFormLocation(e.target.value)}
-                placeholder="e.g. Engineering Workshop (Basement 1)"
-                className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Operational Status</label>
-              <select
-                value={formStatus}
-                onChange={(e) => setFormStatus(e.target.value as AssetStatus)}
-                className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-              >
-                <option value="Operational">Operational</option>
-                <option value="Under Maintenance">Under Maintenance</option>
-                <option value="Out of Service">Out of Service</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">Maintenance Vendor Master</label>
-              <select
-                value={formVendorId}
-                onChange={(e) => setFormVendorId(e.target.value)}
-                className="w-full border border-slate-200 rounded-md p-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
-              >
-                <option value="">-- In-House Maintenance --</option>
-                {vendors.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.vendorName} ({v.vendorCode})
-                  </option>
-                ))}
-              </select>
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  AMC Expiry Date {formAmcStatus === "Active" ? "*" : ""}
+                </label>
+                <input
+                  type="date"
+                  min={formAmcStartDate || formInstallationDate || formPurchaseDate || undefined}
+                  value={formAmcEndDate}
+                  onChange={(e) => setFormAmcEndDate(e.target.value)}
+                  className={cn(
+                    "w-full border rounded-md p-2 focus:outline-none focus:ring-2",
+                    formValidationErrors.amcEndDate ? "border-rose-400 focus:ring-rose-500" : "border-slate-200 focus:ring-slate-900"
+                  )}
+                />
+                {formValidationErrors.amcEndDate && (
+                  <p className="text-[11px] text-rose-600 mt-1 font-medium">{formValidationErrors.amcEndDate}</p>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1173,12 +1537,12 @@ export function MaintenanceAssetsView() {
             <Button
               type="submit"
               size="sm"
-              disabled={saving || !!duplicateCodeWarning}
+              disabled={saving || !!duplicateCodeWarning || Object.keys(formValidationErrors).length > 0}
               className="bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 inline-flex items-center gap-1.5"
             >
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                {saving ? "Saving..." : "Update Asset"}
-              </Button>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {saving ? "Saving..." : "Update Asset"}
+            </Button>
           </div>
         </form>
       </Drawer>
@@ -1470,6 +1834,7 @@ export function MaintenanceAssetsView() {
             <input
               type="date"
               required
+              max={new Date().toISOString().split("T")[0]}
               value={decommissionDate}
               onChange={(e) => setDecommissionDate(e.target.value)}
               className="w-full border border-slate-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-slate-900"

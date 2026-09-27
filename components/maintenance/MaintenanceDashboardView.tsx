@@ -8,16 +8,12 @@ import {
   ClipboardList,
   CalendarClock,
   DoorClosed,
-  Clock,
-  CheckCircle2,
   Search,
   ChevronRight,
   ShieldAlert,
   Check,
   X,
   Info,
-  Layers,
-  Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
@@ -56,6 +52,8 @@ export function MaintenanceDashboardView() {
     data: MaintenanceRequest | WorkOrder | RoomUnderMaintenance;
   } | null>(null);
 
+
+
   // Filtered lists based on search
   const q = searchTerm.toLowerCase();
   const filteredCritical = criticalIssues.filter(
@@ -91,11 +89,13 @@ export function MaintenanceDashboardView() {
       ]}
       wrapChildren={false}
       secondaryActions={
-        <div className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 sm:flex shadow-xs">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Shift: <strong>Morning (08:00 - 16:00)</strong></span>
-          <span className="text-slate-300">|</span>
-          <span>Duty Eng: <strong>Amit Patel</strong></span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 sm:flex shadow-xs">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Shift: <strong>Morning (08:00 - 16:00)</strong></span>
+            <span className="text-slate-300">|</span>
+            <span>Duty Eng: <strong>Amit Patel</strong></span>
+          </div>
         </div>
       }
     >
@@ -198,13 +198,6 @@ export function MaintenanceDashboardView() {
               {criticalIssues.length} Action Needed
             </span>
           </div>
-          <Link
-            href="/maintenance/work-orders"
-            className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            <span>All Work Orders</span>
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Link>
         </div>
 
         <div className="overflow-x-auto">
@@ -342,57 +335,57 @@ export function MaintenanceDashboardView() {
                   </tr>
                 ) : (
                   filteredWorkOrders.map((wo) => (
-                  <tr
-                    key={wo.id}
-                    className="hover:bg-slate-50/80 transition-colors cursor-pointer"
-                    onClick={() => setActiveDrawerItem({ type: "work_order", data: wo })}
-                  >
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
-                      {wo.woNumber}
-                    </td>
-                    <td className="py-3 px-3 font-semibold text-slate-900 whitespace-nowrap">
-                      {wo.location}
-                    </td>
-                    <td className="py-3 px-3">
-                      <p className="font-semibold text-slate-900 line-clamp-1">{wo.issue}</p>
-                    </td>
-                    <td className="py-3 px-3 whitespace-nowrap">
-                      <p className="font-medium text-slate-900">{wo.technicianName}</p>
-                      <p className="text-[10px] text-slate-400">
-                        {wo.assignedType === "External Vendor" ? "External AMC" : "In-House"}
-                      </p>
-                    </td>
-                    <td className="py-3 px-3 whitespace-nowrap">
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-bold border",
-                          wo.status === "In Progress"
-                            ? "bg-amber-50 text-amber-700 border border-amber-200"
-                            : wo.status === "Awaiting Parts"
-                            ? "bg-slate-100 text-slate-700 border border-slate-200"
-                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        )}
-                      >
-                        {wo.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 whitespace-nowrap text-[11px] text-slate-600">
-                      {wo.dueDate}
-                    </td>
-                    <td className="py-3 px-4 text-right whitespace-nowrap">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveDrawerItem({ type: "work_order", data: wo });
-                        }}
-                      >
-                        Open
-                      </Button>
-                    </td>
-                  </tr>
+                    <tr
+                      key={wo.id}
+                      className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                      onClick={() => setActiveDrawerItem({ type: "work_order", data: wo })}
+                    >
+                      <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
+                        {wo.woNumber}
+                      </td>
+                      <td className="py-3 px-3 font-semibold text-slate-900 whitespace-nowrap">
+                        {wo.location}
+                      </td>
+                      <td className="py-3 px-3">
+                        <p className="font-semibold text-slate-900 line-clamp-1">{wo.issue}</p>
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <p className="font-medium text-slate-900">{wo.technicianName}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {wo.assignedType === "External Vendor" ? "External AMC" : "In-House"}
+                        </p>
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-bold border",
+                            wo.status === "In Progress"
+                              ? "bg-amber-50 text-amber-700 border border-amber-200"
+                              : wo.status === "Awaiting Parts"
+                                ? "bg-slate-100 text-slate-700 border border-slate-200"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          )}
+                        >
+                          {wo.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap text-[11px] text-slate-600">
+                        {wo.dueDate}
+                      </td>
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveDrawerItem({ type: "work_order", data: wo });
+                          }}
+                        >
+                          Open
+                        </Button>
+                      </td>
+                    </tr>
                   ))
                 )}
               </tbody>
@@ -428,45 +421,45 @@ export function MaintenanceDashboardView() {
               <p className="py-6 text-center text-xs text-slate-500">No rooms currently blocked.</p>
             ) : (
               roomsUnderMaintenance.map((rm) => (
-              <div
-                key={rm.id}
-                className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 hover:bg-slate-100/60 transition-colors cursor-pointer"
-                onClick={() => setActiveDrawerItem({ type: "room", data: rm })}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 text-sm">{rm.roomNumber}</span>
-                    <span
-                      className={cn(
-                        "rounded px-1.5 py-0.5 text-[10px] font-bold border",
-                        rm.blockType === "OOO"
-                          ? "bg-rose-100 text-rose-800 border-rose-200"
-                          : "bg-amber-100 text-amber-800 border-amber-200"
-                      )}
-                    >
-                      {rm.blockType}
+                <div
+                  key={rm.id}
+                  className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 hover:bg-slate-100/60 transition-colors cursor-pointer"
+                  onClick={() => setActiveDrawerItem({ type: "room", data: rm })}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 text-sm">{rm.roomNumber}</span>
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 text-[10px] font-bold border",
+                          rm.blockType === "OOO"
+                            ? "bg-rose-100 text-rose-800 border-rose-200"
+                            : "bg-amber-100 text-amber-800 border-amber-200"
+                        )}
+                      >
+                        {rm.blockType}
+                      </span>
+                    </div>
+                    <span className="font-mono text-[10px] font-semibold text-slate-500">
+                      {rm.workOrderNo}
                     </span>
                   </div>
-                  <span className="font-mono text-[10px] font-semibold text-slate-500">
-                    {rm.workOrderNo}
-                  </span>
-                </div>
 
-                <p className="mt-1 text-xs text-slate-700 font-medium line-clamp-1">
-                  {rm.reason}
-                </p>
+                  <p className="mt-1 text-xs text-slate-700 font-medium line-clamp-1">
+                    {rm.reason}
+                  </p>
 
-                <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-2 text-[10px] text-slate-500">
-                  <span>Tech: <strong>{rm.technician}</strong></span>
-                  <span className="font-medium text-slate-700">
-                    ETA: {rm.expectedHandover}
-                  </span>
-                </div>
+                  <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-2 text-[10px] text-slate-500">
+                    <span>Tech: <strong>{rm.technician}</strong></span>
+                    <span className="font-medium text-slate-700">
+                      ETA: {rm.expectedHandover}
+                    </span>
+                  </div>
 
-                <div className="mt-1 text-[10px] font-semibold text-emerald-700">
-                  HK Status: {rm.hkHandoverStatus}
+                  <div className="mt-1 text-[10px] font-semibold text-emerald-700">
+                    HK Status: {rm.hkHandoverStatus}
+                  </div>
                 </div>
-              </div>
               ))
             )}
           </div>
@@ -551,15 +544,15 @@ export function MaintenanceDashboardView() {
                   {activeDrawerItem.type === "request"
                     ? (activeDrawerItem.data as MaintenanceRequest).requestNo
                     : activeDrawerItem.type === "work_order"
-                    ? (activeDrawerItem.data as WorkOrder).woNumber
-                    : (activeDrawerItem.data as RoomUnderMaintenance).roomNumber}
+                      ? (activeDrawerItem.data as WorkOrder).woNumber
+                      : (activeDrawerItem.data as RoomUnderMaintenance).roomNumber}
                 </h3>
                 <p className="text-xs text-slate-500">
                   {activeDrawerItem.type === "request"
                     ? "Maintenance Request Details & Status"
                     : activeDrawerItem.type === "work_order"
-                    ? "Work Order & Technician Job Card"
-                    : "Room Maintenance & Handover Status"}
+                      ? "Work Order & Technician Job Card"
+                      : "Room Maintenance & Handover Status"}
                 </p>
               </div>
               <button
