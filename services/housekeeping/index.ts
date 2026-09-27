@@ -99,6 +99,17 @@ export const hkLaundryService = {
   remove: (id: string) => api.delete<{ id: string }>(hkPath(`/laundry/${id}`)),
   advance: (id: string) =>
     api.post<HKLaundryJob>(hkPath(`/laundry/${id}/advance`), {}),
+  settle: (
+    id: string,
+    body: {
+      paymentMode: string;
+      amount?: number;
+      bookingId?: string;
+      guestId?: string;
+      receivedBy?: string;
+      externalReference?: string;
+    },
+  ) => api.post<HKLaundryJob>(hkPath(`/laundry/${id}/settle`), body),
 };
 
 export const hkRequisitionService = {

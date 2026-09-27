@@ -31,7 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
-import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
+import { TextInput, SelectInput, FormField, TextAreaInput, AlertBanner } from "@/components/frontoffice/ui";
 import { KPILuggageCard } from "./KPICard";
 import { LuggageEntryModal } from "./LuggageEntryModal";
 
@@ -72,13 +72,6 @@ export function LuggageView() {
   const saveExtraInfo = (jobId: string, info: any) => {
     setExtraInfoMap((prev) => ({ ...prev, [jobId]: info }));
   };
-
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
 
   const bellboys = useMemo(() => {
     return staff.filter((s) => s.role === "Bell Boy");
@@ -352,14 +345,11 @@ export function LuggageView() {
       </div>
 
       {toast && (
-        <div className={cn(
-          "fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-xl p-3.5 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-bottom-2",
-          toast.variant === "success" ? "bg-emerald-600 text-white" :
-          toast.variant === "error" ? "bg-red-655 text-white" : "bg-blue-600 text-white"
-        )}>
-          <CheckCircle2 className="h-4 w-4" />
-          <span>{toast.message}</span>
-        </div>
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       {/* Primary Tabs */}

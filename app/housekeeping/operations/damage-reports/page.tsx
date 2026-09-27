@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
-import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
+import { TextInput, SelectInput, FormField, TextAreaInput, AlertBanner } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 import { formatInr } from "@/components/housekeeping/damageReportUtils";
 import type { HKDamageReport } from "@/components/housekeeping/HousekeepingTypes";
@@ -75,13 +75,6 @@ export default function DamageReportsPage() {
   const [resolveCost, setResolveCost] = useState("");
 
   const [toast, setToast] = useState<{ message: string; variant: "success" | "error" } | null>(null);
-
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -179,15 +172,11 @@ export default function DamageReportsPage() {
       </div>
 
       {toast && (
-        <div
-          className={cn(
-            "fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-xl p-3 text-xs font-bold shadow-xl",
-            toast.variant === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white",
-          )}
-        >
-          <CheckCircle2 className="h-4 w-4" />
-          {toast.message}
-        </div>
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

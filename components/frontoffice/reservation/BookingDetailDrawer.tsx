@@ -149,7 +149,7 @@ export function BookingDetailDrawer({ booking, onClose, onCancel, onNoShow }: Bo
             detail.status !== "Checked Out" &&
             detail.status !== "No Show" ? (
             <>
-              {isNoShowEligible(detail) && onNoShow ? (
+              {isNoShowEligible(detail) && onNoShow && !detail.groupId ? (
                 <Button
                   variant="outline"
                   className="gap-1.5 border-orange-200 text-orange-700 hover:bg-orange-50"

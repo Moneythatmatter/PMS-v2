@@ -102,6 +102,10 @@ export interface ReservationBooking {
   source?: string;
   roomNo?: string;
   roomType?: string;
+  /** Present when this stay belongs to a group booking */
+  groupId?: string | null;
+  groupName?: string | null;
+  groupNo?: string | null;
   checkIn: string;
   checkOut: string;
   balance: number;

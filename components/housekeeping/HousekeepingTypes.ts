@@ -149,6 +149,16 @@ export interface HKInventoryItem {
   unit: string;
 }
 
+export type LaundryUrgency = "Normal" | "Same-Day" | "Express";
+export type LaundryBillingStatus = "Unbilled" | "Folio" | "Settled";
+
+export interface HKLaundryLineItem {
+  name: string;
+  serviceType: string;
+  qty: number;
+  unitPrice: number;
+}
+
 export interface HKLaundryJob {
   id: string;
   type: "Guest" | "Hotel";
@@ -156,8 +166,22 @@ export interface HKLaundryJob {
   quantity: number;
   room?: string;
   guestName?: string;
+  guestPhone?: string;
+  folioId?: string;
+  bookingId?: string;
   status: "Collection" | "Washing" | "Ironing" | "Ready" | "Delivered";
   charges: number;
+  subtotal?: number;
+  taxAmount?: number;
+  urgency?: LaundryUrgency;
+  serviceType?: string;
+  expectedAt?: string;
+  createdAt?: string;
+  billingStatus?: LaundryBillingStatus;
+  paymentMode?: string;
+  cancelled?: boolean;
+  isOutsourced?: boolean;
+  lineItems?: HKLaundryLineItem[];
   timeline: {
     collectedAt: string;
     washedAt?: string;

@@ -5,6 +5,7 @@ export interface FolioListItem {
   folioNumber?: string | null;
   bookingId?: string | null;
   guestId?: string | null;
+  groupId?: string | null;
   status: FolioStatus;
   currency: string;
   subtotal: number;
@@ -25,6 +26,10 @@ export interface FolioListItem {
   checkIn?: string | null;
   checkOut?: string | null;
   reservationStatus?: string | null;
+  groupName?: string | null;
+  groupNo?: string | null;
+  resolvedGroupId?: string | null;
+  isGroupMaster?: boolean;
 }
 
 export type LedgerTransactionType = "PAYMENT" | "REFUND" | "ADJUSTMENT";

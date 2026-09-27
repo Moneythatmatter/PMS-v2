@@ -32,6 +32,7 @@ import {
   SelectInput,
   FormField,
   TextAreaInput,
+  AlertBanner,
 } from "@/components/frontoffice/ui";
 import { PRRequestedItem, DEPARTMENT_STAFF_DATA } from "@/app/data/purchaseRequisitionsData";
 import {
@@ -52,12 +53,6 @@ export default function CreatePurchaseRequisitionPage() {
 
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; variant: "success" | "info" } | null>(null);
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
 
   // Form Fields State (Preserving all original business logic & field names)
   const [newDept, setNewDept] = useState("Housekeeping");
@@ -342,19 +337,12 @@ export default function CreatePurchaseRequisitionPage() {
 
   return (
     <div className="min-h-screen bg-slate-50/70 text-slate-800 antialiased pb-24 select-none">
-      {/* Toast Notification */}
       {toast && (
-        <div
-          className={cn(
-            "fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold animate-in fade-in slide-in-from-top-2 duration-200",
-            toast.variant === "success"
-              ? "bg-emerald-900 text-white border-emerald-800"
-              : "bg-slate-900 text-white border-slate-800"
-          )}
-        >
-          <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-          <span>{toast.message}</span>
-        </div>
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       {/* Hidden Native File Input */}

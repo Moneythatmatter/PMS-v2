@@ -34,6 +34,7 @@ import {
   FOPageHeader,
   StatMiniCard,
   formatINR,
+  AlertBanner,
 } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 import { DocumentApprovalFooter } from "@/components/purchase-stores/ui/DocumentApprovalFooter";
@@ -207,12 +208,6 @@ export default function PurchaseRequisitionsPage() {
 
   // Toast State
   const [toast, setToast] = useState<{ message: string; variant: "success" | "info" } | null>(null);
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
 
   // Filtered Inventory Catalog inside Selection Modal (exclude items already on the PR)
   const filteredInventoryCatalog = useMemo(() => {
@@ -673,17 +668,12 @@ export default function PurchaseRequisitionsPage() {
         accept=".pdf,.xlsx,.xls,.csv,.docx,.doc,.png,.jpg,.jpeg,.gif,.webp"
       />
 
-      {/* Toast Notification */}
       {toast && (
-        <div
-          className={cn(
-            "fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-xl p-3 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-bottom-2",
-            toast.variant === "success" ? "bg-emerald-600 text-white" : "bg-blue-600 text-white"
-          )}
-        >
-          <CheckCircle2 className="h-4 w-4" />
-          <span>{toast.message}</span>
-        </div>
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       {/* Page Header */}

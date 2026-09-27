@@ -4,8 +4,17 @@ import type { HKLaundryJob } from "../../HousekeepingTypes";
 import { hkLaundryService } from "@/services/housekeeping";
 
 export const addLaundryJob = (job: Omit<HKLaundryJob, "id" | "status" | "timeline">, laundryLength: number, dispatchers: HousekeepingDispatchers) => {
-  const uniqueCode = `${Date.now().toString(36).toUpperCase().slice(-4)}${Math.floor(10 + Math.random() * 90)}`;
-  const optimisticId = `LD-${uniqueCode}`;
+  const seq = 1000 + laundryLength + Math.floor(Math.random() * 90);
+  const optimisticId =
+    job.type === "Guest" ? `LND-${seq}` : `LD-${seq}`;
+
+  const createdAtLabel = new Date().toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 
   const record: HKLaundryJob = {
     id: optimisticId,
@@ -14,16 +23,23 @@ export const addLaundryJob = (job: Omit<HKLaundryJob, "id" | "status" | "timelin
     quantity: job.quantity,
     room: job.room,
     guestName: job.guestName,
+    guestPhone: job.guestPhone,
+    folioId: job.folioId,
+    bookingId: job.bookingId,
     status: "Collection",
     charges: job.charges,
+    subtotal: job.subtotal,
+    taxAmount: job.taxAmount,
+    urgency: job.urgency,
+    serviceType: job.serviceType,
+    expectedAt: job.expectedAt,
+    createdAt: job.createdAt ?? new Date().toISOString(),
+    billingStatus: job.billingStatus ?? (job.type === "Guest" ? "Unbilled" : undefined),
+    cancelled: false,
+    isOutsourced: job.isOutsourced,
+    lineItems: job.lineItems,
     timeline: {
-      collectedAt: new Date().toLocaleString("en-IN", {
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      }),
+      collectedAt: createdAtLabel,
     },
     notes: job.notes,
   };

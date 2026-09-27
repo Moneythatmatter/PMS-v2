@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
-import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
+import { TextInput, SelectInput, FormField, TextAreaInput, AlertBanner } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 
 // Sample records for demo tabs (found / lost / courier)
@@ -92,13 +92,6 @@ export function LostFoundView() {
 
   // Toast
   const [toast, setToast] = useState<{ message: string; variant: "success" | "error" | "info" } | null>(null);
-
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
 
   // Found Items
   const foundItemsList = useMemo(() => {
@@ -257,15 +250,12 @@ export function LostFoundView() {
         </div>
       </div>
 
-      {/* Toast notifier */}
       {toast && (
-        <div className={cn(
-          "fixed bottom-4 left-4 right-4 z-50 flex items-center gap-2 rounded-xl p-3 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-bottom-2 sm:left-auto sm:max-w-sm",
-          toast.variant === "success" ? "bg-emerald-600 text-white" : "bg-blue-600 text-white"
-        )}>
-          <CheckCircle2 className="h-4 w-4" />
-          <span>{toast.message}</span>
-        </div>
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       {/* 4 Equal-width Summary Metrics Cards */}

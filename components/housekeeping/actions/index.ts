@@ -8,6 +8,8 @@ export * from "./room/roomStatus";
 export * from "./laundry/createLaundry";
 export * from "./laundry/collectLaundry";
 export * from "./laundry/deliverLaundry";
+export * from "./laundry/cancelLaundry";
+export * from "./laundry/settleLaundry";
 export * from "./laundry/pricing";
 export * from "./laundry/batch";
 

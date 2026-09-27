@@ -1,15 +1,45 @@
 import type { GuestProfile } from "@/app/data/frontoffice/modules";
 
+export const GUEST_TITLES = ["Mr", "Mrs"] as const;
+export type GuestTitle = (typeof GUEST_TITLES)[number] | "";
+
 export function normalizeMobile(value: string): string {
   return value.replace(/\D/g, "");
 }
 
-export function splitGuestName(name: string): { firstName: string; lastName: string } {
+export function splitGuestName(name: string): {
+  title: GuestTitle;
+  firstName: string;
+  lastName: string;
+} {
   const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  const raw = (parts[0] ?? "").replace(/\.$/, "");
+  const matched = GUEST_TITLES.find(
+    (t) => t.toLowerCase() === raw.toLowerCase(),
+  );
+  if (matched) {
+    return {
+      title: matched,
+      firstName: parts[1] ?? "",
+      lastName: parts.slice(2).join(" "),
+    };
+  }
   return {
+    title: "",
     firstName: parts[0] ?? "",
     lastName: parts.slice(1).join(" "),
   };
+}
+
+export function formatGuestDisplayName(
+  title: string,
+  firstName: string,
+  lastName: string,
+): string {
+  return [title, firstName, lastName]
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .join(" ");
 }
 
 export function findGuestByMobile(
@@ -33,11 +63,52 @@ export function findGuestByEmail(
   excludeGuestId?: string,
 ): GuestProfile | undefined {
   const search = email.trim().toLowerCase();
-  if (!search) return undefined;
+  if (!search || !search.includes("@")) return undefined;
   return guests.find((g) => {
     if (excludeGuestId && g.id === excludeGuestId) return false;
     return (g.email || "").trim().toLowerCase() === search;
   });
+}
+
+export function normalizeIdNumber(value: string): string {
+  return value.replace(/[\s-]/g, "").toUpperCase();
+}
+
+export function findGuestByIdNumber(
+  guests: GuestProfile[],
+  idNumber: string,
+  excludeGuestId?: string,
+): GuestProfile | undefined {
+  const search = normalizeIdNumber(idNumber);
+  if (search.length < 4) return undefined;
+  return guests.find((g) => {
+    if (excludeGuestId && g.id === excludeGuestId) return false;
+    const gid = normalizeIdNumber(g.idNumber || "");
+    return Boolean(gid) && gid === search;
+  });
+}
+
+export function findGuestDuplicate(
+  guests: GuestProfile[],
+  fields: { mobile?: string; email?: string; idNumber?: string },
+  excludeGuestId?: string,
+): { guest: GuestProfile; field: "mobile" | "email" | "idNumber" } | null {
+  const byMobile = fields.mobile
+    ? findGuestByMobile(guests, fields.mobile, excludeGuestId)
+    : undefined;
+  if (byMobile) return { guest: byMobile, field: "mobile" };
+
+  const byEmail = fields.email
+    ? findGuestByEmail(guests, fields.email, excludeGuestId)
+    : undefined;
+  if (byEmail) return { guest: byEmail, field: "email" };
+
+  const byId = fields.idNumber
+    ? findGuestByIdNumber(guests, fields.idNumber, excludeGuestId)
+    : undefined;
+  if (byId) return { guest: byId, field: "idNumber" };
+
+  return null;
 }
 
 export function guestMatchesQuery(guest: GuestProfile, query: string): boolean {
@@ -74,9 +145,10 @@ export function guestProfileToCheckInDetails(guest: GuestProfile) {
 }
 
 export function guestToFormFields(guest: GuestProfile) {
-  const { firstName, lastName } = splitGuestName(guest.name);
+  const { title, firstName, lastName } = splitGuestName(guest.name);
   return {
     guestId: guest.id,
+    title,
     firstName,
     lastName,
     mobile: normalizeMobile(guest.mobile || ""),

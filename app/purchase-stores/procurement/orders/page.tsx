@@ -22,6 +22,7 @@ import {
   FormField,
   FOPageHeader,
   StatMiniCard,
+  AlertBanner,
 } from "@/components/frontoffice/ui";
 import { ModuleDataTable } from "@/components/pms/ModuleDataTable";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
@@ -107,12 +108,6 @@ export default function PurchaseOrdersPage() {
 
   // Toast Notification State
   const [toast, setToast] = useState<{ message: string; variant: "success" | "info" } | null>(null);
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
 
   // Form State for PO Creation / Edit
   const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -470,12 +465,12 @@ export default function PurchaseOrdersPage() {
 
   return (
     <div className="space-y-6 pb-12 select-none min-h-screen">
-      {/* TOAST NOTIFICATION */}
       {toast && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-900 text-white text-xs font-bold shadow-xl animate-in fade-in duration-200">
-          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-          <span>{toast.message}</span>
-        </div>
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       {/* PAGE HEADER */}

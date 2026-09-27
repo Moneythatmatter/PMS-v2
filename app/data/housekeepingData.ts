@@ -390,12 +390,7 @@ export const initialHKInventory: HKInventoryItem[] = [
   { id: "INV-E03", name: "Double Bucket Wringer Mops", category: "Equipment", available: 12, damaged: 2, lost: 0, discarded: 1, parStock: 12, unit: "Pcs" }
 ];
 
-export const initialHKLaundry: HKLaundryJob[] = [
-  { id: "LD-01", type: "Guest", item: "Silk Shirt & Trousers", quantity: 2, room: "112", guestName: "James Wilson", status: "Washing", charges: 350, timeline: { collectedAt: "23 Jun 08:30 AM" }, notes: "Soft wash. Ironing required." },
-  { id: "LD-02", type: "Hotel", item: "Bath Towels (Dirty batch)", quantity: 45, status: "Ironing", charges: 450, timeline: { collectedAt: "23 Jun 07:15 AM", washedAt: "23 Jun 09:30 AM" } },
-  { id: "LD-03", type: "Hotel", item: "King Bed Sheets (Dirty batch)", quantity: 30, status: "Ready", charges: 600, timeline: { collectedAt: "22 Jun 04:00 PM", washedAt: "22 Jun 06:30 PM", readyAt: "23 Jun 10:00 AM" } },
-  { id: "LD-04", type: "Guest", item: "Cotton Dress", quantity: 1, room: "204", guestName: "Rahul Sharma", status: "Delivered", charges: 180, timeline: { collectedAt: "22 Jun 09:00 AM", washedAt: "22 Jun 11:30 AM", readyAt: "22 Jun 03:00 PM", deliveredAt: "22 Jun 04:30 PM" } }
-];
+export const initialHKLaundry: HKLaundryJob[] = [];
 
 export const initialHKDamageReports: HKDamageReport[] = [
   { id: "DM-01", room: "305", damageType: "Furniture", severity: "Minor", responsibility: "Guest", description: "Bed side table drawer handle broken.", reportedBy: "Meena (Housekeeper)", reportedAt: "23 Jun 08:45 AM", estimatedCost: 450, status: "Reported" },

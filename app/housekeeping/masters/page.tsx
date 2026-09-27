@@ -40,6 +40,7 @@ import {
   TextAreaInput,
   FOPageHeader,
   StatMiniCard,
+  AlertBanner,
 } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
@@ -88,13 +89,6 @@ export default function HousekeepingMastersPage() {
 
   // Toast
   const [toast, setToast] = useState<{ message: string; variant: "success" | "info" | "error" } | null>(null);
-
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
 
   // Master records list state
   const [records, setRecords] = useState<MasterRecord[]>(INITIAL_MASTER_RECORDS);
@@ -243,21 +237,12 @@ export default function HousekeepingMastersPage() {
 
   return (
     <div className="space-y-5 select-none">
-      {/* Toast Notification */}
       {toast && (
-        <div
-          className={cn(
-            "fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-xl p-3 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-bottom-2",
-            toast.variant === "success"
-              ? "bg-emerald-600 text-white"
-              : toast.variant === "error"
-              ? "bg-red-600 text-white"
-              : "bg-blue-600 text-white"
-          )}
-        >
-          <CheckCircle2 className="h-4 w-4" />
-          <span>{toast.message}</span>
-        </div>
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       {/* Page Header */}

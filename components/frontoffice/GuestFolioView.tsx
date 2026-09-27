@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   CalendarCheck,
+  ChevronDown,
   ExternalLink,
   FileText,
   ListOrdered,
@@ -14,6 +16,7 @@ import {
   Phone,
   Receipt,
   User,
+  Users,
   Wallet,
 } from "lucide-react";
 import type { FolioListItem, LedgerTransaction } from "@/app/data/types/billing";
@@ -74,6 +77,115 @@ function isCheckoutEligible(folio: FolioListItem) {
   return status === "Checked In" || status === "In-House";
 }
 
+function folioGroupKey(folio: FolioListItem): string {
+  return String(folio.resolvedGroupId ?? folio.groupId ?? "").trim();
+}
+
+function isGroupMasterFolio(folio: FolioListItem): boolean {
+  if (folio.isGroupMaster) return true;
+  return Boolean(folioGroupKey(folio) && !folio.bookingId);
+}
+
+function folioRecencyMs(folio: FolioListItem): number {
+  const opened = Date.parse(String(folio.openedAt ?? ""));
+  return Number.isNaN(opened) ? 0 : opened;
+}
+
+type FolioListRow =
+  | { kind: "solo"; folio: FolioListItem }
+  | {
+      kind: "group";
+      groupId: string;
+      groupName: string;
+      groupNo?: string | null;
+      master: FolioListItem | null;
+      children: FolioListItem[];
+    };
+
+function buildFolioListRows(folios: FolioListItem[]): FolioListRow[] {
+  const masters = new Map<string, FolioListItem>();
+  const childrenByGroup = new Map<string, FolioListItem[]>();
+  const solos: FolioListItem[] = [];
+
+  for (const folio of folios) {
+    const groupId = folioGroupKey(folio);
+    if (isGroupMasterFolio(folio) && groupId) {
+      masters.set(groupId, folio);
+      continue;
+    }
+    if (groupId) {
+      const list = childrenByGroup.get(groupId) ?? [];
+      list.push(folio);
+      childrenByGroup.set(groupId, list);
+      continue;
+    }
+    solos.push(folio);
+  }
+
+  const rows: FolioListRow[] = [];
+  const seen = new Set<string>();
+
+  for (const [groupId, master] of masters) {
+    seen.add(groupId);
+    const children = [...(childrenByGroup.get(groupId) ?? [])].sort(
+      (a, b) => folioRecencyMs(b) - folioRecencyMs(a),
+    );
+    rows.push({
+      kind: "group",
+      groupId,
+      groupName:
+        master.groupName?.trim() ||
+        master.guestName?.trim() ||
+        "Group folio",
+      groupNo: master.groupNo ?? master.bookingNo,
+      master,
+      children,
+    });
+  }
+
+  for (const [groupId, children] of childrenByGroup) {
+    if (seen.has(groupId)) continue;
+    const sorted = [...children].sort(
+      (a, b) => folioRecencyMs(b) - folioRecencyMs(a),
+    );
+    rows.push({
+      kind: "group",
+      groupId,
+      groupName:
+        sorted[0]?.groupName?.trim() ||
+        sorted[0]?.guestName?.trim() ||
+        "Group folio",
+      groupNo: sorted[0]?.groupNo,
+      master: null,
+      children: sorted,
+    });
+  }
+
+  for (const folio of solos) {
+    rows.push({ kind: "solo", folio });
+  }
+
+  return rows.sort((a, b) => {
+    const aMs =
+      a.kind === "solo"
+        ? folioRecencyMs(a.folio)
+        : Math.max(
+            a.master ? folioRecencyMs(a.master) : 0,
+            ...a.children.map(folioRecencyMs),
+            0,
+          );
+    const bMs =
+      b.kind === "solo"
+        ? folioRecencyMs(b.folio)
+        : Math.max(
+            b.master ? folioRecencyMs(b.master) : 0,
+            ...b.children.map(folioRecencyMs),
+            0,
+          );
+    return bMs - aMs;
+  });
+}
+
 function GuestContactLines({
   phone,
   email,
@@ -102,7 +214,102 @@ function GuestContactLines({
   );
 }
 
+function renderFolioCells(
+  folio: FolioListItem,
+  opts: {
+    indent: boolean;
+  },
+) {
+  const { indent } = opts;
+  return (
+    <>
+      <td className={cn("px-4 py-3", indent && "pl-10")}>
+        <p className="font-medium text-slate-900">
+          {folio.folioNumber ?? folio.id.slice(0, 8)}
+        </p>
+        {folio.bookingId ? (
+          <Link
+            href={allBookingsDetailHref({ id: folio.bookingId })}
+            onClick={stopRowClick}
+            className="text-[10px] font-medium text-emerald-700 hover:text-emerald-900 hover:underline"
+          >
+            {folio.bookingNo ?? folio.bookingId.slice(0, 8)}
+          </Link>
+        ) : (
+          <p className="text-[10px] text-slate-400">
+            {folio.bookingNo ?? "—"}
+          </p>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {folio.guestId ? (
+          <Link
+            href={guestProfileHref({ id: folio.guestId })}
+            onClick={stopRowClick}
+            className="font-medium text-slate-800 hover:text-emerald-700 hover:underline"
+          >
+            {folio.guestName ?? "Guest"}
+          </Link>
+        ) : (
+          <p className="font-medium text-slate-800">
+            {folio.guestName ?? "—"}
+          </p>
+        )}
+        <GuestContactLines phone={folio.guestPhone} email={folio.guestEmail} />
+      </td>
+      <td className="px-4 py-3 text-slate-600">
+        {folio.room ? `Room ${folio.room}` : "—"}
+      </td>
+      <td className="px-4 py-3">
+        <span
+          className={cn(
+            "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
+            statusStyles[folio.status] ?? "bg-slate-100 text-slate-600",
+          )}
+        >
+          {folio.status}
+        </span>
+      </td>
+      <td className="px-4 py-3">{formatINR(folio.totalAmount)}</td>
+      <td className="px-4 py-3 text-emerald-700">
+        {formatINR(folio.paidAmount)}
+      </td>
+      <td
+        className={cn(
+          "px-4 py-3 font-semibold",
+          Number(folio.balanceAmount ?? 0) === 0
+            ? "text-slate-500"
+            : "text-red-600",
+        )}
+      >
+        {formatINR(folio.balanceAmount)}
+      </td>
+      <td className="px-4 py-3" onClick={stopRowClick}>
+        <div className="flex items-center justify-end">
+          {isCheckoutEligible(folio) ? (
+            <Link
+              href={checkOutHref({ id: folio.bookingId! })}
+              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-semibold leading-none text-orange-800 transition-colors hover:bg-orange-100"
+              title="Check out guest"
+            >
+              <LogOut className="h-3.5 w-3.5 shrink-0" />
+              Check out
+            </Link>
+          ) : (
+            <span className="text-xs text-slate-300">—</span>
+          )}
+        </div>
+      </td>
+    </>
+  );
+}
+
 export function GuestFolioView() {
+  const searchParams = useSearchParams();
+  const folioIdParam =
+    searchParams.get("folioId") ?? searchParams.get("folio") ?? "";
+  const openedFromQuery = useRef<string | null>(null);
+
   const [folios, setFolios] = useState<FolioListItem[]>([]);
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
   const [selected, setSelected] = useState<FolioListItem | null>(null);
@@ -119,6 +326,10 @@ export function GuestFolioView() {
   const [selectedTxn, setSelectedTxn] = useState<LedgerTransaction | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [paymentDrawerOpen, setPaymentDrawerOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const didAutoExpandGroups = useRef(false);
 
   const loadFolios = useCallback(async () => {
     const rows = await billingFolioService.list(
@@ -204,6 +415,10 @@ export function GuestFolioView() {
           f.guestNo,
           f.guestPhone,
           f.guestEmail,
+          f.groupName,
+          f.groupNo,
+          f.resolvedGroupId,
+          f.groupId,
         ]
           .filter(Boolean)
           .join(" ")
@@ -232,6 +447,23 @@ export function GuestFolioView() {
       return true;
     });
 
+    // Keep group siblings when any member matches search/filters
+    if (q || reservationStatusFilter !== "all" || roomFilter !== "all") {
+      const keepIds = new Set(rows.map((r) => r.id));
+      const groupKeys = new Set(
+        rows.map(folioGroupKey).filter(Boolean),
+      );
+      for (const f of folios) {
+        const gid = folioGroupKey(f);
+        if (gid && groupKeys.has(gid)) keepIds.add(f.id);
+      }
+      rows = folios.filter((f) => keepIds.has(f.id));
+      // Re-apply status filter only (search already expanded) for balance/status pills
+      if (statusFilter !== "all") {
+        // status already applied via loadFolios API — skip
+      }
+    }
+
     rows = [...rows].sort((a, b) => {
       switch (sortBy) {
         case "oldest":
@@ -256,7 +488,36 @@ export function GuestFolioView() {
     balanceFilter,
     reservationStatusFilter,
     sortBy,
+    statusFilter,
   ]);
+
+  const folioListRows = useMemo(
+    () => buildFolioListRows(filteredFolios),
+    [filteredFolios],
+  );
+
+  useEffect(() => {
+    // Auto-expand groups that have an open drawer selection
+    if (!selected) return;
+    const gid = folioGroupKey(selected);
+    if (!gid) return;
+    setExpandedGroups((prev) => {
+      if (prev.has(gid)) return prev;
+      const next = new Set(prev);
+      next.add(gid);
+      return next;
+    });
+  }, [selected]);
+
+  useEffect(() => {
+    if (didAutoExpandGroups.current || folioListRows.length === 0) return;
+    const groupIds = folioListRows
+      .filter((r): r is Extract<FolioListRow, { kind: "group" }> => r.kind === "group")
+      .map((r) => r.groupId);
+    if (!groupIds.length) return;
+    setExpandedGroups(new Set(groupIds));
+    didAutoExpandGroups.current = true;
+  }, [folioListRows]);
 
   const totals = useMemo(() => {
     const scope = filteredFolios;
@@ -296,6 +557,16 @@ export function GuestFolioView() {
     setSelected(folio);
     setFolioDrawerOpen(true);
   };
+
+  useEffect(() => {
+    const id = folioIdParam.trim();
+    if (!id || loading || folios.length === 0) return;
+    if (openedFromQuery.current === id) return;
+    const match = folios.find((f) => f.id === id);
+    if (!match) return;
+    openedFromQuery.current = id;
+    openFolio(match);
+  }, [folioIdParam, loading, folios]);
 
   const closeFolioDrawer = () => {
     setFolioDrawerOpen(false);
@@ -435,7 +706,11 @@ export function GuestFolioView() {
         <div className="mt-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-slate-900">All Folios</h2>
-            <p className="text-xs text-slate-500">{filteredFolios.length} shown</p>
+            <p className="text-xs text-slate-500">
+              {folioListRows.length} group
+              {folioListRows.length === 1 ? "" : "s"} / {filteredFolios.length}{" "}
+              folio{filteredFolios.length !== 1 ? "s" : ""}
+            </p>
           </div>
 
           {filteredFolios.length > 0 ? (
@@ -459,106 +734,196 @@ export function GuestFolioView() {
                     <th className="w-[7.5rem] shrink-0 px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
-                  <tbody>
-                  {filteredFolios.map((folio) => {
-                    const isActive = selected?.id === folio.id && folioDrawerOpen;
-                    return (
+                <tbody>
+                  {folioListRows.flatMap((row) => {
+                    if (row.kind === "solo") {
+                      const folio = row.folio;
+                      const isActive =
+                        selected?.id === folio.id && folioDrawerOpen;
+                      return [
+                        <tr
+                          key={folio.id}
+                          onClick={() => openFolio(folio)}
+                          className={cn(
+                            "cursor-pointer border-t border-slate-50 transition-colors",
+                            isActive
+                              ? "bg-emerald-50/80 hover:bg-emerald-50"
+                              : "hover:bg-slate-50/80",
+                          )}
+                        >
+                          {renderFolioCells(folio, { indent: false })}
+                        </tr>,
+                      ];
+                    }
+
+                    const expanded = expandedGroups.has(row.groupId);
+                    const master = row.master;
+                    const childTotal = row.children.reduce(
+                      (s, c) => s + Number(c.totalAmount ?? 0),
+                      0,
+                    );
+                    const childPaid = row.children.reduce(
+                      (s, c) => s + Number(c.paidAmount ?? 0),
+                      0,
+                    );
+                    const childBalance = row.children.reduce(
+                      (s, c) => s + Number(c.balanceAmount ?? 0),
+                      0,
+                    );
+                    const displayTotal = master
+                      ? Number(master.totalAmount ?? 0)
+                      : childTotal;
+                    const displayPaid = master
+                      ? Number(master.paidAmount ?? 0)
+                      : childPaid;
+                    const displayBalance = master
+                      ? Number(master.balanceAmount ?? 0)
+                      : childBalance;
+                    const masterActive =
+                      Boolean(master) &&
+                      selected?.id === master?.id &&
+                      folioDrawerOpen;
+
+                    const toggleExpand = (e: MouseEvent) => {
+                      e.stopPropagation();
+                      setExpandedGroups((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(row.groupId)) next.delete(row.groupId);
+                        else next.add(row.groupId);
+                        return next;
+                      });
+                    };
+
+                    const nodes = [
                       <tr
-                        key={folio.id}
-                        onClick={() => openFolio(folio)}
+                        key={`g-${row.groupId}`}
+                        onClick={() => {
+                          if (master) openFolio(master);
+                          else if (row.children[0]) openFolio(row.children[0]);
+                        }}
                         className={cn(
-                          "cursor-pointer border-t border-slate-50 transition-colors",
-                          isActive
-                            ? "bg-emerald-50/80 hover:bg-emerald-50"
-                            : "hover:bg-slate-50/80",
+                          "cursor-pointer border-t border-indigo-100/80 bg-indigo-50/40 transition-colors hover:bg-indigo-50/70",
+                          masterActive && "bg-indigo-100/70",
                         )}
                       >
-                        <td className="px-4 py-3" onClick={stopRowClick}>
-                          <p className="font-medium text-slate-900">
-                            {folio.folioNumber ?? folio.id.slice(0, 8)}
-                          </p>
-                          {folio.bookingId ? (
-                            <Link
-                              href={allBookingsDetailHref({ id: folio.bookingId })}
-                              className="text-[10px] font-medium text-emerald-700 hover:text-emerald-900 hover:underline"
+                        <td className="px-4 py-3">
+                          <div className="flex items-start gap-2">
+                            <button
+                              type="button"
+                              aria-label={expanded ? "Collapse group" : "Expand group"}
+                              className="mt-0.5 rounded p-0.5 text-indigo-500 hover:bg-indigo-100"
+                              onClick={toggleExpand}
                             >
-                              {folio.bookingNo ?? folio.bookingId.slice(0, 8)}
-                            </Link>
-                          ) : (
-                            <p className="text-[10px] text-slate-400">
-                              {folio.bookingNo ?? "—"}
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-4 py-3" onClick={stopRowClick}>
-                          {folio.guestId ? (
-                            <Link
-                              href={guestProfileHref({ id: folio.guestId })}
-                              className="font-medium text-slate-800 hover:text-emerald-700 hover:underline"
-                            >
-                              {folio.guestName ?? "Guest"}
-                            </Link>
-                          ) : (
-                            <p className="font-medium text-slate-800">
-                              {folio.guestName ?? "—"}
-                            </p>
-                          )}
-                          <GuestContactLines
-                            phone={folio.guestPhone}
-                            email={folio.guestEmail}
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">
-                          {folio.room ? `Room ${folio.room}` : "—"}
+                              <ChevronDown
+                                className={cn(
+                                  "h-3.5 w-3.5 shrink-0 transition-transform",
+                                  expanded && "rotate-180",
+                                )}
+                              />
+                            </button>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-slate-900">
+                                {master?.folioNumber ??
+                                  row.groupNo ??
+                                  "Group folio"}
+                              </p>
+                              <p className="text-[10px] font-medium text-indigo-700">
+                                {[
+                                  row.groupNo,
+                                  `${row.children.length} room folio${row.children.length === 1 ? "" : "s"}`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </p>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
-                              statusStyles[folio.status] ?? "bg-slate-100 text-slate-600",
-                            )}
-                          >
-                            {folio.status}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
+                              <Users className="h-3.5 w-3.5" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-medium text-slate-800">
+                                {row.groupName}
+                              </p>
+                              <p className="text-[10px] text-indigo-600">
+                                Group master folio
+                              </p>
+                            </div>
+                          </div>
                         </td>
-                        <td className="px-4 py-3">{formatINR(folio.totalAmount)}</td>
+                        <td className="px-4 py-3 text-slate-500">—</td>
+                        <td className="px-4 py-3">
+                          {master ? (
+                            <span
+                              className={cn(
+                                "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
+                                statusStyles[master.status] ??
+                                  "bg-slate-100 text-slate-600",
+                              )}
+                            >
+                              {master.status}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">{formatINR(displayTotal)}</td>
                         <td className="px-4 py-3 text-emerald-700">
-                          {formatINR(folio.paidAmount)}
+                          {formatINR(displayPaid)}
                         </td>
                         <td
                           className={cn(
                             "px-4 py-3 font-semibold",
-                            Number(folio.balanceAmount ?? 0) === 0
+                            displayBalance === 0
                               ? "text-slate-500"
                               : "text-red-600",
                           )}
                         >
-                          {formatINR(folio.balanceAmount)}
+                          {formatINR(displayBalance)}
                         </td>
                         <td className="px-4 py-3" onClick={stopRowClick}>
                           <div className="flex items-center justify-end">
-                            {isCheckoutEligible(folio) ? (
-                              <Link
-                                href={checkOutHref({ id: folio.bookingId! })}
-                                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-semibold leading-none text-orange-800 transition-colors hover:bg-orange-100"
-                                title="Check out guest"
-                              >
-                                <LogOut className="h-3.5 w-3.5 shrink-0" />
-                                Check out
-                              </Link>
-                            ) : (
-                              <span className="text-xs text-slate-300">—</span>
-                            )}
+                            <Link
+                              href={`/frontoffice/group-booking/${row.groupId}`}
+                              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100"
+                            >
+                              Open group
+                            </Link>
                           </div>
                         </td>
-                      </tr>
-                    );
+                      </tr>,
+                    ];
+
+                    if (expanded) {
+                      for (const folio of row.children) {
+                        const isActive =
+                          selected?.id === folio.id && folioDrawerOpen;
+                        nodes.push(
+                          <tr
+                            key={folio.id}
+                            onClick={() => openFolio(folio)}
+                            className={cn(
+                              "cursor-pointer border-t border-slate-50 bg-white transition-colors",
+                              isActive
+                                ? "bg-emerald-50/80 hover:bg-emerald-50"
+                                : "hover:bg-slate-50/80",
+                            )}
+                          >
+                            {renderFolioCells(folio, { indent: true })}
+                          </tr>,
+                        );
+                      }
+                    }
+
+                    return nodes;
                   })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState
               title="No folios found"
               description="Run transactions.sql in Supabase to create folios for existing bookings."
             />

@@ -102,6 +102,14 @@ export function findBookingByQuery<T extends BookingLookupRecord>(
 ): T | undefined {
   const trimmed = query.trim();
   if (!trimmed) return undefined;
+  const exactId = pool.find((record) => record.id === trimmed);
+  if (exactId) return exactId;
+  const exactBookingNo = pool.find(
+    (record) =>
+      record.bookingNo &&
+      record.bookingNo.toLowerCase() === trimmed.toLowerCase(),
+  );
+  if (exactBookingNo) return exactBookingNo;
   return pool.find((record) => bookingMatchesQuery(record, trimmed));
 }
 

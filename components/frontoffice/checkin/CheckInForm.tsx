@@ -8,6 +8,7 @@ import {
   Calendar,
   CalendarCheck,
   CheckCircle2,
+  ChevronDown,
   CreditCard,
   Crown,
   KeyRound,
@@ -44,7 +45,15 @@ import {
   findBookingByQuery,
   reservationToLookupRecord,
 } from "@/lib/booking-lookup";
-import { guestProfileToCheckInDetails } from "@/components/frontoffice/guestFormUtils";
+import { guestProfileToCheckInDetails, findGuestByEmail, findGuestByIdNumber, findGuestByMobile, guestToFormFields, normalizeIdNumber, normalizeMobile } from "@/components/frontoffice/guestFormUtils";
+import { GuestDuplicatePromptModal } from "@/components/frontoffice/GuestDuplicatePromptModal";
+import type { GuestProfile } from "@/app/data/frontoffice/modules";
+import {
+  formatRoomGuestName,
+  RoomGuestsSection,
+  serializeRoomGuests,
+  type RoomGuestDraft,
+} from "@/components/frontoffice/checkin/RoomGuestsSection";
 
 import { bookingTypeOptions } from "@/app/data/frontoffice/checkin";
 
@@ -54,6 +63,23 @@ import { RoomAssignmentSection } from "./RoomAssignmentSection";
 import { PaymentBillingSection } from "./PaymentBillingSection";
 
 const inputClass = "rounded-xl";
+
+const emptyGuestDetails = {
+  firstName: "",
+  lastName: "",
+  mobile: "",
+  email: "",
+  gender: "",
+  dob: "",
+  nationality: "",
+  address: "",
+  city: "",
+  state: "",
+  country: "",
+  pincode: "",
+  idProofType: "",
+  idNumber: "",
+};
 
 type CheckInMode = "reserved" | "walkin";
 
@@ -84,6 +110,53 @@ function getInitials(name?: string) {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+type ArrivalListRow =
+  | { kind: "solo"; booking: ReservationBooking }
+  | {
+      kind: "group";
+      groupId: string;
+      groupName: string;
+      groupNo?: string | null;
+      children: ReservationBooking[];
+    };
+
+/** Collapse group child bookings into one row — same idea as All Bookings. */
+function buildArrivalListRows(
+  bookings: ReservationBooking[],
+): ArrivalListRow[] {
+  const groups = new Map<string, ReservationBooking[]>();
+  const solos: ReservationBooking[] = [];
+
+  for (const booking of bookings) {
+    const groupId = String(booking.groupId ?? "").trim();
+    if (!groupId) {
+      solos.push(booking);
+      continue;
+    }
+    const list = groups.get(groupId) ?? [];
+    list.push(booking);
+    groups.set(groupId, list);
+  }
+
+  const rows: ArrivalListRow[] = [];
+  for (const [groupId, children] of groups) {
+    rows.push({
+      kind: "group",
+      groupId,
+      groupName:
+        children[0]?.groupName?.trim() ||
+        children[0]?.guestName?.trim() ||
+        "Group booking",
+      groupNo: children[0]?.groupNo,
+      children,
+    });
+  }
+  for (const booking of solos) {
+    rows.push({ kind: "solo", booking });
+  }
+  return rows;
 }
 
 function SectionCard({
@@ -127,6 +200,10 @@ function formatStayDate(date: Date) {
 
 function guestDetailsFromBooking(found: ReservationBooking) {
   return {
+    firstName: "",
+    lastName: "",
+    mobile: "",
+    email: "",
     gender: found.gender || "",
     dob: found.dob || "",
     nationality: found.nationality || "",
@@ -142,11 +219,26 @@ function guestDetailsFromBooking(found: ReservationBooking) {
 
 function mergeGuestDetails(
   booking: ReservationBooking,
-  profile?: ReturnType<typeof guestProfileToCheckInDetails>,
+  profile?: ReturnType<typeof guestProfileToCheckInDetails> & {
+    name?: string;
+    mobile?: string;
+    email?: string;
+  },
 ) {
   const fromBooking = guestDetailsFromBooking(booking);
   if (!profile) return fromBooking;
+  const nameParts = String(profile.name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   return {
+    firstName: nameParts[0] || fromBooking.firstName,
+    lastName: nameParts.slice(1).join(" ") || fromBooking.lastName,
+    mobile:
+      String(profile.mobile || "")
+        .replace(/\D/g, "")
+        .slice(0, 10) || fromBooking.mobile,
+    email: profile.email || fromBooking.email,
     gender: profile.gender || fromBooking.gender,
     dob: profile.dob || fromBooking.dob,
     nationality: profile.nationality || fromBooking.nationality,
@@ -168,16 +260,31 @@ function profileLockedFields(
 
 function isEligibleForCheckIn(status: string) {
   const s = String(status || "").toLowerCase().trim().replace(/[-_]/g, " ");
-  if (
+  // Block terminal / already-in-house statuses; allow Confirmed, Reserved, and other open states
+  return !(
     s === "checked in" ||
     s === "cancelled" ||
     s === "checked out" ||
     s === "in house" ||
-    s === "completed"
-  ) {
-    return false;
-  }
-  return s === "confirmed" || s === "reserved" || s === "pending" || s === "guaranteed" || s === "";
+    s === "completed" ||
+    s === "no show"
+  );
+}
+
+function findBookingInList(
+  bookings: ReservationBooking[],
+  key: string,
+): ReservationBooking | undefined {
+  const trimmed = key.trim();
+  if (!trimmed) return undefined;
+  const byId = bookings.find((b) => b.id === trimmed);
+  if (byId) return byId;
+  const record = findBookingByQuery(
+    bookings.map(reservationToLookupRecord),
+    trimmed,
+  );
+  if (!record) return undefined;
+  return bookings.find((b) => b.id === record.id);
 }
 
 export function CheckInForm() {
@@ -193,51 +300,63 @@ export function CheckInForm() {
   const [walkInRef, setWalkInRef] = useState(generateWalkInRef);
   const [walkIn, setWalkIn] = useState({ ...defaultWalkIn });
   const [assignedRoom, setAssignedRoom] = useState("");
-  const [keyCard, setKeyCard] = useState("");
   const [deposit, setDeposit] = useState(0);
-  const [vehicle, setVehicle] = useState("");
   const [remarks, setRemarks] = useState("");
   const [idFile, setIdFile] = useState("");
   const [lockedIdentityFields, setLockedIdentityFields] = useState<
     Partial<Record<keyof GuestDetails, boolean>>
   >({});
-  const [guestDetails, setGuestDetails] = useState({
-    gender: "",
-    dob: "",
-    nationality: "",
-    address: "",
-    city: "",
-    state: "",
-    country: "",
-    pincode: "",
-    idProofType: "",
-    idNumber: "",
-  });
-  const [identityErrors, setIdentityErrors] = useState<Record<string, boolean>>({});
+  const [guestDetails, setGuestDetails] = useState({ ...emptyGuestDetails });
+  const [identityErrors, setIdentityErrors] = useState<Record<string, boolean | string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [roomGuests, setRoomGuests] = useState<RoomGuestDraft[]>([]);
+  const [roomGuestErrors, setRoomGuestErrors] = useState<Record<string, string>>(
+    {},
+  );
   const [toast, setToast] = useState<string | null>(null);
   const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
   const [completed, setCompleted] = useState(false);
   const [pmsBookings, setPmsBookings] = useState<any[]>([]);
+  const [bookingsReady, setBookingsReady] = useState(false);
   const [availableRooms, setAvailableRooms] = useState<
     { id?: string; roomNo: string; roomType: string; status: string; housekeeping: string }[]
   >([]);
   const [roomIdByNo, setRoomIdByNo] = useState<Record<string, string>>({});
   const [roomTypeRates, setRoomTypeRates] = useState<Record<string, number>>({});
   const [arrivalDate, setArrivalDate] = useState(() => todayIso());
+  const [expandedArrivalGroups, setExpandedArrivalGroups] = useState<
+    Set<string>
+  >(() => new Set());
+  const [guestProfiles, setGuestProfiles] = useState<GuestProfile[]>([]);
+  const [selectedStayingGuestId, setSelectedStayingGuestId] = useState<
+    string | null
+  >(null);
+  const [companionLinkedGuestIds, setCompanionLinkedGuestIds] = useState<
+    Record<string, string>
+  >({});
+  const [ignoredDuplicateKeys, setIgnoredDuplicateKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{
+    guest: GuestProfile;
+    field: "mobile" | "email" | "idNumber";
+    matchValue: string;
+    target: "primary" | "walkin" | string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [bookings, roomCards, roomTypes] = await Promise.all([
+        const [bookings, roomCards, roomTypes, guests] = await Promise.all([
           reservationService.list(),
           roomService.status(),
           roomTypeService.list().catch(() => []),
+          guestService.list().catch(() => [] as GuestProfile[]),
         ]);
         if (cancelled) return;
         setPmsBookings(bookings);
-
+        setGuestProfiles(guests);
         // Assignable rooms: not blocked/maintenance; operational status comes from hk_rooms.
         const assignable = roomCards
           .filter((r) => {
@@ -272,7 +391,10 @@ export function CheckInForm() {
         if (!cancelled) {
           setPmsBookings([]);
           setAvailableRooms([]);
+          setGuestProfiles([]);
         }
+      } finally {
+        if (!cancelled) setBookingsReady(true);
       }
     })();
     return () => {
@@ -308,6 +430,27 @@ export function CheckInForm() {
     [eligibleArrivals, arrivalDate],
   );
 
+  const arrivalListRows = useMemo(
+    () => buildArrivalListRows(arrivalsOnSelectedDate as ReservationBooking[]),
+    [arrivalsOnSelectedDate],
+  );
+
+  const arrivalsTodayCount = useMemo(
+    () => buildArrivalListRows(arrivalsToday as ReservationBooking[]).length,
+    [arrivalsToday],
+  );
+
+  useEffect(() => {
+    const groupId = String(booking?.groupId ?? "").trim();
+    if (!groupId) return;
+    setExpandedArrivalGroups((prev) => {
+      if (prev.has(groupId)) return prev;
+      const next = new Set(prev);
+      next.add(groupId);
+      return next;
+    });
+  }, [booking?.groupId, booking?.id]);
+
   const isSelectedArrivalDateToday = arrivalDate === todayIso();
 
   const arrivalSectionTitle = useMemo(() => {
@@ -338,6 +481,12 @@ export function CheckInForm() {
   const handleGuestDetailChange = (key: string, value: string) => {
     if (lockedIdentityFields[key as keyof GuestDetails]) return;
     setGuestDetails((prev) => ({ ...prev, [key]: value }));
+    if (
+      selectedStayingGuestId &&
+      ["mobile", "email", "idNumber", "firstName", "lastName"].includes(key)
+    ) {
+      setSelectedStayingGuestId(null);
+    }
     if (value.trim()) {
       setIdentityErrors((prev) => {
         if (!prev[key]) return prev;
@@ -346,6 +495,166 @@ export function CheckInForm() {
         return next;
       });
     }
+  };
+
+  const duplicateKey = (target: string, field: string, value: string) =>
+    `${target}:${field}:${value}`;
+
+  const lookupDuplicateGuest = useCallback(
+    (
+      field: "mobile" | "email" | "idNumber",
+      value: string,
+      excludeGuestId?: string | null,
+    ): GuestProfile | null => {
+      if (field === "mobile") {
+        return (
+          findGuestByMobile(guestProfiles, value, excludeGuestId ?? undefined) ??
+          null
+        );
+      }
+      if (field === "email") {
+        return (
+          findGuestByEmail(guestProfiles, value, excludeGuestId ?? undefined) ??
+          null
+        );
+      }
+      return (
+        findGuestByIdNumber(guestProfiles, value, excludeGuestId ?? undefined) ??
+        null
+      );
+    },
+    [guestProfiles],
+  );
+
+  const promptIfDuplicate = useCallback(
+    (
+      target: "primary" | "walkin" | string,
+      field: "mobile" | "email" | "idNumber",
+      rawValue: string,
+      excludeGuestId?: string | null,
+    ) => {
+      const value =
+        field === "mobile"
+          ? normalizeMobile(rawValue)
+          : field === "idNumber"
+            ? normalizeIdNumber(rawValue)
+            : rawValue.trim().toLowerCase();
+      if (!value) return false;
+      if (field === "mobile" && value.length < 10) return false;
+      if (field === "email" && !value.includes("@")) return false;
+      if (field === "idNumber" && value.length < 4) return false;
+
+      const key = duplicateKey(target, field, value);
+      if (ignoredDuplicateKeys.has(key)) return false;
+
+      const match = lookupDuplicateGuest(field, rawValue, excludeGuestId);
+      if (!match) return false;
+
+      setDuplicatePrompt({
+        guest: match,
+        field,
+        matchValue: value,
+        target,
+      });
+      return true;
+    },
+    [ignoredDuplicateKeys, lookupDuplicateGuest],
+  );
+
+  const applyExistingGuestToPrimary = useCallback(
+    (guest: GuestProfile, alsoWalkIn: boolean) => {
+      const fields = guestToFormFields(guest);
+      const profile = guestProfileToCheckInDetails(guest);
+      setGuestDetails({
+        firstName: fields.firstName,
+        lastName: fields.lastName,
+        mobile: fields.mobile,
+        email: fields.email,
+        ...profile,
+      });
+      setSelectedStayingGuestId(guest.id);
+      setLockedIdentityFields(profileLockedFields(profile));
+      if (profile.idNumber) setIdFile("On file");
+      if (alsoWalkIn) {
+        setWalkIn((prev) => ({
+          ...prev,
+          firstName: fields.firstName,
+          lastName: fields.lastName,
+          mobile: fields.mobile,
+          email: fields.email,
+        }));
+      }
+      setIdentityErrors({});
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.mobile;
+        delete next.email;
+        delete next.firstName;
+        delete next.lastName;
+        return next;
+      });
+      setToastVariant("success");
+      setToast(`Using existing guest profile: ${guest.name}`);
+    },
+    [],
+  );
+
+  const applyExistingGuestToCompanion = useCallback(
+    (draftId: string, guest: GuestProfile) => {
+      const fields = guestToFormFields(guest);
+      const profile = guestProfileToCheckInDetails(guest);
+      setRoomGuests((prev) =>
+        prev.map((g) =>
+          g.id === draftId
+            ? {
+                ...g,
+                firstName: fields.firstName,
+                lastName: fields.lastName,
+                mobile: fields.mobile,
+                email: fields.email,
+                ...profile,
+              }
+            : g,
+        ),
+      );
+      setCompanionLinkedGuestIds((prev) => ({ ...prev, [draftId]: guest.id }));
+      setRoomGuestErrors((prev) => {
+        const next = { ...prev };
+        for (const key of Object.keys(next)) {
+          if (key.startsWith(`${draftId}.`)) delete next[key];
+        }
+        return next;
+      });
+      setToastVariant("success");
+      setToast(`Linked companion to existing guest: ${guest.name}`);
+    },
+    [],
+  );
+
+  const handlePrimaryIdentityBlur = (
+    field: "mobile" | "email" | "idNumber",
+  ) => {
+    if (lockedIdentityFields[field]) return;
+    const exclude =
+      selectedStayingGuestId || booking?.guestId || undefined;
+    const value = String(guestDetails[field] ?? "");
+    promptIfDuplicate("primary", field, value, exclude);
+  };
+
+  const handleWalkInIdentityBlur = (field: "mobile" | "email") => {
+    if (selectedStayingGuestId) return;
+    const value = field === "mobile" ? walkIn.mobile : walkIn.email;
+    promptIfDuplicate("walkin", field, value, selectedStayingGuestId);
+  };
+
+  const handleCompanionIdentityBlur = (
+    draftId: string,
+    field: "mobile" | "email" | "idNumber",
+  ) => {
+    const companion = roomGuests.find((g) => g.id === draftId);
+    if (!companion) return;
+    const exclude = companionLinkedGuestIds[draftId];
+    promptIfDuplicate(draftId, field, String(companion[field] ?? ""), exclude);
   };
 
   const loadArrival = useCallback(async (found: ReservationBooking) => {
@@ -373,13 +682,26 @@ export function CheckInForm() {
     setLookupError("");
     setErrors({});
     setIdentityErrors({});
+    setRoomGuestErrors({});
+    setRoomGuests([]);
+    setCompanionLinkedGuestIds({});
+    setSelectedStayingGuestId(bookingRecord.guestId || null);
+    setIgnoredDuplicateKeys(new Set());
+    setDuplicatePrompt(null);
     setGuestDetails(guestDetailsFromBooking(bookingRecord));
 
     if (bookingRecord.guestId) {
       try {
         const guest = await guestService.get(bookingRecord.guestId);
         const profileDetails = guestProfileToCheckInDetails(guest);
-        setGuestDetails(mergeGuestDetails(bookingRecord, profileDetails));
+        setGuestDetails(
+          mergeGuestDetails(bookingRecord, {
+            ...profileDetails,
+            name: guest.name,
+            mobile: guest.mobile,
+            email: guest.email,
+          }),
+        );
         setLockedIdentityFields(profileLockedFields(profileDetails));
         if (profileDetails.idNumber) {
           setIdFile("On file");
@@ -399,30 +721,60 @@ export function CheckInForm() {
   }, []);
 
   useEffect(() => {
-    if (!prefillBookingKey || pmsBookings.length === 0) return;
+    if (!prefillBookingKey || !bookingsReady) return;
     if (prefillAttempted.current === prefillBookingKey) return;
 
-    const eligible = pmsBookings.filter((b) => isEligibleForCheckIn(b.status));
-    const foundRecord = findBookingByQuery(
-      eligible.map(reservationToLookupRecord),
-      prefillBookingKey,
-    );
-    const found = foundRecord
-      ? eligible.find((b) => b.id === foundRecord.id)
-      : undefined;
+    let cancelled = false;
 
-    if (found) {
+    const run = async () => {
+      const fromList = findBookingInList(
+        pmsBookings as ReservationBooking[],
+        prefillBookingKey,
+      );
+
+      let candidate = fromList ?? null;
+      if (!candidate) {
+        try {
+          candidate = await reservationService.get(prefillBookingKey);
+        } catch {
+          candidate = null;
+        }
+      }
+
+      if (cancelled) return;
+
+      if (!candidate) {
+        prefillAttempted.current = prefillBookingKey;
+        setCheckInMode("reserved");
+        const msg =
+          "Booking was not found for check-in. It may belong to another property or was removed.";
+        setLookupError(msg);
+        setToastVariant("error");
+        setToast(msg);
+        return;
+      }
+
+      if (!isEligibleForCheckIn(candidate.status)) {
+        prefillAttempted.current = prefillBookingKey;
+        setCheckInMode("reserved");
+        const label = displayBookingNo(candidate);
+        const msg = `Booking ${label} is “${candidate.status || "unknown"}” and cannot be checked in.`;
+        setLookupError(msg);
+        setToastVariant("error");
+        setToast(msg);
+        return;
+      }
+
       prefillAttempted.current = prefillBookingKey;
-      void loadArrival(found);
-      return;
-    }
+      setLookupError("");
+      void loadArrival(candidate);
+    };
 
-    prefillAttempted.current = prefillBookingKey;
-    setCheckInMode("reserved");
-    setLookupError(
-      `Booking "${prefillBookingKey}" was not found or is not eligible for check-in.`,
-    );
-  }, [prefillBookingKey, pmsBookings, loadArrival]);
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [prefillBookingKey, pmsBookings, bookingsReady, loadArrival]);
 
   const handleLookupBooking = (idToSearch?: string) => {
     const query = (idToSearch ?? bookingId).trim();
@@ -431,18 +783,41 @@ export function CheckInForm() {
       return;
     }
 
-    const foundRecord = findBookingByQuery(lookupPool, query);
-    const found = foundRecord
-      ? eligibleArrivals.find((b) => b.id === foundRecord.id)
-      : undefined;
+    const found =
+      findBookingInList(eligibleArrivals as ReservationBooking[], query) ??
+      findBookingInList(pmsBookings as ReservationBooking[], query);
 
-    if (found) {
+    if (found && isEligibleForCheckIn(found.status)) {
+      setLookupError("");
       void loadArrival(found);
-    } else {
-      setLookupError(
-        `No active arrival found matching "${query}". Try booking ID, name, phone, or email — or switch to Walk-in.`,
-      );
+      return;
     }
+
+    if (found && !isEligibleForCheckIn(found.status)) {
+      const msg = `Booking ${displayBookingNo(found)} is “${found.status}” and cannot be checked in.`;
+      setLookupError(msg);
+      showToast(msg, "error");
+      return;
+    }
+
+    // Direct fetch for pasted UUID / deep link
+    void (async () => {
+      try {
+        const remote = await reservationService.get(query);
+        if (!isEligibleForCheckIn(remote.status)) {
+          const msg = `Booking ${displayBookingNo(remote)} is “${remote.status}” and cannot be checked in.`;
+          setLookupError(msg);
+          showToast(msg, "error");
+          return;
+        }
+        setLookupError("");
+        void loadArrival(remote);
+      } catch {
+        const msg = `No active arrival found matching "${query}". Try booking ID, name, phone, or email — or switch to Walk-in.`;
+        setLookupError(msg);
+        showToast(msg, "error");
+      }
+    })();
   };
 
   const showToast = (message: string, variant: "success" | "error" = "success") => {
@@ -450,10 +825,22 @@ export function CheckInForm() {
     setToast(message);
   };
 
+  const isGroupBooking = Boolean(booking?.groupId);
+  const groupOwnerName = isGroupBooking
+    ? String(booking?.guestName || "").trim() || "Group owner"
+    : "";
+
   const handleCompleteCheckIn = async () => {
+    const stayingGuestName = formatRoomGuestName({
+      firstName: guestDetails.firstName,
+      lastName: guestDetails.lastName,
+    });
+
     const guestNameForApi =
       checkInMode === "reserved"
-        ? (booking?.guestName ?? "Guest")
+        ? isGroupBooking
+          ? stayingGuestName || "Guest"
+          : (booking?.guestName ?? "Guest")
         : walkInGuestName;
     const roomForApi =
       checkInMode === "reserved"
@@ -461,7 +848,7 @@ export function CheckInForm() {
         : walkIn.room || assignedRoom;
 
     const newErrors: Record<string, string> = {};
-    const todayStr = todayIso();
+    const contactErrors: Record<string, string> = {};
 
     if (checkInMode === "walkin") {
       if (!walkIn.firstName.trim()) {
@@ -483,6 +870,28 @@ export function CheckInForm() {
       }
       if (walkIn.bookingType === "Company" && !walkIn.companyId) {
         newErrors.companyName = "Please select a company.";
+      }
+    }
+
+    if (checkInMode === "reserved" && isGroupBooking && !booking?.guestId) {
+      if (!String(guestDetails.firstName ?? "").trim()) {
+        contactErrors.firstName = "Required";
+      }
+      if (!String(guestDetails.lastName ?? "").trim()) {
+        contactErrors.lastName = "Required";
+      }
+      const mob = String(guestDetails.mobile ?? "").replace(/\D/g, "");
+      if (!mob) {
+        contactErrors.mobile = "Required";
+      } else if (mob.length !== 10) {
+        contactErrors.mobile = "Must be 10 digits";
+      }
+      if (!String(guestDetails.email ?? "").trim()) {
+        contactErrors.email = "Required";
+      } else if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(guestDetails.email).trim())
+      ) {
+        contactErrors.email = "Invalid email";
       }
     }
 
@@ -511,19 +920,109 @@ export function CheckInForm() {
     if (checkInMode === "walkin" && !walkIn.paymentMode) {
       missingLabels.push("Payment Mode");
     }
+    if (Object.keys(contactErrors).length) {
+      missingLabels.unshift("Guest name / contact");
+    }
 
-    setIdentityErrors(Object.fromEntries(missingIdentity.map(([key]) => [key, true])));
+    const companionFieldErrors: Record<string, string> = {};
+    const companionRequired: Array<[keyof GuestDetails, string]> = [
+      ["firstName", "First name"],
+      ["lastName", "Last name"],
+      ["mobile", "Mobile"],
+      ["email", "Email"],
+      ...identityFields,
+    ];
+    for (const companion of roomGuests) {
+      for (const [key, label] of companionRequired) {
+        const raw = String(companion[key] ?? "").trim();
+        if (!raw) {
+          companionFieldErrors[`${companion.id}.${key}`] = "Required";
+          continue;
+        }
+        if (key === "mobile") {
+          const digits = raw.replace(/\D/g, "");
+          if (digits.length !== 10) {
+            companionFieldErrors[`${companion.id}.mobile`] = "Must be 10 digits";
+          }
+        }
+        if (key === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+          companionFieldErrors[`${companion.id}.email`] = "Invalid email";
+        }
+      }
+    }
+    if (Object.keys(companionFieldErrors).length) {
+      missingLabels.push("Additional guest details");
+    }
 
-    if (missingLabels.length > 0) {
+    setIdentityErrors({
+      ...Object.fromEntries(missingIdentity.map(([key]) => [key, true])),
+      ...contactErrors,
+    });
+    setRoomGuestErrors(companionFieldErrors);
+    setErrors(newErrors);
+
+    if (
+      missingLabels.length > 0 ||
+      Object.keys(newErrors).length > 0 ||
+      Object.keys(companionFieldErrors).length > 0
+    ) {
       showToast(
         missingLabels.length === 1
           ? `${missingLabels[0]} is required.`
-          : `Please complete ${missingLabels.length} required fields: ${missingLabels.join(", ")}.`,
+          : `Please complete required fields: ${missingLabels.slice(0, 4).join(", ")}${missingLabels.length > 4 ? "…" : ""}.`,
         "error",
       );
       return;
     }
     setErrors({});
+
+    // Block create if an unresolved duplicate exists — ask clerk first
+    if (!selectedStayingGuestId) {
+      const primaryExclude = booking?.guestId || undefined;
+      const contactFields: Array<"mobile" | "email" | "idNumber"> = [
+        "mobile",
+        "email",
+        "idNumber",
+      ];
+      for (const field of contactFields) {
+        const raw =
+          checkInMode === "walkin" && (field === "mobile" || field === "email")
+            ? field === "mobile"
+              ? walkIn.mobile
+              : walkIn.email
+            : String(guestDetails[field] ?? "");
+        const target =
+          checkInMode === "walkin" && (field === "mobile" || field === "email")
+            ? "walkin"
+            : "primary";
+        if (promptIfDuplicate(target, field, raw, primaryExclude)) {
+          showToast(
+            "Matching guest found — choose existing profile or continue as new.",
+            "error",
+          );
+          return;
+        }
+      }
+    }
+    for (const companion of roomGuests) {
+      if (companionLinkedGuestIds[companion.id]) continue;
+      for (const field of ["mobile", "email", "idNumber"] as const) {
+        if (
+          promptIfDuplicate(
+            companion.id,
+            field,
+            String(companion[field] ?? ""),
+            null,
+          )
+        ) {
+          showToast(
+            "Matching guest found for an additional guest — choose existing or continue as new.",
+            "error",
+          );
+          return;
+        }
+      }
+    }
 
     try {
       const guestPayload = {
@@ -539,39 +1038,125 @@ export function CheckInForm() {
         idNumber: guestDetails.idNumber,
       };
 
+      const roomGuestNotes = serializeRoomGuests(guestDetails, roomGuests);
+      const remarksWithGuests = [remarks.trim(), roomGuestNotes]
+        .filter(Boolean)
+        .join("\n\n");
+
+      async function createCompanionGuestIds(): Promise<string[]> {
+        const ids: string[] = [];
+        for (const companion of roomGuests) {
+          const linked = companionLinkedGuestIds[companion.id];
+          if (linked) {
+            ids.push(linked);
+            continue;
+          }
+          const name =
+            formatRoomGuestName(companion) ||
+            `Companion ${ids.length + 1}`;
+          const created = await guestService.create({
+            name,
+            email: String(companion.email ?? "").trim() || undefined,
+            mobile: String(companion.mobile ?? "").replace(/\D/g, ""),
+            nationality: companion.nationality || undefined,
+            gender: companion.gender || undefined,
+            dob: companion.dob || undefined,
+            address: companion.address || undefined,
+            city: companion.city || undefined,
+            state: companion.state || undefined,
+            country: companion.country || undefined,
+            pincode: companion.pincode || undefined,
+            idType: companion.idProofType || undefined,
+            idNumber: companion.idNumber || undefined,
+          });
+          if (created?.id) ids.push(created.id);
+        }
+        return ids;
+      }
+
       if (checkInMode === "reserved" && booking) {
         const roomRefId =
           (roomForApi && roomIdByNo[roomForApi]) || roomForApi || undefined;
+
+        let guestId =
+          booking.guestId || selectedStayingGuestId || undefined;
+
+        if (!guestId && isGroupBooking) {
+          const createdGuest = await guestService.create({
+            name: guestNameForApi,
+            email: String(guestDetails.email ?? "").trim() || undefined,
+            mobile: String(guestDetails.mobile ?? "").replace(/\D/g, ""),
+            nationality: guestDetails.nationality || undefined,
+            gender: guestDetails.gender || undefined,
+            dob: guestDetails.dob || undefined,
+            address: guestDetails.address || undefined,
+            city: guestDetails.city || undefined,
+            state: guestDetails.state || undefined,
+            country: guestDetails.country || undefined,
+            pincode: guestDetails.pincode || undefined,
+            idType: guestDetails.idProofType || undefined,
+            idNumber: guestDetails.idNumber || undefined,
+          });
+          guestId = createdGuest.id;
+          await reservationService.update(booking.id, {
+            guestId,
+            specialRequests: remarksWithGuests || undefined,
+          } as Partial<ReservationBooking>);
+        } else if (
+          selectedStayingGuestId &&
+          selectedStayingGuestId !== booking.guestId
+        ) {
+          guestId = selectedStayingGuestId;
+          await reservationService.update(booking.id, {
+            guestId,
+            specialRequests: remarksWithGuests || undefined,
+          } as Partial<ReservationBooking>);
+        } else if (remarksWithGuests) {
+          await reservationService.update(booking.id, {
+            specialRequests: remarksWithGuests,
+          } as Partial<ReservationBooking>);
+        }
+
+        const companionGuestIds = await createCompanionGuestIds();
+
         await reservationService.checkIn(booking.id, {
           roomRefId,
+          guestId,
+          companionGuestIds,
           ...guestPayload,
-        } as Partial<ReservationBooking>);
+        });
       } else {
         const checkIn = formatStayDate(new Date());
         const checkOutDate = new Date();
         checkOutDate.setDate(checkOutDate.getDate() + walkIn.nights);
         const checkOut = formatStayDate(checkOutDate);
 
-        const guest = await guestService.create({
-          name: guestNameForApi,
-          email: walkIn.email || undefined,
-          mobile: walkIn.mobile,
-          nationality: guestDetails.nationality || undefined,
-          gender: guestDetails.gender || undefined,
-          dob: guestDetails.dob || undefined,
-          address: guestDetails.address || undefined,
-          city: guestDetails.city || undefined,
-          state: guestDetails.state || undefined,
-          country: guestDetails.country || undefined,
-          pincode: guestDetails.pincode || undefined,
-          idType: guestDetails.idProofType || undefined,
-          idNumber: guestDetails.idNumber || undefined,
-        });
+        let walkInGuestId = selectedStayingGuestId || "";
+        if (!walkInGuestId) {
+          const guest = await guestService.create({
+            name: guestNameForApi,
+            email: walkIn.email || undefined,
+            mobile: walkIn.mobile,
+            nationality: guestDetails.nationality || undefined,
+            gender: guestDetails.gender || undefined,
+            dob: guestDetails.dob || undefined,
+            address: guestDetails.address || undefined,
+            city: guestDetails.city || undefined,
+            state: guestDetails.state || undefined,
+            country: guestDetails.country || undefined,
+            pincode: guestDetails.pincode || undefined,
+            idType: guestDetails.idProofType || undefined,
+            idNumber: guestDetails.idNumber || undefined,
+          });
+          walkInGuestId = guest.id;
+        }
+
+        const companionGuestIds = await createCompanionGuestIds();
 
         const walkInRoomRef =
           (roomForApi && roomIdByNo[roomForApi]) || roomForApi || undefined;
         const created = await reservationService.create({
-          guestId: guest.id,
+          guestId: walkInGuestId,
           roomRefId: walkInRoomRef,
           checkIn,
           checkOut,
@@ -584,10 +1169,12 @@ export function CheckInForm() {
           source: "Walk-in",
           bookingType: walkIn.bookingType || "Individual",
           companyName: walkIn.companyName || undefined,
+          specialRequests: remarksWithGuests || undefined,
         } as Partial<ReservationBooking>);
         await reservationService.checkIn(created.id, {
           roomRefId: walkInRoomRef,
-        } as Partial<ReservationBooking>);
+          companionGuestIds,
+        });
       }
 
       setCompleted(true);
@@ -602,29 +1189,41 @@ export function CheckInForm() {
     }
   };
 
-  const availableRoomNumbers = useMemo(() => {
+  const assignableRooms = useMemo(() => {
     const type = String(walkIn.roomType || booking?.roomType || "").trim();
     const matchingType = type
       ? availableRooms.filter(
         (r) => r.roomType?.toLowerCase() === type.toLowerCase(),
       )
       : [];
-    // Prefer same room type; if none vacant, show all vacant rooms
     const pool = matchingType.length > 0 ? matchingType : availableRooms;
-    const list = pool.map((r) => r.roomNo);
+    const list: { roomNo: string; roomType?: string }[] = pool.map((r) => ({
+      roomNo: r.roomNo,
+      roomType: r.roomType,
+    }));
 
-    // Keep a already-selected real vacant room visible if status just changed
     const selected = String(assignedRoom || "").trim();
     const isPlaceholder =
       !selected ||
       /^tba$/i.test(selected) ||
       /^n\/?a$/i.test(selected) ||
       /^unassigned$/i.test(selected);
-    if (!isPlaceholder && !list.includes(selected)) {
-      list.unshift(selected);
+    if (
+      !isPlaceholder &&
+      !list.some((r) => r.roomNo === selected)
+    ) {
+      const fromAll = availableRooms.find((r) => r.roomNo === selected);
+      list.unshift({
+        roomNo: selected,
+        roomType: fromAll?.roomType || type || undefined,
+      });
     }
     return list;
   }, [availableRooms, walkIn.roomType, booking?.roomType, assignedRoom]);
+
+  const preferredRoomType = String(
+    walkIn.roomType || booking?.roomType || "",
+  ).trim();
 
   const reservedRoomDisplay = useMemo(() => {
     const roomKey = String(assignedRoom || booking?.roomNo || "").trim();
@@ -658,8 +1257,8 @@ export function CheckInForm() {
                 Arriving today
               </p>
               <p className="text-sm font-semibold text-slate-800">
-                {arrivalsToday.length} guest
-                {arrivalsToday.length !== 1 ? "s" : ""}
+                {arrivalsTodayCount} arrival
+                {arrivalsTodayCount !== 1 ? "s" : ""}
               </p>
             </div>
           </div>
@@ -722,18 +1321,9 @@ export function CheckInForm() {
               setBookingId("");
               setLockedIdentityFields({});
               setIdFile("");
-              setGuestDetails({
-                gender: "",
-                dob: "",
-                nationality: "",
-                address: "",
-                city: "",
-                state: "",
-                country: "",
-                pincode: "",
-                idProofType: "",
-                idNumber: "",
-              });
+              setGuestDetails({ ...emptyGuestDetails });
+              setRoomGuests([]);
+              setRoomGuestErrors({});
               setWalkIn({ ...defaultWalkIn });
               setWalkInRef(generateWalkInRef());
             }}
@@ -779,18 +1369,9 @@ export function CheckInForm() {
                     setBooking(null);
                     setLookupError("");
                     setLockedIdentityFields({});
-                    setGuestDetails({
-                      gender: "",
-                      dob: "",
-                      nationality: "",
-                      address: "",
-                      city: "",
-                      state: "",
-                      country: "",
-                      pincode: "",
-                      idProofType: "",
-                      idNumber: "",
-                    });
+                    setGuestDetails({ ...emptyGuestDetails });
+                    setRoomGuests([]);
+                    setRoomGuestErrors({});
                     setIdFile("");
                   }}
                   onEnter={() => handleLookupBooking()}
@@ -851,28 +1432,160 @@ export function CheckInForm() {
                     <Calendar className="h-4 w-4" />
                   </button>
                   <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
-                    {arrivalsOnSelectedDate.length}
+                    {arrivalListRows.length}
                   </span>
                 </div>
               </div>
               <div className="space-y-2">
-                {arrivalsOnSelectedDate.length === 0 ? (
+                {arrivalListRows.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-emerald-200 bg-white/60 px-3 py-6 text-center text-xs text-slate-500">
                     {isSelectedArrivalDateToday
                       ? "No expected arrivals for today."
                       : "No expected arrivals on this date."}
                   </p>
                 ) : (
-                  arrivalsOnSelectedDate.map((arr) => {
+                  arrivalListRows.map((row) => {
+                    if (row.kind === "group") {
+                      const expanded = expandedArrivalGroups.has(row.groupId);
+                      const childSelected = row.children.some(
+                        (c) => booking?.id === c.id,
+                      );
+                      const totalAmount = row.children.reduce(
+                        (sum, c) => sum + Number(c.totalAmount ?? 0),
+                        0,
+                      );
+                      const checkIn = row.children
+                        .map((c) => c.checkIn)
+                        .filter(Boolean)
+                        .sort()[0];
+                      return (
+                        <div
+                          key={`g-${row.groupId}`}
+                          className={cn(
+                            "overflow-hidden rounded-xl border transition-all",
+                            childSelected
+                              ? "border-indigo-300 bg-indigo-50/40 ring-2 ring-indigo-100"
+                              : "border-white/80 bg-white",
+                          )}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExpandedArrivalGroups((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(row.groupId)) next.delete(row.groupId);
+                                else next.add(row.groupId);
+                                return next;
+                              });
+                            }}
+                            className="flex w-full items-start gap-3 p-3.5 text-left hover:bg-indigo-50/50"
+                          >
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-slate-800 text-sm font-bold text-white">
+                              {getInitials(row.groupName)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <p className="truncate font-semibold text-slate-900">
+                                  {row.groupName}
+                                </p>
+                                <ChevronDown
+                                  className={cn(
+                                    "h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform",
+                                    expanded && "rotate-180",
+                                  )}
+                                />
+                              </div>
+                              <p className="text-xs text-slate-500">
+                                {[
+                                  row.groupNo,
+                                  `${row.children.length} room${row.children.length === 1 ? "" : "s"}`,
+                                  checkIn ? `In ${checkIn}` : "",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </p>
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
+                                  <Users className="h-2.5 w-2.5" />
+                                  Group
+                                </span>
+                                {totalAmount > 0 ? (
+                                  <span className="text-xs font-semibold text-emerald-700">
+                                    {formatINR(totalAmount)}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          </button>
+
+                          {expanded ? (
+                            <div className="space-y-1.5 border-t border-indigo-100/80 bg-white/70 px-2.5 py-2">
+                              {row.children.map((arr) => {
+                                const isSelected = booking?.id === arr.id;
+                                const roomLabel =
+                                  arr.roomNo && arr.roomNo !== "TBA"
+                                    ? `Room ${arr.roomNo}`
+                                    : arr.roomType || "Room TBA";
+                                return (
+                                  <button
+                                    key={arr.id}
+                                    type="button"
+                                    onClick={() => void loadArrival(arr)}
+                                    className={cn(
+                                      "w-full rounded-lg border px-3 py-2.5 text-left transition-all",
+                                      isSelected
+                                        ? "border-emerald-300 bg-emerald-50 ring-1 ring-emerald-100"
+                                        : "border-slate-100 bg-white hover:border-emerald-200 hover:bg-emerald-50/40",
+                                    )}
+                                  >
+                                    <div className="flex items-start gap-2.5">
+                                      <div
+                                        className={cn(
+                                          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold",
+                                          isSelected
+                                            ? "bg-emerald-700 text-white"
+                                            : "bg-slate-100 text-slate-600",
+                                        )}
+                                      >
+                                        <BedDouble className="h-3.5 w-3.5" />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-semibold text-slate-900">
+                                          {roomLabel}
+                                        </p>
+                                        <p className="truncate text-[11px] text-slate-500">
+                                          {formatBookingGuestLine(arr)}
+                                          {arr.guestName
+                                            ? ` · ${arr.guestName}`
+                                            : ""}
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] font-semibold text-emerald-700">
+                                          {arr.roomType}
+                                          {typeof arr.totalAmount === "number"
+                                            ? ` · ${formatINR(arr.totalAmount)}`
+                                            : ""}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    }
+
+                    const arr = row.booking;
                     const isSelected = booking?.id === arr.id;
                     const roomLabel =
                       arr.roomNo && arr.roomNo !== "TBA"
                         ? `Room ${arr.roomNo}`
                         : arr.roomType || "Room TBA";
                     return (
-                        <button
-                          key={arr.id}
-                          type="button"
+                      <button
+                        key={arr.id}
+                        type="button"
                         onClick={() => void loadArrival(arr)}
                         className={cn(
                           "w-full rounded-xl border p-3.5 text-left transition-all",
@@ -897,7 +1610,7 @@ export function CheckInForm() {
                               <p className="truncate font-semibold text-slate-900">
                                 {arr.guestName}
                               </p>
-                              {arr.isVip && (
+                              {(arr as { isVip?: boolean }).isVip && (
                                 <Crown className="h-3.5 w-3.5 text-amber-500" />
                               )}
                             </div>
@@ -914,14 +1627,14 @@ export function CheckInForm() {
                                 ? ` · ${formatINR(arr.totalAmount)}`
                                 : ""}
                             </p>
-                    </div>
-                  </div>
-                        </button>
+                          </div>
+                        </div>
+                      </button>
                     );
                   })
                 )}
-                    </div>
-                  </div>
+              </div>
+            </div>
           </div>
 
           {/* Right — guest card & registration form */}
@@ -944,18 +1657,30 @@ export function CheckInForm() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex min-w-0 items-center gap-4">
                       <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-lg font-bold text-white">
-                        {getInitials(booking.guestName)}
+                        {getInitials(
+                          isGroupBooking ? groupOwnerName : booking.guestName,
+                        )}
                       </div>
                       <div className="min-w-0">
+                        {isGroupBooking ? (
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            Group owner
+                            {booking.groupName ? ` · ${booking.groupName}` : ""}
+                          </p>
+                        ) : null}
                         <div className="flex items-center gap-2">
                           <p className="truncate text-lg font-bold text-slate-900">
-                            {booking.guestName}
+                            {isGroupBooking
+                              ? groupOwnerName
+                              : booking.guestName}
                           </p>
                           {(booking as { isVip?: boolean }).isVip && (
                             <Crown className="h-4 w-4 shrink-0 text-amber-500" />
-                )}
-              </div>
-                        <p className="text-sm text-slate-500">{formatBookingGuestLine(booking)}</p>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-500">
+                          {formatBookingGuestLine(booking)}
+                        </p>
                       </div>
                     </div>
                     <button
@@ -965,7 +1690,13 @@ export function CheckInForm() {
                         setBookingId("");
                         setLookupError("");
                         setLockedIdentityFields({});
+                        setRoomGuests([]);
+                        setRoomGuestErrors({});
                         setGuestDetails({
+                          firstName: "",
+                          lastName: "",
+                          mobile: "",
+                          email: "",
                           gender: "",
                           dob: "",
                           nationality: "",
@@ -1022,16 +1753,24 @@ export function CheckInForm() {
 
                 <SectionCard
                   icon={UserCheck}
-                  title="Identity & Registration"
+                  title={
+                    isGroupBooking
+                      ? "Guest staying in this room"
+                      : "Identity & Registration"
+                  }
                   description={
-                    hasLockedProfileFields
-                      ? "Known guest details are loaded from profile and cannot be changed here."
-                      : "Verify guest identification and address credentials."
+                    isGroupBooking
+                      ? "One form for the guest in this room. Add companions below if needed."
+                      : hasLockedProfileFields
+                        ? "Known guest details are loaded from profile and cannot be changed here."
+                        : "Verify guest identification and address credentials."
                   }
                 >
                   <GuestDetailsSection
                     guestDetails={guestDetails}
+                    includeContact={isGroupBooking}
                     onChange={handleGuestDetailChange}
+                    onIdentityBlur={handlePrimaryIdentityBlur}
                     onFileUpload={(fn) => {
                       setIdFile(fn);
                       if (errors.idFile) {
@@ -1042,12 +1781,29 @@ export function CheckInForm() {
                     errors={identityErrors}
                     readOnlyFields={lockedIdentityFields}
                   />
+                  <RoomGuestsSection
+                    guests={roomGuests}
+                    onChange={(next) => {
+                      setRoomGuests(next);
+                      setRoomGuestErrors({});
+                      setCompanionLinkedGuestIds((prev) => {
+                        const keep = new Set(next.map((g) => g.id));
+                        const updated: Record<string, string> = {};
+                        for (const [id, guestId] of Object.entries(prev)) {
+                          if (keep.has(id)) updated[id] = guestId;
+                        }
+                        return updated;
+                      });
+                    }}
+                    errors={roomGuestErrors}
+                    onIdentityBlur={handleCompanionIdentityBlur}
+                  />
             </SectionCard>
 
                 <SectionCard
                   icon={KeyRound}
-                  title="Room Assignment & Keycard"
-                  description="Assign clean ready room and encode keycard RFID."
+                  title="Room Assignment"
+                  description="Pick a vacant room and note any special requests."
                 >
                   <RoomAssignmentSection
                     assignedRoom={assignedRoom}
@@ -1057,13 +1813,10 @@ export function CheckInForm() {
                         setErrors((p) => ({ ...p, room: "" }));
                       }
                     }}
-                    keyCard={keyCard}
-                    onKeyCardChange={setKeyCard}
-                    vehicle={vehicle}
-                    onVehicleChange={setVehicle}
                     remarks={remarks}
                     onRemarksChange={setRemarks}
-                    availableRooms={availableRoomNumbers}
+                    availableRooms={assignableRooms}
+                    preferredRoomType={preferredRoomType}
                   />
                 </SectionCard>
 
@@ -1135,10 +1888,12 @@ export function CheckInForm() {
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, "").slice(0, 10);
                   setWalkIn((p) => ({ ...p, mobile: val }));
+                  setSelectedStayingGuestId(null);
                   if (errors.mobile) {
                     setErrors((p) => ({ ...p, mobile: "" }));
                   }
                 }}
+                onBlur={() => handleWalkInIdentityBlur("mobile")}
                 />
               </FormField>
               <FormField label="Email Address">
@@ -1147,9 +1902,11 @@ export function CheckInForm() {
                   className={inputClass}
                   placeholder="guest@example.com"
                   value={walkIn.email}
-                onChange={(e) =>
-                  setWalkIn((p) => ({ ...p, email: e.target.value }))
-                }
+                onChange={(e) => {
+                  setWalkIn((p) => ({ ...p, email: e.target.value }));
+                  setSelectedStayingGuestId(null);
+                }}
+                onBlur={() => handleWalkInIdentityBlur("email")}
                 />
               </FormField>
             <FormField label="Booking Type" required error={errors.bookingType}>
@@ -1224,6 +1981,7 @@ export function CheckInForm() {
             <GuestDetailsSection
               guestDetails={guestDetails}
               onChange={handleGuestDetailChange}
+              onIdentityBlur={handlePrimaryIdentityBlur}
               onFileUpload={(fn) => {
                 setIdFile(fn);
                 if (errors.idFile) {
@@ -1232,24 +1990,22 @@ export function CheckInForm() {
               }}
               idFile={idFile}
               errors={identityErrors}
+              readOnlyFields={lockedIdentityFields}
             />
           </SectionCard>
 
           <SectionCard
             icon={KeyRound}
-            title="Room Assignment & Keycard"
-            description="Assign clean ready room and encode keycard RFID."
+            title="Room Assignment"
+            description="Pick a vacant room and note any special requests."
           >
             <RoomAssignmentSection
               assignedRoom={assignedRoom}
               onAssignedRoomChange={setAssignedRoom}
-              keyCard={keyCard}
-              onKeyCardChange={setKeyCard}
-              vehicle={vehicle}
-              onVehicleChange={setVehicle}
               remarks={remarks}
               onRemarksChange={setRemarks}
-              availableRooms={availableRoomNumbers}
+              availableRooms={assignableRooms}
+              preferredRoomType={preferredRoomType}
             />
           </SectionCard>
 
@@ -1279,6 +2035,37 @@ export function CheckInForm() {
           </div>
         </>
       )}
+
+      <GuestDuplicatePromptModal
+        open={Boolean(duplicatePrompt)}
+        guest={duplicatePrompt?.guest ?? null}
+        field={duplicatePrompt?.field ?? "mobile"}
+        onClose={() => setDuplicatePrompt(null)}
+        onKeepNew={() => {
+          if (!duplicatePrompt) return;
+          const key = duplicateKey(
+            duplicatePrompt.target,
+            duplicatePrompt.field,
+            duplicatePrompt.matchValue,
+          );
+          setIgnoredDuplicateKeys((prev) => new Set(prev).add(key));
+          setDuplicatePrompt(null);
+          setToastVariant("success");
+          setToast("Continuing with new guest details.");
+        }}
+        onUseExisting={() => {
+          if (!duplicatePrompt) return;
+          const { guest, target } = duplicatePrompt;
+          if (target === "primary") {
+            applyExistingGuestToPrimary(guest, false);
+          } else if (target === "walkin") {
+            applyExistingGuestToPrimary(guest, true);
+          } else {
+            applyExistingGuestToCompanion(target, guest);
+          }
+          setDuplicatePrompt(null);
+        }}
+      />
     </div>
   );
 }

@@ -27,6 +27,10 @@ function toOptions(values: readonly string[]) {
 }
 
 export type GuestDetails = {
+  firstName?: string;
+  lastName?: string;
+  mobile?: string;
+  email?: string;
   gender: string;
   dob: string;
   nationality: string;
@@ -46,6 +50,10 @@ interface GuestDetailsSectionProps {
   idFile?: string;
   errors?: Record<string, boolean | string>;
   readOnlyFields?: Partial<Record<keyof GuestDetails, boolean>>;
+  /** Include name / mobile / email at the top (group room guest form). */
+  includeContact?: boolean;
+  /** Fired after mobile / email / ID leave focus — used for duplicate checks. */
+  onIdentityBlur?: (field: "mobile" | "email" | "idNumber") => void;
 }
 
 export function GuestDetailsSection({
@@ -55,6 +63,8 @@ export function GuestDetailsSection({
   idFile,
   errors = {},
   readOnlyFields = {},
+  includeContact = false,
+  onIdentityBlur,
 }: GuestDetailsSectionProps) {
   const isReadOnly = (key: keyof GuestDetails) => Boolean(readOnlyFields[key]);
   const fieldClass = (key: keyof GuestDetails) =>
@@ -73,6 +83,70 @@ export function GuestDetailsSection({
 
   return (
     <>
+      {includeContact ? (
+        <>
+          <FormField label="First name" required error={errors?.firstName}>
+            <TextInput
+              className={fieldClass("firstName")}
+              placeholder="First name"
+              value={guestDetails.firstName ?? ""}
+              readOnly={isReadOnly("firstName")}
+              disabled={isReadOnly("firstName")}
+              onChange={(e) => onChange("firstName", e.target.value)}
+            />
+          </FormField>
+          <FormField label="Last name" required error={errors?.lastName}>
+            <TextInput
+              className={fieldClass("lastName")}
+              placeholder="Last name"
+              value={guestDetails.lastName ?? ""}
+              readOnly={isReadOnly("lastName")}
+              disabled={isReadOnly("lastName")}
+              onChange={(e) => onChange("lastName", e.target.value)}
+            />
+          </FormField>
+          <FormField label="Mobile" required error={errors?.mobile}>
+            <TextInput
+              className={fieldClass("mobile")}
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              placeholder="10-digit mobile"
+              value={guestDetails.mobile ?? ""}
+              readOnly={isReadOnly("mobile")}
+              disabled={isReadOnly("mobile")}
+              onChange={(e) =>
+                onChange(
+                  "mobile",
+                  e.target.value.replace(/\D/g, "").slice(0, 10),
+                )
+              }
+              onBlur={
+                isReadOnly("mobile") || !onIdentityBlur
+                  ? undefined
+                  : () => onIdentityBlur("mobile")
+              }
+            />
+          </FormField>
+          <FormField label="Email" required error={errors?.email}>
+            <TextInput
+              className={fieldClass("email")}
+              type="email"
+              placeholder="guest@email.com"
+              value={guestDetails.email ?? ""}
+              readOnly={isReadOnly("email")}
+              disabled={isReadOnly("email")}
+              onChange={(e) => onChange("email", e.target.value)}
+              onBlur={
+                isReadOnly("email") || !onIdentityBlur
+                  ? undefined
+                  : () => onIdentityBlur("email")
+              }
+            />
+          </FormField>
+        </>
+      ) : null}
+
       <FormField label="Gender" required error={errors?.gender}>
         <SearchSelect
           options={genderOptions}
@@ -196,6 +270,11 @@ export function GuestDetailsSection({
           readOnly={isReadOnly("idNumber")}
           disabled={isReadOnly("idNumber")}
           onChange={(e) => onChange("idNumber", e.target.value)}
+          onBlur={
+            isReadOnly("idNumber") || !onIdentityBlur
+              ? undefined
+              : () => onIdentityBlur("idNumber")
+          }
         />
       </FormField>
 

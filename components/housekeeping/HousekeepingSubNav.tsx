@@ -21,7 +21,7 @@ const housekeepingSubNavItems = [
   { label: "Public Area", href: "/housekeeping/operations/public-cleaning", icon: Layers },
   { label: "Cleaning Inspection", href: "/housekeeping/operations/inspection", icon: UserCheck },
   { label: "Guest Requests", href: "/housekeeping/housekeeping-requests", icon: Bell },
-  { label: "Laundry Flow", href: "/housekeeping/operations/laundry", icon: ArrowRightLeft },
+  { label: "Guest Laundry", href: "/housekeeping/operations/laundry", icon: ArrowRightLeft },
   { label: "Luggage", href: "/housekeeping/luggage-management", icon: Luggage },
   { label: "Maintenance", href: "/housekeeping/maintenance-requests", icon: Wrench },
   { label: "Damage Reports", href: "/housekeeping/operations/damage-reports", icon: AlertTriangle },

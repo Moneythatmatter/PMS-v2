@@ -3,6 +3,14 @@ export { dashboardService } from "./dashboard";
 export { reservationService } from "./reservations";
 export type { InHouseGuestDto } from "./reservations";
 export { roomService } from "./rooms";
+export { groupService } from "./groups";
+export type {
+  FoGroupDto,
+  FoGroupBillingRuleDto,
+  CreateGroupPayload,
+  CreateGroupResult,
+  GroupFolioDto,
+} from "./groups";
 export {
   mastersService,
   roomTypeService,

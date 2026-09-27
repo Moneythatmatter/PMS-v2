@@ -19,6 +19,7 @@ export const updateLaundryStatus = (id: string, newStatus: HKLaundryJob["status"
       if (job.id !== id) return job;
       const tl = { ...job.timeline };
       if (newStatus === "Washing") tl.washedAt = nowStr;
+      if (newStatus === "Ironing" && !tl.washedAt) tl.washedAt = nowStr;
       if (newStatus === "Ready") tl.readyAt = nowStr;
       if (newStatus === "Delivered") tl.deliveredAt = nowStr;
       updatedTimeline = tl;

@@ -42,7 +42,7 @@ import {
   guestToFormFields,
   splitGuestName,
 } from "@/components/frontoffice/guestFormUtils";
-import { SearchSelect } from "@/components/frontoffice/SearchSelect";
+import { SearchSelect, RoomTypeAvailabilityOption } from "@/components/frontoffice/SearchSelect";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -174,6 +174,7 @@ export function NewReservationForm() {
   const [editBookingStatus, setEditBookingStatus] = useState<ReservationStatus | null>(null);
   const [allRoomNos, setAllRoomNos] = useState<string[]>([]);
   const [roomIdByNo, setRoomIdByNo] = useState<Record<string, string>>({});
+  const [typeByRoomNo, setTypeByRoomNo] = useState<Record<string, string>>({});
   const [reservations, setReservations] = useState<ReservationBooking[]>([]);
   const [availabilityBlocks, setAvailabilityBlocks] = useState<RoomAvailabilityBlock[]>([]);
   const [tariffByPlanMap, setTariffByPlanMap] = useState<Record<string, number>>({});
@@ -355,11 +356,13 @@ export function NewReservationForm() {
         const byType: Record<string, string[]> = {};
         const nos: string[] = [];
         const idByNo: Record<string, string> = {};
+        const typeByNo: Record<string, string> = {};
         for (const r of roomCards) {
           if (!isRoomSellableStatus(r.status)) continue;
           nos.push(r.roomNo);
           if (r.id) idByNo[r.roomNo] = r.id;
           const key = r.type || "Other";
+          typeByNo[r.roomNo] = key;
           if (!byType[key]) byType[key] = [];
           byType[key].push(r.roomNo);
         }
@@ -368,6 +371,7 @@ export function NewReservationForm() {
         }
         setAllRoomNos(nos.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
         setRoomIdByNo(idByNo);
+        setTypeByRoomNo(typeByNo);
         setAllRoomsByType(byType);
 
         const roomRates: Record<string, number> = {};
@@ -430,6 +434,7 @@ export function NewReservationForm() {
         if (!cancelled) {
           setAllRoomNos([]);
           setAllRoomsByType({});
+          setTypeByRoomNo({});
           setReservations([]);
         }
       }
@@ -500,7 +505,11 @@ export function NewReservationForm() {
   const pendingAmount = Math.max(0, totalAmount - form.advancePaid);
 
   const filteredRooms = useMemo(() => {
-    const pool = form.roomType ? (allRoomsByType[form.roomType] ?? []) : allRoomNos;
+    // Only available rooms: filter by type when chosen, otherwise all sellable rooms.
+    const pool = form.roomType
+      ? (allRoomsByType[form.roomType] ?? [])
+      : allRoomNos;
+
     if (!form.checkIn || !form.checkOut) return pool;
 
     const checkIn = normalizeToIso(form.checkIn);
@@ -527,32 +536,108 @@ export function NewReservationForm() {
     editBookingId,
   ]);
 
+  const availableByType = useMemo(() => {
+    const map: Record<string, number> = {};
+    const checkIn = normalizeToIso(form.checkIn);
+    const checkOut = normalizeToIso(form.checkOut);
+    const hasStay =
+      Boolean(checkIn) &&
+      Boolean(checkOut) &&
+      Boolean(checkOut && checkIn && checkOut > checkIn);
+
+    for (const type of roomTypeOptions) {
+      const pool = allRoomsByType[type] ?? [];
+      if (!hasStay || !checkIn || !checkOut) {
+        map[type] = pool.length;
+        continue;
+      }
+      map[type] = filterRoomsForStay(
+        pool,
+        reservations,
+        checkIn,
+        checkOut,
+        availabilityBlocks,
+        isEditMode ? editBookingId : undefined,
+      ).length;
+    }
+    return map;
+  }, [
+    roomTypeOptions,
+    allRoomsByType,
+    form.checkIn,
+    form.checkOut,
+    reservations,
+    availabilityBlocks,
+    isEditMode,
+    editBookingId,
+  ]);
+
+  const roomTypeSelectOptions = useMemo(
+    () =>
+      roomTypeOptions.map((t) => ({
+        id: t,
+        label: t,
+        hint: String(availableByType[t] ?? 0),
+      })),
+    [roomTypeOptions, availableByType],
+  );
+
   const roomSelectOptions = useMemo(() => {
     const rooms = [...filteredRooms];
     if (form.roomNumber && !rooms.includes(form.roomNumber)) {
       rooms.unshift(form.roomNumber);
     }
-    return rooms;
-  }, [filteredRooms, form.roomNumber]);
+    return rooms.map((r) => ({
+      id: r,
+      label: `Room ${r}`,
+      hint: typeByRoomNo[r] || form.roomType || undefined,
+    }));
+  }, [filteredRooms, form.roomNumber, form.roomType, typeByRoomNo]);
 
   const roomAvailabilityWarning = useMemo(() => {
-    if (!form.roomType || !form.checkIn || !form.checkOut) return null;
+    if (form.roomType) {
+      const availableCount = availableByType[form.roomType] ?? 0;
 
-    const checkIn = normalizeToIso(form.checkIn);
-    const checkOut = normalizeToIso(form.checkOut);
-    if (!checkIn || !checkOut || checkOut <= checkIn) return null;
+      if (form.checkIn && form.checkOut) {
+        const checkIn = normalizeToIso(form.checkIn);
+        const checkOut = normalizeToIso(form.checkOut);
+        if (checkIn && checkOut && checkOut > checkIn) {
+          if (form.roomNumber && !filteredRooms.includes(form.roomNumber)) {
+            return `Room ${form.roomNumber} is not available for the selected dates. Choose another room or leave blank to save as TBA.`;
+          }
+          if (filteredRooms.length === 0 || availableCount === 0) {
+            return "No room available";
+          }
+          return null;
+        }
+      }
 
-    if (form.roomNumber) {
-      if (filteredRooms.includes(form.roomNumber)) return null;
-      return `Room ${form.roomNumber} is not available for the selected dates. Choose another room or leave blank to save as TBA.`;
+      if (availableCount === 0) {
+        return "No room available";
+      }
+      return null;
     }
 
-    if (filteredRooms.length === 0) {
-      return `No ${form.roomType} rooms available for these dates — booking will be saved as TBA.`;
+    // No type selected — warn when the available-room list is empty for the stay.
+    if (
+      form.checkIn &&
+      form.checkOut &&
+      filteredRooms.length === 0 &&
+      allRoomNos.length > 0
+    ) {
+      return "No room available";
     }
 
     return null;
-  }, [form.roomType, form.checkIn, form.checkOut, form.roomNumber, filteredRooms]);
+  }, [
+    form.roomType,
+    form.checkIn,
+    form.checkOut,
+    form.roomNumber,
+    filteredRooms,
+    availableByType,
+    allRoomNos.length,
+  ]);
 
   const completion = useMemo(() => {
     const fields = [
@@ -579,7 +664,17 @@ export function NewReservationForm() {
 
     setForm((prev) => {
       const next = { ...prev, [field]: value };
-      if (field === "roomType") next.roomNumber = "";
+      if (field === "roomType") {
+        const selectedType = String(value);
+        if (selectedType) {
+          const currentRoomType = prev.roomNumber
+            ? typeByRoomNo[prev.roomNumber]
+            : "";
+          if (!prev.roomNumber || currentRoomType !== selectedType) {
+            next.roomNumber = "";
+          }
+        }
+      }
       if (field === "paymentMode" && !reservationPaymentModesNeedingExternalRef.has(String(value))) {
         next.externalReference = "";
       }
@@ -599,7 +694,7 @@ export function NewReservationForm() {
   };
 
   const applyGuestProfile = (guest: GuestProfile) => {
-    const fields = guestToFormFields(guest);
+    const { title: _title, ...fields } = guestToFormFields(guest);
     setForm((prev) => ({
       ...prev,
       ...fields,
@@ -783,7 +878,7 @@ export function NewReservationForm() {
     setSaving(true);
     try {
       let finalGuestId = form.guestId;
-      const guestNameStr = `${form.firstName} ${form.lastName}`;
+      const guestNameStr = `${form.firstName} ${form.lastName}`.trim();
 
       if (!finalGuestId) {
         const created = await guestService.create({
@@ -1060,7 +1155,9 @@ export function NewReservationForm() {
                   value={form.firstName}
                   onChange={(e) => update("firstName", e.target.value)}
                 />
-                {errors.firstName && <p className="text-xs text-red-500">{errors.firstName}</p>}
+                {errors.firstName && (
+                  <p className="text-xs text-red-500">{errors.firstName}</p>
+                )}
               </FormField>
               <FormField label="Last Name" required>
                 <TextInput
@@ -1197,34 +1294,52 @@ export function NewReservationForm() {
               )}
               <FormField label="Room Type" required>
                 <SearchSelect
-                  options={roomTypeOptions.map((t) => ({ id: t, label: t }))}
+                  options={roomTypeSelectOptions}
                   selectedId={form.roomType || null}
                   placeholder="Search room type…"
                   inputClassName={inputClass}
                   onSelect={(opt) => update("roomType", opt.id)}
                   onClear={() => update("roomType", "")}
+                  renderOption={(opt) => (
+                    <RoomTypeAvailabilityOption
+                      label={opt.label}
+                      count={Number(opt.hint ?? 0)}
+                    />
+                  )}
                 />
                 {errors.roomType && <p className="text-xs text-red-500">{errors.roomType}</p>}
               </FormField>
               <FormField label="Room Number">
                 <SearchSelect
-                  options={roomSelectOptions.map((r) => ({
-                    id: r,
-                    label: `Room ${r}`,
-                    hint: form.roomType || undefined,
-                  }))}
+                  options={roomSelectOptions}
                   selectedId={form.roomNumber || null}
                   placeholder={
-                    form.roomType
-                      ? "Search available room…"
-                      : "Select a room type first…"
+                    filteredRooms.length === 0 &&
+                    (Boolean(form.roomType) ||
+                      Boolean(form.checkIn && form.checkOut))
+                      ? "No room available"
+                      : "Search available room…"
                   }
                   inputClassName={inputClass}
-                  onSelect={(opt) => update("roomNumber", opt.id)}
+                  onSelect={(opt) => {
+                    const roomNo = opt.id;
+                    const inferredType = typeByRoomNo[roomNo] || "";
+                    setForm((prev) => ({
+                      ...prev,
+                      roomNumber: roomNo,
+                      roomType: inferredType || prev.roomType,
+                    }));
+                    setErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.roomType;
+                      return next;
+                    });
+                    setSavedStatus(null);
+                  }}
                   onClear={() => update("roomNumber", "")}
                 />
                 {roomAvailabilityWarning && (
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs font-medium text-red-600">
                     {roomAvailabilityWarning}
                   </p>
                 )}

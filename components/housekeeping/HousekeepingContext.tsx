@@ -119,6 +119,8 @@ interface HousekeepingContextType {
   verifyMaintenanceRequest: (id: string) => void;
   addLaundryJob: (job: Omit<HKLaundryJob, "id" | "status" | "timeline">) => void;
   updateLaundryStatus: (id: string, newStatus: HKLaundryJob["status"]) => void;
+  cancelLaundryJob: (id: string) => void;
+  settleLaundryJob: (id: string, paymentMode: string) => void;
   addLuggageJob: (job: Omit<HKLuggageJob, "id" | "status" | "pickupTime">) => void;
   deliverLuggage: (id: string) => void;
   addDamageReport: (report: DamageReportCreateInput) => void;
@@ -401,6 +403,14 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
     actions.updateLaundryStatus(id, newStatus, laundryJobs, dispatchers);
   };
 
+  const cancelLaundryJob = (id: string) => {
+    actions.cancelLaundryJob(id, dispatchers);
+  };
+
+  const settleLaundryJob = (id: string, paymentMode: string) => {
+    actions.settleLaundryJob(id, paymentMode, laundryJobs, dispatchers);
+  };
+
   const addLuggageJob = (job: Omit<HKLuggageJob, "id" | "status" | "pickupTime">) => {
     actions.addLuggageJob(job, luggageJobs.length, dispatchers);
   };
@@ -567,6 +577,8 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         verifyMaintenanceRequest,
         addLaundryJob,
         updateLaundryStatus,
+        cancelLaundryJob,
+        settleLaundryJob,
         addLuggageJob,
         deliverLuggage,
         addDamageReport,

@@ -4,6 +4,7 @@ export const frontOfficeNavItems: ModuleNavItem[] = [
   { label: "Dashboard", href: "/frontoffice/dashboard", icon: "layout-grid" },
   { label: "Room Availability", href: "/frontoffice/room-availability", icon: "door-open" },
   { label: "Reservations", href: "/frontoffice/reservation", icon: "calendar-check" },
+  { label: "Group Booking", href: "/frontoffice/group-booking", icon: "users" },
   { label: "Check-In", href: "/frontoffice/check-in", icon: "user-check" },
   { label: "Check-Out", href: "/frontoffice/check-out", icon: "log-out" },
   { label: "In-House Guests", href: "/frontoffice/in-house-guests", icon: "users" },

@@ -763,6 +763,14 @@ export default function RoomInspection() {
         }
       />
 
+      {toast && (
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
+      )}
+
       {/* KPI Stats Cards Grid */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatMiniCard label="Awaiting Inspection" value={stats.pending} icon={Clock} accent="#f59e0b" />

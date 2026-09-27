@@ -30,7 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
-import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
+import { TextInput, SelectInput, FormField, TextAreaInput, AlertBanner } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 
 // Mock Data Sets (6 Active Tasks, 5 Recurring, 8 Checklists, 6 Chemicals, 8 Audit Logs)
@@ -152,13 +152,6 @@ export default function DeepCleaningPage() {
   // Toast
   const [toast, setToast] = useState<{ message: string; variant: "success" | "error" | "info" } | null>(null);
 
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
-
   // Update Checklist when Area Type changes
   useEffect(() => {
     if (selectedAreaType === "Kitchen") {
@@ -257,15 +250,12 @@ export default function DeepCleaningPage() {
         </div>
       </div>
 
-      {/* Toast notifier */}
       {toast && (
-        <div className={cn(
-          "fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-xl p-3 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-bottom-2",
-          toast.variant === "success" ? "bg-emerald-600 text-white" : "bg-blue-600 text-white"
-        )}>
-          <CheckCircle2 className="h-4 w-4" />
-          <span>{toast.message}</span>
-        </div>
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       {/* Top 6 KPI Cards */}

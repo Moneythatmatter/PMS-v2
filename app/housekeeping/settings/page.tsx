@@ -36,6 +36,7 @@ import {
   TextAreaInput,
   FOPageHeader,
   StatMiniCard,
+  AlertBanner,
 } from "@/components/frontoffice/ui";
 import {
   INITIAL_HOUSEKEEPING_SETTINGS,
@@ -103,12 +104,6 @@ export default function HousekeepingSettingsPage() {
 
   // Toast
   const [toast, setToast] = useState<{ message: string; variant: "success" | "info" } | null>(null);
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
 
   // Compute Pending Diff Changes
   const pendingChanges = useMemo(() => {
@@ -720,17 +715,12 @@ export default function HousekeepingSettingsPage() {
 
   return (
     <div className="space-y-5 select-none pb-20">
-      {/* Toast Notification */}
       {toast && (
-        <div
-          className={cn(
-            "fixed bottom-20 right-4 z-50 flex items-center gap-2 rounded-xl p-3 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-bottom-2",
-            toast.variant === "success" ? "bg-emerald-600 text-white" : "bg-blue-600 text-white"
-          )}
-        >
-          <CheckCircle2 className="h-4 w-4" />
-          <span>{toast.message}</span>
-        </div>
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       {/* Header */}

@@ -29,6 +29,8 @@ export const housekeepingNavItems: ModuleNavItem[] = [
       { label: "Room Master", href: "/housekeeping/masters/rooms", icon: "bed" },
       { label: "Public Areas", href: "/housekeeping/masters/public-areas", icon: "trees" },
       { label: "Cleaning Checklists", href: "/housekeeping/masters/checklists", icon: "clipboard-list" },
+      { label: "Laundry Items", href: "/housekeeping/masters/laundry-items", icon: "shirt" },
+      { label: "Laundry Pricing", href: "/housekeeping/masters/laundry-pricing", icon: "tag" },
       { label: "Staff & Shifts", href: "/housekeeping/masters/staff", icon: "users" },
     ],
   },

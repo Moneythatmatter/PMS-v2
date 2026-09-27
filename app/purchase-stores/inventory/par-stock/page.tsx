@@ -198,9 +198,7 @@ export default function ParStockPage() {
   return (
     <div className="min-h-screen space-y-6 bg-slate-50/50 p-4 sm:p-6 md:p-8">
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 max-w-md animate-in fade-in slide-in-from-top-3">
-          <AlertBanner variant={toastMessage.variant} message={toastMessage.text} onDismiss={() => setToastMessage(null)} />
-        </div>
+        <AlertBanner variant={toastMessage.variant} message={toastMessage.text} onDismiss={() => setToastMessage(null)} />
       )}
 
       <FOPageHeader

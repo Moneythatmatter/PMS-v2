@@ -12,7 +12,7 @@ const statusStyles: Record<ReservationStatus, string> = {
 };
 
 interface ReservationStatusBadgeProps {
-  status: ReservationStatus;
+  status: ReservationStatus | string;
   className?: string;
 }
 
@@ -20,11 +20,14 @@ export function ReservationStatusBadge({
   status,
   className,
 }: ReservationStatusBadgeProps) {
+  const style =
+    statusStyles[status as ReservationStatus] ??
+    "bg-slate-100 text-slate-600 ring-slate-200";
   return (
     <span
       className={cn(
         "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
-        statusStyles[status],
+        style,
         className,
       )}
     >

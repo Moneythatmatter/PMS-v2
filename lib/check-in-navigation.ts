@@ -24,3 +24,7 @@ export function guestProfileHref(
   if (options?.edit) params.set("edit", "1");
   return `/frontoffice/guest-profiles?${params.toString()}`;
 }
+
+export function guestFolioHref(folio: { id: string }): string {
+  return `/frontoffice/guest-folio?folioId=${encodeURIComponent(folio.id)}`;
+}

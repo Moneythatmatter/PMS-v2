@@ -1,6 +1,7 @@
 export const reservationNavItems = [
   { label: "Dashboard", href: "/frontoffice/dashboard", icon: "layout-grid" },
   { label: "New Reservation", href: "/frontoffice/reservation/new", icon: "calendar-plus" },
+  { label: "Group Booking", href: "/frontoffice/group-booking", icon: "users" },
   { label: "Room Availability", href: "/frontoffice/room-availability", icon: "door-open" },
   { label: "All Bookings", href: "/frontoffice/reservation/all-bookings", icon: "list" },
   { label: "Check-In", href: "/frontoffice/check-in", icon: "log-in" },

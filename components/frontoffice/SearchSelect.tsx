@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { SearchSelect as BaseSearchSelect, type SearchOption } from "@/components/ui/SearchSelect";
 
 export interface SearchSelectOption {
@@ -22,6 +22,7 @@ interface SearchSelectProps {
   /** When a selection exists, lock the input (clear via X only). */
   lockInputWhenSelected?: boolean;
   disabled?: boolean;
+  renderOption?: (option: SearchSelectOption) => ReactNode;
 }
 
 export function SearchSelect({
@@ -35,6 +36,7 @@ export function SearchSelect({
   allowCustom = false,
   lockInputWhenSelected = false,
   disabled = false,
+  renderOption,
 }: SearchSelectProps) {
   const searchOptions: SearchOption[] = useMemo(
     () =>
@@ -61,6 +63,39 @@ export function SearchSelect({
       allowCustom={allowCustom}
       lockInputWhenSelected={lockInputWhenSelected}
       disabled={disabled}
+      renderOption={
+        renderOption
+          ? (opt) =>
+              renderOption(
+                (opt.data as SearchSelectOption) ?? {
+                  id: opt.id,
+                  label: opt.label,
+                  hint: opt.hint,
+                },
+              )
+          : undefined
+      }
     />
+  );
+}
+
+/** Room type row: name + red availability count badge. */
+export function RoomTypeAvailabilityOption({
+  label,
+  count,
+}: {
+  label: string;
+  count: number;
+}) {
+  return (
+    <div className="flex w-full items-center justify-between gap-3">
+      <span className="truncate font-medium text-slate-900">{label}</span>
+      <span
+        className="inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded bg-red-500 px-1.5 text-[11px] font-semibold leading-none text-white"
+        aria-label={`${count} available`}
+      >
+        {count}
+      </span>
+    </div>
   );
 }

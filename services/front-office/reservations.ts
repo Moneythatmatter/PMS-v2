@@ -23,6 +23,19 @@ export type InHouseGuestDto = {
   children: number;
 };
 
+export type ReservationGuestLinkDto = {
+  id: string;
+  reservationId: string;
+  guestId: string;
+  role: "PRIMARY" | "COMPANION" | string;
+  guest?: {
+    id: string;
+    name?: string;
+    mobile?: string;
+    email?: string;
+  };
+};
+
 export const reservationService = {
   list: (status?: string) =>
     api.get<ReservationBooking[]>(
@@ -36,10 +49,15 @@ export const reservationService = {
     api.put<ReservationBooking>(foPath(`/reservations/${id}`), body),
   remove: (id: string) =>
     api.delete<{ id: string }>(foPath(`/reservations/${id}`)),
-  checkIn: (id: string, body?: Partial<ReservationBooking>) =>
+  checkIn: (
+    id: string,
+    body?: Partial<ReservationBooking> & { companionGuestIds?: string[] },
+  ) =>
     api.post<ReservationBooking>(foPath(`/reservations/${id}/check-in`), body ?? {}),
   checkOut: (id: string, body?: Record<string, unknown>) =>
     api.post<ReservationBooking>(foPath(`/reservations/${id}/check-out`), body ?? {}),
+  guests: (id: string) =>
+    api.get<ReservationGuestLinkDto[]>(foPath(`/reservations/${id}/guests`)),
   extendStay: (
     id: string,
     body: { checkOut: string; nights?: number; totalAmount?: number; balance?: number },

@@ -966,19 +966,4 @@ export function ExtendStayView() {
 }
 
 
-export function GroupBookingView() {
-  return (
-    <div className="space-y-4">
-      <FOPageHeader
-        eyebrow="Front Office"
-        title="Group Booking"
-        description="Create and manage group reservations."
-      />
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <p className="text-sm text-slate-500">
-          Group booking module — use New Reservation for individual bookings or contact sales for large groups.
-        </p>
-      </div>
-    </div>
-  );
-}
+export { GroupBookingView } from "./GroupBookingView";

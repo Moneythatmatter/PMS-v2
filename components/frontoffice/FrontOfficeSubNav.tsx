@@ -9,6 +9,7 @@ import {
   List,
   LogIn,
   LogOut,
+  Users,
 } from "lucide-react";
 import { reservationNavItems } from "@/app/data/navigation/reservation";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ const iconMap = {
   list: List,
   "log-in": LogIn,
   "log-out": LogOut,
+  users: Users,
 };
 
 function isNavActive(pathname: string, href: string) {

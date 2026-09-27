@@ -33,3 +33,46 @@ export const PUBLIC_AREA_PRIORITIES: PublicAreaPriority[] = [
   "HIGH",
   "URGENT",
 ];
+
+export const LAUNDRY_ITEM_CATEGORIES = [
+  "Garment",
+  "Uniform",
+  "Soft Furnishing",
+  "Other",
+] as const;
+
+export type LaundryItemCategory = (typeof LAUNDRY_ITEM_CATEGORIES)[number];
+
+export const LAUNDRY_SERVICE_TYPES = [
+  "Ironing",
+  "Washing",
+  "Wash & Iron",
+  "Wash & Fold",
+  "Dry Cleaning",
+] as const;
+
+export type LaundryServiceType = (typeof LAUNDRY_SERVICE_TYPES)[number];
+
+export interface LaundryItemMaster {
+  id: string;
+  itemCode: string;
+  name: string;
+  category: string;
+  description?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LaundryPricingMaster {
+  id: string;
+  itemId: string;
+  serviceType: string;
+  unitPrice: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  /** Enriched client-side from item master */
+  itemName?: string;
+  itemCode?: string;
+}

@@ -29,7 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
-import { TextInput, SelectInput, FormField, TextAreaInput, DigitalSignaturePad } from "@/components/frontoffice/ui";
+import { TextInput, SelectInput, FormField, TextAreaInput, DigitalSignaturePad, AlertBanner } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 
 // Mock Data Sets (6 Active Requisitions, 4 Backorders, 5 Issue Tracking, 8 Stock Availability, 8 Audit Logs)
@@ -159,13 +159,6 @@ export default function RequisitionsPage() {
     return Math.max(0, deptBudget - totalRequestedValue);
   }, [totalRequestedValue, deptBudget]);
 
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
-
   // Filtered Requisitions
   const filteredActiveRequisitions = useMemo(() => {
     return MOCK_ACTIVE_REQUISITIONS.filter((req) => {
@@ -248,15 +241,12 @@ export default function RequisitionsPage() {
         </div>
       </div>
 
-      {/* Toast notifier */}
       {toast && (
-        <div className={cn(
-          "fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-xl p-3 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-bottom-2",
-          toast.variant === "success" ? "bg-emerald-600 text-white" : "bg-blue-600 text-white"
-        )}>
-          <CheckCircle2 className="h-4 w-4" />
-          <span>{toast.message}</span>
-        </div>
+        <AlertBanner
+          variant={toast.variant}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       {/* Top 6 KPI Cards */}
