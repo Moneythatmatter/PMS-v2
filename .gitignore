@@ -44,3 +44,10 @@ next-env.d.ts
 
 # developer guide 
 *.md
+
+
+temporary folder
+
+/lib/laundry-new
+/components/laundry-new
+/app/laundry-new

@@ -112,9 +112,21 @@ function formatFriendlyDate(value?: string | null): string {
 
 function defaultExpectedAt(urgency: LaundryUrgency): string {
   const d = new Date();
-  if (urgency === "Express") d.setHours(d.getHours() + 4);
-  else if (urgency === "Same-Day") d.setHours(18, 0, 0, 0);
-  else {
+  if (urgency === "Same-Day") {
+    // Same-Day turnaround: minimum 6 hours or today evening (whichever is later)
+    const currentHour = d.getHours();
+    if (currentHour < 12) {
+      // Morning order -> ready today by 6:00 PM (18:00)
+      d.setHours(18, 0, 0, 0);
+    } else if (currentHour < 15) {
+      // Early afternoon order -> ready today by 9:00 PM (21:00)
+      d.setHours(21, 0, 0, 0);
+    } else {
+      // Late afternoon / evening order -> 6 hours from now
+      d.setHours(d.getHours() + 6);
+    }
+  } else {
+    // Normal / Standard: Next day 6:00 PM (18:00)
     d.setDate(d.getDate() + 1);
     d.setHours(18, 0, 0, 0);
   }
@@ -513,13 +525,15 @@ export function GuestLaundryView() {
     }
     const urgencyRate: LaundryUrgency = urgency || "Normal";
     const surcharged = calculateSurcharge(base, urgencyRate);
+    const surchargeAmount = roundMoney(surcharged - base);
     const tax = calculateTax(surcharged, LAUNDRY_GST_RATE);
     const total = roundMoney(surcharged + tax);
     return {
+      base: roundMoney(base),
+      surcharge: surchargeAmount,
       subtotal: roundMoney(surcharged),
       tax,
       total,
-      base: roundMoney(base),
     };
   }, [lines, urgency]);
 
@@ -939,7 +953,6 @@ export function GuestLaundryView() {
                 <option value="All">All</option>
                 <option value="Normal">Normal</option>
                 <option value="Same-Day">Same-Day</option>
-                <option value="Express">Express</option>
               </SelectInput>
             </FormField>
             <FormField label="Billing">
@@ -1024,9 +1037,7 @@ export function GuestLaundryView() {
                           <span
                             className={cn(
                               "mt-1 inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-bold",
-                              job.urgency === "Express"
-                                ? "bg-red-50 text-red-700"
-                                : "bg-orange-50 text-orange-700",
+                              "bg-amber-50 text-amber-700",
                             )}
                           >
                             {job.urgency}
@@ -1082,7 +1093,7 @@ export function GuestLaundryView() {
                       </td>
                       <td className="px-4 py-3.5 align-top">
                         {(job.billingStatus ?? "Unbilled") === "Folio" ||
-                        job.billingStatus === "Settled" ? (
+                          job.billingStatus === "Settled" ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
                             <Check className="h-3 w-3" />
                             Folio
@@ -1170,14 +1181,15 @@ export function GuestLaundryView() {
                 <option value="">Select urgency</option>
                 <option value="Normal">Normal (Standard rate)</option>
                 <option value="Same-Day">Same-Day (+25% surcharge)</option>
-                <option value="Express">Express (+55% surcharge)</option>
               </SelectInput>
             </FormField>
-            <FormField label="Expected Delivery" required>
+            <FormField label="Expected Delivery (Auto-calculated)" required>
               <TextInput
                 type="datetime-local"
                 value={expectedAt}
-                onChange={(e) => setExpectedAt(e.target.value)}
+                readOnly
+                disabled
+                className="cursor-not-allowed border-slate-200 bg-slate-100/90 font-medium text-slate-700"
               />
             </FormField>
           </div>
@@ -1244,11 +1256,11 @@ export function GuestLaundryView() {
                               i.name.toLowerCase() === line.name.toLowerCase(),
                           )
                             ? catalogItems.find(
-                                (i) =>
-                                  i.isActive !== false &&
-                                  i.name.toLowerCase() ===
-                                    line.name.toLowerCase(),
-                              )?.name ?? line.name
+                              (i) =>
+                                i.isActive !== false &&
+                                i.name.toLowerCase() ===
+                                line.name.toLowerCase(),
+                            )?.name ?? line.name
                             : line.name
                         }
                         onChange={(e) =>
@@ -1339,17 +1351,41 @@ export function GuestLaundryView() {
               Add Another Item
             </button>
 
-            <div className="mt-4 space-y-1.5 border-t border-slate-100 pt-3 text-sm">
+            <div className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-sm">
               <div className="flex justify-between text-slate-600">
-                <span>Items Base Subtotal</span>
-                <span>{formatINR(pricing.subtotal)}</span>
+                <span>Base Amount</span>
+                <span className="font-medium text-slate-800">{formatINR(pricing.base)}</span>
               </div>
+              <div className="flex justify-between text-slate-600">
+                <span className="flex items-center gap-1.5">
+                  Urgency Surcharge
+                  {urgency === "Same-Day" && (
+                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200">
+                      Same-Day (+25%)
+                    </span>
+                  )}
+                  {(!urgency || urgency === "Normal") && (
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                      Standard (0%)
+                    </span>
+                  )}
+                </span>
+                <span className={cn("font-medium", pricing.surcharge > 0 ? "text-amber-700" : "text-slate-600")}>
+                  {pricing.surcharge > 0 ? `+${formatINR(pricing.surcharge)}` : "₹0.00"}
+                </span>
+              </div>
+              {pricing.surcharge > 0 && (
+                <div className="flex justify-between text-xs text-slate-500">
+                  <span>Taxable Subtotal (Base + Surcharge)</span>
+                  <span className="font-medium text-slate-700">{formatINR(pricing.subtotal)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-slate-600">
                 <span>GST Tax ({Math.round(LAUNDRY_GST_RATE * 100)}%)</span>
-                <span>{formatINR(pricing.tax)}</span>
+                <span className="font-medium text-slate-800">{formatINR(pricing.tax)}</span>
               </div>
               <div className="flex justify-between border-t border-slate-100 pt-2 text-base font-bold">
-                <span className="text-slate-900">Estimated Total Charges</span>
+                <span className="text-slate-900">Total Amount</span>
                 <span className="text-emerald-700">{formatINR(pricing.total)}</span>
               </div>
             </div>
@@ -1477,8 +1513,8 @@ export function GuestLaundryView() {
                   Next:{" "}
                   <strong className="text-slate-900">
                     {displayStage(detailNext) === "Washing" ||
-                    (selectedJob.status === "Collection" &&
-                      detailNext !== "Ironing")
+                      (selectedJob.status === "Collection" &&
+                        detailNext !== "Ironing")
                       ? "Collected"
                       : displayStage(detailNext)}
                   </strong>
@@ -1533,19 +1569,19 @@ export function GuestLaundryView() {
                 {(selectedJob.lineItems?.length
                   ? selectedJob.lineItems
                   : [
-                      {
-                        name: selectedJob.item,
-                        serviceType: primaryService(selectedJob),
-                        qty: selectedJob.quantity,
-                        unitPrice:
-                          selectedJob.quantity > 0
-                            ? roundMoney(
-                                (selectedJob.subtotal ?? selectedJob.charges) /
-                                  selectedJob.quantity,
-                              )
-                            : selectedJob.charges,
-                      },
-                    ]
+                    {
+                      name: selectedJob.item,
+                      serviceType: primaryService(selectedJob),
+                      qty: selectedJob.quantity,
+                      unitPrice:
+                        selectedJob.quantity > 0
+                          ? roundMoney(
+                            (selectedJob.subtotal ?? selectedJob.charges) /
+                            selectedJob.quantity,
+                          )
+                          : selectedJob.charges,
+                    },
+                  ]
                 ).map((li, i) => (
                   <div
                     key={`${li.name}-${i}`}
@@ -1574,7 +1610,7 @@ export function GuestLaundryView() {
                   <span>
                     {formatINR(
                       selectedJob.subtotal ??
-                        roundMoney(selectedJob.charges / (1 + LAUNDRY_GST_RATE)),
+                      roundMoney(selectedJob.charges / (1 + LAUNDRY_GST_RATE)),
                     )}
                   </span>
                 </div>
@@ -1583,10 +1619,10 @@ export function GuestLaundryView() {
                   <span>
                     {formatINR(
                       selectedJob.taxAmount ??
-                        roundMoney(
-                          selectedJob.charges -
-                            selectedJob.charges / (1 + LAUNDRY_GST_RATE),
-                        ),
+                      roundMoney(
+                        selectedJob.charges -
+                        selectedJob.charges / (1 + LAUNDRY_GST_RATE),
+                      ),
                     )}
                   </span>
                 </div>

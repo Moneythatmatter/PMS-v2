@@ -4,13 +4,10 @@ export const LAUNDRY_GST_RATE = 0.12;
 
 export const calculateSurcharge = (
   baseRate: number,
-  urgency: "Normal" | "Same-Day" | "Express",
+  urgency: "Normal" | "Same-Day" | string,
 ): number => {
   if (urgency === "Same-Day") {
     return Math.round(baseRate * 1.25 * 100) / 100;
-  }
-  if (urgency === "Express") {
-    return Math.round(baseRate * 1.55 * 100) / 100;
   }
   return baseRate;
 };

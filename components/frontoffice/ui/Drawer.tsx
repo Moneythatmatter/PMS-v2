@@ -42,7 +42,7 @@ export function Drawer({
     <>
       <div
         className={cn(
-          "fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-300",
+          "fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-300 h-full",
           open ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         onClick={onClose}
@@ -59,26 +59,26 @@ export function Drawer({
             : { width: panelWidth, maxWidth: "min(60vw, 100vw)" }
         }
         className={cn(
-          "fixed z-50 flex w-full max-w-full flex-col bg-white shadow-2xl sm:max-w-none",
+          "fixed z-50 flex w-full max-w-full flex-col bg-white shadow-2xl sm:max-w-none h-full",
           !isResizing && "transition-all duration-300 ease-out",
           fullScreen
             ? "inset-0 border-0"
             : cn(
-                "inset-y-0 right-0 border-l border-slate-200",
-                !canResize && width === "sm" && "w-full max-w-sm",
-                !canResize && width === "md" && "w-full max-w-md",
-                !canResize && width === "lg" && "w-full max-w-lg",
-                !canResize && width === "xl" && "w-full max-w-2xl",
-                !canResize && width === "2xl" && "w-full max-w-4xl",
-                !canResize && width === "3xl" && "w-full max-w-6xl",
-                !canResize &&
-                  width === "responsive" &&
-                  "w-full md:w-[85vw] lg:w-[70vw] xl:w-[65vw]",
-                !canResize &&
-                  typeof width === "string" &&
-                  !["sm", "md", "lg", "xl", "2xl", "3xl", "responsive"].includes(width) &&
-                  width,
-              ),
+              "inset-y-0 right-0 border-l border-slate-200",
+              !canResize && width === "sm" && "w-full max-w-sm",
+              !canResize && width === "md" && "w-full max-w-md",
+              !canResize && width === "lg" && "w-full max-w-lg",
+              !canResize && width === "xl" && "w-full max-w-2xl",
+              !canResize && width === "2xl" && "w-full max-w-4xl",
+              !canResize && width === "3xl" && "w-full max-w-6xl",
+              !canResize &&
+              width === "responsive" &&
+              "w-full md:w-[85vw] lg:w-[70vw] xl:w-[65vw]",
+              !canResize &&
+              typeof width === "string" &&
+              !["sm", "md", "lg", "xl", "2xl", "3xl", "responsive"].includes(width) &&
+              width,
+            ),
           open ? "translate-x-0" : "translate-x-full",
           className,
         )}

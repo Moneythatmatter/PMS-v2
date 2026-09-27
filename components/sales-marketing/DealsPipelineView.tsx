@@ -260,13 +260,13 @@ export interface TentativeHoldDetails {
 export interface DealActivity {
   id: string;
   type:
-    | SharedActivityType
-    | "WhatsApp Follow-up"
-    | "Proposal Sent"
-    | "Negotiation"
-    | "Note"
-    | "Stage Change"
-    | string;
+  | SharedActivityType
+  | "WhatsApp Follow-up"
+  | "Proposal Sent"
+  | "Negotiation"
+  | "Note"
+  | "Stage Change"
+  | string;
   date: string;
   time?: string;
   user: string;
@@ -401,7 +401,7 @@ export function DealsPipelineView() {
   const router = useRouter();
   const [deals, setDeals] = useState<HotelDealItem[]>([]);
   const [centralLeads, setCentralLeads] = useState<CentralLeadItem[]>([]);
-  const [pipelineStages, setPipelineStages] = useState<PipelineStageConfig[]>(HOTEL_PIPELINE_STAGES);
+  const [pipelineStages, setPipelineStages] = useState<PipelineStageConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -605,13 +605,48 @@ export function DealsPipelineView() {
   // ─────────────────────────────────────────────────────────────
 
   const filteredDeals = useMemo(() => {
+    const rawQuery = searchQuery.trim().toLowerCase();
+    const queryWithoutHash = rawQuery.startsWith("#") ? rawQuery.slice(1) : rawQuery;
+    const cleanDigits = rawQuery.replace(/\D/g, "");
+
     return deals.filter((d) => {
+      const linkedLead = centralLeads.find(
+        (l) => l.id === d.leadId || (l.dbId && l.dbId === d.leadId)
+      );
+
+      const dealMobileDigits = (d.mobile || "").replace(/\D/g, "");
+      const leadMobileDigits = (linkedLead?.mobileNumber || linkedLead?.mobile || "").replace(/\D/g, "");
+
       const matchSearch =
-        d.dealName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        d.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (d.companyName && d.companyName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        d.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        d.leadId.toLowerCase().includes(searchQuery.toLowerCase());
+        !rawQuery ||
+        // Deal Name & Opportunity IDs
+        (d.dealName && d.dealName.toLowerCase().includes(rawQuery)) ||
+        (d.id && (d.id.toLowerCase().includes(rawQuery) || d.id.toLowerCase().includes(queryWithoutHash))) ||
+        (d.dbId && (d.dbId.toLowerCase().includes(rawQuery) || d.dbId.toLowerCase().includes(queryWithoutHash))) ||
+        (d.leadId && (d.leadId.toLowerCase().includes(rawQuery) || d.leadId.toLowerCase().includes(queryWithoutHash))) ||
+        // Customer Name, Contact Person, Company
+        (d.customerName && d.customerName.toLowerCase().includes(rawQuery)) ||
+        (d.contactPerson && d.contactPerson.toLowerCase().includes(rawQuery)) ||
+        (d.companyName && d.companyName.toLowerCase().includes(rawQuery)) ||
+        (d.corporateClientName && d.corporateClientName.toLowerCase().includes(rawQuery)) ||
+        (d.travelAgentName && d.travelAgentName.toLowerCase().includes(rawQuery)) ||
+        // Mobile / Phone
+        (d.mobile && d.mobile.toLowerCase().includes(rawQuery)) ||
+        (cleanDigits.length > 0 && dealMobileDigits.includes(cleanDigits)) ||
+        // Email & Executive
+        (d.email && d.email.toLowerCase().includes(rawQuery)) ||
+        (d.assignedExecutive && d.assignedExecutive.toLowerCase().includes(rawQuery)) ||
+        // Linked Lead details
+        (linkedLead && (
+          (linkedLead.leadName && linkedLead.leadName.toLowerCase().includes(rawQuery)) ||
+          (linkedLead.contactPerson && linkedLead.contactPerson.toLowerCase().includes(rawQuery)) ||
+          (linkedLead.id && (linkedLead.id.toLowerCase().includes(rawQuery) || linkedLead.id.toLowerCase().includes(queryWithoutHash))) ||
+          (linkedLead.dbId && (linkedLead.dbId.toLowerCase().includes(rawQuery) || linkedLead.dbId.toLowerCase().includes(queryWithoutHash))) ||
+          (linkedLead.companyName && linkedLead.companyName.toLowerCase().includes(rawQuery)) ||
+          (linkedLead.mobileNumber && linkedLead.mobileNumber.toLowerCase().includes(rawQuery)) ||
+          (cleanDigits.length > 0 && leadMobileDigits.includes(cleanDigits)) ||
+          (linkedLead.email && linkedLead.email.toLowerCase().includes(rawQuery))
+        ));
 
       const matchStage =
         selectedStageFilter === "ALL" ||
@@ -620,9 +655,9 @@ export function DealsPipelineView() {
       const matchExec = selectedExecutiveFilter === "ALL" || d.assignedExecutive === selectedExecutiveFilter;
       const matchStatus = selectedStatusFilter === "ALL" || d.status === selectedStatusFilter;
 
-      return matchSearch && matchStage && matchType && matchExec && matchStatus;
+      return Boolean(matchSearch && matchStage && matchType && matchExec && matchStatus);
     });
-  }, [deals, searchQuery, selectedStageFilter, selectedLeadTypeFilter, selectedExecutiveFilter, selectedStatusFilter]);
+  }, [deals, centralLeads, searchQuery, selectedStageFilter, selectedLeadTypeFilter, selectedExecutiveFilter, selectedStatusFilter]);
 
   // Overall KPI Cards Metrics
   const kpiMetrics = useMemo(() => {
@@ -735,8 +770,8 @@ export function DealsPipelineView() {
       targetLower.includes("won") || targetLower.includes("close won") || targetLower.includes("deal won")
         ? "Won"
         : targetLower.includes("lost") || targetLower.includes("close lost") || targetLower.includes("deal lost")
-        ? "Lost"
-        : "Open";
+          ? "Lost"
+          : "Open";
 
     const auditActivity: DealActivity = {
       id: `ACT-${Date.now()}`,
@@ -756,10 +791,10 @@ export function DealsPipelineView() {
         newStatus === "Won"
           ? "Deal Won! Advance received. Click 'Convert to Booking →' in Bookings Queue."
           : newStatus === "Lost"
-          ? `Closed Lost: ${deal.lostReason || "Customer cancelled/chose alternative"}`
-          : targetLower.includes("hold") || targetLower.includes("tentative")
-          ? `Venue on Tentative Hold until ${deal.tentativeHold?.holdExpiryDate || todayIsoDate()}.`
-          : `Advanced to ${targetStage}. Awaiting next action.`,
+            ? `Closed Lost: ${deal.lostReason || "Customer cancelled/chose alternative"}`
+            : targetLower.includes("hold") || targetLower.includes("tentative")
+              ? `Venue on Tentative Hold until ${deal.tentativeHold?.holdExpiryDate || todayIsoDate()}.`
+              : `Advanced to ${targetStage}. Awaiting next action.`,
       activities: [auditActivity, ...deal.activities],
     };
 
@@ -896,8 +931,8 @@ export function DealsPipelineView() {
     const nextSummary = payload.nextActionSummary
       ? `${payload.nextActionSummary} (${payload.nextActionDate || "Soon"})`
       : payload.status === "Upcoming"
-      ? `${payload.activityType} scheduled for ${payload.activityDate} at ${payload.activityTime}`
-      : selectedDeal.nextActionSummary;
+        ? `${payload.activityType} scheduled for ${payload.activityDate} at ${payload.activityTime}`
+        : selectedDeal.nextActionSummary;
 
     const updatedDeal: HotelDealItem = {
       ...selectedDeal,
@@ -1248,11 +1283,20 @@ export function DealsPipelineView() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by Deal Name, Opportunity ID (#OPP-301), Client, Company..."
+            placeholder="Search by Deal Name, Name, Mobile No., Opportunity ID (#OPP-301), Client, Company..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full text-xs sm:text-sm rounded-lg border border-slate-200 pl-9 pr-3 py-2 bg-slate-50/50 font-normal text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300"
+            className="w-full text-xs sm:text-sm rounded-lg border border-slate-200 pl-9 pr-8 py-2 bg-slate-50/50 font-normal text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
@@ -1326,7 +1370,7 @@ export function DealsPipelineView() {
                   {/* Column Header */}
                   <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200/80">
                     <div className="flex items-center gap-1.5 truncate">
-                      <strong className="text-xs font-bold text-slate-900 truncate">
+                      <strong className="text-xs font-bold text-slate-900 truncate capitalize">
                         {stage.label}
                       </strong>
                       <span className="bg-slate-200 text-slate-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
@@ -1433,8 +1477,8 @@ export function DealsPipelineView() {
                         </div>
                       ))
                     ) : (
-                      <div className="p-6 text-center text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-xl">
-                        No deals in {stage.label}
+                      <div className="p-6 text-center text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-xl capitalize">
+                        No deals in  {stage.label}
                       </div>
                     )}
                   </div>
@@ -1646,8 +1690,8 @@ export function DealsPipelineView() {
                       selectedDeal.status === "Won"
                         ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
                         : selectedDeal.status === "Lost"
-                        ? "bg-rose-50 text-rose-700 border-rose-200/80"
-                        : "bg-slate-100 text-slate-700 border-slate-200/80"
+                          ? "bg-rose-50 text-rose-700 border-rose-200/80"
+                          : "bg-slate-100 text-slate-700 border-slate-200/80"
                     )}
                   >
                     Stage: {selectedDeal.stage}
@@ -1909,10 +1953,10 @@ export function DealsPipelineView() {
                             qtn.status === "Accepted"
                               ? "bg-emerald-100 text-emerald-800 border-emerald-200"
                               : qtn.status === "Sent"
-                              ? "bg-blue-100 text-blue-800 border-blue-200"
-                              : qtn.status === "Draft"
-                              ? "bg-amber-100 text-amber-800 border-amber-200"
-                              : "bg-slate-100 text-slate-600 border-slate-200"
+                                ? "bg-blue-100 text-blue-800 border-blue-200"
+                                : qtn.status === "Draft"
+                                  ? "bg-amber-100 text-amber-800 border-amber-200"
+                                  : "bg-slate-100 text-slate-600 border-slate-200"
                           )}
                         >
                           {qtn.status}
