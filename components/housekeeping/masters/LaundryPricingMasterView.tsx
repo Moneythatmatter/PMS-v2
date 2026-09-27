@@ -22,20 +22,6 @@ import {
 } from "@/components/frontoffice/ui";
 import { toast } from "@/components/ui/toast";
 
-type PriceLine = {
-  key: string;
-  serviceType: string;
-  unitPrice: string;
-};
-
-function newPriceLine(serviceType?: string): PriceLine {
-  return {
-    key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    serviceType: serviceType ?? LAUNDRY_SERVICE_TYPES[0],
-    unitPrice: "",
-  };
-}
-
 function formatINR(amount: number) {
   return `₹${Number(amount || 0).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -67,8 +53,9 @@ export function LaundryPricingMasterView() {
   const [preview, setPreview] = useState<LaundryPricingMaster | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [serviceType, setServiceType] = useState<string>(LAUNDRY_SERVICE_TYPES[0]);
   const [itemId, setItemId] = useState("");
-  const [priceLines, setPriceLines] = useState<PriceLine[]>([newPriceLine()]);
+  const [unitPrice, setUnitPrice] = useState("");
   const [isActive, setIsActive] = useState(true);
 
   const itemMap = useMemo(() => {
@@ -149,10 +136,30 @@ export function LaundryPricingMasterView() {
     [pricing],
   );
 
+  const availableItems = useMemo(() => {
+    if (!serviceType) return items;
+    return items.filter((item) => {
+      if (
+        editing &&
+        item.id === editing.itemId &&
+        serviceType.toLowerCase() === editing.serviceType.toLowerCase()
+      ) {
+        return true;
+      }
+      return !pricing.some(
+        (p) =>
+          p.itemId === item.id &&
+          p.serviceType.toLowerCase() === serviceType.toLowerCase() &&
+          (!editing || p.id !== editing.id),
+      );
+    });
+  }, [items, pricing, serviceType, editing]);
+
   const resetForm = () => {
     setEditing(null);
-    setItemId(items[0]?.id ?? "");
-    setPriceLines([newPriceLine()]);
+    setServiceType(LAUNDRY_SERVICE_TYPES[0]);
+    setItemId("");
+    setUnitPrice("");
     setIsActive(true);
   };
 
@@ -163,59 +170,48 @@ export function LaundryPricingMasterView() {
 
   const openEdit = (row: LaundryPricingMaster) => {
     setEditing(row);
+    setServiceType(row.serviceType);
     setItemId(row.itemId);
-    setPriceLines([
-      {
-        key: row.id,
-        serviceType: row.serviceType,
-        unitPrice: String(row.unitPrice ?? ""),
-      },
-    ]);
+    setUnitPrice(String(row.unitPrice ?? ""));
     setIsActive(row.isActive !== false);
     setPreview(null);
     setFormOpen(true);
   };
 
-  const updatePriceLine = (key: string, patch: Partial<PriceLine>) => {
-    setPriceLines((prev) =>
-      prev.map((line) => (line.key === key ? { ...line, ...patch } : line)),
-    );
-  };
-
   const handleSave = async () => {
+    if (!serviceType) {
+      toast.error("Select a service type");
+      return;
+    }
     if (!itemId) {
       toast.error("Select a laundry item");
+      return;
+    }
+    const price = Number(unitPrice);
+    if (!unitPrice.trim() || Number.isNaN(price) || price < 0) {
+      toast.error("Enter a valid unit price");
       return;
     }
 
     const itemName = items.find((i) => i.id === itemId)?.name ?? "This item";
 
-    if (editing) {
-      const line = priceLines[0];
-      if (!line?.serviceType) {
-        toast.error("Select a service type");
-        return;
-      }
-      const price = Number(line.unitPrice);
-      if (!line.unitPrice.trim() || Number.isNaN(price) || price < 0) {
-        toast.error("Enter a valid unit price");
-        return;
-      }
-      const duplicate = pricing.find(
-        (row) =>
-          row.itemId === itemId &&
-          row.serviceType === line.serviceType &&
-          row.id !== editing.id,
-      );
-      if (duplicate) {
-        toast.error(`${itemName} with ${line.serviceType} already exists`);
-        return;
-      }
-      setSaving(true);
-      try {
+    const duplicate = pricing.find(
+      (row) =>
+        row.itemId === itemId &&
+        row.serviceType.toLowerCase() === serviceType.toLowerCase() &&
+        (!editing || row.id !== editing.id),
+    );
+    if (duplicate) {
+      toast.error(`${itemName} with ${serviceType} already exists`);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (editing) {
         const record = await laundryPricingMasterService.update(editing.id, {
           itemId,
-          serviceType: line.serviceType,
+          serviceType,
           unitPrice: Math.round(price * 100) / 100,
           isActive,
         });
@@ -223,86 +219,24 @@ export function LaundryPricingMasterView() {
           prev.map((p) => (p.id === editing.id ? record : p)),
         );
         toast.success("Pricing updated");
-        setFormOpen(false);
-        resetForm();
-      } catch (e) {
-        const message =
-          e instanceof Error ? e.message : "Failed to save pricing";
-        toast.error(
-          /unique|duplicate|already exists/i.test(message)
-            ? `${itemName} with ${line.serviceType} already exists`
-            : message,
-        );
-      } finally {
-        setSaving(false);
-      }
-      return;
-    }
-
-    const validLines: { serviceType: string; unitPrice: number }[] = [];
-    const seenInForm = new Set<string>();
-
-    for (const line of priceLines) {
-      if (!line.serviceType) {
-        toast.error("Select a service type for each row");
-        return;
-      }
-      const price = Number(line.unitPrice);
-      if (!line.unitPrice.trim() || Number.isNaN(price) || price < 0) {
-        toast.error(`Enter a valid price for ${line.serviceType}`);
-        return;
-      }
-      if (seenInForm.has(line.serviceType)) {
-        toast.error(`${line.serviceType} is listed more than once`);
-        return;
-      }
-      seenInForm.add(line.serviceType);
-
-      const exists = pricing.some(
-        (row) =>
-          row.itemId === itemId && row.serviceType === line.serviceType,
-      );
-      if (exists) {
-        toast.error(`${itemName} with ${line.serviceType} already exists`);
-        return;
-      }
-
-      validLines.push({
-        serviceType: line.serviceType,
-        unitPrice: Math.round(price * 100) / 100,
-      });
-    }
-
-    if (validLines.length === 0) {
-      toast.error("Add at least one service with price");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const created: LaundryPricingMaster[] = [];
-      for (const line of validLines) {
+      } else {
         const record = await laundryPricingMasterService.create({
           itemId,
-          serviceType: line.serviceType,
-          unitPrice: line.unitPrice,
+          serviceType,
+          unitPrice: Math.round(price * 100) / 100,
           isActive,
         });
-        created.push(record);
+        setPricing((prev) => [record, ...prev]);
+        toast.success(`Pricing added for ${itemName} (${serviceType})`);
       }
-      setPricing((prev) => [...created, ...prev]);
-      toast.success(
-        created.length === 1
-          ? "Pricing added"
-          : `${created.length} service prices added for ${itemName}`,
-      );
       setFormOpen(false);
       resetForm();
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Failed to save pricing";
+      const message =
+        e instanceof Error ? e.message : "Failed to save pricing";
       toast.error(
         /unique|duplicate|already exists/i.test(message)
-          ? message
+          ? `${itemName} with ${serviceType} already exists`
           : message,
       );
     } finally {
@@ -479,8 +413,8 @@ export function LaundryPricingMasterView() {
         title={editing ? "Edit Pricing" : "Add Pricing"}
         description={
           editing
-            ? "Update service and unit price for this item."
-            : "Select one item, then add multiple services with prices."
+            ? "Update unit price and status for this item & service."
+            : "Select service type, choose an item, and set its unit price."
         }
         footer={
           <>
@@ -495,29 +429,60 @@ export function LaundryPricingMasterView() {
             </Button>
             <Button
               className="bg-[#0B6B4F] hover:bg-[#095a43]"
-              disabled={saving}
+              disabled={
+                saving ||
+                (!editing && availableItems.length === 0 && !!serviceType)
+              }
               onClick={() => void handleSave()}
             >
-              {saving
-                ? "Saving…"
-                : editing
-                  ? "Update Price"
-                  : priceLines.length > 1
-                    ? `Save ${priceLines.length} Prices`
-                    : "Save Price"}
+              {saving ? "Saving…" : editing ? "Update Price" : "Save Price"}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
+          <FormField label="Service Type" required>
+            <SelectInput
+              value={serviceType}
+              onChange={(e) => {
+                const nextService = e.target.value;
+                setServiceType(nextService);
+                if (
+                  itemId &&
+                  pricing.some(
+                    (p) =>
+                      p.itemId === itemId &&
+                      p.serviceType.toLowerCase() ===
+                        nextService.toLowerCase() &&
+                      (!editing || p.id !== editing.id),
+                  )
+                ) {
+                  setItemId("");
+                }
+              }}
+              disabled={!!editing}
+            >
+              <option value="">Select service</option>
+              {LAUNDRY_SERVICE_TYPES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+
           <FormField label="Laundry Item" required>
             <SelectInput
               value={itemId}
               onChange={(e) => setItemId(e.target.value)}
               disabled={!!editing}
             >
-              <option value="">Select item</option>
-              {items.map((item) => (
+              <option value="">
+                {availableItems.length === 0 && serviceType
+                  ? "No available items (all items priced for this service)"
+                  : "Select item"}
+              </option>
+              {availableItems.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name} ({item.itemCode})
                 </option>
@@ -525,89 +490,23 @@ export function LaundryPricingMasterView() {
             </SelectInput>
           </FormField>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Services & Prices
-              </p>
-              {!editing && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const used = new Set(priceLines.map((l) => l.serviceType));
-                    const next =
-                      LAUNDRY_SERVICE_TYPES.find((s) => !used.has(s)) ??
-                      LAUNDRY_SERVICE_TYPES[0];
-                    setPriceLines((prev) => [...prev, newPriceLine(next)]);
-                  }}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add service
-                </button>
-              )}
-            </div>
+          {!editing && serviceType && availableItems.length === 0 && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+              All {items.length} laundry items already have a price configured for{" "}
+              <strong>{serviceType}</strong>.
+            </p>
+          )}
 
-            {priceLines.map((line) => (
-              <div
-                key={line.key}
-                className="grid grid-cols-12 items-end gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-2.5"
-              >
-                <div className="col-span-12 sm:col-span-6">
-                  <FormField label="Service Type" required>
-                    <SelectInput
-                      value={line.serviceType}
-                      onChange={(e) =>
-                        updatePriceLine(line.key, {
-                          serviceType: e.target.value,
-                        })
-                      }
-                      disabled={!!editing}
-                    >
-                      {LAUNDRY_SERVICE_TYPES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </SelectInput>
-                  </FormField>
-                </div>
-                <div className="col-span-10 sm:col-span-5">
-                  <FormField label="Unit Price (₹)" required>
-                    <TextInput
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="e.g. 73"
-                      value={line.unitPrice}
-                      onChange={(e) =>
-                        updatePriceLine(line.key, {
-                          unitPrice: e.target.value,
-                        })
-                      }
-                    />
-                  </FormField>
-                </div>
-                {!editing && (
-                  <div className="col-span-2 flex justify-end pb-1 sm:col-span-1">
-                    <button
-                      type="button"
-                      disabled={priceLines.length <= 1}
-                      onClick={() =>
-                        setPriceLines((prev) =>
-                          prev.filter((l) => l.key !== line.key),
-                        )
-                      }
-                      className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
-                      aria-label="Remove service"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          <FormField label="Unit Price (₹)" required>
+            <TextInput
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="e.g. 75"
+              value={unitPrice}
+              onChange={(e) => setUnitPrice(e.target.value)}
+            />
+          </FormField>
 
           <FormField label="Status">
             <SelectInput

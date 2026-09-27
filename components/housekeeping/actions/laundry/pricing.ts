@@ -1,22 +1,19 @@
 // Pricing and urgency surcharge calculations for guest laundry
 
-export const LAUNDRY_GST_RATE = 0.12;
+export const LAUNDRY_GST_RATE = 0;
 
 export const calculateSurcharge = (
   baseRate: number,
-  urgency: "Normal" | "Same-Day" | string,
+  _urgency?: string,
 ): number => {
-  if (urgency === "Same-Day") {
-    return Math.round(baseRate * 1.25 * 100) / 100;
-  }
   return baseRate;
 };
 
 export const calculateTax = (
-  charges: number,
-  gstRate: number = LAUNDRY_GST_RATE,
+  _charges: number,
+  _gstRate: number = LAUNDRY_GST_RATE,
 ): number => {
-  return Math.round(charges * gstRate * 100) / 100;
+  return 0;
 };
 
 export const roundMoney = (value: number): number =>

@@ -19,6 +19,7 @@ import {
   Truck,
   User,
   Wallet,
+  X,
   XCircle,
 } from "lucide-react";
 import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
@@ -110,26 +111,10 @@ function formatFriendlyDate(value?: string | null): string {
   });
 }
 
-function defaultExpectedAt(urgency: LaundryUrgency): string {
+function defaultExpectedAt(): string {
   const d = new Date();
-  if (urgency === "Same-Day") {
-    // Same-Day turnaround: minimum 6 hours or today evening (whichever is later)
-    const currentHour = d.getHours();
-    if (currentHour < 12) {
-      // Morning order -> ready today by 6:00 PM (18:00)
-      d.setHours(18, 0, 0, 0);
-    } else if (currentHour < 15) {
-      // Early afternoon order -> ready today by 9:00 PM (21:00)
-      d.setHours(21, 0, 0, 0);
-    } else {
-      // Late afternoon / evening order -> 6 hours from now
-      d.setHours(d.getHours() + 6);
-    }
-  } else {
-    // Normal / Standard: Next day 6:00 PM (18:00)
-    d.setDate(d.getDate() + 1);
-    d.setHours(18, 0, 0, 0);
-  }
+  d.setDate(d.getDate() + 1);
+  d.setHours(18, 0, 0, 0);
   return d.toISOString();
 }
 
@@ -153,6 +138,129 @@ function isIronOnly(serviceType?: string) {
 function displayStage(status: HKLaundryJob["status"]): string {
   if (status === "Collection") return "Pending";
   return status;
+}
+
+interface GarmentSearchInputProps {
+  value: string;
+  catalogItems: LaundryItemMaster[];
+  selectedItemNames: Set<string>;
+  onSelect: (itemName: string) => void;
+  placeholder?: string;
+}
+
+function GarmentSearchInput({
+  value,
+  catalogItems,
+  selectedItemNames,
+  onSelect,
+  placeholder = "Search / type item...",
+}: GarmentSearchInputProps) {
+  const [query, setQuery] = useState(value);
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setQuery(value);
+  }, [value]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return catalogItems
+      .filter((i) => i.isActive !== false)
+      .filter((item) => {
+        const lower = item.name.toLowerCase();
+        const notSelectedElsewhere =
+          lower === value.trim().toLowerCase() || !selectedItemNames.has(lower);
+        if (!notSelectedElsewhere) return false;
+        if (!q) return true;
+        return (
+          lower.includes(q) ||
+          (item.itemCode && item.itemCode.toLowerCase().includes(q))
+        );
+      });
+  }, [catalogItems, query, value, selectedItemNames]);
+
+  return (
+    <div ref={wrapperRef} className="relative w-full">
+      <div className="relative flex items-center">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+        <input
+          type="text"
+          value={query}
+          placeholder={placeholder}
+          onFocus={() => setIsOpen(true)}
+          onChange={(e) => {
+            const val = e.target.value;
+            setQuery(val);
+            setIsOpen(true);
+            onSelect(val);
+          }}
+          className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-7 text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              onSelect("");
+              setIsOpen(true);
+            }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+            tabIndex={-1}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 z-50 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+          {filteredItems.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-slate-400 italic">
+              {query ? `No items matching "${query}"` : "No available items"}
+            </div>
+          ) : (
+            filteredItems.map((item) => {
+              const isSelected =
+                item.name.toLowerCase() === value.trim().toLowerCase();
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setQuery(item.name);
+                    onSelect(item.name);
+                    setIsOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between px-3 py-1.5 text-left text-xs sm:text-sm hover:bg-emerald-50 hover:text-emerald-900 transition-colors cursor-pointer",
+                    isSelected
+                      ? "bg-emerald-50/80 font-semibold text-emerald-800"
+                      : "text-slate-700",
+                  )}
+                >
+                  <span className="font-medium">{item.name}</span>
+                  <span className="font-mono text-[10px] text-slate-400">
+                    {item.itemCode}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function stageBadgeClass(status: HKLaundryJob["status"]) {
@@ -343,20 +451,7 @@ export function GuestLaundryView() {
     return map;
   }, [catalogItems, catalogPricing]);
 
-  const quickGarments = useMemo(() => {
-    const active = catalogItems.filter((i) => i.isActive !== false);
-    return active.map((item) => {
-      const iron = priceByItemService.get(`${item.name.toLowerCase()}::Ironing`);
-      const anyPrice = [...priceByItemService.entries()].find(([k]) =>
-        k.startsWith(`${item.name.toLowerCase()}::`),
-      )?.[1];
-      return {
-        name: item.name,
-        unitPrice: iron ?? anyPrice ?? 0,
-        defaultService: iron != null ? "Ironing" : LAUNDRY_SERVICE_TYPES[0],
-      };
-    });
-  }, [catalogItems, priceByItemService]);
+
 
   const resolvePrice = useCallback(
     (itemName: string, serviceType: string) => {
@@ -523,19 +618,15 @@ export function GuestLaundryView() {
       const unit = Number(line.unitPrice) || 0;
       base += qty * unit;
     }
-    const urgencyRate: LaundryUrgency = urgency || "Normal";
-    const surcharged = calculateSurcharge(base, urgencyRate);
-    const surchargeAmount = roundMoney(surcharged - base);
-    const tax = calculateTax(surcharged, LAUNDRY_GST_RATE);
-    const total = roundMoney(surcharged + tax);
+    const total = roundMoney(base);
     return {
-      base: roundMoney(base),
-      surcharge: surchargeAmount,
-      subtotal: roundMoney(surcharged),
-      tax,
+      base: total,
+      surcharge: 0,
+      subtotal: total,
+      tax: 0,
       total,
     };
-  }, [lines, urgency]);
+  }, [lines]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -623,9 +714,8 @@ export function GuestLaundryView() {
   }, [createOpen]);
 
   useEffect(() => {
-    if (!urgency) return;
-    setExpectedAt(toDatetimeLocalValue(defaultExpectedAt(urgency)));
-  }, [urgency]);
+    setExpectedAt(toDatetimeLocalValue(defaultExpectedAt()));
+  }, []);
 
   const resetFilters = useCallback(() => {
     setSearch("");
@@ -638,8 +728,8 @@ export function GuestLaundryView() {
 
   const resetCreateForm = () => {
     setSelectedRoomId("");
-    setUrgency("");
-    setExpectedAt("");
+    setUrgency("Normal");
+    setExpectedAt(toDatetimeLocalValue(defaultExpectedAt()));
     setLines([newFormLine()]);
     setRemarks("");
   };
@@ -649,23 +739,27 @@ export function GuestLaundryView() {
     setCreateOpen(true);
   };
 
-  const handleQuickAdd = (garment: {
-    name: string;
-    unitPrice: number;
-    defaultService: string;
-  }) => {
-    setLines((prev) => [
-      ...prev,
-      newFormLine({
-        name: garment.name,
-        serviceType: garment.defaultService,
-        qty: "1",
-        unitPrice: String(garment.unitPrice),
-      }),
-    ]);
-  };
+  const selectedItemNames = useMemo(() => {
+    return new Set(
+      lines
+        .map((l) => l.name.trim().toLowerCase())
+        .filter(Boolean),
+    );
+  }, [lines]);
+
+
 
   const updateLine = (idx: number, patch: Partial<FormLine>) => {
+    if (patch.name != null && patch.name.trim() !== "") {
+      const targetName = patch.name.trim().toLowerCase();
+      const duplicateIdx = lines.findIndex(
+        (l, i) => i !== idx && l.name.trim().toLowerCase() === targetName,
+      );
+      if (duplicateIdx >= 0) {
+        toast.error(`"${patch.name}" is already in the order. Please increase its quantity instead.`);
+        return;
+      }
+    }
     setLines((prev) =>
       prev.map((l, i) => {
         if (i !== idx) return l;
@@ -706,6 +800,16 @@ export function GuestLaundryView() {
       return;
     }
 
+    const seenNames = new Set<string>();
+    for (const l of validLines) {
+      const lowerName = l.name.toLowerCase();
+      if (seenNames.has(lowerName)) {
+        toast.error(`Duplicate item "${l.name}" found. Please increase the quantity on a single line instead.`);
+        return;
+      }
+      seenNames.add(lowerName);
+    }
+
     const lineItems: HKLaundryLineItem[] = validLines;
     const qty = lineItems.reduce((s, l) => s + l.qty, 0);
     const serviceType =
@@ -727,8 +831,8 @@ export function GuestLaundryView() {
       bookingId: selectedStay.bookingId,
       charges: pricing.total,
       subtotal: pricing.subtotal,
-      taxAmount: pricing.tax,
-      urgency,
+      taxAmount: 0,
+      urgency: "Normal",
       serviceType,
       expectedAt: fromDatetimeLocalValue(expectedAt),
       createdAt: new Date().toISOString(),
@@ -737,25 +841,6 @@ export function GuestLaundryView() {
       lineItems,
       notes: remarks.trim() || undefined,
     });
-
-    const kot: LaundryKotData = {
-      jobId: `LND-${1000 + laundryJobs.length + 1}`,
-      type: "Guest",
-      item,
-      quantity: qty,
-      room: selectedStay.room.roomNo,
-      guestName: selectedStay.guestName,
-      serviceType,
-      urgency,
-      washBatch: "Colors",
-      careLabel: "Normal Cotton",
-      isOutsourced: false,
-      charges: pricing.total,
-      baseCharges: pricing.subtotal,
-      notes: remarks.trim() || undefined,
-      createdAt: new Date().toLocaleString("en-IN"),
-    };
-    void printLaundryKotDocument(kot);
 
     setCreateOpen(false);
     resetCreateForm();
@@ -944,17 +1029,7 @@ export function GuestLaundryView() {
         </div>
 
         {filterOpen && (
-          <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
-            <FormField label="Urgency">
-              <SelectInput
-                value={urgencyFilter}
-                onChange={(e) => setUrgencyFilter(e.target.value)}
-              >
-                <option value="All">All</option>
-                <option value="Normal">Normal</option>
-                <option value="Same-Day">Same-Day</option>
-              </SelectInput>
-            </FormField>
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
             <FormField label="Billing">
               <SelectInput
                 value={billingFilter}
@@ -1171,19 +1246,7 @@ export function GuestLaundryView() {
                 </span>
               </div>
             </FormField>
-            <FormField label="Service Speed / Urgency" required>
-              <SelectInput
-                value={urgency}
-                onChange={(e) =>
-                  setUrgency(e.target.value as LaundryUrgency | "")
-                }
-              >
-                <option value="">Select urgency</option>
-                <option value="Normal">Normal (Standard rate)</option>
-                <option value="Same-Day">Same-Day (+25% surcharge)</option>
-              </SelectInput>
-            </FormField>
-            <FormField label="Expected Delivery (Auto-calculated)" required>
+            <FormField label="Expected Delivery (Standard)" required>
               <TextInput
                 type="datetime-local"
                 value={expectedAt}
@@ -1195,23 +1258,11 @@ export function GuestLaundryView() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mb-3 flex items-center justify-between">
               <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-700">
                 <Shirt className="h-4 w-4" />
                 Garment Items & Service Mapping
               </p>
-              <div className="flex flex-wrap gap-1.5">
-                {quickGarments.map((g) => (
-                  <button
-                    key={g.name}
-                    type="button"
-                    onClick={() => handleQuickAdd(g)}
-                    className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800"
-                  >
-                    + {g.name}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {catalogLoading ? (
@@ -1247,43 +1298,13 @@ export function GuestLaundryView() {
                     key={line.key}
                     className="grid grid-cols-12 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/60 p-2"
                   >
-                    <div className="col-span-12 sm:col-span-3">
-                      <SelectInput
-                        value={
-                          catalogItems.some(
-                            (i) =>
-                              i.isActive !== false &&
-                              i.name.toLowerCase() === line.name.toLowerCase(),
-                          )
-                            ? catalogItems.find(
-                              (i) =>
-                                i.isActive !== false &&
-                                i.name.toLowerCase() ===
-                                line.name.toLowerCase(),
-                            )?.name ?? line.name
-                            : line.name
-                        }
-                        onChange={(e) =>
-                          updateLine(idx, { name: e.target.value })
-                        }
-                      >
-                        <option value="">Select item</option>
-                        {!catalogItems.some(
-                          (i) =>
-                            i.isActive !== false &&
-                            i.name.toLowerCase() === line.name.toLowerCase(),
-                        ) &&
-                          line.name && (
-                            <option value={line.name}>{line.name}</option>
-                          )}
-                        {catalogItems
-                          .filter((i) => i.isActive !== false)
-                          .map((item) => (
-                            <option key={item.id} value={item.name}>
-                              {item.name}
-                            </option>
-                          ))}
-                      </SelectInput>
+                    <div className="col-span-12 sm:col-span-4">
+                      <GarmentSearchInput
+                        value={line.name}
+                        catalogItems={catalogItems}
+                        selectedItemNames={selectedItemNames}
+                        onSelect={(name) => updateLine(idx, { name })}
+                      />
                     </div>
                     <div className="col-span-6 sm:col-span-3">
                       <SelectInput
@@ -1320,19 +1341,18 @@ export function GuestLaundryView() {
                         }
                       />
                     </div>
-                    <div className="col-span-10 flex items-center justify-end sm:col-span-2">
-                      <span className="text-sm font-bold text-slate-900">
+                    <div className="col-span-12 sm:col-span-2 flex items-center justify-between sm:justify-end gap-2">
+                      <span className="text-sm font-bold text-slate-900 whitespace-nowrap">
                         {formatINR(rowTotal)}
                       </span>
-                    </div>
-                    <div className="col-span-2 flex justify-end sm:col-span-1">
                       <button
                         type="button"
                         disabled={lines.length <= 1}
                         onClick={() =>
                           setLines((prev) => prev.filter((_, i) => i !== idx))
                         }
-                        className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30 shrink-0 cursor-pointer"
+                        title="Remove item"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -1353,36 +1373,8 @@ export function GuestLaundryView() {
 
             <div className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-sm">
               <div className="flex justify-between text-slate-600">
-                <span>Base Amount</span>
-                <span className="font-medium text-slate-800">{formatINR(pricing.base)}</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span className="flex items-center gap-1.5">
-                  Urgency Surcharge
-                  {urgency === "Same-Day" && (
-                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200">
-                      Same-Day (+25%)
-                    </span>
-                  )}
-                  {(!urgency || urgency === "Normal") && (
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
-                      Standard (0%)
-                    </span>
-                  )}
-                </span>
-                <span className={cn("font-medium", pricing.surcharge > 0 ? "text-amber-700" : "text-slate-600")}>
-                  {pricing.surcharge > 0 ? `+${formatINR(pricing.surcharge)}` : "₹0.00"}
-                </span>
-              </div>
-              {pricing.surcharge > 0 && (
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span>Taxable Subtotal (Base + Surcharge)</span>
-                  <span className="font-medium text-slate-700">{formatINR(pricing.subtotal)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-slate-600">
-                <span>GST Tax ({Math.round(LAUNDRY_GST_RATE * 100)}%)</span>
-                <span className="font-medium text-slate-800">{formatINR(pricing.tax)}</span>
+                <span>Items Subtotal</span>
+                <span className="font-medium text-slate-800">{formatINR(pricing.total)}</span>
               </div>
               <div className="flex justify-between border-t border-slate-100 pt-2 text-base font-bold">
                 <span className="text-slate-900">Total Amount</span>
@@ -1606,28 +1598,11 @@ export function GuestLaundryView() {
               </div>
               <div className="mt-4 space-y-1 border-t border-slate-100 pt-3 text-sm">
                 <div className="flex justify-between text-slate-600">
-                  <span>Subtotal</span>
-                  <span>
-                    {formatINR(
-                      selectedJob.subtotal ??
-                      roundMoney(selectedJob.charges / (1 + LAUNDRY_GST_RATE)),
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>GST</span>
-                  <span>
-                    {formatINR(
-                      selectedJob.taxAmount ??
-                      roundMoney(
-                        selectedJob.charges -
-                        selectedJob.charges / (1 + LAUNDRY_GST_RATE),
-                      ),
-                    )}
-                  </span>
+                  <span>Items Subtotal</span>
+                  <span>{formatINR(selectedJob.charges)}</span>
                 </div>
                 <div className="flex justify-between pt-1 text-base font-bold">
-                  <span>Total</span>
+                  <span>Total Amount</span>
                   <span className="text-emerald-700">
                     {formatINR(selectedJob.charges)}
                   </span>

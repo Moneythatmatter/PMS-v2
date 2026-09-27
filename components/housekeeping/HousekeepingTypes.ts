@@ -149,7 +149,7 @@ export interface HKInventoryItem {
   unit: string;
 }
 
-export type LaundryUrgency = "Normal" | "Same-Day";
+export type LaundryUrgency = "Normal";
 export type LaundryBillingStatus = "Unbilled" | "Folio" | "Settled";
 
 export interface HKLaundryLineItem {

@@ -47,7 +47,6 @@ export const LAUNDRY_SERVICE_TYPES = [
   "Ironing",
   "Washing",
   "Wash & Iron",
-  "Wash & Fold",
   "Dry Cleaning",
 ] as const;
 
