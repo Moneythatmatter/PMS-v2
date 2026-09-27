@@ -171,9 +171,7 @@ export function AddActivityModal({
     if (initialActivityType) {
       setActivityType(initialActivityType);
     }
-    if (initialStatus) {
-      setStatus(initialStatus);
-    }
+    setStatus(initialStatus === "Completed" ? "Completed" : "Scheduled");
     setActivityDate(todayIsoDate());
 
     if (dealContext) {
@@ -461,12 +459,12 @@ export function AddActivityModal({
             <div>
               <label className="block font-bold text-slate-700 mb-1 text-[11px]">Status</label>
               <select
-                value={status}
+                value={status === "Upcoming" ? "Scheduled" : status}
                 onChange={(e) => setStatus(e.target.value as SharedActivityStatus)}
                 className="w-full p-2 rounded-lg border border-slate-200 font-semibold bg-white text-xs"
               >
-                <option value="Completed">✓ Log Completed</option>
-                <option value="Upcoming">⏳ Schedule Upcoming</option>
+                <option value="Scheduled">⏳ Pending</option>
+                <option value="Completed">✓ Completed</option>
               </select>
             </div>
           )}

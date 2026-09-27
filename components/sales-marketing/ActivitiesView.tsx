@@ -41,7 +41,7 @@ import {
   SharedActivityType,
 } from "./shared/AddActivityModal";
 import { smActivityService, smDealService } from "@/services/sales-marketing";
-import { mapActivityFromApi, mapActivityToApi, mapDealFromApi } from "@/lib/sales-marketing/api-mappers";
+import { mapActivityFromApi, mapActivityToApi, mapDealFromApi, mapDealToApi } from "@/lib/sales-marketing/api-mappers";
 import { nowTimelineStamp, todayIsoDate } from "@/lib/sales-marketing/useSmList";
 
 // ─────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ export function ActivitiesView() {
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState("");
-  const [viewTab, setViewTab] = useState<"ALL" | "TODAY" | "OVERDUE">("ALL");
+  const [viewTab, setViewTab] = useState<"ALL" | "TODAY" | "OVERDUE" | "COMPLETED">("ALL");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("ALL");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL");
   const [selectedExecutiveFilter, setSelectedExecutiveFilter] = useState<string>("ALL");
@@ -241,6 +241,7 @@ export function ActivitiesView() {
       // Tab Filtering
       if (viewTab === "OVERDUE" && a.status !== "Overdue") return false;
       if (viewTab === "TODAY" && a.activityDate !== todayStr) return false;
+      if (viewTab === "COMPLETED" && a.status !== "Completed") return false;
 
       // Text Search Filter
       const searchLower = searchTerm.toLowerCase();
@@ -351,7 +352,8 @@ export function ActivitiesView() {
   }, [searchParams, router]);
 
   const handleSaveSharedActivity = async (payload: ActivityPayload) => {
-    const linkedDeal = deals.find((d) => d.id === payload.relatedEntityId) || deals[0];
+    const linkedDeal = deals.find((d) => d.id === payload.relatedEntityId || d.dbId === payload.relatedEntityId);
+    const targetDeal = linkedDeal || deals[0];
     const timestamp = nowTimelineStamp();
 
     let mappedType: ActivityType = "Call";
@@ -367,18 +369,18 @@ export function ActivitiesView() {
       id: `ACT-${Date.now()}`,
       activityType: mappedType,
       priority: payload.priority as ActivityPriority,
-      dealId: payload.relatedEntityId !== "NONE" && linkedDeal ? linkedDeal.id : "OPP-301",
-      dealName: payload.dealName || linkedDeal?.dealName || "General Opportunity",
-      leadId: linkedDeal?.leadId || "LD-501",
-      leadName: payload.leadName || linkedDeal?.customerName || payload.contactPerson,
-      customerName: payload.contactPerson || linkedDeal?.customerName || "Customer",
-      companyName: payload.companyName || linkedDeal?.companyName,
-      contactPerson: payload.contactPerson || linkedDeal?.contactPerson || linkedDeal?.customerName || "Customer",
-      mobileNumber: payload.mobile || linkedDeal?.mobile || "+91 98000 00000",
-      email: payload.email || linkedDeal?.email || "guest@hotel.com",
-      pipelineStage: payload.pipelineStage || linkedDeal?.stage || "Qualification",
-      expectedRevenue: linkedDeal?.dealValue || 500000,
-      campaignName: linkedDeal?.campaignName || undefined,
+      dealId: payload.relatedEntityId !== "NONE" && targetDeal ? targetDeal.id : "OPP-301",
+      dealName: payload.dealName || targetDeal?.dealName || "General Opportunity",
+      leadId: targetDeal?.leadId || "LD-501",
+      leadName: payload.leadName || targetDeal?.customerName || payload.contactPerson,
+      customerName: payload.contactPerson || targetDeal?.customerName || "Customer",
+      companyName: payload.companyName || targetDeal?.companyName,
+      contactPerson: payload.contactPerson || targetDeal?.contactPerson || targetDeal?.customerName || "Customer",
+      mobileNumber: payload.mobile || targetDeal?.mobile || "+91 98000 00000",
+      email: payload.email || targetDeal?.email || "guest@hotel.com",
+      pipelineStage: payload.pipelineStage || targetDeal?.stage || "Qualification",
+      expectedRevenue: targetDeal?.dealValue || 500000,
+      campaignName: targetDeal?.campaignName || undefined,
       activityDate: payload.activityDate,
       activityTime: payload.activityTime,
       assignedExecutive: payload.assignedExecutive,
@@ -403,6 +405,36 @@ export function ActivitiesView() {
 
     const saved = await persistActivity(newActivity);
     if (!saved) return;
+
+    if (targetDeal && payload.relatedEntityId !== "NONE") {
+      try {
+        const dealAct = {
+          id: saved.id,
+          type: payload.activityType,
+          date: saved.activityDate,
+          time: saved.activityTime,
+          user: saved.assignedExecutive,
+          notes: saved.outcomeNotes || saved.purpose,
+          status: saved.status,
+          purpose: saved.purpose,
+          venue: saved.venueRequired,
+          contactPerson: saved.contactPerson,
+          nextAction: saved.nextAction,
+          nextActionDate: saved.nextActionDate,
+        };
+        const updatedDeal = {
+          ...targetDeal,
+          activities: [dealAct, ...(targetDeal.activities || [])],
+        };
+        const dealPayload = mapDealToApi(updatedDeal);
+        if (targetDeal.dbId) {
+          await smDealService.update(targetDeal.dbId, dealPayload);
+        }
+        setDeals((prev) => prev.map((d) => (d.id === targetDeal.id ? updatedDeal : d)));
+      } catch (err) {
+        console.error("Failed to sync activity to linked deal profile", err);
+      }
+    }
 
     setActivitiesList((prev) => [saved, ...prev]);
     setIsScheduleModalOpen(false);
@@ -497,7 +529,13 @@ export function ActivitiesView() {
         </Card>
 
         {/* Card 4: Completed Activities */}
-        <Card className="h-full min-w-0 p-3 sm:p-5">
+        <Card
+          onClick={() => setViewTab("COMPLETED")}
+          className={cn(
+            "h-full min-w-0 p-3 sm:p-5 cursor-pointer transition hover:border-emerald-300 hover:shadow-xs",
+            viewTab === "COMPLETED" && "ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/20"
+          )}
+        >
           <div className="flex items-start justify-between gap-2">
             <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
               Completed Activities
@@ -551,6 +589,16 @@ export function ActivitiesView() {
               )}
             >
               <AlertTriangle className="h-3.5 w-3.5" /> Overdue ({metrics.overdueCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewTab("COMPLETED")}
+              className={cn(
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5",
+                viewTab === "COMPLETED" ? "bg-emerald-700 text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
+              )}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" /> Completed ({metrics.completedCount})
             </button>
           </div>
         </div>

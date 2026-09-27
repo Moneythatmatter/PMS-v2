@@ -3,11 +3,13 @@ import { cn } from "@/lib/utils";
 interface CardProps {
   children: React.ReactNode;
   className?: string;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
 }
 
-export function Card({ children, className }: CardProps) {
+export function Card({ children, className, onClick }: CardProps) {
   return (
     <div
+      onClick={onClick}
       className={cn(
         "rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5",
         className,

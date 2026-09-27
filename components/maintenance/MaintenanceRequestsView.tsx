@@ -36,6 +36,7 @@ import {
   Info,
   Sparkles,
   Loader2,
+  XCircle,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { Badge, Button, Card, Drawer, DropdownSelect, Modal } from "@/components/ui";
@@ -69,6 +70,59 @@ import {
 import { isActiveRoomBookingStatus } from "@/lib/frontoffice/active-booking";
 
 type RequestLocationType = "Guest Room" | "Public Area";
+
+export function compressImageFile(file: File): Promise<{ fileName: string; dataUrl: string }> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve({ fileName: file.name, dataUrl: (e.target?.result as string) || "" });
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_WIDTH = 900;
+        const MAX_HEIGHT = 900;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width = Math.round((width * MAX_HEIGHT) / height);
+            height = MAX_HEIGHT;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.65);
+          resolve({ fileName: file.name, dataUrl: compressedDataUrl });
+        } else {
+          resolve({ fileName: file.name, dataUrl: (e.target?.result as string) || "" });
+        }
+      };
+      img.onerror = () => {
+        resolve({ fileName: file.name, dataUrl: (e.target?.result as string) || "" });
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+}
 
 const mntStatusListBadge: Record<string, string> = {
   Operational: "bg-emerald-100 text-emerald-800",
@@ -152,11 +206,26 @@ function isLinkedWorkOrderCompleted(
   return wo.status === "Verified" || wo.status === "Closed";
 }
 
+function isLinkedWorkOrderCancelled(
+  req: { status?: string; workOrderNo?: string; requestNo?: string; id?: string },
+  workOrders: Array<{ woNumber?: string; requestRef?: string; status?: string }>,
+): boolean {
+  if (req.status === "Cancelled" || req.status === "Rejected") return true;
+  const wo = workOrders.find(
+    (w) =>
+      (req.workOrderNo && w.woNumber === req.workOrderNo) ||
+      (req.requestNo && w.requestRef === req.requestNo) ||
+      (req.id && w.requestRef === req.id)
+  );
+  if (!wo) return false;
+  return wo.status === "Cancelled";
+}
+
 function getRequestDisplayStatus(
-  req: { status: string; workOrderNo?: string },
-  workOrders: Array<{ woNumber?: string; status?: string }>,
+  req: { status: string; workOrderNo?: string; requestNo?: string; id?: string },
+  workOrders: Array<{ woNumber?: string; requestRef?: string; status?: string }>,
 ): string {
-  if (req.status === "Cancelled" || req.status === "Rejected") return req.status;
+  if (isLinkedWorkOrderCancelled(req, workOrders)) return "Cancelled";
   if (req.status === "Closed") return "Closed";
   if (isLinkedWorkOrderCompleted(req, workOrders)) return "Completed";
   if (req.status === "Work Order Created") return "WO Created";
@@ -264,6 +333,14 @@ export function MaintenanceRequestsView() {
     return ids;
   }, [requests, workOrders]);
 
+  const cancelledRequestIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const req of requests) {
+      if (isLinkedWorkOrderCancelled(req, workOrders)) ids.add(req.id);
+    }
+    return ids;
+  }, [requests, workOrders]);
+
   const [saving, setSaving] = useState(false);
   const savingLockRef = useRef(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -322,6 +399,7 @@ export function MaintenanceRequestsView() {
   const [vfExecutionMethod, setVfExecutionMethod] = useState<ExecutionMethod>("In-House");
   const [vfNotes, setVfNotes] = useState("");
   const [vfAttachmentName, setVfAttachmentName] = useState<string | null>(null);
+  const [vfAttachmentUrl, setVfAttachmentUrl] = useState<string | null>(null);
 
   // Cancel Request Modal
   const [cancelTargetRequest, setCancelTargetRequest] = useState<MaintenanceRequest | null>(null);
@@ -338,6 +416,8 @@ export function MaintenanceRequestsView() {
   const [createGuestInRoom, setCreateGuestInRoom] = useState<"Yes" | "No" | "Unknown">("No");
   const [createEntryPreference, setCreateEntryPreference] = useState<EntryPreference>("Call Guest First");
   const [createAttachmentName, setCreateAttachmentName] = useState<string | null>(null);
+  const [createAttachmentUrl, setCreateAttachmentUrl] = useState<string | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [createIssues, setCreateIssues] = useState<SnagIssue[]>([]);
   const [issueInputTitle, setIssueInputTitle] = useState<string>("");
   const [createRoomStatusLabel, setCreateRoomStatusLabel] = useState<string | null>(null);
@@ -407,7 +487,8 @@ export function MaintenanceRequestsView() {
     const activeWorkOrders = requests.filter(
       (r) =>
         (r.status === "Work Order Created" || r.status === "Approved") &&
-        !completedRequestIds.has(r.id),
+        !completedRequestIds.has(r.id) &&
+        !cancelledRequestIds.has(r.id),
     ).length;
 
     return {
@@ -416,14 +497,15 @@ export function MaintenanceRequestsView() {
       verifiedReady,
       activeWorkOrders,
     };
-  }, [requests, completedRequestIds]);
+  }, [requests, completedRequestIds, cancelledRequestIds]);
 
   // ─────────────────────────────────────────────────────────────
   // 2. FILTERING LOGIC
   // ─────────────────────────────────────────────────────────────
   const filteredRequests = useMemo(() => {
-    return requests.filter((req) => {
+    const list = requests.filter((req) => {
       const woCompleted = completedRequestIds.has(req.id);
+      const woCancelled = cancelledRequestIds.has(req.id);
 
       // Status Tab Filter
       if (selectedStatusTab !== "ALL") {
@@ -431,12 +513,12 @@ export function MaintenanceRequestsView() {
         if (selectedStatusTab === "Verified" && req.status !== "Verified") return false;
         if (
           selectedStatusTab === "Approved" &&
-          (!(req.status === "Approved" || req.status === "Work Order Created") || woCompleted)
+          (!(req.status === "Approved" || req.status === "Work Order Created") || woCompleted || woCancelled)
         ) {
           return false;
         }
         if (selectedStatusTab === "Completed" && !woCompleted) return false;
-        if (selectedStatusTab === "Closed" && !(req.status === "Cancelled" || req.status === "Closed")) return false;
+        if (selectedStatusTab === "Closed" && !(req.status === "Cancelled" || req.status === "Closed" || woCancelled)) return false;
       }
 
       // Priority Filter
@@ -472,6 +554,14 @@ export function MaintenanceRequestsView() {
       }
 
       return true;
+    });
+
+    // Sort reverse-chronologically (newest Requests at the top of table)
+    return list.sort((a, b) => {
+      const numA = parseInt((a.requestNo || "").replace(/\D/g, ""), 10) || 0;
+      const numB = parseInt((b.requestNo || "").replace(/\D/g, ""), 10) || 0;
+      if (numA !== numB) return numB - numA;
+      return (b.id || "").localeCompare(a.id || "");
     });
   }, [
     requests,
@@ -558,6 +648,7 @@ export function MaintenanceRequestsView() {
     setCreateGuestInRoom("No");
     setCreateEntryPreference("Call Guest First");
     setCreateAttachmentName(null);
+    setCreateAttachmentUrl(null);
     setCreateIssues([]);
     setIssueInputTitle("");
     setCreateRoomStatusLabel(null);
@@ -633,6 +724,7 @@ export function MaintenanceRequestsView() {
           ? createEntryPreference
           : "Coordinate with Duty Manager",
       attachmentName: createAttachmentName || undefined,
+      attachmentUrl: createAttachmentUrl || undefined,
       status: "New",
       createdAt: new Date().toISOString(),
       timeline: [
@@ -680,6 +772,7 @@ export function MaintenanceRequestsView() {
     setVfExecutionMethod(req.verification?.executionMethod || "In-House");
     setVfNotes(req.verification?.notes || "");
     setVfAttachmentName(req.verification?.attachmentName || null);
+    setVfAttachmentUrl(req.verification?.attachmentUrl || null);
   };
 
   const handleAddVerificationMaterial = () => {
@@ -718,12 +811,15 @@ export function MaintenanceRequestsView() {
       ? {
           status: "Closed",
           cancellationReason: "No defect found during physical verification",
+          attachmentName: verifyTargetRequest.attachmentName,
+          attachmentUrl: verifyTargetRequest.attachmentUrl,
           verification: {
             problemConfirmed: "No",
             findings: vfFindings.trim(),
             recommendedWork: "N/A — No defect found",
             notes: vfNotes.trim() || undefined,
             attachmentName: vfAttachmentName || undefined,
+            attachmentUrl: vfAttachmentUrl || undefined,
             verifiedBy: `${currentUser.name} (Engineering)`,
             verifiedAt: "Just now",
           },
@@ -738,6 +834,8 @@ export function MaintenanceRequestsView() {
         }
       : {
           status: "Verified",
+          attachmentName: verifyTargetRequest.attachmentName,
+          attachmentUrl: verifyTargetRequest.attachmentUrl,
           verification: {
             problemConfirmed: vfProblemConfirmed,
             findings: vfFindings.trim(),
@@ -748,6 +846,7 @@ export function MaintenanceRequestsView() {
             executionMethod: vfExecutionMethod,
             notes: vfNotes.trim() || undefined,
             attachmentName: vfAttachmentName || undefined,
+            attachmentUrl: vfAttachmentUrl || undefined,
             verifiedBy: `${currentUser.name} (Engineering)`,
             verifiedAt: "Just now",
           },
@@ -802,7 +901,7 @@ export function MaintenanceRequestsView() {
       isSafetyHazard: req.isSafetyHazard,
       guestInRoom: req.guestInRoom,
       entryPreference: req.entryPreference,
-      executionMethod: req.verification?.executionMethod,
+      executionMethod: req.verification?.executionMethod || "In-House",
       assignedType: req.verification?.executionMethod === "Outsource" ? "External Vendor" : "In-House Staff",
       technicianName: req.verification?.executionMethod === "Outsource" ? "Pending Vendor Selection" : "Unassigned Staff",
       dueDate: "Today, 04:00 PM",
@@ -813,6 +912,12 @@ export function MaintenanceRequestsView() {
       requiredMaterials: req.verification?.requiredMaterials,
       materialsList: req.verification?.materialsList,
       estimatedBudget: req.verification?.estimatedBudget,
+      requestAttachmentName: req.requestAttachmentName || req.attachmentName,
+      requestAttachmentUrl: req.requestAttachmentUrl || req.attachmentUrl,
+      verificationAttachmentName: req.verificationAttachmentName || req.verification?.attachmentName,
+      verificationAttachmentUrl: req.verificationAttachmentUrl || req.verification?.attachmentUrl,
+      attachmentName: req.verificationAttachmentName || req.verification?.attachmentName || req.requestAttachmentName || req.attachmentName,
+      attachmentUrl: req.verificationAttachmentUrl || req.verification?.attachmentUrl || req.requestAttachmentUrl || req.attachmentUrl,
       partsCost: 0,
       externalServiceCost: req.verification?.executionMethod === "Outsource" ? req.verification.estimatedBudget || 0 : 0,
       totalCost: req.verification?.estimatedBudget || 0,
@@ -829,6 +934,9 @@ export function MaintenanceRequestsView() {
       workOrderNo: generatedWoNumber,
       approvedBy: `${currentUser.name} (Engineering)`,
       approvedAt: "Just now",
+      attachmentName: req.attachmentName,
+      attachmentUrl: req.attachmentUrl,
+      verification: req.verification,
       timeline: [
         ...(req.timeline || []),
         { time: "Just now", action: `Approved & Work Order #${generatedWoNumber} Created`, user: currentUser.name },
@@ -1080,7 +1188,8 @@ export function MaintenanceRequestsView() {
               count: requests.filter(
                 (r) =>
                   (r.status === "Approved" || r.status === "Work Order Created") &&
-                  !completedRequestIds.has(r.id),
+                  !completedRequestIds.has(r.id) &&
+                  !cancelledRequestIds.has(r.id),
               ).length,
             },
             {
@@ -1091,7 +1200,7 @@ export function MaintenanceRequestsView() {
             {
               id: "Closed",
               label: "Closed",
-              count: requests.filter((r) => r.status === "Cancelled" || r.status === "Closed").length,
+              count: requests.filter((r) => r.status === "Cancelled" || r.status === "Closed" || cancelledRequestIds.has(r.id)).length,
             },
           ].map((tab) => (
             <button
@@ -1459,6 +1568,8 @@ export function MaintenanceRequestsView() {
                               "inline-flex items-center justify-center min-w-[96px] rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset text-center",
                               getRequestDisplayStatus(req, workOrders) === "Completed"
                                 ? "bg-emerald-50 text-emerald-800 ring-emerald-200"
+                                : getRequestDisplayStatus(req, workOrders) === "Cancelled"
+                                ? "bg-rose-50 text-rose-700 ring-rose-200"
                                 : req.status === "Approved" || req.status === "Work Order Created"
                                 ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
                                 : req.status === "Verified"
@@ -1509,6 +1620,10 @@ export function MaintenanceRequestsView() {
                                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                                 {saving ? "Saving..." : "Approve"}
                               </Button>
+                            ) : cancelledRequestIds.has(req.id) || req.status === "Cancelled" ? (
+                              <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 border border-rose-200 px-2 py-1 text-[11px] font-bold text-rose-800">
+                                <XCircle className="h-3 w-3 text-rose-600" /> Cancelled
+                              </span>
                             ) : completedRequestIds.has(req.id) ? (
                               <Link href="/maintenance/work-orders">
                                 <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100">
@@ -1912,11 +2027,37 @@ export function MaintenanceRequestsView() {
               <div className="p-3 border border-dashed border-slate-300 rounded-xl bg-slate-50 text-center">
                 {createAttachmentName ? (
                   <div className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200">
-                    <span className="text-xs font-semibold text-slate-700 truncate max-w-xs">{createAttachmentName}</span>
+                    <div className="flex items-center gap-2.5 overflow-hidden">
+                      {createAttachmentUrl ? (
+                        <img
+                          src={createAttachmentUrl}
+                          alt={createAttachmentName}
+                          className="h-12 w-12 object-cover rounded-md border border-slate-200 shrink-0 cursor-pointer hover:opacity-90"
+                          onClick={() => setPreviewImageUrl(createAttachmentUrl)}
+                        />
+                      ) : (
+                        <FileText className="h-8 w-8 text-slate-400 shrink-0" />
+                      )}
+                      <div className="min-w-0 text-left">
+                        <span className="text-xs font-semibold text-slate-800 truncate block">{createAttachmentName}</span>
+                        {createAttachmentUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewImageUrl(createAttachmentUrl)}
+                            className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                          >
+                            View Photo Preview
+                          </button>
+                        )}
+                      </div>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setCreateAttachmentName(null)}
-                      className="text-xs text-rose-600 hover:text-rose-800 font-bold ml-2 cursor-pointer"
+                      onClick={() => {
+                        setCreateAttachmentName(null);
+                        setCreateAttachmentUrl(null);
+                      }}
+                      className="text-xs text-rose-600 hover:text-rose-800 font-bold ml-2 cursor-pointer shrink-0"
                     >
                       Remove
                     </button>
@@ -1924,13 +2065,25 @@ export function MaintenanceRequestsView() {
                 ) : (
                   <label className="cursor-pointer block">
                     <span className="text-xs text-slate-600 font-medium block">Click or drag photo to attach issue evidence</span>
-                    <span className="text-[10px] text-slate-400 block mt-0.5">JPG, PNG, or PDF up to 10MB</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">JPG, PNG, or PDF up to 2MB</span>
                     <input
                       type="file"
+                      accept="image/*,.pdf"
                       className="hidden"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
-                        if (file) setCreateAttachmentName(file.name);
+                        if (!file) return;
+                        if (file.size > 2 * 1024 * 1024) {
+                          setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+                          return;
+                        }
+                        try {
+                          const result = await compressImageFile(file);
+                          setCreateAttachmentName(result.fileName);
+                          setCreateAttachmentUrl(result.dataUrl);
+                        } catch (err) {
+                          setCreateAttachmentName(file.name);
+                        }
                       }}
                     />
                   </label>
@@ -1983,7 +2136,8 @@ export function MaintenanceRequestsView() {
               <div>
                 {selectedRequest.status !== "Closed" &&
                   selectedRequest.status !== "Cancelled" &&
-                  !completedRequestIds.has(selectedRequest.id) && (
+                  !completedRequestIds.has(selectedRequest.id) &&
+                  !cancelledRequestIds.has(selectedRequest.id) && (
                   <Button
                     type="button"
                     variant="outline"
@@ -2032,7 +2186,11 @@ export function MaintenanceRequestsView() {
                   </Button>
                 )}
 
-                {completedRequestIds.has(selectedRequest.id) ? (
+                {cancelledRequestIds.has(selectedRequest.id) || selectedRequest.status === "Cancelled" ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 border border-rose-200 px-3 py-1 text-xs font-bold text-rose-800">
+                    <XCircle className="h-3.5 w-3.5 text-rose-600" /> Work Order Cancelled
+                  </span>
+                ) : completedRequestIds.has(selectedRequest.id) ? (
                   <Link href="/maintenance/work-orders">
                     <Button
                       type="button"
@@ -2136,6 +2294,41 @@ export function MaintenanceRequestsView() {
                   <span className="text-[10px] text-slate-400 block">{selectedRequest.reportedDept}</span>
                 </div>
               </div>
+
+              {/* Reported Issue Photo (Initial Evidence) */}
+              {(selectedRequest.attachmentUrl || selectedRequest.attachmentName) && (
+                <div className="pt-2 border-t border-slate-100">
+                  <span className="text-[10px] text-slate-500 font-bold block mb-1">📷 Reported Issue Photo / Evidence</span>
+                  <div className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border border-slate-200">
+                    {selectedRequest.attachmentUrl ? (
+                      <img
+                        src={selectedRequest.attachmentUrl}
+                        alt={selectedRequest.attachmentName || "Reported Issue Photo"}
+                        className="h-16 w-16 object-cover rounded-md border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => setPreviewImageUrl(selectedRequest.attachmentUrl || null)}
+                      />
+                    ) : (
+                      <div className="h-12 w-12 rounded-md bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-400">
+                        <FileText className="h-6 w-6" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <span className="text-xs font-semibold text-slate-800 block truncate max-w-[200px]">
+                        {selectedRequest.attachmentName || "Reported_Issue.jpg"}
+                      </span>
+                      {selectedRequest.attachmentUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewImageUrl(selectedRequest.attachmentUrl || null)}
+                          className="text-[11px] font-bold text-emerald-700 hover:underline mt-0.5 cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <Eye className="h-3 w-3" /> View Reported Photo
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Multi-Issue Snags List (if present) */}
@@ -2182,7 +2375,14 @@ export function MaintenanceRequestsView() {
                 <strong className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                   <Wrench className="h-3.5 w-3.5 text-slate-500" /> 2. Maintenance Verification Findings
                 </strong>
-                {selectedRequest.verification ? (
+                {selectedRequest.verification ||
+                selectedRequest.status === "Verified" ||
+                selectedRequest.status === "Approved" ||
+                selectedRequest.status === "Work Order Created" ||
+                selectedRequest.status === "Closed" ||
+                Boolean(selectedRequest.workOrderNo) ||
+                getRequestDisplayStatus(selectedRequest, workOrders) === "Completed" ||
+                completedRequestIds.has(selectedRequest.id) ? (
                   <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80">
                     Verified
                   </span>
@@ -2199,7 +2399,7 @@ export function MaintenanceRequestsView() {
                     <div>
                       <span className="text-[10px] text-slate-400 block font-bold">Execution Method</span>
                       <span className="inline-block rounded px-2 py-0.5 text-[10px] font-medium border mt-0.5 bg-slate-100 text-slate-700 border-slate-200">
-                        {selectedRequest.verification.executionMethod}
+                        {selectedRequest.verification.executionMethod || "In-House"}
                       </span>
                     </div>
                     <div>
@@ -2212,13 +2412,15 @@ export function MaintenanceRequestsView() {
 
                   <div>
                     <span className="text-[10px] text-slate-400 block font-bold">Physical Inspection Findings</span>
-                    <p className="text-slate-800 font-medium">{selectedRequest.verification.findings}</p>
+                    <p className="text-slate-800 font-medium">{selectedRequest.verification.findings || "Physical verification completed."}</p>
                   </div>
 
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-bold">Recommended Scope of Work</span>
-                    <p className="text-slate-800 font-medium">{selectedRequest.verification.recommendedWork}</p>
-                  </div>
+                  {selectedRequest.verification.recommendedWork && (
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold">Recommended Scope of Work</span>
+                      <p className="text-slate-800 font-medium">{selectedRequest.verification.recommendedWork}</p>
+                    </div>
+                  )}
 
                   {selectedRequest.verification.requiredMaterials && (
                     <div>
@@ -2228,8 +2430,71 @@ export function MaintenanceRequestsView() {
                   )}
 
                   <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-                    <span>Verified By: <strong>{selectedRequest.verification.verifiedBy}</strong></span>
-                    <span className="font-mono">{selectedRequest.verification.verifiedAt}</span>
+                    <span>Verified By: <strong>{selectedRequest.verification.verifiedBy || "Engineering"}</strong></span>
+                    <span className="font-mono">{selectedRequest.verification.verifiedAt || "Verified"}</span>
+                  </div>
+
+                  {/* Physical Inspection Photo (Technical Evidence) */}
+                  {(selectedRequest.verification.attachmentUrl || selectedRequest.verification.attachmentName) && (
+                    <div className="pt-2 border-t border-slate-100">
+                      <span className="text-[10px] text-slate-500 font-bold block mb-1">🔧 Physical Inspection Photo / Evidence</span>
+                      <div className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border border-slate-200">
+                        {selectedRequest.verification.attachmentUrl ? (
+                          <img
+                            src={selectedRequest.verification.attachmentUrl}
+                            alt={selectedRequest.verification.attachmentName || "Inspection Photo"}
+                            className="h-16 w-16 object-cover rounded-md border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => setPreviewImageUrl(selectedRequest.verification?.attachmentUrl || null)}
+                          />
+                        ) : (
+                          <div className="h-12 w-12 rounded-md bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-400">
+                            <FileText className="h-6 w-6" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <span className="text-xs font-semibold text-slate-800 block truncate max-w-[200px]">
+                            {selectedRequest.verification.attachmentName || "Inspection_Evidence.jpg"}
+                          </span>
+                          {selectedRequest.verification.attachmentUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewImageUrl(selectedRequest.verification?.attachmentUrl || null)}
+                              className="text-[11px] font-bold text-emerald-700 hover:underline mt-0.5 cursor-pointer inline-flex items-center gap-1"
+                            >
+                              <Eye className="h-3 w-3" /> View Inspection Photo
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : selectedRequest.status === "Verified" ||
+                selectedRequest.status === "Approved" ||
+                selectedRequest.status === "Work Order Created" ||
+                selectedRequest.status === "Closed" ||
+                Boolean(selectedRequest.workOrderNo) ||
+                getRequestDisplayStatus(selectedRequest, workOrders) === "Completed" ||
+                completedRequestIds.has(selectedRequest.id) ? (
+                <div className="space-y-2 text-xs">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold">Execution Method</span>
+                      <span className="inline-block rounded px-2 py-0.5 text-[10px] font-medium border mt-0.5 bg-slate-100 text-slate-700 border-slate-200">
+                        In-House Engineering Staff
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold">Inspection Status</span>
+                      <span className="text-emerald-700 font-semibold text-xs flex items-center gap-1 mt-0.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Physical Inspection Completed &amp; Approved
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-bold">Physical Inspection Findings</span>
+                    <p className="text-slate-800 font-medium">Physical verification completed. Ticket verified and approved for Work Order dispatch.</p>
                   </div>
                 </div>
               ) : (
@@ -2541,11 +2806,37 @@ export function MaintenanceRequestsView() {
               <div className="p-3 border border-dashed border-slate-300 rounded-xl bg-slate-50 text-center">
                 {vfAttachmentName ? (
                   <div className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200">
-                    <span className="text-xs font-semibold text-slate-700 truncate max-w-xs">{vfAttachmentName}</span>
+                    <div className="flex items-center gap-2.5 overflow-hidden">
+                      {vfAttachmentUrl ? (
+                        <img
+                          src={vfAttachmentUrl}
+                          alt={vfAttachmentName}
+                          className="h-12 w-12 object-cover rounded-md border border-slate-200 shrink-0 cursor-pointer hover:opacity-90"
+                          onClick={() => setPreviewImageUrl(vfAttachmentUrl)}
+                        />
+                      ) : (
+                        <FileText className="h-8 w-8 text-slate-400 shrink-0" />
+                      )}
+                      <div className="min-w-0 text-left">
+                        <span className="text-xs font-semibold text-slate-800 truncate block">{vfAttachmentName}</span>
+                        {vfAttachmentUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewImageUrl(vfAttachmentUrl)}
+                            className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                          >
+                            View Photo Preview
+                          </button>
+                        )}
+                      </div>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setVfAttachmentName(null)}
-                      className="text-xs text-rose-600 hover:text-rose-800 font-bold ml-2 cursor-pointer"
+                      onClick={() => {
+                        setVfAttachmentName(null);
+                        setVfAttachmentUrl(null);
+                      }}
+                      className="text-xs text-rose-600 hover:text-rose-800 font-bold ml-2 cursor-pointer shrink-0"
                     >
                       Remove
                     </button>
@@ -2553,13 +2844,25 @@ export function MaintenanceRequestsView() {
                 ) : (
                   <label className="cursor-pointer block">
                     <span className="text-xs text-slate-600 font-medium block">Click or drag photo to attach inspection evidence</span>
-                    <span className="text-[10px] text-slate-400 block mt-0.5">JPG, PNG or PDF up to 10MB</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">JPG, PNG or PDF up to 2MB</span>
                     <input
                       type="file"
+                      accept="image/*,.pdf"
                       className="hidden"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
-                        if (file) setVfAttachmentName(file.name);
+                        if (!file) return;
+                        if (file.size > 2 * 1024 * 1024) {
+                          setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+                          return;
+                        }
+                        try {
+                          const result = await compressImageFile(file);
+                          setVfAttachmentName(result.fileName);
+                          setVfAttachmentUrl(result.dataUrl);
+                        } catch (err) {
+                          setVfAttachmentName(file.name);
+                        }
                       }}
                     />
                   </label>
@@ -2675,6 +2978,36 @@ export function MaintenanceRequestsView() {
               </>
             )}
           </form>
+        </Modal>
+      )}
+      {/* IMAGE PREVIEW LIGHTBOX MODAL */}
+      {previewImageUrl && (
+        <Modal
+          isOpen={Boolean(previewImageUrl)}
+          onClose={() => setPreviewImageUrl(null)}
+          title="Image Evidence Preview"
+          maxWidth="md"
+        >
+          <div className="p-2 space-y-3 text-center">
+            <div className="max-h-[70vh] overflow-hidden rounded-xl bg-slate-950 flex items-center justify-center p-2">
+              <img
+                src={previewImageUrl}
+                alt="Full photo evidence"
+                className="max-h-[65vh] max-w-full object-contain rounded-lg shadow-lg"
+              />
+            </div>
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPreviewImageUrl(null)}
+                className="rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Close Preview
+              </Button>
+            </div>
+          </div>
         </Modal>
       )}
     </ModulePageShell>

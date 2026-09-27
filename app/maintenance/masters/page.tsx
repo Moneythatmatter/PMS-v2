@@ -48,25 +48,11 @@ const MASTERS_LIST = [
     badge: "Taxonomy",
   },
   {
-    title: "Root Causes",
-    description: "Library of standard technical root causes for failure classification and reporting.",
-    href: "/maintenance/masters/root-causes",
-    icon: CheckSquare,
-    badge: "Diagnosis",
-  },
-  {
     title: "PM Task Templates",
     description: "Checklist templates for recurring preventive maintenance schedules and asset servicing.",
     href: "/maintenance/masters/pm-templates",
     icon: Repeat,
     badge: "Schedules",
-  },
-  {
-    title: "Spare Parts Catalog",
-    description: "Parts and materials catalog used when recording spare part usage on Work Orders.",
-    href: "/maintenance/masters/spare-parts",
-    icon: Package,
-    badge: "Materials",
   },
   {
     title: "Vendor Master",

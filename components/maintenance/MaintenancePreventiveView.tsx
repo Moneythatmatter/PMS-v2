@@ -60,6 +60,20 @@ function normalizePmSchedule(pm: PMSchedule): PMSchedule {
   };
 }
 
+/** Find live work order linked to PM Schedule. */
+function getLinkedWorkOrder(
+  pm: { activeWorkOrderNo?: string; pmNumber?: string },
+  workOrders: WorkOrder[]
+): WorkOrder | undefined {
+  if (!workOrders || workOrders.length === 0) return undefined;
+  return workOrders.find(
+    (w) =>
+      (pm.activeWorkOrderNo && w.woNumber === pm.activeWorkOrderNo) ||
+      (pm.pmNumber && w.sourceRef === pm.pmNumber) ||
+      (pm.pmNumber && w.issue && w.issue.includes(pm.pmNumber))
+  );
+}
+
 export const getPMStatusBadgeConfig = (status: PMScheduleStatus) => {
   switch (status) {
     case "Upcoming":
@@ -79,6 +93,7 @@ export function MaintenancePreventiveView() {
   const router = useRouter();
   const { data: pmSchedulesRaw, loading, reload: reloadSchedules } = usePsList(() => mntPmScheduleService.list(), []);
   const pmSchedules = useMemo(() => pmSchedulesRaw.map(normalizePmSchedule), [pmSchedulesRaw]);
+  const { data: workOrders, reload: reloadWorkOrders } = usePsList(() => mntWorkOrderService.list(), []);
   const { data: templates } = usePsList(() => mntPmTemplateService.list(), []);
   const { data: vendors } = usePsList(() => mntVendorService.list(), []);
   const { data: assets } = usePsList(() => mntAssetService.list(), []);
@@ -154,7 +169,7 @@ export function MaintenancePreventiveView() {
   // 2. FILTERING LOGIC
   // ─────────────────────────────────────────────────────────────
   const filteredSchedules = useMemo(() => {
-    return pmSchedules.filter((pm) => {
+    const list = pmSchedules.filter((pm) => {
       // Status Filter
       if (selectedStatusFilter !== "ALL" && pm.status !== selectedStatusFilter) return false;
 
@@ -178,6 +193,14 @@ export function MaintenancePreventiveView() {
       }
 
       return true;
+    });
+
+    // Sort reverse-chronologically (newest PM schedules at the top of table)
+    return list.sort((a, b) => {
+      const numA = parseInt((a.pmNumber || "").replace(/\D/g, ""), 10) || 0;
+      const numB = parseInt((b.pmNumber || "").replace(/\D/g, ""), 10) || 0;
+      if (numA !== numB) return numB - numA;
+      return (b.id || "").localeCompare(a.id || "");
     });
   }, [pmSchedules, selectedStatusFilter, selectedFrequencyFilter, selectedExecutionFilter, searchTerm]);
 
@@ -290,9 +313,10 @@ export function MaintenancePreventiveView() {
   // ─────────────────────────────────────────────────────────────
   const handleGenerateWorkOrder = async (pm: PMSchedule) => {
     if (saving) return;
-    // Prevent duplicate active Work Order if already generated
-    if (pm.activeWorkOrderNo) {
-      setToastMessage(`⚠️ Active Work Order #${pm.activeWorkOrderNo} already exists for ${pm.pmNumber}. View it on the Work Orders page.`);
+    // Prevent duplicate active Work Order if already generated and active
+    const linkedWo = getLinkedWorkOrder(pm, workOrders);
+    if (linkedWo && linkedWo.status !== "Completed" && linkedWo.status !== "Closed" && linkedWo.status !== "Cancelled") {
+      setToastMessage(`⚠️ Active Work Order #${linkedWo.woNumber} already exists for ${pm.pmNumber}. View it on the Work Orders page.`);
       return;
     }
 
@@ -339,7 +363,7 @@ export function MaintenancePreventiveView() {
       const updatedSchedule = await mntPmScheduleService.update(pm.id, {
         activeWorkOrderNo: newWoNumber,
       });
-      await reloadSchedules();
+      await Promise.all([reloadSchedules(), reloadWorkOrders()]);
       if (selectedSchedule?.id === pm.id) setSelectedSchedule(normalizePmSchedule(updatedSchedule));
       setToastMessage(`✓ Work Order #${newWoNumber} generated for ${pm.pmNumber} and sent to Work Orders page.`);
     } catch (err) {
@@ -684,34 +708,56 @@ export function MaintenancePreventiveView() {
                         {/* 9. Contextual Action */}
                         <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1.5">
-                            {pm.activeWorkOrderNo ? (
-                              <Link href={`/maintenance/work-orders?searchTerm=${pm.activeWorkOrderNo}`}>
-                                <span className="inline-flex items-center gap-1 rounded-lg bg-teal-50 border border-teal-200 px-2 py-1 text-[11px] font-bold text-teal-800 hover:bg-teal-100">
-                                  <Wrench className="h-3 w-3" /> Active #{pm.activeWorkOrderNo}
-                                </span>
-                              </Link>
-                            ) : (pm.status === "Due" || pm.status === "Overdue") ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                disabled={saving}
-                                onClick={() => handleGenerateWorkOrder(pm)}
-                                className="h-7 px-2 text-xs font-semibold bg-emerald-700 text-white hover:bg-emerald-800 rounded-lg cursor-pointer flex items-center gap-1 disabled:opacity-50"
-                              >
-                                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                                {saving ? "Saving..." : "Generate Work Order"}
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setSelectedSchedule(normalizePmSchedule(pm))}
-                                className="h-7 px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
-                              >
-                                View Details
-                              </Button>
-                            )}
+                            {(() => {
+                              const linkedWo = getLinkedWorkOrder(pm, workOrders);
+                              const isWoActive = linkedWo && linkedWo.status !== "Completed" && linkedWo.status !== "Closed" && linkedWo.status !== "Cancelled";
+                              const isWoCompleted = linkedWo && (linkedWo.status === "Completed" || linkedWo.status === "Closed");
+
+                              if (isWoActive) {
+                                return (
+                                  <Link href={`/maintenance/work-orders?searchTerm=${linkedWo.woNumber}`}>
+                                    <span className="inline-flex items-center gap-1 rounded-lg bg-teal-50 border border-teal-200 px-2 py-1 text-[11px] font-bold text-teal-800 hover:bg-teal-100">
+                                      <Wrench className="h-3 w-3" /> Active #{linkedWo.woNumber}
+                                    </span>
+                                  </Link>
+                                );
+                              }
+
+                              if (isWoCompleted) {
+                                return (
+                                  <div className="flex items-center gap-1.5">
+                                    <Link href={`/maintenance/work-orders?searchTerm=${linkedWo.woNumber}`}>
+                                      <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100">
+                                        <CheckCircle2 className="h-3 w-3" /> WO #{linkedWo.woNumber} (Done)
+                                      </span>
+                                    </Link>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      disabled={saving}
+                                      onClick={() => handleGenerateWorkOrder(pm)}
+                                      className="h-7 px-2 text-[11px] font-semibold bg-emerald-700 text-white hover:bg-emerald-800 rounded-lg cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                                    >
+                                      {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                                      Next Run
+                                    </Button>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={saving}
+                                  onClick={() => handleGenerateWorkOrder(pm)}
+                                  className="h-7 px-2 text-xs font-semibold bg-emerald-700 text-white hover:bg-emerald-800 rounded-lg cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                                >
+                                  {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                                  {saving ? "Saving..." : "Generate Work Order"}
+                                </Button>
+                              );
+                            })()}
 
                             <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
                           </div>
@@ -1076,28 +1122,37 @@ export function MaintenancePreventiveView() {
                 {selectedSchedule.status === "Inactive" ? "Activate Schedule" : "Mark Inactive"}
               </Button>
 
-              {selectedSchedule.activeWorkOrderNo ? (
-                <Link href={`/maintenance/work-orders?searchTerm=${selectedSchedule.activeWorkOrderNo}`}>
+              {(() => {
+                const linkedWo = getLinkedWorkOrder(selectedSchedule, workOrders);
+                const isWoActive = linkedWo && linkedWo.status !== "Completed" && linkedWo.status !== "Closed" && linkedWo.status !== "Cancelled";
+
+                if (isWoActive) {
+                  return (
+                    <Link href={`/maintenance/work-orders?searchTerm=${linkedWo.woNumber}`}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer"
+                      >
+                        <Wrench className="h-3.5 w-3.5" /> View Active WO (#{linkedWo.woNumber}) →
+                      </Button>
+                    </Link>
+                  );
+                }
+
+                return (
                   <Button
                     type="button"
                     size="sm"
-                    className="bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer"
+                    disabled={saving}
+                    onClick={() => handleGenerateWorkOrder(selectedSchedule)}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-50"
                   >
-                    <Wrench className="h-3.5 w-3.5" /> View Active WO (#{selectedSchedule.activeWorkOrderNo}) →
+                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    {saving ? "Saving..." : "Generate Work Order →"}
                   </Button>
-                </Link>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={saving}
-                  onClick={() => handleGenerateWorkOrder(selectedSchedule)}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                >
-                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                  {saving ? "Saving..." : "Generate Work Order →"}
-                </Button>
-              )}
+                );
+              })()}
             </div>
           }
         >

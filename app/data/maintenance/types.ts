@@ -66,6 +66,7 @@ export interface RequestVerification {
   executionMethod?: ExecutionMethod;
   notes?: string;
   attachmentName?: string;
+  attachmentUrl?: string;
   verifiedBy: string;
   verifiedAt: string;
 }
@@ -89,6 +90,11 @@ export interface MaintenanceRequest {
   status: RequestStatus;
   workOrderNo?: string;
   attachmentName?: string;
+  attachmentUrl?: string;
+  requestAttachmentName?: string;
+  requestAttachmentUrl?: string;
+  verificationAttachmentName?: string;
+  verificationAttachmentUrl?: string;
   createdAt: string;
   verification?: RequestVerification;
   approvedBy?: string;
@@ -147,6 +153,7 @@ export interface WorkOrderProgressUpdate {
   remarks: string;
   partsWaiting?: string;
   attachmentName?: string;
+  attachmentUrl?: string;
 }
 
 export interface WorkOrderTimelineEvent {
@@ -230,6 +237,11 @@ export interface WorkOrder {
   // Progress & Activity History
   progressUpdates?: WorkOrderProgressUpdate[];
   attachmentName?: string;
+  attachmentUrl?: string;
+  requestAttachmentName?: string;
+  requestAttachmentUrl?: string;
+  verificationAttachmentName?: string;
+  verificationAttachmentUrl?: string;
   reopenedReason?: string;
   cancelReason?: string;
   timeline: WorkOrderTimelineEvent[];

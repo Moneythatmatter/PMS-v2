@@ -49,8 +49,8 @@ import { cn } from "@/lib/utils";
 import { CentralLeadItem } from "@/app/data/centralLeadData";
 import { LeadType, LeadSource } from "./LeadsInquiriesView";
 import { AddActivityModal, ActivityPayload, SharedActivityType, SharedActivityStatus } from "./shared/AddActivityModal";
-import { smDealService, smLeadService, smDealStageService } from "@/services/sales-marketing";
-import { mapDealFromApi, mapDealToApi, mapCentralLeadFromApi, mapDealStageFromApi } from "@/lib/sales-marketing/api-mappers";
+import { smDealService, smLeadService, smDealStageService, smActivityService } from "@/services/sales-marketing";
+import { mapDealFromApi, mapDealToApi, mapCentralLeadFromApi, mapDealStageFromApi, mapActivityFromApi, mapActivityToApi } from "@/lib/sales-marketing/api-mappers";
 import { nowTimelineStamp, todayIsoDate } from "@/lib/sales-marketing/useSmList";
 
 // ─────────────────────────────────────────────────────────────
@@ -408,12 +408,46 @@ export function DealsPipelineView() {
   const loadDealsAndLeads = async () => {
     setLoading(true);
     try {
-      const [dealRows, leadRows, stageRows] = await Promise.all([
+      const [dealRows, leadRows, stageRows, activityRows] = await Promise.all([
         smDealService.list(),
         smLeadService.list(),
         smDealStageService.list(),
+        smActivityService.list().catch(() => []),
       ]);
-      setDeals(dealRows.map(mapDealFromApi));
+      const centralActivities = activityRows.map(mapActivityFromApi);
+      const mappedDeals = dealRows.map(mapDealFromApi).map((deal) => {
+        const matchingCentralActs: DealActivity[] = centralActivities
+          .filter((a) => a.dealId === deal.id || a.dealId === deal.dbId)
+          .map((act) => ({
+            id: act.id,
+            type: act.activityType,
+            date: act.activityDate,
+            time: act.activityTime,
+            user: act.assignedExecutive,
+            notes: act.outcomeNotes || act.purpose || "Activity logged",
+            status: act.status,
+            purpose: act.purpose,
+            venue: act.venueRequired,
+            contactPerson: act.contactPerson,
+            nextAction: act.nextAction,
+            nextActionDate: act.nextActionDate,
+          }));
+
+        const existingIds = new Set((deal.activities || []).map((a) => a.id));
+        const mergedActivities = [...(deal.activities || [])];
+        for (const act of matchingCentralActs) {
+          if (!existingIds.has(act.id)) {
+            mergedActivities.push(act);
+            existingIds.add(act.id);
+          }
+        }
+        return {
+          ...deal,
+          activities: mergedActivities,
+        };
+      });
+
+      setDeals(mappedDeals);
       setCentralLeads(leadRows.map(mapCentralLeadFromApi));
 
       const activeMasterStages = stageRows
@@ -871,6 +905,47 @@ export function DealsPipelineView() {
       nextCallDate: payload.nextActionDate || (payload.status === "Upcoming" ? payload.activityDate : selectedDeal.nextCallDate),
       activities: [newDealActivity, ...selectedDeal.activities],
     };
+
+    // Also persist central activity so it appears in Central Activities View
+    try {
+      let mappedType = "Call";
+      if (payload.activityType === "Phone Call") mappedType = "Call";
+      else if (payload.activityType === "Site Visit") mappedType = "Site Visit";
+      else if (payload.activityType === "Follow-up") mappedType = "Follow Up";
+      else if (payload.activityType === "Meeting") mappedType = "Meeting";
+      else if (payload.activityType === "WhatsApp") mappedType = "WhatsApp";
+      else if (payload.activityType === "Email") mappedType = "Email";
+      else if (payload.activityType === "Task / Note") mappedType = "Task";
+
+      const centralPayload = mapActivityToApi({
+        id: payload.id,
+        activityType: mappedType as any,
+        priority: (payload.priority as any) || "Medium",
+        dealId: selectedDeal.id,
+        dealDbId: selectedDeal.dbId,
+        dealName: selectedDeal.dealName,
+        leadId: selectedDeal.leadId,
+        customerName: selectedDeal.customerName,
+        companyName: selectedDeal.companyName,
+        contactPerson: payload.contactPerson || selectedDeal.customerName,
+        mobileNumber: payload.mobile || selectedDeal.mobile,
+        email: payload.email || selectedDeal.email,
+        pipelineStage: selectedDeal.stage,
+        activityDate: payload.activityDate,
+        activityTime: payload.activityTime,
+        assignedExecutive: payload.assignedExecutive,
+        status: payload.status === "Completed" ? "Completed" : "Scheduled",
+        venueRequired: payload.venue,
+        purpose: payload.subject || `${payload.activityType} for ${selectedDeal.dealName}`,
+        outcomeNotes: payload.notes,
+        outcome: payload.status === "Completed" ? "Completed" : undefined,
+        nextAction: payload.nextActionSummary,
+        nextActionDate: payload.nextActionDate,
+      });
+      await smActivityService.create(centralPayload);
+    } catch (e) {
+      console.error("Failed to save central activity", e);
+    }
 
     const saved = await persistDeal(updatedDeal);
     if (!saved) return;

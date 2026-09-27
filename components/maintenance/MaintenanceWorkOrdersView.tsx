@@ -28,6 +28,7 @@ import {
   Sparkles,
   SlidersHorizontal,
   Download,
+  Eye,
   Loader2,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
@@ -55,6 +56,7 @@ import {
 import { currentUser } from "@/app/data/user";
 import { usePsList } from "@/hooks/usePsResource";
 import { mntWorkOrderService, mntRequestService, mntVendorService, mntProblemCategoryService, mntSparePartService } from "@/services/maintenance";
+import { compressImageFile } from "./MaintenanceRequestsView";
 
 // Legacy fallback if spare-parts master is empty (until seeded).
 export const STORES_SPARE_PARTS_CATALOG = [
@@ -107,7 +109,7 @@ function canStartWork(wo: WorkOrder): boolean {
 export function MaintenanceWorkOrdersView() {
   const searchParams = useSearchParams();
   const { data: workOrders, loading, reload: reloadWorkOrders } = usePsList(() => mntWorkOrderService.list(), []);
-  const { data: requests } = usePsList(() => mntRequestService.list(), []);
+  const { data: requests, reload: reloadRequests } = usePsList(() => mntRequestService.list(), []);
   const { data: vendors } = usePsList(() => mntVendorService.list(), []);
   const { data: problemCategories } = usePsList(() => mntProblemCategoryService.list(), []);
   const { data: sparePartsMaster } = usePsList(() => mntSparePartService.list(), []);
@@ -150,6 +152,26 @@ export function MaintenanceWorkOrdersView() {
   // Drawer / Modal States
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+
+  // Fallback linked request lookup for complete photo visibility across all stages
+  const selectedLinkedRequest = useMemo(() => {
+    if (!selectedWorkOrder) return null;
+    return requests.find(
+      (r) =>
+        (selectedWorkOrder.requestRef && (r.requestNo === selectedWorkOrder.requestRef || r.id === selectedWorkOrder.requestRef)) ||
+        (r.workOrderNo && r.workOrderNo === selectedWorkOrder.woNumber)
+    );
+  }, [selectedWorkOrder, requests]);
+
+  const selectedReqPhotoUrl = selectedWorkOrder?.requestAttachmentUrl || selectedLinkedRequest?.requestAttachmentUrl || selectedLinkedRequest?.attachmentUrl;
+  const selectedReqPhotoName = selectedWorkOrder?.requestAttachmentName || selectedLinkedRequest?.requestAttachmentName || selectedLinkedRequest?.attachmentName;
+
+  const selectedVerifPhotoUrl = selectedWorkOrder?.verificationAttachmentUrl || selectedLinkedRequest?.verificationAttachmentUrl || selectedLinkedRequest?.verification?.attachmentUrl;
+  const selectedVerifPhotoName = selectedWorkOrder?.verificationAttachmentName || selectedLinkedRequest?.verificationAttachmentName || selectedLinkedRequest?.verification?.attachmentName;
+
+  const selectedComplPhotoUrl = selectedWorkOrder?.attachmentUrl;
+  const selectedComplPhotoName = selectedWorkOrder?.attachmentName;
 
   // ─────────────────────────────────────────────────────────────
   // MODAL STATES FOR CONTROLLED ACTIONS
@@ -159,19 +181,23 @@ export function MaintenanceWorkOrdersView() {
   const [progressStatus, setProgressStatus] = useState<WorkOrderStatus>("In Progress");
   const [progressRemarks, setProgressRemarks] = useState("");
   const [partsWaiting, setPartsWaiting] = useState("");
-  const [progressAttachment, setProgressAttachment] = useState<string | null>(null);
+  const [progressAttachmentName, setProgressAttachmentName] = useState<string | null>(null);
+  const [progressAttachmentUrl, setProgressAttachmentUrl] = useState<string | null>(null);
 
   // 2. Complete Work Order Modal
   const [completeTargetWO, setCompleteTargetWO] = useState<WorkOrder | null>(null);
   const [completionRootCause, setCompletionRootCause] = useState("");
   const [completionActionTaken, setCompletionActionTaken] = useState("");
   const [completionNotes, setCompletionNotes] = useState("");
-  const [completionAttachment, setCompletionAttachment] = useState<string | null>(null);
+  const [completionAttachmentName, setCompletionAttachmentName] = useState<string | null>(null);
+  const [completionAttachmentUrl, setCompletionAttachmentUrl] = useState<string | null>(null);
 
   // 3. Verify & Sign-off Modal
   const [verifyTargetWO, setVerifyTargetWO] = useState<WorkOrder | null>(null);
   const [verificationResult, setVerificationResult] = useState<"Pass" | "Needs Rework">("Pass");
   const [verificationNotes, setVerificationNotes] = useState("");
+  const [verifyAttachmentName, setVerifyAttachmentName] = useState<string | null>(null);
+  const [verifyAttachmentUrl, setVerifyAttachmentUrl] = useState<string | null>(null);
 
   // 4. Add Spare Part Modal (Stores Reference Usage Only)
   const [addPartTargetWO, setAddPartTargetWO] = useState<WorkOrder | null>(null);
@@ -240,6 +266,74 @@ export function MaintenanceWorkOrdersView() {
   const [createDueDate, setCreateDueDate] = useState<string>("Today, 05:00 PM");
   const [createSnagIssues, setCreateSnagIssues] = useState<SnagIssue[]>([]);
 
+  // Create Drawer photo state
+  const [createAttachmentName, setCreateAttachmentName] = useState<string | null>(null);
+  const [createAttachmentUrl, setCreateAttachmentUrl] = useState<string | null>(null);
+
+  const handleProgressFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+      return;
+    }
+    try {
+      const res = await compressImageFile(file);
+      setProgressAttachmentName(res.fileName);
+      setProgressAttachmentUrl(res.dataUrl);
+    } catch (err) {
+      console.error("Failed to compress image", err);
+    }
+  };
+
+  const handleCompletionFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+      return;
+    }
+    try {
+      const res = await compressImageFile(file);
+      setCompletionAttachmentName(res.fileName);
+      setCompletionAttachmentUrl(res.dataUrl);
+    } catch (err) {
+      console.error("Failed to compress image", err);
+    }
+  };
+
+  const handleVerifyFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+      return;
+    }
+    try {
+      const res = await compressImageFile(file);
+      setVerifyAttachmentName(res.fileName);
+      setVerifyAttachmentUrl(res.dataUrl);
+    } catch (err) {
+      console.error("Failed to compress image", err);
+    }
+  };
+
+  const handleCreateFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+      return;
+    }
+    try {
+      const res = await compressImageFile(file);
+      setCreateAttachmentName(res.fileName);
+      setCreateAttachmentUrl(res.dataUrl);
+    } catch (err) {
+      console.error("Failed to compress image", err);
+    }
+  };
+
   // Auto-fill from Request URL searchParams
   useEffect(() => {
     const requestParam = searchParams.get("requestRef");
@@ -270,6 +364,11 @@ export function MaintenanceWorkOrdersView() {
     setCreateSnagIssues(req.snagIssues || []);
     setCreateRoomBlock(req.locationType === "Guest Room" && req.priority === "Critical" ? "OOO" : "NONE");
 
+    if (req.requestAttachmentUrl || req.attachmentUrl) {
+      setCreateAttachmentName(req.requestAttachmentName || req.attachmentName || "Reported_Issue.jpg");
+      setCreateAttachmentUrl(req.requestAttachmentUrl || req.attachmentUrl || null);
+    }
+
     if (req.verification) {
       setInheritedFindings(req.verification.findings || "");
       setInheritedRecommendedWork(req.verification.recommendedWork || "");
@@ -295,7 +394,7 @@ export function MaintenanceWorkOrdersView() {
   // 2. FILTERING LOGIC
   // ─────────────────────────────────────────────────────────────
   const filteredWorkOrders = useMemo(() => {
-    return workOrders.filter((wo) => {
+    const list = workOrders.filter((wo) => {
       // Status Tab Filter
       if (selectedStatusTab !== "ALL") {
         if (selectedStatusTab === "New" && !needsTechnicianAssignment(wo)) return false;
@@ -326,12 +425,12 @@ export function MaintenanceWorkOrdersView() {
       // Search Query
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
-        const matchWO = wo.woNumber.toLowerCase().includes(q);
+        const matchWO = wo.woNumber ? wo.woNumber.toLowerCase().includes(q) : false;
         const matchReq = wo.requestRef ? wo.requestRef.toLowerCase().includes(q) : false;
-        const matchLoc = wo.location.toLowerCase().includes(q);
-        const matchIssue = wo.issue.toLowerCase().includes(q);
+        const matchLoc = wo.location ? wo.location.toLowerCase().includes(q) : false;
+        const matchIssue = wo.issue ? wo.issue.toLowerCase().includes(q) : false;
         const matchAsset = wo.assetName ? wo.assetName.toLowerCase().includes(q) : false;
-        const matchTech = wo.technicianName.toLowerCase().includes(q);
+        const matchTech = wo.technicianName ? wo.technicianName.toLowerCase().includes(q) : false;
         const matchVendor = wo.maintenanceVendorName ? wo.maintenanceVendorName.toLowerCase().includes(q) : false;
 
         if (!matchWO && !matchReq && !matchLoc && !matchIssue && !matchAsset && !matchTech && !matchVendor) {
@@ -340,6 +439,14 @@ export function MaintenanceWorkOrdersView() {
       }
 
       return true;
+    });
+
+    // Sort reverse-chronologically (newest Work Orders at the top of table)
+    return list.sort((a, b) => {
+      const numA = parseInt((a.woNumber || "").replace(/\D/g, ""), 10) || 0;
+      const numB = parseInt((b.woNumber || "").replace(/\D/g, ""), 10) || 0;
+      if (numA !== numB) return numB - numA;
+      return (b.id || "").localeCompare(a.id || "");
     });
   }, [workOrders, selectedStatusTab, selectedTypeFilter, selectedPriorityFilter, selectedAssigneeFilter, searchTerm]);
 
@@ -453,6 +560,12 @@ export function MaintenanceWorkOrdersView() {
     const selectedVendor = vendors.find((v) => v.id === createVendorId) || vendors[0];
     const newWoNumber = `WO-${120 + workOrders.length + 1}`;
 
+    const linkedReq = requests.find((r) => r.id === selectedRequestId || r.requestNo === createRequestRef);
+    const reqAttUrl = createAttachmentUrl || linkedReq?.requestAttachmentUrl || linkedReq?.attachmentUrl;
+    const reqAttName = createAttachmentName || linkedReq?.requestAttachmentName || linkedReq?.attachmentName;
+    const verifAttUrl = linkedReq?.verificationAttachmentUrl || linkedReq?.verification?.attachmentUrl;
+    const verifAttName = linkedReq?.verificationAttachmentName || linkedReq?.verification?.attachmentName;
+
     const newWorkOrder: Partial<WorkOrder> = {
       woNumber: newWoNumber,
       requestRef: createRequestRef.trim() || undefined,
@@ -486,6 +599,12 @@ export function MaintenanceWorkOrdersView() {
       recommendedWork: inheritedRecommendedWork || undefined,
       requiredMaterials: inheritedRequiredMaterials || undefined,
       estimatedBudget: inheritedEstimatedBudget !== "" ? Number(inheritedEstimatedBudget) : undefined,
+      requestAttachmentName: reqAttName || undefined,
+      requestAttachmentUrl: reqAttUrl || undefined,
+      verificationAttachmentName: verifAttName || undefined,
+      verificationAttachmentUrl: verifAttUrl || undefined,
+      attachmentName: verifAttName || reqAttName || undefined,
+      attachmentUrl: verifAttUrl || reqAttUrl || undefined,
       assetCode: createAssetCode.trim() || undefined,
       assetName: createAssetName.trim() || undefined,
       scheduledDate: createScheduledDate,
@@ -578,7 +697,11 @@ export function MaintenanceWorkOrdersView() {
 
   const handleOpenAssignModal = (wo: WorkOrder) => {
     setAssignTargetWO(wo);
-    setAssignExecutionMethod(wo.executionMethod === "Outsource" ? "Outsource" : "In-House");
+    const initialMethod =
+      wo.executionMethod === "Outsource" || wo.assignedType === "External Vendor" || Boolean(wo.maintenanceVendorName)
+        ? "Outsource"
+        : "In-House";
+    setAssignExecutionMethod(initialMethod);
     setAssignTechnicianName(ON_DUTY_TECHNICIANS[0]?.name ?? "");
     setAssignVendorId(vendors[0]?.id ?? "");
     setAssignExternalTechName("");
@@ -637,12 +760,13 @@ export function MaintenanceWorkOrdersView() {
   };
 
   // Progress Update Modal
-  const handleOpenProgressModal = (wo: WorkOrder) => {
+  const handleOpenProgressModal = (wo: WorkOrder, initialStatus?: "In Progress" | "Awaiting Parts") => {
     setProgressTargetWO(wo);
-    setProgressStatus(wo.status === "Awaiting Parts" ? "Awaiting Parts" : "In Progress");
+    setProgressStatus(initialStatus || (wo.status === "Awaiting Parts" ? "Awaiting Parts" : "In Progress"));
     setProgressRemarks("");
     setPartsWaiting("");
-    setProgressAttachment(null);
+    setProgressAttachmentName(null);
+    setProgressAttachmentUrl(null);
   };
 
   const handleSaveProgressUpdate = async (e: React.FormEvent) => {
@@ -657,7 +781,8 @@ export function MaintenanceWorkOrdersView() {
       status: progressStatus,
       remarks: progressRemarks.trim(),
       partsWaiting: partsWaiting.trim() || undefined,
-      attachmentName: progressAttachment || undefined,
+      attachmentName: progressAttachmentName || undefined,
+      attachmentUrl: progressAttachmentUrl || undefined,
     };
 
     const updatedTimelineAction = progressStatus === "Awaiting Parts"
@@ -668,7 +793,7 @@ export function MaintenanceWorkOrdersView() {
       status: progressStatus,
       progressUpdates: [...(progressTargetWO.progressUpdates || []), newUpdate],
       timeline: [
-        ...progressTargetWO.timeline,
+        ...(progressTargetWO.timeline || []),
         { time: "Just now", action: updatedTimelineAction, user: currentUser.name, remark: progressRemarks.trim() },
       ],
     };
@@ -696,7 +821,8 @@ export function MaintenanceWorkOrdersView() {
     setCompletionRootCause(wo.rootCause || "");
     setCompletionActionTaken(wo.actionTaken || "");
     setCompletionNotes(wo.completionNotes || "");
-    setCompletionAttachment(null);
+    setCompletionAttachmentName(wo.attachmentName || null);
+    setCompletionAttachmentUrl(wo.attachmentUrl || null);
   };
 
   const handleConfirmComplete = async (e: React.FormEvent) => {
@@ -709,11 +835,12 @@ export function MaintenanceWorkOrdersView() {
       rootCause: completionRootCause.trim(),
       actionTaken: completionActionTaken.trim(),
       completionNotes: completionNotes.trim() || undefined,
-      attachmentName: completionAttachment || completeTargetWO.attachmentName,
+      attachmentName: completionAttachmentName || completeTargetWO.attachmentName,
+      attachmentUrl: completionAttachmentUrl || completeTargetWO.attachmentUrl,
       postCleaningRequired: completeTargetWO.locationType === "Guest Room",
       hkHandoverStatus: completeTargetWO.locationType === "Guest Room" ? "Post-Maintenance Cleaning Req." : undefined,
       timeline: [
-        ...completeTargetWO.timeline,
+        ...(completeTargetWO.timeline || []),
         {
           time: "Just now",
           action: "Maintenance work reported Completed by technician/vendor",
@@ -745,6 +872,8 @@ export function MaintenanceWorkOrdersView() {
     setVerifyTargetWO(wo);
     setVerificationResult("Pass");
     setVerificationNotes("");
+    setVerifyAttachmentName(wo.verificationAttachmentName || null);
+    setVerifyAttachmentUrl(wo.verificationAttachmentUrl || null);
   };
 
   const handleConfirmVerify = async (e: React.FormEvent) => {
@@ -765,8 +894,10 @@ export function MaintenanceWorkOrdersView() {
           verifiedAt: verifierTimestamp,
           verificationResult: "Pass",
           verificationNotes: verificationNotes.trim() || "Work inspected and verified acceptable. Work order closed.",
+          verificationAttachmentName: verifyAttachmentName || verifyTargetWO.verificationAttachmentName,
+          verificationAttachmentUrl: verifyAttachmentUrl || verifyTargetWO.verificationAttachmentUrl,
           timeline: [
-            ...verifyTargetWO.timeline,
+            ...(verifyTargetWO.timeline || []),
             { time: "Just now", action: `Verification PASSED by ${verifierName}`, user: verifierName },
             { time: "Just now", action: "Work Order Closed", user: verifierName },
           ],
@@ -786,7 +917,7 @@ export function MaintenanceWorkOrdersView() {
           verificationNotes: verificationNotes.trim() || "Verification failed. Sent back for technician rework.",
           reopenedReason: `Verification Needs Rework: ${verificationNotes.trim()}`,
           timeline: [
-            ...verifyTargetWO.timeline,
+            ...(verifyTargetWO.timeline || []),
             { time: "Just now", action: `Verification FAILED (Needs Rework) by ${verifierName}`, user: verifierName, remark: verificationNotes.trim() },
             { time: "Just now", action: "Work Order Reopened for Rework", user: verifierName },
           ],
@@ -806,29 +937,19 @@ export function MaintenanceWorkOrdersView() {
     }
   };
 
-  // Add Spare Part Modal (Stores Reference Usage Recording)
+  // Add Spare Part Modal (Manual Spare Part Recording)
   const handleOpenAddPartModal = (wo: WorkOrder) => {
     setAddPartTargetWO(wo);
-    const firstCat = sparePartsCatalog[0];
-    if (firstCat) {
-      setSelectedCatalogPartId(firstCat.id);
-      setCustomPartName(firstCat.partName);
-      setCustomProductCode(firstCat.productCode);
-      setPartUnitCost(firstCat.unitCost);
-      setStoresReference(firstCat.ref);
-    } else {
-      setSelectedCatalogPartId("");
-      setCustomPartName("");
-      setCustomProductCode("");
-      setPartUnitCost(0);
-      setStoresReference("");
-    }
+    setCustomPartName("");
+    setCustomProductCode("");
     setPartQuantity(1);
+    setPartUnitCost(0);
+    setStoresReference("");
   };
 
   const handleConfirmAddPart = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addPartTargetWO || saving) return;
+    if (!addPartTargetWO || !customPartName.trim() || saving) return;
 
     const finalPartName = customPartName.trim() || "Spare Part";
     const finalProductCode = customProductCode.trim() || "MNT-PART";
@@ -853,7 +974,7 @@ export function MaintenanceWorkOrdersView() {
       partsCost: newPartsCost,
       totalCost: newPartsCost + (addPartTargetWO.externalServiceCost || 0),
       timeline: [
-        ...addPartTargetWO.timeline,
+        ...(addPartTargetWO.timeline || []),
         {
           time: "Just now",
           action: `Recorded material usage: ${partQuantity}x ${finalPartName} (Ref: ${storesReference.trim() || "Stores Request"})`,
@@ -893,7 +1014,7 @@ export function MaintenanceWorkOrdersView() {
       status: "In Progress",
       reopenedReason: reopenReason.trim(),
       timeline: [
-        ...reopenTargetWO.timeline,
+        ...(reopenTargetWO.timeline || []),
         { time: "Just now", action: `Work Order Reopened: ${reopenReason.trim()}`, user: currentUser.name },
       ],
     };
@@ -929,7 +1050,7 @@ export function MaintenanceWorkOrdersView() {
       status: "Cancelled",
       cancelReason: cancelReason.trim(),
       timeline: [
-        ...cancelTargetWO.timeline,
+        ...(cancelTargetWO.timeline || []),
         { time: "Just now", action: `Work Order Cancelled: ${cancelReason.trim()}`, user: currentUser.name },
       ],
     };
@@ -939,6 +1060,28 @@ export function MaintenanceWorkOrdersView() {
     setSaving(true);
     try {
       const saved = await mntWorkOrderService.update(cancelTargetWO.id, updated);
+
+      // Also sync & cancel linked request if present
+      const linkedReq = requests.find(
+        (r) =>
+          (cancelTargetWO.requestRef && (r.requestNo === cancelTargetWO.requestRef || r.id === cancelTargetWO.requestRef)) ||
+          (r.workOrderNo && r.workOrderNo === cancelTargetWO.woNumber)
+      );
+      if (linkedReq) {
+        await mntRequestService.update(linkedReq.id, {
+          status: "Cancelled",
+          timeline: [
+            ...(linkedReq.timeline || []),
+            {
+              time: "Just now",
+              action: `Request Cancelled: Linked Work Order #${cancelTargetWO.woNumber} Cancelled (${cancelReason.trim()})`,
+              user: currentUser.name,
+            },
+          ],
+        });
+        await reloadRequests();
+      }
+
       await reloadWorkOrders();
       if (selectedWorkOrder?.id === cancelTargetWO.id) setSelectedWorkOrder(saved);
       setCancelTargetWO(null);
@@ -1359,8 +1502,26 @@ export function MaintenanceWorkOrdersView() {
                             {wo.assetName} {wo.assetCode ? `(${wo.assetCode})` : ""}
                           </p>
                         ) : (
-                          <span className="text-xs text-slate-400">General Maintenance</span>
+                          <span className="text-xs text-slate-400 block mt-0.5">General Maintenance</span>
                         )}
+                        {(() => {
+                          const linkedReq = requests.find((r) => (wo.requestRef && (r.requestNo === wo.requestRef || r.id === wo.requestRef)) || (r.workOrderNo && r.workOrderNo === wo.woNumber));
+                          const hasPhoto = Boolean(
+                            wo.requestAttachmentUrl ||
+                            wo.verificationAttachmentUrl ||
+                            wo.attachmentUrl ||
+                            linkedReq?.requestAttachmentUrl ||
+                            linkedReq?.attachmentUrl ||
+                            linkedReq?.verificationAttachmentUrl ||
+                            linkedReq?.verification?.attachmentUrl ||
+                            (wo.progressUpdates && wo.progressUpdates.some((p) => p.attachmentUrl))
+                          );
+                          return hasPhoto ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded mt-1">
+                              <Paperclip className="h-3 w-3 text-emerald-600" /> Photo Evidence
+                            </span>
+                          ) : null;
+                        })()}
                       </td>
 
                       {/* 4. Type */}
@@ -1724,6 +1885,47 @@ export function MaintenanceWorkOrdersView() {
               />
             </div>
 
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 text-[11px]">
+                Attach Work Order Photo (Optional)
+              </label>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium cursor-pointer">
+                  <Paperclip className="h-3.5 w-3.5 text-slate-500" />
+                  <span>{createAttachmentName ? "Change Photo" : "Upload Photo"}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleCreateFileChange}
+                  />
+                </label>
+                {createAttachmentName && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreateAttachmentName(null);
+                      setCreateAttachmentUrl(null);
+                    }}
+                    className="text-[10px] font-bold text-rose-600 hover:underline"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              {createAttachmentUrl && (
+                <div className="mt-2 flex items-center gap-2 p-1.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <img
+                    src={createAttachmentUrl}
+                    alt="Create WO Preview"
+                    className="h-12 w-12 object-cover rounded-md border shrink-0 cursor-pointer"
+                    onClick={() => setPreviewImageUrl(createAttachmentUrl)}
+                  />
+                  <span className="text-xs font-medium text-slate-700 truncate">{createAttachmentName}</span>
+                </div>
+              )}
+            </div>
+
             {/* Inherited Verification Data Display */}
             {inheritedFindings && (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-[11px]">
@@ -2043,7 +2245,22 @@ export function MaintenanceWorkOrdersView() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => handleOpenProgressModal(selectedWorkOrder)}
+                      onClick={() => handleOpenProgressModal(selectedWorkOrder, "Awaiting Parts")}
+                      className={cn(
+                        "text-xs font-semibold rounded-lg cursor-pointer flex items-center gap-1.5 transition-colors",
+                        selectedWorkOrder.status === "Awaiting Parts"
+                          ? "bg-amber-100 text-amber-900 border-amber-300 font-bold"
+                          : "text-amber-800 bg-amber-50/90 border-amber-200 hover:bg-amber-100"
+                      )}
+                    >
+                      <Package className="h-3.5 w-3.5 text-amber-700" />
+                      {selectedWorkOrder.status === "Awaiting Parts" ? "Awaiting Parts" : "Mark Awaiting Parts"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenProgressModal(selectedWorkOrder, "In Progress")}
                       className="text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer"
                     >
                       + Add Progress Update
@@ -2194,6 +2411,128 @@ export function MaintenanceWorkOrdersView() {
                   {selectedWorkOrder.estimatedBudget && <p className="text-slate-700 font-mono"><strong>Budget Estimate:</strong> ₹{selectedWorkOrder.estimatedBudget}</p>}
                 </div>
               )}
+
+              {/* ATTACHED PHOTO EVIDENCE DISPLAY CARD (ALL STAGE PHOTOS) */}
+              {(selectedReqPhotoUrl ||
+                selectedReqPhotoName ||
+                selectedVerifPhotoUrl ||
+                selectedVerifPhotoName ||
+                selectedComplPhotoUrl ||
+                selectedComplPhotoName) && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 mt-2">
+                  <strong className="text-xs font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-200 pb-1.5">
+                    <Paperclip className="h-3.5 w-3.5 text-slate-500" /> Attached Photo Evidence
+                  </strong>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                    {/* 1. Reported Issue Photo */}
+                    {(selectedReqPhotoUrl || selectedReqPhotoName) && (
+                      <div className="p-2 bg-white rounded-lg border border-slate-200 space-y-1">
+                        <span className="text-[10px] text-slate-500 font-bold block">📷 Reported Issue Photo</span>
+                        <div className="flex items-center gap-2">
+                          {selectedReqPhotoUrl ? (
+                            <img
+                              src={selectedReqPhotoUrl}
+                              alt={selectedReqPhotoName || "Reported Issue Photo"}
+                              className="h-14 w-14 object-cover rounded-md border border-slate-200 cursor-pointer hover:opacity-90 shrink-0"
+                              onClick={() => setPreviewImageUrl(selectedReqPhotoUrl || null)}
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded bg-slate-100 flex items-center justify-center border text-slate-400 shrink-0">
+                              <FileText className="h-5 w-5" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-xs font-semibold text-slate-800 truncate block">
+                              {selectedReqPhotoName || "Reported_Issue.jpg"}
+                            </span>
+                            {selectedReqPhotoUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewImageUrl(selectedReqPhotoUrl || null)}
+                                className="text-[10px] font-bold text-emerald-700 hover:underline mt-0.5 cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Eye className="h-3 w-3" /> View Photo
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 2. Physical Inspection Photo */}
+                    {(selectedVerifPhotoUrl || selectedVerifPhotoName) && (
+                      <div className="p-2 bg-white rounded-lg border border-slate-200 space-y-1">
+                        <span className="text-[10px] text-slate-500 font-bold block">🔧 Physical Inspection Photo</span>
+                        <div className="flex items-center gap-2">
+                          {selectedVerifPhotoUrl ? (
+                            <img
+                              src={selectedVerifPhotoUrl}
+                              alt={selectedVerifPhotoName || "Physical Inspection Photo"}
+                              className="h-14 w-14 object-cover rounded-md border border-slate-200 cursor-pointer hover:opacity-90 shrink-0"
+                              onClick={() => setPreviewImageUrl(selectedVerifPhotoUrl || null)}
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded bg-slate-100 flex items-center justify-center border text-slate-400 shrink-0">
+                              <FileText className="h-5 w-5" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-xs font-semibold text-slate-800 truncate block">
+                              {selectedVerifPhotoName || "Inspection_Photo.jpg"}
+                            </span>
+                            {selectedVerifPhotoUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewImageUrl(selectedVerifPhotoUrl || null)}
+                                className="text-[10px] font-bold text-emerald-700 hover:underline mt-0.5 cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Eye className="h-3 w-3" /> View Photo
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 3. Completion Evidence Photo (when distinct) */}
+                    {(selectedComplPhotoUrl || selectedComplPhotoName) &&
+                      selectedComplPhotoUrl !== selectedReqPhotoUrl &&
+                      selectedComplPhotoUrl !== selectedVerifPhotoUrl && (
+                      <div className="p-2 bg-white rounded-lg border border-slate-200 space-y-1">
+                        <span className="text-[10px] text-slate-500 font-bold block">✅ Completion Evidence Photo</span>
+                        <div className="flex items-center gap-2">
+                          {selectedComplPhotoUrl ? (
+                            <img
+                              src={selectedComplPhotoUrl}
+                              alt={selectedComplPhotoName || "Completion Photo"}
+                              className="h-14 w-14 object-cover rounded-md border border-slate-200 cursor-pointer hover:opacity-90 shrink-0"
+                              onClick={() => setPreviewImageUrl(selectedComplPhotoUrl || null)}
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded bg-slate-100 flex items-center justify-center border text-slate-400 shrink-0">
+                              <FileText className="h-5 w-5" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-xs font-semibold text-slate-800 truncate block">
+                              {selectedComplPhotoName || "Completion_Photo.jpg"}
+                            </span>
+                            {selectedComplPhotoUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewImageUrl(selectedComplPhotoUrl || null)}
+                                className="text-[10px] font-bold text-emerald-700 hover:underline mt-0.5 cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Eye className="h-3 w-3" /> View Photo
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* SECTION 2: ASSIGNMENT & EXECUTION DETAILS */}
@@ -2293,16 +2632,46 @@ export function MaintenanceWorkOrdersView() {
               {selectedWorkOrder.progressUpdates && selectedWorkOrder.progressUpdates.length > 0 ? (
                 <div className="space-y-2 divide-y divide-slate-100">
                   {selectedWorkOrder.progressUpdates.map((pu) => (
-                    <div key={pu.id} className="pt-2 text-xs">
+                    <div key={pu.id} className="pt-2 text-xs space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-slate-900">{pu.status}</span>
                         <span className="font-mono text-[10px] text-slate-400">{pu.date} {pu.time}</span>
                       </div>
-                      <p className="text-slate-700 mt-0.5">{pu.remarks}</p>
+                      <p className="text-slate-700">{pu.remarks}</p>
                       {pu.partsWaiting && (
-                        <p className="text-amber-800 font-medium text-[11px] mt-0.5">⚠️ Waiting for part: {pu.partsWaiting}</p>
+                        <p className="text-amber-800 font-medium text-[11px]">⚠️ Waiting for part: {pu.partsWaiting}</p>
                       )}
-                      <span className="text-[10px] text-slate-400 block mt-0.5">By {pu.user}</span>
+                      {(pu.attachmentUrl || pu.attachmentName) && (
+                        <div className="p-1.5 bg-slate-50 rounded-lg border border-slate-200 flex items-center gap-2 mt-1">
+                          {pu.attachmentUrl ? (
+                            <img
+                              src={pu.attachmentUrl}
+                              alt={pu.attachmentName || "Progress Attachment"}
+                              className="h-10 w-10 object-cover rounded border cursor-pointer hover:opacity-90 shrink-0"
+                              onClick={() => setPreviewImageUrl(pu.attachmentUrl || null)}
+                            />
+                          ) : (
+                            <div className="h-8 w-8 rounded bg-white flex items-center justify-center border text-slate-400 shrink-0">
+                              <Paperclip className="h-4 w-4" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-semibold text-slate-800 truncate block">
+                              {pu.attachmentName || "Progress_Photo.jpg"}
+                            </span>
+                            {pu.attachmentUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewImageUrl(pu.attachmentUrl || null)}
+                                className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Eye className="h-3 w-3" /> View Photo
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <span className="text-[10px] text-slate-400 block pt-0.5">By {pu.user}</span>
                     </div>
                   ))}
                 </div>
@@ -2312,24 +2681,61 @@ export function MaintenanceWorkOrdersView() {
             </div>
 
             {/* SECTION 5: REPAIR COMPLETION & ROOT CAUSE */}
-            {(selectedWorkOrder.rootCause || selectedWorkOrder.actionTaken) && (
+            {(selectedWorkOrder.rootCause || selectedWorkOrder.actionTaken || selectedWorkOrder.attachmentUrl) && (
               <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-2">
                 <strong className="text-xs font-bold text-slate-900 block border-b border-slate-100 pb-1.5">
                   5. Repair Completion &amp; Root Cause
                 </strong>
                 <div className="grid grid-cols-1 gap-2 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-bold">Root Cause Identified</span>
-                    <p className="text-slate-800 font-medium">{selectedWorkOrder.rootCause}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-bold">Action Taken / Corrective Resolution</span>
-                    <p className="text-slate-800 font-medium">{selectedWorkOrder.actionTaken}</p>
-                  </div>
+                  {selectedWorkOrder.rootCause && (
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold">Root Cause Identified</span>
+                      <p className="text-slate-800 font-medium">{selectedWorkOrder.rootCause}</p>
+                    </div>
+                  )}
+                  {selectedWorkOrder.actionTaken && (
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold">Action Taken / Corrective Resolution</span>
+                      <p className="text-slate-800 font-medium">{selectedWorkOrder.actionTaken}</p>
+                    </div>
+                  )}
                   {selectedWorkOrder.completionNotes && (
                     <div>
                       <span className="text-[10px] text-slate-400 block font-bold">Completion Notes</span>
                       <p className="text-slate-700">{selectedWorkOrder.completionNotes}</p>
+                    </div>
+                  )}
+                  {(selectedWorkOrder.attachmentUrl || selectedWorkOrder.attachmentName) && (
+                    <div className="pt-1">
+                      <span className="text-[10px] text-slate-400 block font-bold mb-1">📷 Completion Evidence Photo</span>
+                      <div className="p-2 bg-emerald-50/50 rounded-lg border border-emerald-200 flex items-center gap-2">
+                        {selectedWorkOrder.attachmentUrl ? (
+                          <img
+                            src={selectedWorkOrder.attachmentUrl}
+                            alt={selectedWorkOrder.attachmentName || "Completion Photo"}
+                            className="h-12 w-12 object-cover rounded-md border border-emerald-300 cursor-pointer hover:opacity-90 shrink-0"
+                            onClick={() => setPreviewImageUrl(selectedWorkOrder.attachmentUrl || null)}
+                          />
+                        ) : (
+                          <div className="h-9 w-9 rounded bg-white flex items-center justify-center border text-slate-400 shrink-0">
+                            <Paperclip className="h-4 w-4" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <span className="text-xs font-semibold text-slate-800 truncate block">
+                            {selectedWorkOrder.attachmentName || "Completion_Evidence.jpg"}
+                          </span>
+                          {selectedWorkOrder.attachmentUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewImageUrl(selectedWorkOrder.attachmentUrl || null)}
+                              className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer inline-flex items-center gap-1 mt-0.5"
+                            >
+                              <Eye className="h-3 w-3" /> View Photo
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2342,16 +2748,33 @@ export function MaintenanceWorkOrdersView() {
                 <strong className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                   <Package className="h-3.5 w-3.5 text-slate-500" /> 6. Spare Parts Used (Stores Reference)
                 </strong>
-                {selectedWorkOrder.status !== "Closed" && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleOpenAddPartModal(selectedWorkOrder)}
-                    className="h-6 px-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 rounded"
-                  >
-                    + Record Part Usage
-                  </Button>
+                {selectedWorkOrder.status !== "Closed" && selectedWorkOrder.status !== "Cancelled" && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleOpenProgressModal(selectedWorkOrder, "Awaiting Parts")}
+                      className={cn(
+                        "h-6 px-2 text-[11px] font-bold rounded flex items-center gap-1 transition-colors cursor-pointer",
+                        selectedWorkOrder.status === "Awaiting Parts"
+                          ? "bg-amber-100 text-amber-900 border border-amber-300"
+                          : "text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200"
+                      )}
+                    >
+                      <Package className="h-3 w-3 text-amber-700" />
+                      {selectedWorkOrder.status === "Awaiting Parts" ? "Awaiting Parts (Active)" : "Flag Awaiting Parts"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleOpenAddPartModal(selectedWorkOrder)}
+                      className="h-6 px-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 rounded cursor-pointer"
+                    >
+                      + Record Part Usage
+                    </Button>
+                  </div>
                 )}
               </div>
 
@@ -2455,7 +2878,7 @@ export function MaintenanceWorkOrdersView() {
                 8. Chronological Activity Log
               </strong>
               <div className="space-y-2 border-l-2 border-slate-200 pl-3 pt-1">
-                {selectedWorkOrder.timeline.map((entry, idx) => (
+                {(selectedWorkOrder.timeline || []).map((entry, idx) => (
                   <div key={idx} className="text-xs">
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="font-bold text-slate-800">{entry.action}</span>
@@ -2529,6 +2952,47 @@ export function MaintenanceWorkOrdersView() {
                 />
               </div>
             )}
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 text-[11px]">
+                Attach Work Progress Photo (Optional)
+              </label>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium cursor-pointer">
+                  <Paperclip className="h-3.5 w-3.5 text-slate-500" />
+                  <span>{progressAttachmentName ? "Change Photo" : "Upload Photo"}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleProgressFileChange}
+                  />
+                </label>
+                {progressAttachmentName && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProgressAttachmentName(null);
+                      setProgressAttachmentUrl(null);
+                    }}
+                    className="text-[10px] font-bold text-rose-600 hover:underline"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              {progressAttachmentUrl && (
+                <div className="mt-2 flex items-center gap-2 p-1.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <img
+                    src={progressAttachmentUrl}
+                    alt="Progress Preview"
+                    className="h-12 w-12 object-cover rounded-md border shrink-0 cursor-pointer"
+                    onClick={() => setPreviewImageUrl(progressAttachmentUrl)}
+                  />
+                  <span className="text-xs font-medium text-slate-700 truncate">{progressAttachmentName}</span>
+                </div>
+              )}
+            </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <Button
@@ -2608,6 +3072,47 @@ export function MaintenanceWorkOrdersView() {
                 onChange={(e) => setCompletionNotes(e.target.value)}
                 className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
               />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 text-[11px]">
+                Attach Completion Photo Evidence (Optional)
+              </label>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium cursor-pointer">
+                  <Paperclip className="h-3.5 w-3.5 text-slate-500" />
+                  <span>{completionAttachmentName ? "Change Completion Photo" : "Upload Completion Photo"}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleCompletionFileChange}
+                  />
+                </label>
+                {completionAttachmentName && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompletionAttachmentName(null);
+                      setCompletionAttachmentUrl(null);
+                    }}
+                    className="text-[10px] font-bold text-rose-600 hover:underline"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              {completionAttachmentUrl && (
+                <div className="mt-2 flex items-center gap-2 p-1.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <img
+                    src={completionAttachmentUrl}
+                    alt="Completion Preview"
+                    className="h-12 w-12 object-cover rounded-md border shrink-0 cursor-pointer"
+                    onClick={() => setPreviewImageUrl(completionAttachmentUrl)}
+                  />
+                  <span className="text-xs font-medium text-slate-700 truncate">{completionAttachmentName}</span>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
@@ -2696,6 +3201,47 @@ export function MaintenanceWorkOrdersView() {
               />
             </div>
 
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 text-[11px]">
+                Attach Verification Inspection Photo (Optional)
+              </label>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium cursor-pointer">
+                  <Paperclip className="h-3.5 w-3.5 text-slate-500" />
+                  <span>{verifyAttachmentName ? "Change Photo" : "Upload Inspection Photo"}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleVerifyFileChange}
+                  />
+                </label>
+                {verifyAttachmentName && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVerifyAttachmentName(null);
+                      setVerifyAttachmentUrl(null);
+                    }}
+                    className="text-[10px] font-bold text-rose-600 hover:underline"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              {verifyAttachmentUrl && (
+                <div className="mt-2 flex items-center gap-2 p-1.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <img
+                    src={verifyAttachmentUrl}
+                    alt="Inspection Preview"
+                    className="h-12 w-12 object-cover rounded-md border shrink-0 cursor-pointer"
+                    onClick={() => setPreviewImageUrl(verifyAttachmentUrl)}
+                  />
+                  <span className="text-xs font-medium text-slate-700 truncate">{verifyAttachmentName}</span>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <Button
                 type="button"
@@ -2744,38 +3290,16 @@ export function MaintenanceWorkOrdersView() {
 
             <div>
               <label className="block font-bold text-slate-700 mb-1 text-[11px]">
-                Select Part from Catalog <span className="text-rose-500">*</span>
+                Part / Material Name <span className="text-rose-500">*</span>
               </label>
-              <select
-                value={selectedCatalogPartId}
+              <input
+                type="text"
                 required
-                onChange={(e) => {
-                  const pid = e.target.value;
-                  setSelectedCatalogPartId(pid);
-                  const p = sparePartsCatalog.find((part) => part.id === pid);
-                  if (p) {
-                    setCustomPartName(p.partName);
-                    setCustomProductCode(p.productCode);
-                    setPartUnitCost(p.unitCost);
-                    setStoresReference(p.ref);
-                  }
-                }}
+                placeholder="e.g. 15mm Brass Isolation Valve, 45uF Capacitor, etc."
+                value={customPartName}
+                onChange={(e) => setCustomPartName(e.target.value)}
                 className="w-full p-2 rounded-lg border border-slate-200 bg-white font-semibold text-xs text-slate-900"
-              >
-                {sparePartsCatalog.length === 0 && (
-                  <option value="">No active spare parts — add in Masters</option>
-                )}
-                {sparePartsCatalog.map((part) => (
-                  <option key={part.id} value={part.id}>
-                    {part.partName} ({part.productCode}) — ₹{part.unitCost}
-                  </option>
-                ))}
-              </select>
-              {sparePartsMaster.length === 0 && (
-                <p className="mt-1 text-[10px] text-amber-700">
-                  Catalog is empty. Add parts under Masters → Spare Parts Catalog.
-                </p>
-              )}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
@@ -2960,34 +3484,11 @@ export function MaintenanceWorkOrdersView() {
               <strong>#{assignTargetWO.woNumber}</strong>.
             </p>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1.5 text-[11px]">Execution Method</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAssignExecutionMethod("In-House")}
-                  className={cn(
-                    "rounded-lg border px-3 py-2 text-xs font-semibold cursor-pointer",
-                    assignExecutionMethod === "In-House"
-                      ? "border-emerald-600 bg-emerald-50 text-emerald-800"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-                  )}
-                >
-                  In-House Tech
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAssignExecutionMethod("Outsource")}
-                  className={cn(
-                    "rounded-lg border px-3 py-2 text-xs font-semibold cursor-pointer",
-                    assignExecutionMethod === "Outsource"
-                      ? "border-emerald-600 bg-emerald-50 text-emerald-800"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-                  )}
-                >
-                  External Vendor
-                </button>
-              </div>
+            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-500">Verified Execution Method:</span>
+              <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                {assignExecutionMethod === "Outsource" ? "Outsource / Vendor" : "In-House Engineering"}
+              </span>
             </div>
 
             {assignExecutionMethod === "In-House" ? (
@@ -3065,6 +3566,36 @@ export function MaintenanceWorkOrdersView() {
               </Button>
             </div>
           </form>
+        </Modal>
+      )}
+      {/* IMAGE PREVIEW LIGHTBOX MODAL */}
+      {previewImageUrl && (
+        <Modal
+          isOpen={Boolean(previewImageUrl)}
+          onClose={() => setPreviewImageUrl(null)}
+          title="Image Evidence Preview"
+          maxWidth="md"
+        >
+          <div className="p-2 space-y-3 text-center">
+            <div className="max-h-[70vh] overflow-hidden rounded-xl bg-slate-950 flex items-center justify-center p-2">
+              <img
+                src={previewImageUrl}
+                alt="Full photo evidence"
+                className="max-h-[65vh] max-w-full object-contain rounded-lg shadow-lg"
+              />
+            </div>
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPreviewImageUrl(null)}
+                className="rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Close Preview
+              </Button>
+            </div>
+          </div>
         </Modal>
       )}
     </ModulePageShell>
