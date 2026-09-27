@@ -371,6 +371,11 @@ export default function RoomInspection() {
       setSignatureName(draft.signatureName);
       setHasSignature(draft.hasSignature);
     } else {
+      const latestHistory = selectedRoom?.inspectionHistory?.[0];
+      const isPassedRoom =
+        selectedQueueItem?.queueStatus === "passed" ||
+        selectedRoom?.hkStatus === "Inspected";
+
       setChecklistItems(
         defaultTasks.map((task) => ({
           task,
@@ -384,13 +389,17 @@ export default function RoomInspection() {
           defectArea: task.toLowerCase().includes("bathroom") || task.toLowerCase().includes("towels") ? "Bathroom" : "Bedroom",
         }))
       );
-      setRemarks("");
+      setRemarks(latestHistory?.remarks || selectedRoom?.remarks || "");
       setInspectionNotes("");
-      setSignatureName(currentUsername || "");
-      setHasSignature(false);
+      setSignatureName(
+        latestHistory?.supervisor ||
+        latestHistory?.inspector ||
+        (isPassedRoom ? "Supervisor" : currentUsername || "")
+      );
+      setHasSignature(Boolean(latestHistory?.signature || isPassedRoom));
     }
     setShowHistory(false);
-  }, [selectedRoomNo]);
+  }, [selectedRoomNo, selectedRoom, selectedQueueItem, currentUsername]);
 
   // Digital Signature Canvas drawing configurations
   useEffect(() => {
@@ -418,9 +427,19 @@ export default function RoomInspection() {
       setHasSignature(true);
     } else {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      setHasSignature(false);
+      const isPassed =
+        selectedQueueItem?.queueStatus === "passed" ||
+        selectedRoom?.hkStatus === "Inspected";
+      if (isPassed && signatureName) {
+        ctx.font = "italic 24px 'Brush Script MT', 'Dancing Script', 'Caveat', cursive, sans-serif";
+        ctx.fillStyle = "#1e3a8a";
+        ctx.fillText(signatureName, 30, 65);
+        setHasSignature(true);
+      } else {
+        setHasSignature(false);
+      }
     }
-  }, [selectedRoomNo, drafts]);
+  }, [selectedRoomNo, drafts, selectedQueueItem, selectedRoom, signatureName]);
 
   // Coordinates helper for responsive digital signatures
   const getCanvasMousePos = (
@@ -496,21 +515,6 @@ export default function RoomInspection() {
     }
   };
 
-  // Checklist updates
-  const handleCheckChange = (index: number, val: boolean) => {
-    setChecklistItems((prev) =>
-      prev.map((item, idx) => {
-        if (idx !== index) return item;
-        return {
-          ...item,
-          checked: val,
-          isFailed: !val,
-          defectReason: !val ? item.defectReason || `${item.task} issue` : "",
-        };
-      })
-    );
-  };
-
   const toggleItemRemarks = (index: number) => {
     setChecklistItems((prev) =>
       prev.map((item, idx) => {
@@ -559,35 +563,12 @@ export default function RoomInspection() {
     );
   };
 
-  const updateItemDefect = (index: number, key: keyof ChecklistItemState, val: string) => {
-    setChecklistItems((prev) =>
-      prev.map((item, idx) => {
-        if (idx !== index) return item;
-        return {
-          ...item,
-          [key]: val,
-        };
-      })
-    );
-  };
-
   // Calculated Metrics
-  const passedItemsCount = useMemo(() => {
-    return checklistItems.filter((i) => i.checked).length;
-  }, [checklistItems]);
-
   const qualityScore = useMemo(() => {
-    if (checklistItems.length === 0) return 0;
-    return Math.round((passedItemsCount / checklistItems.length) * 100);
-  }, [passedItemsCount, checklistItems]);
+    return 100;
+  }, []);
 
   // Validation
-  const isInspectionFailed = useMemo(() => {
-    return checklistItems.some((i) => !i.checked);
-  }, [checklistItems]);
-
-  const isRemarksInvalid = isInspectionFailed && !remarks.trim();
-
   const passBlockReason = useMemo(() => {
     if (selectedQueueItem?.queueStatus === "passed") {
       return "This room has already passed inspection.";
@@ -601,24 +582,17 @@ export default function RoomInspection() {
     if (selectedQueueItem?.queueStatus !== "awaiting") {
       return "Complete and mark the cleaning task on Cleaning Tasks before inspecting.";
     }
-    if (passedItemsCount !== checklistItems.length) {
-      return `Check all ${checklistItems.length} inspection items (${passedItemsCount}/${checklistItems.length} done).`;
-    }
     if (!hasSignature) return "Draw your supervisor signature.";
     if (!signatureName.trim()) return "Enter your printed name.";
     return null;
   }, [
     selectedQueueItem,
-    passedItemsCount,
-    checklistItems.length,
     hasSignature,
     signatureName,
   ]);
 
   const canPassInspection =
     selectedQueueItem?.queueStatus === "awaiting" &&
-    passedItemsCount === checklistItems.length &&
-    qualityScore === 100 &&
     hasSignature &&
     signatureName.trim().length > 0;
 
@@ -641,7 +615,7 @@ export default function RoomInspection() {
       return;
     }
 
-    inspectRoom(selectedRoomNo, true, signatureName, remarks || "Passed quality inspection.", qualityScore);
+    inspectRoom(selectedRoomNo, true, signatureName, remarks || "", qualityScore);
 
     if (drafts[selectedRoomNo]) {
       const copy = { ...drafts };
@@ -650,7 +624,7 @@ export default function RoomInspection() {
     }
 
     void reloadInspectionData();
-    
+
     setToast({ message: `Room ${selectedRoomNo} inspection passed — room is now available for sale.`, variant: "success" });
     setSelectedRoomNo(null);
   };
@@ -695,7 +669,7 @@ export default function RoomInspection() {
         signatureDataUrl,
       },
     }));
-    
+
     setToast({ message: `Draft inspection saved locally for Room ${selectedRoomNo}.`, variant: "info" });
     setSelectedRoomNo(null);
   };
@@ -747,17 +721,17 @@ export default function RoomInspection() {
               <span className="text-[10px] font-semibold text-amber-700">API offline</span>
             )}
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-slate-500 font-medium">Role:</span>
-            <select
-              value={currentUserRole}
-              onChange={(e) => setRole(e.target.value)}
-              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer pr-1 text-xs"
-            >
-              <option value="Executive Housekeeper">Executive Housekeeper (Admin)</option>
-              <option value="Supervisor">Supervisor</option>
-              <option value="Housekeeper">Housekeeper</option>
-            </select>
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-slate-500 font-medium">Role:</span>
+              <select
+                value={currentUserRole}
+                onChange={(e) => setRole(e.target.value)}
+                className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer pr-1 text-xs"
+              >
+                <option value="Executive Housekeeper">Executive Housekeeper (Admin)</option>
+                <option value="Supervisor">Supervisor</option>
+                <option value="Housekeeper">Housekeeper</option>
+              </select>
             </div>
           </div>
         }
@@ -1029,18 +1003,20 @@ export default function RoomInspection() {
                         </div>
                       </div>
 
-                      <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-end gap-1.5">
-                        <Button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedRoomNo(room.roomNo);
-                          }}
-                          disabled={item.queueStatus === "cleaning"}
-                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-750 font-bold text-[9px] py-1 px-3 border border-emerald-200 rounded-xl transition-all h-7 disabled:opacity-50"
-                        >
-                          Inspect
-                        </Button>
-                      </div>
+                      {item.queueStatus !== "passed" && (
+                        <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-end gap-1.5">
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedRoomNo(room.roomNo);
+                            }}
+                            disabled={item.queueStatus === "cleaning"}
+                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-750 font-bold text-[9px] py-1 px-3 border border-emerald-200 rounded-xl transition-all h-7 disabled:opacity-50"
+                          >
+                            Inspect
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1092,42 +1068,62 @@ export default function RoomInspection() {
         width="xl"
         footer={
           selectedRoom && (
-            <div className="grid w-full grid-cols-3 gap-3">
-              <Button
-                onClick={handleReject}
-                className="bg-[#DC3545] hover:bg-[#c82333] border-[#DC3545] text-white h-10 w-full rounded-lg text-sm font-medium"
-              >
-                Reject
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleSaveDraft}
-                className="h-10 w-full rounded-lg text-sm font-medium"
-              >
-                Save Draft
-              </Button>
-              <div className="space-y-1">
+            selectedQueueItem?.queueStatus === "passed" || selectedRoom?.hkStatus === "Inspected" ? (
+              <div className="flex w-full items-center justify-between">
+                <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" /> This inspection has passed and is read-only.
+                </span>
                 <Button
-                  variant="primary"
-                  onClick={handlePass}
-                  disabled={!canPassInspection}
+                  variant="outline"
+                  onClick={() => setSelectedRoomNo(null)}
+                  className="h-10 px-6 rounded-lg text-sm font-medium"
+                >
+                  Close
+                </Button>
+              </div>
+            ) : (
+              <div className="grid w-full grid-cols-3 gap-3">
+                <Button
+                  onClick={handleReject}
+                  className="bg-[#DC3545] hover:bg-[#c82333] border-[#DC3545] text-white h-10 w-full rounded-lg text-sm font-medium"
+                >
+                  Reject
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleSaveDraft}
                   className="h-10 w-full rounded-lg text-sm font-medium"
                 >
-                  Pass Inspection
+                  Save Draft
                 </Button>
-                {passBlockReason && !canPassInspection ? (
-                  <p className="text-[10px] text-amber-700 font-medium text-center leading-tight">
-                    {passBlockReason}
-                  </p>
-                ) : null}
+                <div className="space-y-1">
+                  <Button
+                    variant="primary"
+                    onClick={handlePass}
+                    disabled={!canPassInspection}
+                    className="h-10 w-full rounded-lg text-sm font-medium"
+                  >
+                    Pass Inspection
+                  </Button>
+                  {passBlockReason && !canPassInspection ? (
+                    <p className="text-[10px] text-amber-700 font-medium text-center leading-tight">
+                      {passBlockReason}
+                    </p>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            )
           )
         }
       >
-        {selectedRoom && (
-          <div className="space-y-4 font-semibold text-slate-750">
-              
+        {selectedRoom && (() => {
+          const isReadOnly =
+            selectedQueueItem?.queueStatus === "passed" ||
+            selectedRoom?.hkStatus === "Inspected";
+
+          return (
+            <div className="space-y-4 font-semibold text-slate-750">
+
               {/* Card 1: Room Summary Specification Grid */}
               <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 space-y-3 shadow-xs">
                 <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
@@ -1199,276 +1195,106 @@ export default function RoomInspection() {
               </div>
 
               {/* Card 2: Quality Score Bar */}
-              <div className="rounded-xl border border-slate-100 bg-white p-4 space-y-2.5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-slate-455 font-bold uppercase tracking-wider block">
-                      Calculated Quality Score
-                    </span>
-                    <div className="flex items-baseline gap-1 mt-0.5">
-                      <span className={cn(
-                        "text-3xl font-extrabold tracking-tight",
-                        qualityScore >= 80 ? "text-emerald-600" : "text-red-650"
-                      )}>
-                        {qualityScore}%
-                      </span>
-                      <span className="text-[9px] text-slate-400 font-bold uppercase">score</span>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-xs font-bold text-slate-800 block">Inspection Progress</span>
-                    <span className="text-xs text-slate-500 font-semibold mt-0.5 block">
-                      {passedItemsCount} / {checklistItems.length} Checked
-                    </span>
-                  </div>
-                </div>
-
-                {/* Progress bar */}
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all duration-350",
-                      qualityScore >= 80 ? "bg-emerald-600" : "bg-red-500"
-                    )}
-                    style={{ width: `${qualityScore}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Card 3: Inspection Checklist Items */}
-              <div className="rounded-xl border border-slate-100 bg-white p-4 space-y-3 shadow-sm">
-                <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider border-b border-slate-50 pb-1.5">
-                  <ClipboardList className="h-4 w-4 text-emerald-700" /> Inspection Checklist
-                </h4>
-
-                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-                  {checklistItems.map((item, idx) => (
-                    <div key={item.task} className="flex flex-col gap-2 rounded-xl border border-slate-100 p-3 bg-white hover:bg-slate-50/50 transition-colors">
-                      <div className="flex items-start justify-between gap-2.5">
-                        <label className="flex items-start gap-3 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={item.checked}
-                            onChange={(e) => handleCheckChange(idx, e.target.checked)}
-                            className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                          />
-                          <span className={cn(
-                            "text-xs font-semibold text-slate-700",
-                            !item.checked && "text-red-655 font-bold"
-                          )}>
-                            {item.task}
-                          </span>
-                        </label>
-
-                        <div className="flex items-center gap-1.5">
-                          {!item.checked && (
-                            <span className="rounded bg-red-100 px-1.5 py-0.5 text-[8px] font-extrabold text-red-755 uppercase tracking-wide">
-                              Failed
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => toggleItemRemarks(idx)}
-                            className={cn(
-                              "p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-650",
-                              item.remarks && "text-blue-600"
-                            )}
-                            title="Add Note"
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => triggerAttachPhoto(idx)}
-                            className={cn(
-                              "p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-650",
-                              item.photo && "text-emerald-600"
-                            )}
-                            title="Capture Photo"
-                          >
-                            <Camera className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Item Remarks Input */}
-                      {item.showRemarksInput && (
-                        <div className="pl-7 pr-2">
-                          <input
-                            type="text"
-                            value={item.remarks}
-                            onChange={(e) => updateItemRemarks(idx, e.target.value)}
-                            placeholder="Add specific remarks..."
-                            className="w-full text-xs border border-slate-205 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
-                          />
-                        </div>
-                      )}
-
-                      {/* Photo Attachment Placeholder */}
-                      {item.photo && (
-                        <div className="pl-7 flex items-center gap-2 text-[10px] text-slate-500 font-semibold">
-                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded flex items-center gap-1">
-                            📷 {item.photo}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => removeItemPhoto(idx)}
-                            className="text-red-550 hover:text-red-700"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Defect sub-form if unchecked */}
-                      {!item.checked && (
-                        <div className="ml-7 mt-1.5 p-3 rounded-lg border border-red-100 bg-red-50/20 space-y-2.5 text-xs text-slate-700 font-bold">
-                          <div className="text-[9px] font-extrabold text-red-700 uppercase tracking-wider flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3 text-red-655" /> Defect Report
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[9px] text-slate-400 font-bold block mb-0.5">Reason *</label>
-                              <input
-                                type="text"
-                                value={item.defectReason}
-                                onChange={(e) => updateItemDefect(idx, "defectReason", e.target.value)}
-                                placeholder="Bathroom Mirror Dirty"
-                                className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[9px] text-slate-400 font-bold block mb-0.5">Severity</label>
-                              <select
-                                value={item.defectSeverity}
-                                onChange={(e) =>
-                                  updateItemDefect(idx, "defectSeverity", e.target.value as any)
-                                }
-                                className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none"
-                              >
-                                <option value="Low">Low</option>
-                                <option value="Medium">Medium</option>
-                                <option value="High">High</option>
-                              </select>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[9px] text-slate-400 font-bold block mb-0.5">Area</label>
-                              <input
-                                type="text"
-                                value={item.defectArea}
-                                onChange={(e) => updateItemDefect(idx, "defectArea", e.target.value)}
-                                placeholder="Bathroom"
-                                className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none font-semibold"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[9px] text-slate-400 font-bold block mb-0.5">Assign Back To</label>
-                              <div className="w-full text-xs bg-slate-100 border border-slate-200 text-slate-655 rounded px-2 py-1.5">
-                                {selectedTask?.assignedToName ?? selectedRoom.assignedStaff ?? "Unassigned"}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {/* Card 4: Inspector Remarks & Signature canvas */}
               <div className="rounded-xl border border-slate-100 bg-white p-4 space-y-3 shadow-sm">
                 <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
-                  Supervisor Remarks {isInspectionFailed && <span className="text-red-500">*</span>}
+                  Supervisor Remarks
+                  {isReadOnly && <span className="text-[10px] text-emerald-600 font-semibold ml-2 lowercase font-normal">(read-only)</span>}
                 </label>
                 <textarea
                   value={remarks}
+                  readOnly={isReadOnly}
+                  disabled={isReadOnly}
                   onChange={(e) => {
+                    if (isReadOnly) return;
                     setRemarks(e.target.value);
                     if (e.target.value.trim()) setRemarksError(null);
                   }}
                   placeholder={
-                    isInspectionFailed
-                      ? "Describe the defect reasons in detail (Required)..."
+                    isReadOnly
+                      ? "No supervisor remarks recorded."
                       : "General supervisor inspection remarks (Optional)..."
                   }
                   maxLength={250}
                   className={cn(
                     "w-full rounded-xl border p-2.5 h-20 text-xs focus:outline-none focus:ring-1 font-semibold text-slate-750",
-                    remarksError
+                    isReadOnly && "bg-slate-50 text-slate-600 cursor-not-allowed border-slate-200",
+                    !isReadOnly && remarksError
                       ? "border-red-500 focus:ring-red-500 bg-red-50/5"
                       : "border-slate-200 focus:ring-emerald-500 focus:border-emerald-500"
                   )}
                 />
                 <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold">
-                  {remarksError ? (
+                  {!isReadOnly && remarksError && (
                     <span className="text-red-505 font-bold">{remarksError}</span>
-                  ) : (
-                    isRemarksInvalid && (
-                      <span className="text-red-500 font-bold">* Remarks required for rejected rooms.</span>
-                    )
                   )}
-                  <span className="ml-auto">{remarks.length} / 250 characters</span>
+                  {!isReadOnly && <span className="ml-auto">{remarks.length} / 250 characters</span>}
                 </div>
               </div>
 
               {/* Card 5: Digital Signature pad */}
               <div className="rounded-xl border border-slate-100 bg-white p-4 space-y-3 shadow-sm">
                 <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
-                  Digital Signature Sign-off <span className="text-red-500">*</span>
+                  Digital Signature Sign-off {!isReadOnly && <span className="text-red-500">*</span>}
+                  {isReadOnly && <span className="text-[10px] text-emerald-600 font-semibold ml-2 lowercase font-normal">(read-only)</span>}
                 </label>
                 <div
                   className={cn(
                     "relative rounded-xl border bg-slate-50 overflow-hidden",
-                    signatureCanvasError ? "border-red-500" : "border-slate-200"
+                    isReadOnly ? "border-slate-200" : signatureCanvasError ? "border-red-500" : "border-slate-200"
                   )}
                 >
                   <canvas
                     ref={canvasRef}
-                    onMouseDown={startDraw}
-                    onMouseMove={draw}
-                    onMouseUp={stopDraw}
-                    onMouseLeave={stopDraw}
-                    onTouchStart={startDraw}
-                    onTouchMove={draw}
-                    onTouchEnd={stopDraw}
-                    className="cursor-crosshair w-full block h-28 bg-white"
+                    onMouseDown={!isReadOnly ? startDraw : undefined}
+                    onMouseMove={!isReadOnly ? draw : undefined}
+                    onMouseUp={!isReadOnly ? stopDraw : undefined}
+                    onMouseLeave={!isReadOnly ? stopDraw : undefined}
+                    onTouchStart={!isReadOnly ? startDraw : undefined}
+                    onTouchMove={!isReadOnly ? draw : undefined}
+                    onTouchEnd={!isReadOnly ? stopDraw : undefined}
+                    className={cn(
+                      "w-full block h-28 bg-white",
+                      isReadOnly ? "cursor-default pointer-events-none" : "cursor-crosshair"
+                    )}
                   />
-                  <button
-                    type="button"
-                    onClick={clearCanvas}
-                    className="absolute right-2.5 bottom-2.5 text-[9px] font-extrabold text-red-650 hover:text-red-750 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm"
-                  >
-                    Clear Signature
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={clearCanvas}
+                      className="absolute right-2.5 bottom-2.5 text-[9px] font-extrabold text-red-650 hover:text-red-750 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm"
+                    >
+                      Clear Signature
+                    </button>
+                  )}
                 </div>
-                {signatureCanvasError && (
+                {!isReadOnly && signatureCanvasError && (
                   <span className="text-red-500 text-[10px] font-bold block">{signatureCanvasError}</span>
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-semibold text-slate-655">
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold block mb-1">Printed Name *</label>
+                    <label className="text-[10px] text-slate-400 font-bold block mb-1">Printed Name {!isReadOnly && "*"}</label>
                     <input
                       type="text"
                       value={signatureName}
+                      readOnly={isReadOnly}
+                      disabled={isReadOnly}
                       onChange={(e) => {
+                        if (isReadOnly) return;
                         setSignatureName(e.target.value);
                         if (e.target.value.trim()) setSignatureNameError(null);
                       }}
                       placeholder="Printed Name"
                       className={cn(
                         "w-full text-xs border rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1",
-                        signatureNameError
+                        isReadOnly && "bg-slate-50 text-slate-600 cursor-not-allowed border-slate-200",
+                        !isReadOnly && signatureNameError
                           ? "border-red-500 focus:ring-red-500"
                           : "border-slate-200 focus:ring-emerald-500"
                       )}
                     />
-                    {signatureNameError && (
+                    {!isReadOnly && signatureNameError && (
                       <span className="text-red-500 text-[9px] font-bold block mt-0.5">
                         {signatureNameError}
                       </span>
@@ -1499,59 +1325,23 @@ export default function RoomInspection() {
               <div className="rounded-xl border border-slate-100 bg-white p-4 space-y-2 shadow-sm">
                 <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
                   Inspection Notes
+                  {isReadOnly && <span className="text-[10px] text-emerald-600 font-semibold ml-2 lowercase font-normal">(read-only)</span>}
                 </label>
                 <input
                   type="text"
                   value={inspectionNotes}
-                  onChange={(e) => setInspectionNotes(e.target.value)}
-                  placeholder="e.g. Linen smells fresh, floor tiles normal."
-                  className="w-full text-xs border border-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-550 font-medium text-slate-700 bg-white"
+                  readOnly={isReadOnly}
+                  disabled={isReadOnly}
+                  onChange={(e) => {
+                    if (isReadOnly) return;
+                    setInspectionNotes(e.target.value);
+                  }}
+                  placeholder={isReadOnly ? "No inspection notes" : "e.g. Linen smells fresh, floor tiles normal."}
+                  className="w-full text-xs border border-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-550 font-medium text-slate-700 bg-white disabled:bg-slate-50 disabled:text-slate-600 disabled:cursor-not-allowed"
                 />
               </div>
 
-              {/* Card 7: Collateral Photos Grid */}
-              <div className="rounded-xl border border-slate-100 bg-white p-4 space-y-3 shadow-sm">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-50 pb-1.5">
-                  <Camera className="h-4 w-4 text-emerald-750" /> Collateral Photos
-                </h4>
-                <div className="responsive-image-gallery">
-                  <div className="global-image-card-container">
-                    <span className="global-image-card-label">
-                      Before
-                    </span>
-                    <div className="global-image-card">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src="https://images.unsplash.com/photo-1566665797739-1674de7a421a?w=150&q=80"
-                        alt="before-clean"
-                      />
-                    </div>
-                  </div>
-                  <div className="global-image-card-container">
-                    <span className="global-image-card-label">
-                      After
-                    </span>
-                    <div className="global-image-card">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src="https://images.unsplash.com/photo-1540518614846-7eded433c457?w=150&q=80"
-                        alt="after-clean"
-                      />
-                    </div>
-                  </div>
-                  <div className="global-image-card-container">
-                    <span className="global-image-card-label">
-                      Inspect
-                    </span>
-                    <div className="global-image-card">
-                      <div className="global-image-card-upload">
-                        <Camera className="h-4 w-4" />
-                        <span className="text-[8px] font-bold mt-1">Upload</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+
 
               {/* Card 8: Inspection History collapsible accordion */}
               <div className="rounded-xl border border-slate-100 bg-white overflow-hidden shadow-sm">
@@ -1603,7 +1393,8 @@ export default function RoomInspection() {
                 )}
               </div>
             </div>
-        )}
+          );
+        })()}
       </Drawer>
     </div>
   );
