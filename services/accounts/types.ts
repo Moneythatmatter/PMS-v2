@@ -450,9 +450,11 @@ export type VoucherLine = {
   partyName: string | null;
   divisionId: string | null;
   divisionName: string | null;
+  entryType: EntryType;
+  amount: number;
+  /** Derived from entryType + amount. */
   debit: number;
   credit: number;
-  narration: string;
   chequeNo: string;
   chequeDate: string | null;
   gstRate: number | null;
@@ -521,13 +523,14 @@ export type VoucherDetail = Voucher & {
   auditLogs: AuditLog[];
 };
 
+export type EntryType = "Dr" | "Cr";
+
+/** The line party is derived server-side from the voucher-level partyId. */
 export type VoucherLineInput = {
   accountId: string;
-  partyId?: string | null;
+  entryType: EntryType;
+  amount: number;
   divisionId?: string | null;
-  debit?: number;
-  credit?: number;
-  narration?: string;
   chequeNo?: string;
   chequeDate?: string | null;
   gstRate?: number | null;
@@ -581,7 +584,7 @@ export type ReceiptPaymentInput = {
   narration?: string;
   partyId?: string | null;
   status?: "Draft" | "Posted";
-  lines: { accountId: string; partyId?: string | null; divisionId?: string | null; amount: number; narration?: string; billId?: string | null }[];
+  lines: { accountId: string; divisionId?: string | null; amount: number; billId?: string | null }[];
 };
 
 export type VoucherQuery = {
