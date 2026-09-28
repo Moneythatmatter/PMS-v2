@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BedDouble, CheckCircle2, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
-import { roomTypes } from "@/app/data/frontoffice/constants";
-import type { RoomMaster } from "@/app/data/frontoffice/masters";
-import { roomService } from "@/services/front-office";
+import type { RoomMaster, RoomTypeMaster } from "@/app/data/frontoffice/masters";
+import { roomService, roomTypeService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
@@ -30,6 +29,7 @@ function formatUpdatedAt(value?: string) {
 
 export function RoomsView() {
   const [items, setItems] = useState<RoomMaster[]>([]);
+  const [roomTypeMasters, setRoomTypeMasters] = useState<RoomTypeMaster[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -43,7 +43,7 @@ export function RoomsView() {
   const [saving, setSaving] = useState(false);
 
   const [roomNo, setRoomNo] = useState("");
-  const [roomType, setRoomType] = useState<string>(roomTypes[0] ?? "Standard");
+  const [roomType, setRoomType] = useState<string>("");
   const [floor, setFloor] = useState("1st Floor");
   const [maxOccupancy, setMaxOccupancy] = useState("2");
   const [bedType, setBedType] = useState<string>("Queen");
@@ -54,9 +54,10 @@ export function RoomsView() {
     (async () => {
       try {
         setLoading(true);
-        const data = await roomService.list();
+        const [data, types] = await Promise.all([roomService.list(), roomTypeService.list()]);
         if (!cancelled) {
           setItems(data);
+          setRoomTypeMasters(types);
           setError(null);
         }
       } catch (e) {
@@ -97,10 +98,19 @@ export function RoomsView() {
     [items],
   );
 
+  const roomTypeOptions = useMemo(() => {
+    const names = roomTypeMasters
+      .filter((t) => t.status !== "Inactive")
+      .map((t) => t.name)
+      .filter(Boolean);
+    if (roomType && !names.includes(roomType)) names.push(roomType);
+    return names.sort((a, b) => a.localeCompare(b));
+  }, [roomTypeMasters, roomType]);
+
   const resetForm = () => {
     setEditing(null);
     setRoomNo("");
-    setRoomType(roomTypes[0] ?? "Standard");
+    setRoomType("");
     setFloor("1st Floor");
     setMaxOccupancy("2");
     setBedType("Queen");
@@ -115,7 +125,7 @@ export function RoomsView() {
   const openEdit = (row: RoomMaster) => {
     setEditing(row);
     setRoomNo(row.roomNo);
-    setRoomType(row.roomType ?? "Standard");
+    setRoomType(row.roomType ?? "");
     setFloor(row.floor ?? "");
     setMaxOccupancy(String(row.maxOccupancy ?? 2));
     setBedType(row.bedType ?? "Queen");
@@ -373,7 +383,10 @@ export function RoomsView() {
           </FormField>
           <FormField label="Room Type" required>
             <SelectInput value={roomType} onChange={(e) => setRoomType(e.target.value)}>
-              {roomTypes.map((t) => (
+              <option value="" disabled>
+                {roomTypeOptions.length ? "Select room type" : "No room types — add one in Room Types master"}
+              </option>
+              {roomTypeOptions.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </SelectInput>

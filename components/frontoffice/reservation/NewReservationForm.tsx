@@ -1400,8 +1400,9 @@ export function NewReservationForm() {
                   className={inputClass}
                   type="number"
                   min={0}
-                  value={form.advancePaid}
-                  onChange={(e) => update("advancePaid", Number(e.target.value))}
+                  placeholder="Enter advance amount"
+                  value={form.advancePaid || ""}
+                  onChange={(e) => update("advancePaid", Number(e.target.value) || 0)}
                 />
                 {errors.advancePaid && (
                   <p className="text-xs text-red-500">{errors.advancePaid}</p>
@@ -1427,7 +1428,8 @@ export function NewReservationForm() {
                 <TextInput
                   className={cn(inputClass, "bg-slate-50 font-semibold")}
                   type="number"
-                  value={pendingAmount}
+                  placeholder="Auto-calculated"
+                  value={pendingAmount || ""}
                   readOnly
                 />
               </FormField>

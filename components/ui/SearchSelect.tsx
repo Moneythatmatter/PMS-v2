@@ -54,6 +54,7 @@ export function SearchSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [internalQuery, setInternalQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const uniqueOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -138,6 +139,14 @@ export function SearchSelect({
     (!requireQuery || trimmedQuery.length > 0);
   const inputLocked = disabled || (lockInputWhenSelected && Boolean(selectedId));
 
+  useEffect(() => {
+    if (!showDropdown) return;
+    const frame = requestAnimationFrame(() => {
+      dropdownRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [showDropdown]);
+
   const handleInputChange = (val: string) => {
     if (inputLocked) return;
     if (isControlledQuery) {
@@ -207,7 +216,9 @@ export function SearchSelect({
       </div>
 
       {showDropdown && (
-        <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+        <div
+          ref={dropdownRef}
+          className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
           {canCommitCustom && (
             <button
               type="button"
