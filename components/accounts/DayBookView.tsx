@@ -98,8 +98,7 @@ export function DayBookView() {
           v.lines.some(
             (l) =>
               (l.accountName ?? "").toLowerCase().includes(q) ||
-              (l.partyName ?? "").toLowerCase().includes(q) ||
-              (l.narration ?? "").toLowerCase().includes(q)
+              (l.partyName ?? "").toLowerCase().includes(q)
           )
         );
       }
@@ -180,7 +179,7 @@ export function DayBookView() {
         l.lineNo,
         l.accountCode ?? "",
         l.accountName ?? "",
-        l.narration || v.narration,
+        v.narration,
         l.debit,
         l.credit,
         l.divisionName ?? v.divisionName ?? "",
@@ -549,7 +548,7 @@ export function DayBookView() {
                               </td>
 
                               <td className="py-2.5 px-4 text-slate-600 border-r border-slate-100">
-                                {line.narration || voucher.narration || "—"}
+                                {voucher.narration || "—"}
                               </td>
 
                               <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-900 border-r border-slate-100">

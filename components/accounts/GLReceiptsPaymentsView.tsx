@@ -47,22 +47,18 @@ type VoucherKind = "Receipt" | "Payment";
 interface FormLineItem {
   key: string;
   accountId: string;
-  partyId: string;
   billId: string;
   amount: number;
-  lineNarration: string;
 }
 
 type Toast = { message: string; variant: "success" | "error" } | null;
 
 let lineSeq = 0;
-const newLine = (): FormLineItem => ({
+const newLine = (accountId = ""): FormLineItem => ({
   key: `line-${++lineSeq}`,
-  accountId: "",
-  partyId: "",
+  accountId,
   billId: "",
   amount: 0,
-  lineNarration: "",
 });
 
 function downloadCsv(filename: string, header: string[], rows: (string | number | null | undefined)[][]) {
@@ -92,6 +88,7 @@ export function GLReceiptsPaymentsView() {
   const [instrumentNo, setInstrumentNo] = useState("");
   const [instrumentDate, setInstrumentDate] = useState("");
   const [overallNarration, setOverallNarration] = useState("");
+  const [partyId, setPartyId] = useState("");
   const [lineItems, setLineItems] = useState<FormLineItem[]>(() => [newLine()]);
   const [preview, setPreview] = useState<{ key: string; voucherNo: string } | null>(null);
   const [previewNonce, setPreviewNonce] = useState(0);
@@ -163,13 +160,13 @@ export function GLReceiptsPaymentsView() {
     [lineItems],
   );
 
-  const loadBills = async (partyId: string, kind: VoucherKind) => {
-    const key = `${kind}:${partyId}`;
-    if (!partyId || billsByKey[key]) return;
+  const loadBills = async (forPartyId: string, kind: VoucherKind) => {
+    const key = `${kind}:${forPartyId}`;
+    if (!forPartyId || billsByKey[key]) return;
     setBillsByKey((prev) => ({ ...prev, [key]: "loading" }));
     try {
       const bills = await accPartyBillService.list({
-        partyId,
+        partyId: forPartyId,
         moduleType: kind === "Receipt" ? "AR" : "AP",
         pendingOnly: true,
       });
@@ -183,18 +180,35 @@ export function GLReceiptsPaymentsView() {
       });
     }
   };
-  const billsFor = (partyId: string) => {
-    const b = billsByKey[`${vouchType}:${partyId}`];
-    return Array.isArray(b) ? b : [];
+  const partyBillState = partyId ? billsByKey[`${vouchType}:${partyId}`] : undefined;
+  const partyBills = Array.isArray(partyBillState) ? partyBillState : [];
+
+  const partyAccountFor = (id: string, kind: VoucherKind) => {
+    const party = lookups?.parties.find((p) => p.id === id);
+    return (kind === "Receipt" ? party?.receivableAccountId : party?.payableAccountId) ?? "";
   };
 
   const handleTypeChange = (newType: VoucherKind) => {
     setVouchType(newType);
     setLineItems((prev) => prev.map((l) => ({ ...l, billId: "" })));
-    for (const l of lineItems) if (l.partyId) void loadBills(l.partyId, newType);
+    if (partyId) void loadBills(partyId, newType);
   };
 
-  const handleAddLineItem = () => setLineItems((prev) => [...prev, newLine()]);
+  const handlePartyChange = (id: string) => {
+    const prevAccount = partyAccountFor(partyId, vouchType);
+    const nextAccount = id ? partyAccountFor(id, vouchType) : "";
+    setPartyId(id);
+    setLineItems((prev) =>
+      prev.map((l) => ({
+        ...l,
+        billId: "",
+        accountId: nextAccount && (!l.accountId || l.accountId === prevAccount) ? nextAccount : l.accountId,
+      })),
+    );
+    if (id) void loadBills(id, vouchType);
+  };
+
+  const handleAddLineItem = () => setLineItems((prev) => [...prev, newLine(partyAccountFor(partyId, vouchType))]);
 
   const handleRemoveLineItem = (key: string) => {
     if (lineItems.length === 1) {
@@ -209,23 +223,19 @@ export function GLReceiptsPaymentsView() {
       prev.map((item) => {
         if (item.key !== key) return item;
         const next: FormLineItem = { ...item, [field]: value };
-        if (field === "partyId") {
-          next.billId = "";
-          const party = lookups?.parties.find((p) => p.id === value);
-          const partyAccount = vouchType === "Receipt" ? party?.receivableAccountId : party?.payableAccountId;
-          if (!item.accountId && partyAccount) next.accountId = partyAccount;
-        }
         if (field === "billId" && value) {
-          const bill = billsFor(item.partyId).find((b) => b.id === value);
+          const bill = partyBills.find((b) => b.id === value);
           if (bill && !item.amount) next.amount = bill.balance;
         }
         return next;
       }),
     );
-    if (field === "partyId" && value) void loadBills(value as string, vouchType);
   };
 
-  const resetLines = () => setLineItems([newLine()]);
+  const resetLines = () => {
+    setPartyId("");
+    setLineItems([newLine()]);
+  };
 
   const handlePostVoucher = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -247,7 +257,10 @@ export function GLReceiptsPaymentsView() {
       notify(`${paymentMethod.paymentMethodName} requires a reference / instrument number.`, "error");
       return;
     }
-    const partyIds = [...new Set(lineItems.map((l) => l.partyId).filter(Boolean))];
+    if (voucherType?.partyRequired && !partyId) {
+      notify(`${voucherType.voucherTypeName} requires a party.`, "error");
+      return;
+    }
 
     setIsPosting(true);
     try {
@@ -260,13 +273,11 @@ export function GLReceiptsPaymentsView() {
         instrumentNo: instrumentNo.trim(),
         instrumentDate: instrumentDate || null,
         narration: overallNarration.trim(),
-        partyId: partyIds.length === 1 ? partyIds[0] : null,
+        partyId: partyId || null,
         status: "Posted",
         lines: lineItems.map((l) => ({
           accountId: l.accountId,
-          partyId: l.partyId || null,
           amount: Number(l.amount),
-          narration: l.lineNarration.trim(),
           billId: l.billId || null,
         })),
       });
@@ -335,25 +346,23 @@ export function GLReceiptsPaymentsView() {
     "h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-800 focus:border-emerald-500 focus:outline-none";
 
   const renderBillSelect = (item: FormLineItem, className: string) => {
-    const state = item.partyId ? billsByKey[`${vouchType}:${item.partyId}`] : undefined;
-    const bills = billsFor(item.partyId);
     return (
       <select
         value={item.billId}
-        disabled={!item.partyId || state === "loading"}
+        disabled={!partyId || partyBillState === "loading"}
         onChange={(e) => handleUpdateLineItem(item.key, "billId", e.target.value)}
         className={className}
       >
         <option value="">
-          {!item.partyId
+          {!partyId
             ? "Select a party first"
-            : state === "loading"
+            : partyBillState === "loading"
             ? "Loading bills…"
-            : bills.length === 0
+            : partyBills.length === 0
             ? `No open ${moduleType} bills (on account)`
             : "On account (no bill)"}
         </option>
-        {bills.map((b) => (
+        {partyBills.map((b) => (
           <option key={b.id} value={b.id}>
             {b.billNo} · {formatDate(b.billDate)} · Bal {formatINR(b.balance)}
           </option>
@@ -537,6 +546,17 @@ export function GLReceiptsPaymentsView() {
               />
             </FormField>
 
+            <FormField label="Party / Sub-Ledger" required={voucherType?.partyRequired} className="sm:col-span-2">
+              <select value={partyId} onChange={(e) => handlePartyChange(e.target.value)} className={selectClass}>
+                <option value="">— No party (direct {vouchType.toLowerCase()}) —</option>
+                {(lookups?.parties ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.partyName} ({p.partyCode})
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
             <FormField label="Overall Voucher Narration" className="sm:col-span-2">
               <TextInput
                 value={overallNarration}
@@ -573,11 +593,9 @@ export function GLReceiptsPaymentsView() {
                 <thead>
                   <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
                     <th className="px-3 py-2 w-10 text-center">#</th>
-                    <th className="px-3 py-2 min-w-[180px]">Account Ledger</th>
-                    <th className="px-3 py-2 min-w-[180px]">Party / Sub-Ledger</th>
-                    <th className="px-3 py-2 min-w-[180px]">Against Bill</th>
-                    <th className="px-3 py-2 w-32 text-right">Amount (₹)</th>
-                    <th className="px-3 py-2 min-w-[200px]">Line Narration</th>
+                    <th className="px-3 py-2 min-w-[220px]">Account Ledger</th>
+                    <th className="px-3 py-2 min-w-[220px]">Against Bill</th>
+                    <th className="px-3 py-2 w-40 text-right">Amount (₹)</th>
                     <th className="px-3 py-2 w-12 text-center">Del</th>
                   </tr>
                 </thead>
@@ -599,20 +617,6 @@ export function GLReceiptsPaymentsView() {
                           ))}
                         </select>
                       </td>
-                      <td className="px-3 py-2">
-                        <select
-                          value={item.partyId}
-                          onChange={(e) => handleUpdateLineItem(item.key, "partyId", e.target.value)}
-                          className={lineSelectClass}
-                        >
-                          <option value="">— No party —</option>
-                          {(lookups?.parties ?? []).map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.partyName} ({p.partyCode})
-                            </option>
-                          ))}
-                        </select>
-                      </td>
                       <td className="px-3 py-2">{renderBillSelect(item, lineSelectClass)}</td>
                       <td className="px-3 py-2">
                         <input
@@ -623,14 +627,6 @@ export function GLReceiptsPaymentsView() {
                           onChange={(e) => handleUpdateLineItem(item.key, "amount", parseFloat(e.target.value) || 0)}
                           placeholder="0.00"
                           className="h-7 w-full rounded-md border border-slate-200 px-2 text-right text-xs font-bold text-slate-900 focus:border-emerald-500 focus:outline-none"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <TextInput
-                          value={item.lineNarration}
-                          onChange={(e) => handleUpdateLineItem(item.key, "lineNarration", e.target.value)}
-                          placeholder="Line item description..."
-                          className="h-7 text-xs"
                         />
                       </td>
                       <td className="px-3 py-2 text-center">
@@ -675,22 +671,6 @@ export function GLReceiptsPaymentsView() {
                         {(lookups?.ledgers ?? []).map((l) => (
                           <option key={l.id} value={l.id}>
                             {l.code} - {l.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500">Party / Sub-Ledger:</label>
-                      <select
-                        value={item.partyId}
-                        onChange={(e) => handleUpdateLineItem(item.key, "partyId", e.target.value)}
-                        className={lineSelectClass}
-                      >
-                        <option value="">— No party —</option>
-                        {(lookups?.parties ?? []).map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.partyName}
                           </option>
                         ))}
                       </select>

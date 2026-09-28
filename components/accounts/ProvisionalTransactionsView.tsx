@@ -229,8 +229,8 @@ export function ProvisionalTransactionsView() {
       provisionalType: vouchType,
       expiryDate: expiryDt || null,
       lines: [
-        { accountId, debit: isDebit ? amount : 0, credit: isDebit ? 0 : amount, narration: narration.trim() },
-        { accountId: contraAccountId, debit: isDebit ? 0 : amount, credit: isDebit ? amount : 0, narration: narration.trim() },
+        { accountId, entryType: isDebit ? "Dr" : "Cr", amount },
+        { accountId: contraAccountId, entryType: isDebit ? "Cr" : "Dr", amount },
       ],
     };
   };

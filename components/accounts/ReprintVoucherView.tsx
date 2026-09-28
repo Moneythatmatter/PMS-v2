@@ -840,7 +840,7 @@ export function ReprintVoucherView() {
                           <td className="px-2.5 py-1.5 border-r border-slate-200 font-mono text-[11px]">{l.accountCode}</td>
                           <td className="px-3 py-1.5 border-r border-slate-200 font-bold text-slate-900">{l.accountName}</td>
                           <td className="px-3 py-1.5 border-r border-slate-200 text-slate-700 text-[11px]">
-                            {[l.partyName, l.narration, l.chequeNo && `Chq ${l.chequeNo}`, printAnalysisCode && l.divisionName]
+                            {[l.partyName, l.chequeNo && `Chq ${l.chequeNo}`, printAnalysisCode && l.divisionName]
                               .filter(Boolean)
                               .join(" • ") || "-"}
                           </td>

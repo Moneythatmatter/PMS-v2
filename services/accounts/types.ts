@@ -439,6 +439,8 @@ export type Lookups = {
 // Vouchers
 // ---------------------------------------------------------------------------
 
+export type EntryType = "Dr" | "Cr";
+
 export type VoucherLine = {
   id: string;
   voucherId: string;
@@ -522,8 +524,6 @@ export type VoucherDetail = Voucher & {
   bills: PartyBill[];
   auditLogs: AuditLog[];
 };
-
-export type EntryType = "Dr" | "Cr";
 
 /** The line party is derived server-side from the voucher-level partyId. */
 export type VoucherLineInput = {
