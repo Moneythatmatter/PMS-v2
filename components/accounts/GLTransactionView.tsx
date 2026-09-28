@@ -29,6 +29,7 @@ import {
   TextAreaInput,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
+import { LedgerPickerModal, type LedgerPickerOption } from "./LedgerPickerModal";
 import { cn } from "@/lib/utils";
 import {
   accCompanyService,
@@ -127,6 +128,7 @@ export function GLTransactionView() {
   const [transactionDate, setTransactionDate] = useState(todayIso());
   const [manualVoucherNo, setManualVoucherNo] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
+  const [voucherPartyId, setVoucherPartyId] = useState("");
   const [commonNarration, setCommonNarration] = useState("");
   const [lineNarrationDetails, setLineNarrationDetails] = useState("");
   const [rows, setRows] = useState<JournalRow[]>(blankRows);
@@ -180,17 +182,31 @@ export function GLTransactionView() {
   const editable = !current || current.status === "Draft";
   const status = current?.status ?? "New";
 
-  const ledgerOptions = useMemo(() => {
-    const base = (lookups?.ledgers ?? []).map((l) => ({ id: l.id, label: `${l.code} - ${l.name}` }));
+  const ledgerPickerOptions = useMemo(() => {
+    const base: LedgerPickerOption[] = (lookups?.ledgers ?? []).map((l) => ({
+      id: l.id,
+      code: l.code,
+      name: l.name,
+      nature: l.nature,
+      category: l.category,
+      isBankAccount: l.isBankAccount,
+      isCashAccount: l.isCashAccount,
+    }));
     const known = new Set(base.map((b) => b.id));
     for (const l of current?.lines ?? []) {
       if (!known.has(l.accountId)) {
         known.add(l.accountId);
-        base.push({ id: l.accountId, label: `${l.accountCode ?? ""} - ${l.accountName ?? "Account"}` });
+        base.push({ id: l.accountId, code: l.accountCode ?? "", name: l.accountName ?? "Account" });
       }
     }
     return base;
   }, [lookups, current]);
+  const ledgerOptions = useMemo(
+    () => ledgerPickerOptions.map((l) => ({ id: l.id, label: `${l.code} - ${l.name}` })),
+    [ledgerPickerOptions],
+  );
+  const [ledgerPickerRowKey, setLedgerPickerRowKey] = useState<string | null>(null);
+  const ledgerPickerRow = rows.find((r) => r.key === ledgerPickerRowKey) ?? null;
   const ledgerLabel = (id: string) => ledgerOptions.find((l) => l.id === id)?.label ?? "";
   const partyLabel = (id: string) => lookups?.parties.find((p) => p.id === id)?.partyName ?? "";
   const divisionLabel = (id: string) => lookups?.divisions.find((d) => d.id === id)?.divisionName ?? "";
@@ -235,6 +251,7 @@ export function GLTransactionView() {
     setTransactionDate(v.voucherDate);
     setManualVoucherNo(v.voucherNo);
     setReferenceNumber(v.referenceNo ?? "");
+    setVoucherPartyId(v.partyId ?? v.lines.find((l) => l.partyId)?.partyId ?? "");
     setCommonNarration(v.narration ?? "");
     setLineNarrationDetails("");
     setRows(rowsFromVoucher(v));
@@ -244,6 +261,7 @@ export function GLTransactionView() {
     setCurrent(null);
     setManualVoucherNo("");
     setReferenceNumber("");
+    setVoucherPartyId("");
     setCommonNarration("");
     setLineNarrationDetails("");
     setRows(blankRows());
@@ -320,7 +338,7 @@ export function GLTransactionView() {
     }
     const amountIdx = rows.findIndex((r) => (r.debit > 0) === (r.credit > 0));
     if (amountIdx >= 0) {
-      notify(`Line ${amountIdx + 1}: enter either a debit or a credit amount.`, "error");
+      notify(`Line ${amountIdx + 1}: enter an amount.`, "error");
       return null;
     }
     if (totalDebit <= 0) {
@@ -334,8 +352,13 @@ export function GLTransactionView() {
       );
       return null;
     }
+    if (voucherType?.partyRequired && !voucherPartyId) {
+      notify(`${voucherType.voucherTypeName} requires a party — select one in Section 1.`, "error");
+      return null;
+    }
     const defaultLineNarration = lineNarrationDetails.trim();
     return {
+      partyId: voucherPartyId || null,
       voucherTypeId: typeId,
       voucherNo: isManualNumbering && !current ? manualVoucherNo.trim() : undefined,
       voucherDate: transactionDate,
@@ -714,6 +737,23 @@ export function GLTransactionView() {
           />
         </FormField>
 
+        {(voucherType?.partyRequired || voucherPartyId) && (
+          <FormField label="Party" required={voucherType?.partyRequired}>
+            <SelectInput
+              value={voucherPartyId}
+              disabled={!editable}
+              onChange={(e) => setVoucherPartyId(e.target.value)}
+            >
+              <option value="">Select party...</option>
+              {(lookups?.parties ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.partyName} ({p.partyCode})
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+        )}
+
         <FormField label="Common Narration">
           <TextInput
             value={commonNarration}
@@ -771,19 +811,16 @@ export function GLTransactionView() {
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full text-left text-xs font-sans">
+          <table className="w-full min-w-[960px] text-left text-xs font-sans">
             <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px] tracking-wider">
               <tr>
-                <th className="px-3 py-2.5 w-20 border-r border-slate-200">Dr / Cr</th>
-                <th className="px-3.5 py-2.5 min-w-[200px] border-r border-slate-200">Account Name</th>
-                <th className="px-3.5 py-2.5 min-w-[170px] border-r border-slate-200">Party</th>
-                <th className="px-3 py-2.5 w-32 text-right border-r border-slate-200">Debit Amount</th>
-                <th className="px-3 py-2.5 w-32 text-right border-r border-slate-200">Credit Amount</th>
-                <th className="px-3.5 py-2.5 min-w-[180px] border-r border-slate-200">Narration</th>
-                <th className="px-3 py-2.5 w-32 border-r border-slate-200">Cheque No.</th>
-                <th className="px-3 py-2.5 w-36 border-r border-slate-200">Cheque Date</th>
-                <th className="px-3 py-2.5 w-36 border-r border-slate-200">Analysis (Division)</th>
-                <th className="px-3 py-2.5 w-24 border-r border-slate-200">GST</th>
+                <th className="px-3 py-2.5 w-[92px] min-w-[92px] border-r border-slate-200">Dr / Cr</th>
+                <th className="px-3.5 py-2.5 min-w-[280px] border-r border-slate-200">Account Name (Ledger)</th>
+                <th className="px-3 py-2.5 min-w-[140px] text-right border-r border-slate-200">Amount</th>
+                <th className="px-3 py-2.5 min-w-[120px] border-r border-slate-200">Cheque No.</th>
+                <th className="px-3 py-2.5 min-w-[140px] border-r border-slate-200">Cheque Date</th>
+                <th className="px-3 py-2.5 min-w-[150px] border-r border-slate-200">Analysis (Division)</th>
+                <th className="px-3 py-2.5 min-w-[100px] border-r border-slate-200">GST</th>
                 <th className="px-3 py-2.5 w-12 text-center">Action</th>
               </tr>
             </thead>
@@ -795,73 +832,41 @@ export function GLTransactionView() {
                       value={row.type}
                       disabled={!editable}
                       onChange={(e) => handleUpdateRow(row.key, "type", e.target.value as "Dr" | "Cr")}
-                      className="h-8 text-xs font-bold text-slate-800"
+                      className={cn(
+                        "h-8 min-w-[76px] pl-2.5 pr-7 bg-[right_8px_center] text-xs font-bold",
+                        row.type === "Dr" ? "text-emerald-700" : "text-rose-700",
+                      )}
                     >
                       <option value="Dr">Dr</option>
                       <option value="Cr">Cr</option>
                     </SelectInput>
                   </td>
                   <td className="p-2 border-r border-slate-100">
-                    <SelectInput
-                      value={row.accountId}
+                    <button
+                      type="button"
                       disabled={!editable}
-                      onChange={(e) => handleUpdateRow(row.key, "accountId", e.target.value)}
-                      className="h-8 text-xs font-semibold text-slate-900"
+                      onClick={() => setLedgerPickerRowKey(row.key)}
+                      title={ledgerLabel(row.accountId) || "Select ledger"}
+                      className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-left text-xs transition hover:border-emerald-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50"
                     >
-                      <option value="">Select Account...</option>
-                      {ledgerOptions.map((l) => (
-                        <option key={l.id} value={l.id}>
-                          {l.label}
-                        </option>
-                      ))}
-                    </SelectInput>
-                  </td>
-                  <td className="p-2 border-r border-slate-100">
-                    <SelectInput
-                      value={row.partyId}
-                      disabled={!editable}
-                      onChange={(e) => handleUpdateRow(row.key, "partyId", e.target.value)}
-                      className="h-8 text-xs"
-                    >
-                      <option value="">— None —</option>
-                      {(lookups?.parties ?? []).map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.partyName} ({p.partyCode})
-                        </option>
-                      ))}
-                    </SelectInput>
+                      <span className={cn("truncate", row.accountId ? "font-semibold text-slate-900" : "text-slate-400")}>
+                        {ledgerLabel(row.accountId) || "Select Ledger..."}
+                      </span>
+                      <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    </button>
                   </td>
                   <td className="p-2 border-r border-slate-100">
                     <TextInput
                       type="number"
                       min={0}
                       step="0.01"
-                      value={row.debit || ""}
+                      value={(row.type === "Dr" ? row.debit : row.credit) || ""}
                       disabled={!editable}
-                      onChange={(e) => handleUpdateRow(row.key, "debit", parseFloat(e.target.value) || 0)}
+                      onChange={(e) =>
+                        handleUpdateRow(row.key, row.type === "Dr" ? "debit" : "credit", parseFloat(e.target.value) || 0)
+                      }
                       placeholder="0.00"
                       className="h-8 text-xs text-right font-bold text-slate-900"
-                    />
-                  </td>
-                  <td className="p-2 border-r border-slate-100">
-                    <TextInput
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={row.credit || ""}
-                      disabled={!editable}
-                      onChange={(e) => handleUpdateRow(row.key, "credit", parseFloat(e.target.value) || 0)}
-                      placeholder="0.00"
-                      className="h-8 text-xs text-right font-bold text-slate-900"
-                    />
-                  </td>
-                  <td className="p-2 border-r border-slate-100">
-                    <TextInput
-                      value={row.narration}
-                      disabled={!editable}
-                      onChange={(e) => handleUpdateRow(row.key, "narration", e.target.value)}
-                      placeholder="Line narration..."
-                      className="h-8 text-xs"
                     />
                   </td>
                   <td className="p-2 border-r border-slate-100">
@@ -929,6 +934,16 @@ export function GLTransactionView() {
           </table>
         </div>
       </section>
+
+      {ledgerPickerRow && (
+        <LedgerPickerModal
+          ledgers={ledgerPickerOptions}
+          selectedId={ledgerPickerRow.accountId}
+          title={`Select Ledger — Line ${rows.indexOf(ledgerPickerRow) + 1} (${ledgerPickerRow.type})`}
+          onSelect={(ledger) => handleUpdateRow(ledgerPickerRow.key, "accountId", ledger.id)}
+          onClose={() => setLedgerPickerRowKey(null)}
+        />
+      )}
 
       {/* Section 3 — Dynamic Footer Totals Summary */}
       <section className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
