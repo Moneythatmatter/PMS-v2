@@ -13,11 +13,6 @@ export * from "./laundry/settleLaundry";
 export * from "./laundry/pricing";
 export * from "./laundry/batch";
 
-// Luggage Actions
-export * from "./luggage/createLuggage";
-export * from "./luggage/assignBellBoy";
-export * from "./luggage/deliverLuggage";
-
 // Maintenance Actions
 export * from "./maintenance/createMaintenance";
 export * from "./maintenance/assignMaintenance";

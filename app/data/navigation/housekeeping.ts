@@ -14,7 +14,6 @@ export const housekeepingNavItems: ModuleNavItem[] = [
       { label: "Guest Requests", href: "/housekeeping/housekeeping-requests", icon: "bell" },
       { label: "Maintenance", href: "/housekeeping/maintenance-requests", icon: "wrench" },
       { label: "Laundry Flow", href: "/housekeeping/operations/laundry", icon: "arrow-right-left" },
-      { label: "Luggage", href: "/housekeeping/luggage-management", icon: "luggage" },
       { label: "Lost & Found", href: "/housekeeping/lost-and-found", icon: "package-search" },
       { label: "Deep Cleaning", href: "/housekeeping/operations/deep-cleaning", icon: "calendar-clock" },
       { label: "Damage Reports", href: "/housekeeping/operations/damage-reports", icon: "alert-triangle" },

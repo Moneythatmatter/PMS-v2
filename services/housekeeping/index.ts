@@ -11,7 +11,6 @@ import type {
   HKDamageReport,
   HKRequisition,
   HKHistoryLog,
-  HKLuggageJob,
 } from "@/components/housekeeping/HousekeepingTypes";
 
 /** Housekeeping base path helper. */
@@ -163,7 +162,6 @@ export const hkDamageService = {
     >(hkPath(`/damage-reports/${id}/resolve`), body ?? {}),
 };
 export const hkHistoryService = crud<HKHistoryLog>("/history");
-export const hkLuggageService = crud<HKLuggageJob>("/luggage");
 export const hkSettingsService = crud<{
   id: string;
   label?: string;

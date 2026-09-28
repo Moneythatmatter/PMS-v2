@@ -46,8 +46,3 @@ next-env.d.ts
 *.md
 
 
-temporary folder
-
-/lib/laundry-new
-/components/laundry-new
-/app/laundry-new

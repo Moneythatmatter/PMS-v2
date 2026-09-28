@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import Link from "next/link";
 import {
   ChevronRight,
   ChevronDown,
@@ -24,18 +23,26 @@ import {
 import { Button, Card } from "@/components/ui";
 import {
   FormField,
-  TextInput,
   Drawer,
-  AlertBanner,
   FODatePicker,
   formatINR,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
 import {
-  sampleTrialBalanceData,
-  TrialBalanceEntry,
-} from "@/app/data/accounts/trialBalanceData";
+  accCompanyService,
+  accReportService,
+  type AccountNature,
+  type TrialBalanceRow,
+} from "@/services/accounts";
+import { useAccLookups, useAccQuery, fyStartIso, todayIso, formatDate } from "@/components/accounts/accountsApi";
 import { cn } from "@/lib/utils";
+
+function addMonths(iso: string, months: number): string {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setMonth(d.getMonth() + months);
+  d.setDate(d.getDate() - 1);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
 
 export function TrialBalanceView() {
   // Filters Panel / Mobile Drawer Toggle
@@ -45,7 +52,6 @@ export function TrialBalanceView() {
   // Level Selection Checkboxes
   const [showGroup, setShowGroup] = useState(true);
   const [showLedger, setShowLedger] = useState(true);
-  const [showSubLedger, setShowSubLedger] = useState(true);
   const [suppressZero, setSuppressZero] = useState(true);
 
   // Column Visibility Checkboxes
@@ -56,60 +62,72 @@ export function TrialBalanceView() {
   const [showCompanyHeading, setShowCompanyHeading] = useState(false);
 
   // Filter & Search Controls
-  const [fromDate, setFromDate] = useState("2026-04-01");
-  const [toDate, setToDate] = useState("2027-03-31");
-  const [appliedFromDate, setAppliedFromDate] = useState("2026-04-01");
-  const [appliedToDate, setAppliedToDate] = useState("2027-03-31");
-  const [datePreset, setDatePreset] = useState("fy26");
+  const fyStart = fyStartIso();
+  const [fromDate, setFromDate] = useState(fyStart);
+  const [toDate, setToDate] = useState(todayIso());
+  const [appliedFromDate, setAppliedFromDate] = useState(fyStart);
+  const [appliedToDate, setAppliedToDate] = useState(todayIso());
+  const [datePreset, setDatePreset] = useState("fy");
   const [searchQuery, setSearchQuery] = useState("");
   const [orderBy, setOrderBy] = useState<"acGroup" | "seqNo" | "name">("seqNo");
-  const [isDisplayLoading, setIsDisplayLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Expanded group IDs state
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    "grp-1000": true,
-    "grp-1100": true,
-    "grp-1200": true,
-    "grp-2000": true,
-    "grp-2100": true,
-    "grp-3000": true,
-    "grp-4000": true,
-    "grp-5000": true,
-    "led-1030": true,
-    "led-2010": true,
-  });
+  const { lookups } = useAccLookups();
+  const currentFy = useMemo(() => {
+    const fys = lookups?.fiscalYears ?? [];
+    return (
+      fys.find((f) => f.startDate <= appliedToDate && f.endDate >= appliedToDate) ??
+      fys.find((f) => f.isCurrent) ??
+      null
+    );
+  }, [lookups, appliedToDate]);
+
+  const report = useAccQuery(
+    () =>
+      accReportService.trialBalance({
+        from: appliedFromDate,
+        to: appliedToDate,
+        showZero: !suppressZero,
+      }),
+    [appliedFromDate, appliedToDate, suppressZero]
+  );
+  const rows = useMemo(() => report.data?.rows ?? [], [report.data]);
+
+  const companyQuery = useAccQuery(
+    () => (showCompanyHeading ? accCompanyService.list() : Promise.resolve([])),
+    [showCompanyHeading]
+  );
+  const company = companyQuery.data?.find((c) => c.status === "Active") ?? companyQuery.data?.[0] ?? null;
+
+  // Collapsed group IDs (groups are expanded unless explicitly collapsed)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   const toggleExpand = (id: string) => {
-    setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }));
+    setExpandedGroups((prev) => ({ ...prev, [id]: prev[id] === false }));
   };
 
   const expandAll = () => {
-    const allExpanded: Record<string, boolean> = {};
-    sampleTrialBalanceData.forEach((item) => {
-      allExpanded[item.id] = true;
-    });
-    setExpandedGroups(allExpanded);
+    setExpandedGroups({});
   };
 
   const collapseAll = () => {
-    setExpandedGroups({});
+    const collapsed: Record<string, boolean> = {};
+    rows.forEach((item) => {
+      if (item.accountType === "Group") collapsed[item.accountId] = false;
+    });
+    setExpandedGroups(collapsed);
   };
 
   // Preset Date Range Selector
   const handleDatePreset = (preset: string) => {
     setDatePreset(preset);
-    let newFrom = "2026-04-01";
-    let newTo = "2027-03-31";
-    if (preset === "fy26") {
-      newFrom = "2026-04-01";
-      newTo = "2027-03-31";
-    } else if (preset === "q1") {
-      newFrom = "2026-04-01";
-      newTo = "2026-06-30";
+    const today = todayIso();
+    let newFrom = fyStart;
+    let newTo = today;
+    if (preset === "q1") {
+      newTo = addMonths(fyStart, 3);
     } else if (preset === "thisMonth") {
-      newFrom = "2026-07-01";
-      newTo = "2026-07-31";
+      newFrom = `${today.slice(0, 7)}-01`;
     }
     setFromDate(newFrom);
     setToDate(newTo);
@@ -117,115 +135,82 @@ export function TrialBalanceView() {
 
   // Trigger Display Report Action
   const handleDisplayReport = () => {
-    setIsDisplayLoading(true);
-    setAppliedFromDate(fromDate);
-    setAppliedToDate(toDate);
-    setToastMessage(`Trial Balance refreshed for period ${fromDate} to ${toDate}.`);
-    setTimeout(() => {
-      setIsDisplayLoading(false);
-    }, 350);
+    if (toDate < fromDate) {
+      setToastMessage("'To' date must be on or after 'From' date.");
+      return;
+    }
+    if (fromDate === appliedFromDate && toDate === appliedToDate) {
+      void report.reload();
+    } else {
+      setAppliedFromDate(fromDate);
+      setAppliedToDate(toDate);
+    }
   };
 
   // Filtered & Sorted Trial Balance Data
   const filteredData = useMemo(() => {
-    return sampleTrialBalanceData
-      .filter((item) => {
-        // Level Filters
-        if (item.level === "group" && !showGroup) return false;
-        if (item.level === "ledger" && !showLedger) return false;
-        if (item.level === "sub-ledger" && !showSubLedger) return false;
-
-        // Suppress Zero Transactions Filter
-        if (suppressZero) {
-          const totalActivity =
-            item.openingDr +
-            item.openingCr +
-            item.transDr +
-            item.transCr +
-            item.closingDr +
-            item.closingCr;
-          if (totalActivity === 0) return false;
-        }
-
-        // Search Query Filter
-        if (searchQuery.trim()) {
-          const query = searchQuery.toLowerCase();
-          const matchesName = item.name.toLowerCase().includes(query);
-          const matchesCode = item.code.toLowerCase().includes(query);
-          if (!matchesName && !matchesCode) return false;
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        if (orderBy === "name") return a.name.localeCompare(b.name);
-        if (orderBy === "acGroup") return a.code.localeCompare(b.code);
-        return a.seqNo - b.seqNo;
-      });
-  }, [showGroup, showLedger, showSubLedger, suppressZero, searchQuery, orderBy]);
-
-  // Grand Totals Calculation
-  const grandTotals = useMemo(() => {
-    const topLevelGroups = filteredData.filter(
-      (item) => item.level === "group" && !item.parentId
-    );
-
-    const initial = {
-      openingDr: 0,
-      openingCr: 0,
-      transDr: 0,
-      transCr: 0,
-      closingDr: 0,
-      closingCr: 0,
+    const byId = new Map(rows.map((r) => [r.accountId, r]));
+    const isHiddenByCollapse = (item: TrialBalanceRow) => {
+      let parentId = item.parentId;
+      while (parentId) {
+        if (expandedGroups[parentId] === false) return true;
+        parentId = byId.get(parentId)?.parentId ?? null;
+      }
+      return false;
     };
+    const query = searchQuery.trim().toLowerCase();
 
-    if (topLevelGroups.length > 0) {
-      return topLevelGroups.reduce((acc, curr) => {
-        acc.openingDr += curr.openingDr;
-        acc.openingCr += curr.openingCr;
-        acc.transDr += curr.transDr;
-        acc.transCr += curr.transCr;
-        acc.closingDr += curr.closingDr;
-        acc.closingCr += curr.closingCr;
-        return acc;
-      }, initial);
-    }
+    const list = rows.filter((item) => {
+      // Level Filters
+      if (item.accountType === "Group" && !showGroup) return false;
+      if (item.accountType === "Ledger" && !showLedger) return false;
 
-    return filteredData
-      .filter((item) => item.level === "ledger")
-      .reduce((acc, curr) => {
-        acc.openingDr += curr.openingDr;
-        acc.openingCr += curr.openingCr;
-        acc.transDr += curr.transDr;
-        acc.transCr += curr.transCr;
-        acc.closingDr += curr.closingDr;
-        acc.closingCr += curr.closingCr;
-        return acc;
-      }, initial);
-  }, [filteredData]);
+      // Search Query Filter
+      if (query) {
+        const matchesName = item.name.toLowerCase().includes(query);
+        const matchesCode = item.code.toLowerCase().includes(query);
+        if (!matchesName && !matchesCode) return false;
+      } else if (showGroup && orderBy === "seqNo" && isHiddenByCollapse(item)) {
+        return false;
+      }
 
-  // Check if trial balance is in balance
-  const isBalanced =
-    grandTotals.closingDr === grandTotals.closingCr &&
-    grandTotals.openingDr === grandTotals.openingCr;
+      return true;
+    });
+
+    if (orderBy === "name") return [...list].sort((a, b) => a.name.localeCompare(b.name));
+    if (orderBy === "acGroup") return [...list].sort((a, b) => a.code.localeCompare(b.code));
+    return list;
+  }, [rows, expandedGroups, showGroup, showLedger, searchQuery, orderBy]);
+
+  // Grand Totals (ledger sums computed by the backend)
+  const grandTotals = {
+    openingDr: report.data?.totals.openingDebit ?? 0,
+    openingCr: report.data?.totals.openingCredit ?? 0,
+    transDr: report.data?.totals.debit ?? 0,
+    transCr: report.data?.totals.credit ?? 0,
+    closingDr: report.data?.totals.closingDebit ?? 0,
+    closingCr: report.data?.totals.closingCredit ?? 0,
+  };
+
+  const isBalanced = report.data?.balanced ?? true;
 
   // Active filter count for pill badge
   const activeFiltersCount =
     (!showGroup ? 1 : 0) +
     (!showLedger ? 1 : 0) +
-    (!showSubLedger ? 1 : 0) +
     (suppressZero ? 1 : 0) +
     (searchQuery ? 1 : 0);
 
-  // Helper for Group Category Color Badges
-  const getCategoryBadgeClass = (code: string) => {
-    if (code.startsWith("1")) return "bg-emerald-50 text-emerald-800 border-emerald-200";
-    if (code.startsWith("2")) return "bg-purple-50 text-purple-800 border-purple-200";
-    if (code.startsWith("3")) return "bg-blue-50 text-blue-800 border-blue-200";
-    if (code.startsWith("4")) return "bg-amber-50 text-amber-800 border-amber-200";
-    if (code.startsWith("5")) return "bg-rose-50 text-rose-800 border-rose-200";
+  // Helper for Account Nature Color Badges
+  const getCategoryBadgeClass = (nature: AccountNature) => {
+    if (nature === "Asset") return "bg-emerald-50 text-emerald-800 border-emerald-200";
+    if (nature === "Liability") return "bg-purple-50 text-purple-800 border-purple-200";
+    if (nature === "Income") return "bg-amber-50 text-amber-800 border-amber-200";
+    if (nature === "Expense") return "bg-rose-50 text-rose-800 border-rose-200";
     return "bg-slate-100 text-slate-800 border-slate-200";
   };
+
+  const fmtAmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // ─────────────────────────────────────────────────────────────
   // CLEAN EXCEL-READY CSV EXPORT
@@ -252,16 +237,16 @@ export function TrialBalanceView() {
       "CLOSING CREDIT (INR)",
     ];
 
-    const dataRows = filteredData.map((item) => [
+    const dataRows: (string | number)[][] = filteredData.map((item) => [
       item.code,
       item.name,
-      item.level.toUpperCase(),
-      item.openingDr || 0,
-      item.openingCr || 0,
-      item.transDr || 0,
-      item.transCr || 0,
-      item.closingDr || 0,
-      item.closingCr || 0,
+      item.accountType.toUpperCase(),
+      item.openingDebit || 0,
+      item.openingCredit || 0,
+      item.debit || 0,
+      item.credit || 0,
+      item.closingDebit || 0,
+      item.closingCredit || 0,
     ]);
 
     // Grand Totals Row
@@ -295,7 +280,7 @@ export function TrialBalanceView() {
   };
 
   // Shared Filter Form Controls Component
-  const FilterFormContent = () => (
+  const filterFormContent = (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
       {/* Box 1: Levels & Suppress Zero */}
       <div className="lg:col-span-4 rounded-xl bg-slate-50/70 p-3.5 border border-slate-200 space-y-2.5">
@@ -323,16 +308,6 @@ export function TrialBalanceView() {
               className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
             />
             <span>Ledger</span>
-          </label>
-
-          <label className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 border border-slate-200 cursor-pointer hover:border-slate-300">
-            <input
-              type="checkbox"
-              checked={showSubLedger}
-              onChange={(e) => setShowSubLedger(e.target.checked)}
-              className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-            />
-            <span>Sub Ledger</span>
           </label>
 
           <label className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 border border-slate-200 cursor-pointer hover:border-slate-300">
@@ -417,7 +392,7 @@ export function TrialBalanceView() {
         {/* Date Presets */}
         <div className="flex items-center gap-1">
           {[
-            { id: "fy26", label: "FY 2026-27" },
+            { id: "fy", label: "FY to Date" },
             { id: "q1", label: "Q1 Apr-Jun" },
             { id: "thisMonth", label: "This Month" },
           ].map((p) => (
@@ -457,10 +432,10 @@ export function TrialBalanceView() {
             type="button"
             size="sm"
             onClick={handleDisplayReport}
-            disabled={isDisplayLoading}
+            disabled={report.loading}
             className="h-8 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-3.5 shadow-2xs shrink-0 disabled:opacity-75 cursor-pointer rounded-lg"
           >
-            {isDisplayLoading ? (
+            {report.loading ? (
               <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
             ) : (
               <Search className="h-3.5 w-3.5 mr-1" />
@@ -483,7 +458,7 @@ export function TrialBalanceView() {
                 <button
                   key={opt.id}
                   type="button"
-                  onClick={() => setOrderBy(opt.id as any)}
+                  onClick={() => setOrderBy(opt.id as typeof orderBy)}
                   className={cn(
                     "flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer select-none",
                     active
@@ -628,7 +603,7 @@ export function TrialBalanceView() {
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200">
             <Calendar className="h-3.5 w-3.5 text-slate-600" />
-            FY 2026 - 27
+            {currentFy ? currentFy.fiscalYearName : `${formatDate(appliedFromDate)} – ${formatDate(appliedToDate)}`}
           </span>
         </div>
       </div>
@@ -655,7 +630,7 @@ export function TrialBalanceView() {
             </button>
           </div>
 
-          <FilterFormContent />
+          {filterFormContent}
         </div>
       )}
 
@@ -666,7 +641,7 @@ export function TrialBalanceView() {
         title="Report Controls & Filters"
       >
         <div className="p-4 space-y-4">
-          <FilterFormContent />
+          {filterFormContent}
           <div className="pt-2">
             <Button
               type="button"
@@ -746,7 +721,9 @@ export function TrialBalanceView() {
               isBalanced ? "text-emerald-700" : "text-rose-700"
             )}
           >
-            {isBalanced ? "✓ Balanced — Dr & Cr match" : "⚠️ Discrepancy Found"}
+            {isBalanced
+              ? "✓ Balanced — Dr & Cr match"
+              : `⚠️ Difference: ${formatINR(Math.abs(report.data?.difference ?? 0))}`}
           </p>
         </Card>
       </div>
@@ -755,17 +732,20 @@ export function TrialBalanceView() {
       {showCompanyHeading && (
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-xs">
           <h1 className="text-xl font-bold tracking-tight text-slate-900 uppercase">
-            Hotel & Resorts Private Limited
+            {company ? company.legalName || company.tradeName : companyQuery.loading ? "Loading company…" : "Company not configured"}
           </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            123 Grand Boulevard, City Center • GSTIN: 27AAAAA0000A1Z5
-          </p>
+          {company && (
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              {[company.addressLine1, company.city, company.state].filter(Boolean).join(", ")}
+              {company.gstNumber ? ` • GSTIN: ${company.gstNumber}` : ""}
+            </p>
+          )}
           <div className="my-2.5 border-t border-slate-100 max-w-xs mx-auto" />
           <h2 className="text-xs font-bold tracking-widest text-emerald-800 uppercase">
             TRIAL BALANCE STATEMENT
           </h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Period: <span className="font-semibold text-slate-700">{fromDate}</span> to <span className="font-semibold text-slate-700">{toDate}</span>
+            Period: <span className="font-semibold text-slate-700">{formatDate(appliedFromDate)}</span> to <span className="font-semibold text-slate-700">{formatDate(appliedToDate)}</span>
           </p>
         </div>
       )}
@@ -794,12 +774,33 @@ export function TrialBalanceView() {
           </div>
         </div>
 
-        {/* Empty Search State */}
-        {filteredData.length === 0 ? (
+        {report.loading && !report.data ? (
+          <div className="py-12 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-xs text-slate-500">
+            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+            Loading trial balance…
+          </div>
+        ) : report.error ? (
+          <div className="py-12 text-center rounded-xl border border-dashed border-rose-200 bg-rose-50/40">
+            <AlertCircle className="mx-auto h-8 w-8 text-rose-500 mb-2" />
+            <p className="text-sm font-semibold text-slate-700">Could not load trial balance</p>
+            <p className="text-xs text-slate-500 mt-1">{report.error}</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => void report.reload()} className="mt-3">
+              Retry
+            </Button>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="py-12 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50">
+            <Scale className="mx-auto h-8 w-8 text-slate-400 mb-2" />
+            <p className="text-sm font-semibold text-slate-700">No balances for this period</p>
+            <p className="text-xs text-slate-500 mt-1">
+              No posted transactions or opening balances were found between {formatDate(appliedFromDate)} and {formatDate(appliedToDate)}.
+            </p>
+          </div>
+        ) : filteredData.length === 0 ? (
           <div className="py-12 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50">
             <Scale className="mx-auto h-8 w-8 text-slate-400 mb-2" />
             <p className="text-sm font-semibold text-slate-700">No accounts match your search filters</p>
-            <p className="text-xs text-slate-500 mt-1">Try clearing your search term or checking "Hide Zero Trns".</p>
+            <p className="text-xs text-slate-500 mt-1">Try clearing your search term or enabling more display levels.</p>
             <Button
               type="button"
               variant="outline"
@@ -808,7 +809,6 @@ export function TrialBalanceView() {
                 setSearchQuery("");
                 setShowGroup(true);
                 setShowLedger(true);
-                setShowSubLedger(true);
               }}
               className="mt-3"
             >
@@ -820,13 +820,13 @@ export function TrialBalanceView() {
             {/* MOBILE VIEW (Card Stack layout for small screens) */}
             <div className="space-y-3 md:hidden">
               {filteredData.map((item) => {
-                const isGroup = item.level === "group";
-                const isSubLedger = item.level === "sub-ledger";
+                const isGroup = item.accountType === "Group";
+                const isSubLedger = !isGroup && item.level > 2;
 
                 return (
                   <div
-                    key={item.id}
-                    onClick={() => isGroup && toggleExpand(item.id)}
+                    key={item.accountId}
+                    onClick={() => isGroup && toggleExpand(item.accountId)}
                     className={cn(
                       "rounded-xl border border-slate-200 bg-white p-3.5 transition-all shadow-2xs",
                       isGroup && "bg-slate-50/90 border-slate-300 font-bold",
@@ -838,7 +838,7 @@ export function TrialBalanceView() {
                         <span
                           className={cn(
                             "font-mono text-[10px] px-1.5 py-0.5 rounded border font-semibold shrink-0",
-                            getCategoryBadgeClass(item.code)
+                            getCategoryBadgeClass(item.nature)
                           )}
                         >
                           {item.code}
@@ -859,7 +859,7 @@ export function TrialBalanceView() {
                         <ChevronDown
                           className={cn(
                             "h-4 w-4 text-slate-500 transition-transform",
-                            expandedGroups[item.id] === false && "-rotate-90"
+                            expandedGroups[item.accountId] === false && "-rotate-90"
                           )}
                         />
                       )}
@@ -870,7 +870,7 @@ export function TrialBalanceView() {
                         <div>
                           <p className="text-[10px] font-semibold text-slate-400 uppercase">Opening</p>
                           <p className="font-mono font-medium text-slate-700">
-                            {item.openingDr > 0 ? `Dr ${item.openingDr.toLocaleString("en-IN")}` : item.openingCr > 0 ? `Cr ${item.openingCr.toLocaleString("en-IN")}` : "-"}
+                            {item.openingDebit > 0 ? `Dr ${item.openingDebit.toLocaleString("en-IN")}` : item.openingCredit > 0 ? `Cr ${item.openingCredit.toLocaleString("en-IN")}` : "-"}
                           </p>
                         </div>
                       )}
@@ -879,7 +879,9 @@ export function TrialBalanceView() {
                         <div>
                           <p className="text-[10px] font-semibold text-slate-400 uppercase">Activity</p>
                           <p className="font-mono font-medium text-slate-700">
-                            {item.transDr > 0 ? `Dr ${item.transDr.toLocaleString("en-IN")}` : item.transCr > 0 ? `Cr ${item.transCr.toLocaleString("en-IN")}` : "-"}
+                            {item.debit > 0 || item.credit > 0
+                              ? `Dr ${item.debit.toLocaleString("en-IN")} / Cr ${item.credit.toLocaleString("en-IN")}`
+                              : "-"}
                           </p>
                         </div>
                       )}
@@ -888,7 +890,7 @@ export function TrialBalanceView() {
                         <div>
                           <p className="text-[10px] font-semibold text-slate-400 uppercase">Closing</p>
                           <p className="font-mono font-bold text-emerald-800">
-                            {item.closingDr > 0 ? `Dr ${item.closingDr.toLocaleString("en-IN")}` : item.closingCr > 0 ? `Cr ${item.closingCr.toLocaleString("en-IN")}` : "-"}
+                            {item.closingDebit > 0 ? `Dr ${item.closingDebit.toLocaleString("en-IN")}` : item.closingCredit > 0 ? `Cr ${item.closingCredit.toLocaleString("en-IN")}` : "-"}
                           </p>
                         </div>
                       )}
@@ -984,14 +986,15 @@ export function TrialBalanceView() {
                 {/* Table Body */}
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {filteredData.map((item) => {
-                    const isGroup = item.level === "group";
-                    const isSubLedger = item.level === "sub-ledger";
-                    const isExpanded = expandedGroups[item.id] !== false;
+                    const isGroup = item.accountType === "Group";
+                    const isSubLedger = !isGroup && item.level > 2;
+                    const isExpanded = expandedGroups[item.accountId] !== false;
+                    const indent = orderBy === "seqNo" && !searchQuery.trim() ? Math.max(0, item.level - 1) : 0;
 
                     return (
                       <tr
-                        key={item.id}
-                        onClick={() => isGroup && toggleExpand(item.id)}
+                        key={item.accountId}
+                        onClick={() => isGroup && toggleExpand(item.accountId)}
                         className={cn(
                           "transition-colors hover:bg-slate-50/80 cursor-pointer select-none",
                           isGroup && "bg-slate-50/70 font-bold text-slate-900",
@@ -1000,17 +1003,15 @@ export function TrialBalanceView() {
                       >
                         {/* Name Column */}
                         <td
-                          className={cn(
-                            "px-4 py-2.5 border-r border-slate-200 flex items-center gap-2",
-                            isSubLedger ? "pl-10" : item.parentId ? "pl-7" : "pl-4"
-                          )}
+                          className="px-4 py-2.5 border-r border-slate-200 flex items-center gap-2"
+                          style={{ paddingLeft: 16 + indent * 14 }}
                         >
                           {isGroup && (
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleExpand(item.id);
+                                toggleExpand(item.accountId);
                               }}
                               className="p-0.5 rounded hover:bg-slate-200 text-slate-500"
                             >
@@ -1025,7 +1026,7 @@ export function TrialBalanceView() {
                           <span
                             className={cn(
                               "font-mono text-[11px] px-1.5 py-0.5 rounded border font-semibold shrink-0",
-                              getCategoryBadgeClass(item.code)
+                              getCategoryBadgeClass(item.nature)
                             )}
                           >
                             {item.code}
@@ -1048,10 +1049,10 @@ export function TrialBalanceView() {
                         {showOpening && (
                           <>
                             <td className="px-3 py-2.5 text-right font-mono border-r border-slate-100 w-28 whitespace-nowrap">
-                              {item.openingDr > 0 ? item.openingDr.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}
+                              {item.openingDebit > 0 ? fmtAmt(item.openingDebit) : "-"}
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono border-r border-slate-200 w-28 whitespace-nowrap">
-                              {item.openingCr > 0 ? item.openingCr.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}
+                              {item.openingCredit > 0 ? fmtAmt(item.openingCredit) : "-"}
                             </td>
                           </>
                         )}
@@ -1060,10 +1061,10 @@ export function TrialBalanceView() {
                         {showTransactions && (
                           <>
                             <td className="px-3 py-2.5 text-right font-mono border-r border-slate-100 w-28 whitespace-nowrap">
-                              {item.transDr > 0 ? item.transDr.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}
+                              {item.debit > 0 ? fmtAmt(item.debit) : "-"}
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono border-r border-slate-200 w-28 whitespace-nowrap">
-                              {item.transCr > 0 ? item.transCr.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}
+                              {item.credit > 0 ? fmtAmt(item.credit) : "-"}
                             </td>
                           </>
                         )}
@@ -1077,7 +1078,7 @@ export function TrialBalanceView() {
                                 isGroup ? "font-bold text-slate-900" : "font-medium text-slate-800"
                               )}
                             >
-                              {item.closingDr > 0 ? item.closingDr.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}
+                              {item.closingDebit > 0 ? fmtAmt(item.closingDebit) : "-"}
                             </td>
                             <td
                               className={cn(
@@ -1085,14 +1086,14 @@ export function TrialBalanceView() {
                                 isGroup ? "font-bold text-slate-900" : "font-medium text-slate-800"
                               )}
                             >
-                              {item.closingCr > 0 ? item.closingCr.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}
+                              {item.closingCredit > 0 ? fmtAmt(item.closingCredit) : "-"}
                             </td>
                           </>
                         )}
 
                         {showDiff && (
                           <td className="px-3 py-2.5 text-right font-mono text-slate-500 w-24 whitespace-nowrap">
-                            0.00
+                            {fmtAmt(item.debit - item.credit)}
                           </td>
                         )}
                       </tr>
@@ -1142,7 +1143,7 @@ export function TrialBalanceView() {
 
                     {showDiff && (
                       <td className="px-3 py-3 text-right font-mono text-slate-700 whitespace-nowrap">
-                        0.00
+                        {fmtAmt(grandTotals.transDr - grandTotals.transCr)}
                       </td>
                     )}
                   </tr>

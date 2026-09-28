@@ -11,7 +11,6 @@ import {
   Wrench,
   AlertTriangle,
   ArrowRightLeft,
-  Luggage,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +21,6 @@ const housekeepingSubNavItems = [
   { label: "Cleaning Inspection", href: "/housekeeping/operations/inspection", icon: UserCheck },
   { label: "Guest Requests", href: "/housekeeping/housekeeping-requests", icon: Bell },
   { label: "Guest Laundry", href: "/housekeeping/operations/laundry", icon: ArrowRightLeft },
-  { label: "Luggage", href: "/housekeeping/luggage-management", icon: Luggage },
   { label: "Maintenance", href: "/housekeeping/maintenance-requests", icon: Wrench },
   { label: "Damage Reports", href: "/housekeeping/operations/damage-reports", icon: AlertTriangle },
 ] as const;

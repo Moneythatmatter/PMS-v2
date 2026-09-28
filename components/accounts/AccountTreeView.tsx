@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import {
   Folder,
   FolderOpen,
@@ -14,13 +14,13 @@ import {
   Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { COANode } from "@/app/data/accounts/chartOfAccountsData";
+import type { AccountTreeNode } from "@/services/accounts";
 import { cn } from "@/lib/utils";
 
 export interface AccountTreeViewProps {
-  treeData: COANode[];
+  treeData: AccountTreeNode[];
   selectedNodeId: string;
-  onSelectNode: (node: COANode) => void;
+  onSelectNode: (node: AccountTreeNode) => void;
   expandedNodes: Set<string>;
   onToggleExpand: (id: string) => void;
   onExpandAll: () => void;
@@ -44,7 +44,7 @@ export function AccountTreeView({
   const [filterInactive, setFilterInactive] = useState(false);
 
   // Recursive Tree Node Renderer
-  const TreeNode = ({ node, level = 0 }: { node: COANode; level?: number }) => {
+  const TreeNode = ({ node, level = 0 }: { node: AccountTreeNode; level?: number }) => {
     const isExpanded = expandedNodes.has(node.id);
     const isSelected = selectedNodeId === node.id;
     const hasChildren = node.children && node.children.length > 0;
@@ -62,7 +62,7 @@ export function AccountTreeView({
 
       let matchesChild = false;
       if (node.children) {
-        const checkChildren = (children: COANode[]): boolean => {
+        const checkChildren = (children: AccountTreeNode[]): boolean => {
           return children.some(
             (c) =>
               c.name.toLowerCase().includes(q) ||
@@ -78,7 +78,7 @@ export function AccountTreeView({
 
     const handleRowClick = () => {
       onSelectNode(node);
-      if (node.type === "Group") {
+      if (node.accountType === "Group") {
         onToggleExpand(node.id);
       }
     };
@@ -103,7 +103,7 @@ export function AccountTreeView({
           )}
         >
           {/* Chevron Expand/Collapse */}
-          {node.type === "Group" ? (
+          {node.accountType === "Group" ? (
             <span
               className="p-0.5 rounded shrink-0 hover:bg-black/10 transition-colors"
               onClick={(e) => {
@@ -132,7 +132,7 @@ export function AccountTreeView({
           )}
 
           {/* Icon */}
-          {node.type === "Group" ? (
+          {node.accountType === "Group" ? (
             isExpanded ? (
               <FolderOpen
                 className={cn(
@@ -200,7 +200,7 @@ export function AccountTreeView({
         </div>
 
         {/* Children Render */}
-        {node.type === "Group" && hasChildren && (
+        {node.accountType === "Group" && hasChildren && (
           <div
             className={cn(
               "grid transition-all duration-200 ease-in-out",
@@ -303,9 +303,13 @@ export function AccountTreeView({
 
       {/* Tree Content Container */}
       <div className="flex-1 overflow-y-auto pr-1 space-y-0.5 max-h-[640px]">
-        {treeData.map((rootNode) => (
-          <TreeNode key={rootNode.id} node={rootNode} />
-        ))}
+        {treeData.length === 0 ? (
+          <p className="py-8 text-center text-xs font-medium text-slate-500">
+            No accounts found. Use &quot;New&quot; to create the first account group.
+          </p>
+        ) : (
+          treeData.map((rootNode) => <TreeNode key={rootNode.id} node={rootNode} />)
+        )}
       </div>
     </div>
   );

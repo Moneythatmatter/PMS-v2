@@ -9,7 +9,6 @@ export const resetState = (dispatchers: HousekeepingDispatchers) => {
   dispatchers.setDamageReports([]);
   dispatchers.setRequisitions([]);
   dispatchers.setHistory([]);
-  dispatchers.setLuggageJobs([]);
   dispatchers.setRequests([]);
   dispatchers.setMaintenance([]);
   dispatchers.setLostFound([]);

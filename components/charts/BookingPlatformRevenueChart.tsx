@@ -22,12 +22,14 @@ interface BookingPlatformRevenueChartProps {
   data?: BookingPlatformRevenuePoint[];
   title?: string;
   subtitle?: string;
+  emptyMessage?: string;
 }
 
 export function BookingPlatformRevenueChart({
   data = defaultPlatformData,
   title = "Booking Platform Revenue",
   subtitle = "Revenue contribution by reservation channel",
+  emptyMessage = "No revenue recorded yet",
 }: BookingPlatformRevenueChartProps) {
   const formatCurrency = (val: number) =>
     `₹${val.toLocaleString("en-IN")}`;
@@ -36,6 +38,11 @@ export function BookingPlatformRevenueChart({
     <Card className="h-full">
       <CardHeader title={title} subtitle={subtitle} />
       <div className="h-56 sm:h-64">
+        {data.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-sm text-slate-500">
+            {emptyMessage}
+          </div>
+        ) : (
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -53,7 +60,7 @@ export function BookingPlatformRevenueChart({
               ))}
             </Pie>
             <Tooltip
-              formatter={(value: any, _name: any, item: any) => [
+              formatter={(value, _name, item) => [
                 `${formatCurrency(Number(value || 0))} (${item?.payload?.percentage ?? 0}%)`,
                 "Revenue",
               ]}
@@ -71,6 +78,7 @@ export function BookingPlatformRevenueChart({
             />
           </PieChart>
         </ResponsiveContainer>
+        )}
       </div>
     </Card>
   );

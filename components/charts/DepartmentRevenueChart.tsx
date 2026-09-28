@@ -40,12 +40,14 @@ interface DepartmentRevenueChartProps {
   data?: DepartmentRevenueDataPoint[];
   title?: string;
   subtitle?: string;
+  emptyMessage?: string;
 }
 
 export function DepartmentRevenueChart({
   data = defaultData,
   title = "Departmental Revenue Distribution",
   subtitle = "Revenue contributed by operational module",
+  emptyMessage = "No revenue recorded yet",
 }: DepartmentRevenueChartProps) {
   const formatCurrency = (val: number) =>
     `₹${val.toLocaleString("en-IN")}`;
@@ -54,6 +56,11 @@ export function DepartmentRevenueChart({
     <Card className="h-full">
       <CardHeader title={title} subtitle={subtitle} />
       <div className="h-56 sm:h-64">
+        {data.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-sm text-slate-500">
+            {emptyMessage}
+          </div>
+        ) : (
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
@@ -76,7 +83,7 @@ export function DepartmentRevenueChart({
               tickFormatter={(v) => `₹${v / 1000}k`}
             />
             <Tooltip
-              formatter={(value: any, _name: any, item: any) => [
+              formatter={(value, _name, item) => [
                 `${formatCurrency(Number(value || 0))} (${item?.payload?.share ?? 0}%)`,
                 "Revenue",
               ]}
@@ -97,6 +104,7 @@ export function DepartmentRevenueChart({
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        )}
       </div>
     </Card>
   );

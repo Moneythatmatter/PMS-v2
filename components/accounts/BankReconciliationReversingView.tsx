@@ -1,247 +1,209 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Building2,
   RotateCcw,
   CheckCircle2,
-  AlertTriangle,
   Search,
   Calendar,
   SlidersHorizontal,
-  FileText,
-  Save,
   Printer,
   Download,
-  CheckSquare,
-  Square,
   Info,
   ShieldAlert,
-  Lock,
   X,
-  ArrowRight,
   ChevronDown,
   Filter,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import {
-  FormField,
-  StatMiniCard,
-  Drawer,
-  FODatePicker,
-  formatINR,
-} from "@/components/frontoffice/ui";
+import { FormField, StatMiniCard, Drawer, FODatePicker } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
-import {
-  sampleBankAccounts,
-  sampleBankReconciliationData,
-  BankReconciliationEntry,
-} from "@/app/data/accounts/bankReconciliationData";
 import { cn } from "@/lib/utils";
+import { accBankReconService } from "@/services/accounts";
+import {
+  accErrorMessage,
+  formatDate,
+  formatINR,
+  fyStartIso,
+  todayIso,
+  useAccLookups,
+  useAccQuery,
+} from "@/components/accounts/accountsApi";
+
+type Toast = { message: string; variant: "success" | "error" } | null;
+
+function downloadCsv(filename: string, header: string[], rows: (string | number | null | undefined)[][]) {
+  const esc = (v: string | number | null | undefined) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = [header, ...rows].map((r) => r.map(esc).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+const trnBadge = (t: string) =>
+  t === "Receipt"
+    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+    : t === "Payment"
+    ? "bg-rose-100 text-rose-800 border-rose-300"
+    : "bg-blue-100 text-blue-800 border-blue-300";
 
 export function BankReconciliationReversingView() {
-  // Mobile Filter Drawer State
+  const { lookups } = useAccLookups();
+
   const [showFilters, setShowFilters] = useState(true);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   // Bank & Filter Controls
-  const [selectedBank, setSelectedBank] = useState("<ALL Banks>");
-  const [appliedBank, setAppliedBank] = useState("<ALL Banks>");
-  const [fromReconDate, setFromReconDate] = useState("2026-04-01");
-  const [toReconDate, setToReconDate] = useState("2027-03-31");
-  const [appliedFromReconDate, setAppliedFromReconDate] = useState("2026-04-01");
-  const [appliedToReconDate, setAppliedToReconDate] = useState("2027-03-31");
+  const [selectedBank, setSelectedBank] = useState("");
+  const [fromReconDate, setFromReconDate] = useState(fyStartIso);
+  const [toReconDate, setToReconDate] = useState(todayIso);
+  const [applied, setApplied] = useState(() => ({ bank: "", from: fyStartIso(), to: todayIso() }));
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Reversal Options
-  const [reverseReason, setReverseReason] = useState("Statement Mismatch Correction");
-  const [keepAuditLog, setKeepAuditLog] = useState(true);
+  const [reverseReason, setReverseReason] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Reconciled Entries List (Initial state with reconciled items across bank accounts)
-  const [reconciledEntries, setReconciledEntries] = useState<BankReconciliationEntry[]>(() =>
-    sampleBankReconciliationData.map((item, idx) => ({
-      ...item,
-      // Make most sample items reconciled so there are items to reverse
-      reconciled: idx % 2 === 0 ? true : item.reconciled,
-      reconDate: item.reconDate || "28/04/2026",
-    }))
-  );
-
-  // Status & Notification state
   const [isReversing, setIsReversing] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Single-Step Verification Modal State
+  const [toast, setToast] = useState<Toast>(null);
+  const notify = (message: string, variant: "success" | "error" = "success") => setToast({ message, variant });
   const [showVerificationModal, setShowVerificationModal] = useState(false);
-  const [authorizationConfirmed, setAuthorizationConfirmed] = useState(false);
-  const [targetReversalIds, setTargetReversalIds] = useState<Set<string>>(new Set());
+  const [targetReversalIds, setTargetReversalIds] = useState<string[]>([]);
 
-  // Helper to parse DD/MM/YYYY into YYYY-MM-DD for date comparisons
-  const parseFormattedDate = (dateStr: string): string => {
-    if (!dateStr) return "";
-    if (dateStr.includes("-")) return dateStr;
-    const parts = dateStr.split("/");
-    if (parts.length === 3) {
-      return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-    }
-    return dateStr;
-  };
+  // Voucher date <= recon date, so limiting voucher dates to the recon "to" date never hides a match.
+  const recon = useAccQuery(
+    () =>
+      accBankReconService.get({
+        bankAccountId: applied.bank || undefined,
+        to: applied.to || undefined,
+        status: "reconciled",
+      }),
+    [applied],
+  );
 
-  // Filtered Reconciled Entries by Applied Bank Account & Applied Date Range
+  const bankOptions = useMemo(() => {
+    const fromRecon = recon.data?.bankAccounts ?? [];
+    if (fromRecon.length) return fromRecon.map((b) => ({ id: b.id, label: `${b.code} - ${b.name}${b.bankAccountNo ? ` (${b.bankAccountNo})` : ""}` }));
+    return (lookups?.bankCashAccounts ?? [])
+      .filter((b) => b.isBankAccount)
+      .map((b) => ({ id: b.id, label: `${b.code} - ${b.name}` }));
+  }, [recon.data, lookups]);
+  const account = recon.data?.account ?? null;
+  const bankId = selectedBank || account?.id || "";
+  const bankLabel = account ? `${account.code} - ${account.name}` : "No bank account";
+
   const filteredData = useMemo(() => {
-    return reconciledEntries.filter((item) => {
-      // 1. Only show entries that are currently reconciled for reversal
+    const q = searchQuery.trim().toLowerCase();
+    return (recon.data?.entries ?? []).filter((item) => {
       if (!item.reconciled) return false;
-
-      // 2. Bank Account Filter (<ALL Banks> or specific selected bank)
-      if (
-        appliedBank &&
-        appliedBank !== "<ALL Banks>" &&
-        item.bankName !== appliedBank
-      ) {
-        return false;
-      }
-
-      // 3. Date Period Filter (Applied From & To Recon Dates)
-      const itemDate = parseFormattedDate(item.reconDate || item.vouchDt);
-      if (appliedFromReconDate && itemDate < appliedFromReconDate) return false;
-      if (appliedToReconDate && itemDate > appliedToReconDate) return false;
-
-      // 4. Search Query Filter
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return (
-          item.vouchNo.toLowerCase().includes(q) ||
-          item.chqNo.toLowerCase().includes(q) ||
-          item.narration.toLowerCase().includes(q) ||
-          item.bankName.toLowerCase().includes(q)
-        );
-      }
-      return true;
+      const d = item.reconDate ?? item.voucherDate;
+      if (applied.from && d < applied.from) return false;
+      if (applied.to && d > applied.to) return false;
+      if (!q) return true;
+      return [item.voucherNo, item.instrumentNo, item.narration, item.partyName, item.referenceNo]
+        .some((s) => (s ?? "").toLowerCase().includes(q));
     });
-  }, [
-    reconciledEntries,
-    appliedBank,
-    appliedFromReconDate,
-    appliedToReconDate,
-    searchQuery,
-  ]);
+  }, [recon.data, applied.from, applied.to, searchQuery]);
 
-  // Synchronized Selection Calculations
-  const selectedEntriesInLog = useMemo(() => {
-    return filteredData.filter((item) => selectedIds.has(item.id));
-  }, [filteredData, selectedIds]);
-
+  const selectedEntriesInLog = filteredData.filter((item) => selectedIds.has(item.id));
   const selectedCount = selectedEntriesInLog.length;
-  const selectedTotalValue = useMemo(() => {
-    return selectedEntriesInLog.reduce(
-      (sum, item) => sum + Math.max(item.drAmt, item.crAmt),
-      0
-    );
-  }, [selectedEntriesInLog]);
+  const selectedTotalValue = selectedEntriesInLog.reduce((sum, item) => sum + Math.max(item.debit, item.credit), 0);
 
-  // Overall Statistics
   const totalReconciledCount = filteredData.length;
-  const totalReconciledDr = useMemo(
-    () => filteredData.reduce((sum, item) => sum + item.drAmt, 0),
-    [filteredData]
-  );
-  const totalReconciledCr = useMemo(
-    () => filteredData.reduce((sum, item) => sum + item.crAmt, 0),
-    [filteredData]
-  );
-  const totalReconciledValue = Math.abs(totalReconciledDr - totalReconciledCr);
+  const totalReconciledDr = filteredData.reduce((sum, item) => sum + item.debit, 0);
+  const totalReconciledCr = filteredData.reduce((sum, item) => sum + item.credit, 0);
+  const totalReconciledValue = totalReconciledDr - totalReconciledCr;
 
-  // Selection handlers
   const handleToggleSelect = (id: string) => {
     const next = new Set(selectedIds);
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
-    }
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
     setSelectedIds(next);
   };
 
   const handleSelectAll = () => {
-    if (selectedCount === filteredData.length && filteredData.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredData.map((e) => e.id)));
-    }
+    if (selectedCount === filteredData.length && filteredData.length > 0) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredData.map((e) => e.id)));
   };
 
-  // Selected Items to be reversed calculation for Modal
-  const targetItems = useMemo(() => {
-    return reconciledEntries.filter((item) => targetReversalIds.has(item.id));
-  }, [reconciledEntries, targetReversalIds]);
+  const targetItems = filteredData.filter((item) => targetReversalIds.includes(item.id));
+  const targetTotalAmount = targetItems.reduce((sum, item) => sum + Math.max(item.debit, item.credit), 0);
 
-  const targetTotalAmount = useMemo(() => {
-    return targetItems.reduce((sum, item) => sum + Math.max(item.drAmt, item.crAmt), 0);
-  }, [targetItems]);
-
-  // Initiation of Reversal Process (Opens Verification Modal)
   const handleInitiateReversal = (specificId?: string) => {
-    const rawIdsToUse = specificId ? new Set([specificId]) : selectedIds;
-    
-    // Ensure only valid IDs present in current filtered log are processed
-    const validIds = new Set(
-      Array.from(rawIdsToUse).filter((id) => filteredData.some((f) => f.id === id))
-    );
-
-    if (validIds.size === 0) {
-      setToastMessage(
-        "Please select at least one reconciled transaction to reverse."
-      );
+    const ids = (specificId ? [specificId] : [...selectedIds]).filter((id) => filteredData.some((f) => f.id === id));
+    if (ids.length === 0) {
+      notify("Please select at least one reconciled transaction to reverse.", "error");
       return;
     }
-
-    setTargetReversalIds(validIds);
-    setAuthorizationConfirmed(false);
+    setTargetReversalIds(ids);
     setShowVerificationModal(true);
   };
 
-  // Execution of Reversal
-  const handleExecuteReversal = () => {
-    const countToReport = targetReversalIds.size;
+  const handleExecuteReversal = async () => {
+    if (!reverseReason.trim()) {
+      notify("A reason is required to unreconcile entries.", "error");
+      return;
+    }
     setIsReversing(true);
-    setTimeout(() => {
-      setReconciledEntries((prev) =>
-        prev.map((item) => {
-          if (targetReversalIds.has(item.id)) {
-            return {
-              ...item,
-              reconciled: false,
-              reconDate: "",
-            };
-          }
-          return item;
-        })
-      );
-      setToastMessage(
-        `✓ ${countToReport} transaction(s) reversed successfully.`
-      );
+    try {
+      const res = await accBankReconService.unreconcile(targetReversalIds, reverseReason.trim());
+      notify(`✓ ${res.unreconciled} transaction(s) moved back to unreconciled.`);
       setSelectedIds(new Set());
-      setTargetReversalIds(new Set());
+      setTargetReversalIds([]);
       setShowVerificationModal(false);
+      void recon.reload();
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
       setIsReversing(false);
-    }, 500);
+    }
   };
 
-  // Fetch Reconciled Logs Handler (Third Fix: Filters accurately by Bank & Period)
   const handleFetchReconciledLogs = () => {
-    setAppliedBank(selectedBank);
-    setAppliedFromReconDate(fromReconDate);
-    setAppliedToReconDate(toReconDate);
+    if (fromReconDate && toReconDate && fromReconDate > toReconDate) {
+      notify("From recon date cannot be after the to recon date.", "error");
+      return;
+    }
+    setApplied({ bank: selectedBank, from: fromReconDate, to: toReconDate });
     setSelectedIds(new Set());
-    setToastMessage(
-      `✓ Fetched reconciled logs for ${selectedBank} (Period: ${fromReconDate} to ${toReconDate}).`
-    );
+    setMobileFilterOpen(false);
   };
 
-  // Filter Form Controls Component
-  const FilterFormContent = () => (
+  const handleExport = () => {
+    if (filteredData.length === 0) {
+      notify("Nothing to export for the selected filters.", "error");
+      return;
+    }
+    downloadCsv(
+      `reconciled-entries-${account?.code ?? "bank"}.csv`,
+      ["Voucher Date", "Voucher No", "Type", "Cheque No", "Cheque Date", "Party", "Narration", "Debit", "Credit", "Recon Date", "Reconciled By"],
+      filteredData.map((e) => [
+        e.voucherDate,
+        e.voucherNo,
+        e.voucherCategory,
+        e.instrumentNo,
+        e.instrumentDate,
+        e.partyName,
+        e.narration,
+        e.debit,
+        e.credit,
+        e.reconDate,
+        e.reconciledBy,
+      ]),
+    );
+    notify(`Exported ${filteredData.length} reconciled entries to CSV.`);
+  };
+
+  const filterFormContent = (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
       {/* Box 1: Bank Account */}
       <div className="lg:col-span-4 rounded-xl bg-slate-50/70 p-3.5 border border-slate-200/70 space-y-3">
@@ -253,13 +215,14 @@ export function BankReconciliationReversingView() {
         <div className="space-y-1">
           <label className="text-[11px] font-semibold text-slate-600">Bank Account:</label>
           <select
-            value={selectedBank}
+            value={bankId}
             onChange={(e) => setSelectedBank(e.target.value)}
             className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 font-bold focus:border-rose-500 focus:outline-none"
           >
-            {sampleBankAccounts.map((b) => (
-              <option key={b} value={b}>
-                {b}
+            {bankOptions.length === 0 && <option value="">No bank accounts configured</option>}
+            {bankOptions.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.label}
               </option>
             ))}
           </select>
@@ -275,30 +238,23 @@ export function BankReconciliationReversingView() {
       <div className="lg:col-span-4 rounded-xl bg-slate-50/70 p-3.5 border border-slate-200/70 space-y-2.5">
         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
           <SlidersHorizontal className="h-3.5 w-3.5 text-rose-600" />
-          Reversal Settings & Audit Options
+          Reversal Settings
         </p>
 
         <div className="space-y-2 text-xs">
           <div>
-            <label className="text-[11px] font-semibold text-slate-600">Reversal Reason / Remark:</label>
+            <label className="text-[11px] font-semibold text-slate-600">
+              Reversal Reason / Remark: <span className="text-red-500">*</span>
+            </label>
             <input
               type="text"
               value={reverseReason}
               onChange={(e) => setReverseReason(e.target.value)}
-              placeholder="Reason for un-reconciling..."
+              placeholder="e.g. Statement mismatch correction"
               className="mt-1 h-7 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 focus:border-rose-500 focus:outline-none"
             />
           </div>
-
-          <label className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 border border-slate-200 cursor-pointer hover:border-rose-300">
-            <input
-              type="checkbox"
-              checked={keepAuditLog}
-              onChange={(e) => setKeepAuditLog(e.target.checked)}
-              className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 h-3.5 w-3.5"
-            />
-            <span className="text-[11px] text-slate-700 font-medium">Maintain Detailed Audit Trail Log</span>
-          </label>
+          <p className="text-[11px] text-slate-500">Every reversal is recorded in the accounts audit trail with this reason.</p>
         </div>
       </div>
 
@@ -322,8 +278,10 @@ export function BankReconciliationReversingView() {
         <Button
           type="button"
           onClick={handleFetchReconciledLogs}
+          disabled={recon.loading}
           className="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs h-7 rounded-lg font-bold cursor-pointer"
         >
+          {recon.loading && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
           Fetch Reconciled Logs
         </Button>
       </div>
@@ -335,8 +293,9 @@ export function BankReconciliationReversingView() {
       eyebrow="Accounts & Bank Audit"
       title="Bank Reconciliation Reversing"
       description="Select and un-reconcile previously cleared bank statement entries to restore them to pending status."
-      toast={toastMessage}
-      onDismissToast={() => setToastMessage(null)}
+      toast={toast?.message ?? null}
+      toastVariant={toast?.variant}
+      onDismissToast={() => setToast(null)}
       breadcrumbs={[
         { label: "Accounts", href: "/accounts/dashboard" },
         { label: "Transactions", href: "/accounts/transactions" },
@@ -350,14 +309,14 @@ export function BankReconciliationReversingView() {
             onClick={() => handleInitiateReversal()}
             className={cn(
               "rounded-xl text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white shadow-xs transition-all cursor-pointer",
-              (selectedCount === 0 || isReversing) && "opacity-50 cursor-not-allowed"
+              (selectedCount === 0 || isReversing) && "opacity-50 cursor-not-allowed",
             )}
           >
             <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
             {isReversing ? "Reversing..." : `Reverse Reconciliation (${selectedCount})`}
           </Button>
 
-          <a href="/accounts/transactions/bank-reconciliation">
+          <Link href="/accounts/transactions/bank-reconciliation">
             <Button
               type="button"
               variant="outline"
@@ -367,7 +326,7 @@ export function BankReconciliationReversingView() {
               <Building2 className="h-3.5 w-3.5 mr-1.5 text-emerald-700" />
               Reconciliation View
             </Button>
-          </a>
+          </Link>
 
           <Button
             type="button"
@@ -384,7 +343,7 @@ export function BankReconciliationReversingView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => alert("Reversal log exported to CSV.")}
+            onClick={handleExport}
             className="rounded-xl text-xs font-medium bg-white shadow-xs cursor-pointer text-slate-700"
           >
             <Download className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
@@ -393,7 +352,7 @@ export function BankReconciliationReversingView() {
         </div>
       }
     >
-      {/* Top Controls Toolbar Bar (Identical to Bank Reconciliation Page) */}
+      {/* Top Controls Toolbar Bar */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xs">
         <div className="flex items-center gap-2">
           <Button
@@ -405,15 +364,9 @@ export function BankReconciliationReversingView() {
           >
             <SlidersHorizontal className="h-3.5 w-3.5 text-rose-600" />
             <span>{showFilters ? "Hide Parameters" : "Parameters & Options"}</span>
-            <ChevronDown
-              className={cn(
-                "h-3.5 w-3.5 transition-transform duration-200",
-                showFilters && "rotate-180"
-              )}
-            />
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", showFilters && "rotate-180")} />
           </Button>
 
-          {/* Mobile Filter Drawer Button */}
           <Button
             type="button"
             variant="outline"
@@ -426,16 +379,15 @@ export function BankReconciliationReversingView() {
           </Button>
         </div>
 
-        {/* Bank & Period Badges */}
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-rose-50 px-3 py-1 text-xs font-bold text-rose-800 border border-rose-200">
             <Building2 className="h-3.5 w-3.5 text-rose-700" />
-            Selected Bank: <span className="underline">{appliedBank}</span>
+            Selected Bank: <span className="underline">{bankLabel}</span>
           </span>
 
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
             <Calendar className="h-3.5 w-3.5 text-slate-600" />
-            FY 2026 - 27
+            {formatDate(applied.from)} – {formatDate(applied.to)}
           </span>
         </div>
       </div>
@@ -446,9 +398,7 @@ export function BankReconciliationReversingView() {
           <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
             <div className="flex items-center gap-2">
               <SlidersHorizontal className="h-4 w-4 text-rose-600" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Reversal Search Parameters &amp; Options
-              </h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">Reversal Search Parameters &amp; Options</h3>
             </div>
             <button
               onClick={() => setShowFilters(false)}
@@ -457,29 +407,33 @@ export function BankReconciliationReversingView() {
               ✕ Hide Options
             </button>
           </div>
-          <FilterFormContent />
+          {filterFormContent}
         </div>
       )}
 
       {/* Mobile Drawer */}
-      <Drawer
-        open={mobileFilterOpen}
-        onClose={() => setMobileFilterOpen(false)}
-        title="Reversal Parameters & Options"
-      >
+      <Drawer open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)} title="Reversal Parameters & Options">
         <div className="p-4">
-          <FilterFormContent />
+          {filterFormContent}
           <div className="mt-4 border-t border-slate-100 pt-3">
-            <Button
-              type="button"
-              className="w-full bg-rose-700 text-white font-bold"
-              onClick={() => setMobileFilterOpen(false)}
-            >
+            <Button type="button" className="w-full bg-rose-700 text-white font-bold" onClick={handleFetchReconciledLogs}>
               Apply Filter
             </Button>
           </div>
         </div>
       </Drawer>
+
+      {recon.error && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+          <span className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            {recon.error}
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={() => void recon.reload()} className="rounded-xl bg-white text-xs">
+            <RefreshCw className="h-3.5 w-3.5 mr-1" /> Retry
+          </Button>
+        </div>
+      )}
 
       {/* KPI Cards Grid */}
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -506,14 +460,14 @@ export function BankReconciliationReversingView() {
         />
       </div>
 
-      {/* WINHMS Audit Warning Note Banner */}
+      {/* Audit Warning Note Banner */}
       <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50/70 p-3 text-xs space-y-1">
         <div className="flex items-center justify-between font-bold text-rose-900">
           <div className="flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 text-rose-700 shrink-0" />
             <span>Note: The following cleared entries are available for bank reconciliation reversal</span>
           </div>
-          <span className="text-[11px] font-mono text-rose-700 uppercase tracking-wider">{appliedBank}</span>
+          <span className="text-[11px] font-mono text-rose-700 uppercase tracking-wider">{bankLabel}</span>
         </div>
         <p className="text-slate-700 pl-6 leading-relaxed text-[11px]">
           Reversing reconciliation entries will remove their cleared bank statement date and restore them to <strong>Unreconciled</strong> pending status.
@@ -549,14 +503,12 @@ export function BankReconciliationReversingView() {
               onClick={handleSelectAll}
               className="text-xs border-slate-300 font-semibold cursor-pointer"
             >
-              {selectedCount === filteredData.length && filteredData.length > 0
-                ? "Deselect All"
-                : "Select All"}
+              {selectedCount === filteredData.length && filteredData.length > 0 ? "Deselect All" : "Select All"}
             </Button>
           </div>
         </div>
 
-        {/* Desktop Table (hidden md:block) */}
+        {/* Desktop Table */}
         <div className="hidden md:block max-h-[540px] overflow-y-auto overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
           <table className="w-full text-left text-xs">
             <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
@@ -564,10 +516,7 @@ export function BankReconciliationReversingView() {
                 <th className="px-3 py-2.5 text-center w-12">
                   <input
                     type="checkbox"
-                    checked={
-                      selectedCount > 0 &&
-                      selectedCount === filteredData.length
-                    }
+                    checked={selectedCount > 0 && selectedCount === filteredData.length}
                     onChange={handleSelectAll}
                     className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 h-4 w-4 cursor-pointer"
                   />
@@ -585,10 +534,16 @@ export function BankReconciliationReversingView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredData.length === 0 ? (
+              {recon.loading && !recon.data ? (
+                <tr>
+                  <td colSpan={11} className="py-8 text-center text-slate-500 font-medium">
+                    <Loader2 className="inline h-4 w-4 mr-1 animate-spin text-rose-600" /> Loading reconciled entries…
+                  </td>
+                </tr>
+              ) : filteredData.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="py-8 text-center text-slate-400 font-medium">
-                    No reconciled entries found matching the filter criteria.
+                    {account ? "No reconciled entries found matching the filter criteria." : "No bank account is configured in the chart of accounts."}
                   </td>
                 </tr>
               ) : (
@@ -599,7 +554,7 @@ export function BankReconciliationReversingView() {
                       key={row.id}
                       className={cn(
                         "even:bg-slate-50/50 hover:bg-slate-100/80 transition-colors",
-                        isSelected && "bg-rose-50/80 hover:bg-rose-100/80"
+                        isSelected && "bg-rose-50/80 hover:bg-rose-100/80",
                       )}
                     >
                       <td className="px-3 py-2.5 text-center">
@@ -610,33 +565,31 @@ export function BankReconciliationReversingView() {
                           className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 h-4 w-4 cursor-pointer"
                         />
                       </td>
-                      <td className="px-3 py-2.5 text-slate-600 font-medium">{row.vouchDt}</td>
-                      <td className="px-3.5 py-2.5 font-bold text-slate-900">{row.vouchNo}</td>
+                      <td className="px-3 py-2.5 text-slate-600 font-medium">{formatDate(row.voucherDate)}</td>
+                      <td className="px-3.5 py-2.5 font-bold text-slate-900">{row.voucherNo}</td>
                       <td className="px-2.5 py-2.5 text-center">
                         <span
                           className={cn(
                             "inline-block px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider",
-                            row.trnType === "Receipt"
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                              : row.trnType === "Payment"
-                              ? "bg-rose-100 text-rose-800 border-rose-300"
-                              : "bg-blue-100 text-blue-800 border-blue-300"
+                            trnBadge(row.voucherCategory),
                           )}
                         >
-                          {row.trnType}
+                          {row.voucherCategory}
                         </span>
                       </td>
-                      <td className="px-3.5 py-2.5 font-bold text-slate-800">{row.chqNo}</td>
-                      <td className="px-3 py-2.5 text-slate-600 font-medium">{row.chqDt}</td>
-                      <td className="px-4 py-2.5 text-slate-800 font-medium">{row.narration}</td>
-                      <td className="px-3 py-2.5 text-right font-bold text-slate-900">
-                        {row.drAmt > 0 ? formatINR(row.drAmt) : "-"}
+                      <td className="px-3.5 py-2.5 font-bold text-slate-800">{row.instrumentNo || "—"}</td>
+                      <td className="px-3 py-2.5 text-slate-600 font-medium">{formatDate(row.instrumentDate)}</td>
+                      <td className="px-4 py-2.5 text-slate-800 font-medium">
+                        {row.narration}
+                        {row.partyName && <span className="block text-[10px] text-slate-400">{row.partyName}</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-right font-bold text-slate-900">
-                        {row.crAmt > 0 ? formatINR(row.crAmt) : "-"}
-                      </td>
-                      <td className="px-3 py-2.5 text-center font-bold text-emerald-800 bg-emerald-50/50 rounded">
-                        {row.reconDate || "28/04/2026"}
+                      <td className="px-3 py-2.5 text-right font-bold text-slate-900">{row.debit > 0 ? formatINR(row.debit) : "-"}</td>
+                      <td className="px-3 py-2.5 text-right font-bold text-slate-900">{row.credit > 0 ? formatINR(row.credit) : "-"}</td>
+                      <td
+                        className="px-3 py-2.5 text-center font-bold text-emerald-800 bg-emerald-50/50 rounded"
+                        title={row.reconciledBy ? `Reconciled by ${row.reconciledBy}` : undefined}
+                      >
+                        {formatDate(row.reconDate)}
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <button
@@ -655,9 +608,13 @@ export function BankReconciliationReversingView() {
           </table>
         </div>
 
-        {/* Mobile Stacked Card View (md:hidden) */}
+        {/* Mobile Stacked Card View */}
         <div className="md:hidden space-y-2.5">
-          {filteredData.length === 0 ? (
+          {recon.loading && !recon.data ? (
+            <div className="p-6 text-center text-slate-500 font-medium text-xs rounded-xl border border-slate-200 bg-white">
+              <Loader2 className="inline h-4 w-4 mr-1 animate-spin text-rose-600" /> Loading reconciled entries…
+            </div>
+          ) : filteredData.length === 0 ? (
             <div className="p-6 text-center text-slate-400 font-medium text-xs rounded-xl border border-slate-200 bg-white">
               No reconciled entries found.
             </div>
@@ -669,7 +626,7 @@ export function BankReconciliationReversingView() {
                   key={row.id}
                   className={cn(
                     "rounded-xl border p-3.5 space-y-2 bg-white transition-colors",
-                    isSelected ? "border-rose-300 bg-rose-50/40" : "border-slate-200"
+                    isSelected ? "border-rose-300 bg-rose-50/40" : "border-slate-200",
                   )}
                 >
                   <div className="flex items-center justify-between">
@@ -680,34 +637,30 @@ export function BankReconciliationReversingView() {
                         onChange={() => handleToggleSelect(row.id)}
                         className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 h-4 w-4"
                       />
-                      <span>{row.vouchNo}</span>
+                      <span>{row.voucherNo}</span>
                     </label>
 
                     <span
                       className={cn(
                         "px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider",
-                        row.trnType === "Receipt"
-                          ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                          : row.trnType === "Payment"
-                          ? "bg-rose-100 text-rose-800 border-rose-300"
-                          : "bg-blue-100 text-blue-800 border-blue-300"
+                        trnBadge(row.voucherCategory),
                       )}
                     >
-                      {row.trnType}
+                      {row.voucherCategory}
                     </span>
                   </div>
 
                   <p className="text-xs text-slate-800 font-medium">{row.narration}</p>
 
                   <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
-                    <span className="text-slate-500 font-medium">Chq: {row.chqNo}</span>
+                    <span className="text-slate-500 font-medium">Chq: {row.instrumentNo || "—"}</span>
                     <span className="font-bold text-slate-900">
-                      {row.drAmt > 0 ? `Dr ${formatINR(row.drAmt)}` : `Cr ${formatINR(row.crAmt)}`}
+                      {row.debit > 0 ? `Dr ${formatINR(row.debit)}` : `Cr ${formatINR(row.credit)}`}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between text-xs pt-1">
-                    <span className="text-[11px] text-emerald-800 font-semibold">Reconciled: {row.reconDate || "28/04/2026"}</span>
+                    <span className="text-[11px] text-emerald-800 font-semibold">Reconciled: {formatDate(row.reconDate)}</span>
                     <Button
                       type="button"
                       size="sm"
@@ -724,23 +677,18 @@ export function BankReconciliationReversingView() {
         </div>
       </section>
 
-      {/* Single-Step Verification Modal Overlay */}
+      {/* Verification Modal Overlay */}
       {showVerificationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
-            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-100 text-rose-700 font-bold">
                   <ShieldAlert className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    Confirm Reconciliation Reversal
-                  </h3>
-                  <p className="text-[11px] text-slate-500 font-medium">
-                    Reversal Confirmation
-                  </p>
+                  <h3 className="text-sm font-bold text-slate-900">Confirm Reconciliation Reversal</h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Reversal Confirmation</p>
                 </div>
               </div>
 
@@ -753,21 +701,28 @@ export function BankReconciliationReversingView() {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="space-y-4">
               <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3.5 text-xs space-y-1.5">
                 <p className="text-slate-800 leading-relaxed font-semibold">
-                  You are about to reverse <strong className="text-rose-900 font-extrabold">{targetItems.length} reconciled transaction(s)</strong>.
+                  You are about to reverse <strong className="text-rose-900 font-extrabold">{targetItems.length} reconciled transaction(s)</strong>{" "}
+                  worth {formatINR(targetTotalAmount)}.
                 </p>
                 <p className="text-slate-700 text-[11px]">
                   These transactions will be moved back to the <strong>unreconciled state</strong>.
                 </p>
-                <p className="text-[11px] text-rose-800 font-medium pt-0.5">
-                  This action may affect bank reconciliation records.
-                </p>
+                <p className="text-[11px] text-rose-800 font-medium pt-0.5">This action may affect bank reconciliation records.</p>
               </div>
 
-              {/* Modal Footer Buttons */}
+              <FormField label="Reversal Reason" required>
+                <input
+                  type="text"
+                  value={reverseReason}
+                  onChange={(e) => setReverseReason(e.target.value)}
+                  placeholder="e.g. Statement mismatch correction"
+                  className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 focus:border-rose-500 focus:outline-none"
+                />
+              </FormField>
+
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <Button
                   type="button"
@@ -782,9 +737,9 @@ export function BankReconciliationReversingView() {
                 <Button
                   type="button"
                   size="sm"
-                  disabled={isReversing}
-                  onClick={handleExecuteReversal}
-                  className="rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold shadow-xs cursor-pointer"
+                  disabled={isReversing || !reverseReason.trim()}
+                  onClick={() => void handleExecuteReversal()}
+                  className="rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
                 >
                   <RotateCcw className="h-3.5 w-3.5 mr-1" />
                   {isReversing ? "Reversing..." : "Confirm Reversal"}

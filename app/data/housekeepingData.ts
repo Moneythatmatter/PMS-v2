@@ -8,8 +8,7 @@ import type {
   HKLaundryJob,
   HKDamageReport,
   HKRequisition,
-  HKHistoryLog,
-  HKLuggageJob
+  HKHistoryLog
 } from "../../components/housekeeping/HousekeepingTypes";
 
 export const initialHKRooms: HKRoom[] = [
@@ -407,9 +406,4 @@ export const initialHKHistory: HKHistoryLog[] = [
   { id: "H-02", timestamp: "23 Jun 10:00 AM", user: "Ramesh Kumar", category: "Inspection", room: "103", action: "Inspection Passed", details: "Room passed supervisor check-in inspection. Room is now Vacant Ready." },
   { id: "H-03", timestamp: "23 Jun 09:15 AM", user: "System", category: "Room Status", room: "101", action: "Checkout Dirty Triggered", details: "Guest check-out in front office automatically marked room 101 as Vacant Dirty." },
   { id: "H-04", timestamp: "23 Jun 08:30 AM", user: "Somnath Sen", category: "Inventory", action: "Linen Restocked", details: "Issued 50 Pillow covers and 30 sheets to 3rd Floor store." }
-];
-
-export const initialHKLuggageJobs: HKLuggageJob[] = [
-  { id: "LG-001", guest: "James Wilson", room: "112", bellBoy: "Vikram Singh", tagNumber: "TAG-9921", bagCount: 3, type: "Check-in", pickupTime: "22 Jun 02:15 PM", deliveryTime: "22 Jun 02:30 PM", status: "Delivered", remarks: "Delivered to room safely." },
-  { id: "LG-002", guest: "Priya Patel", room: "501", bellBoy: "Vikram Singh", tagNumber: "TAG-9922", bagCount: 4, type: "Storage", pickupTime: "23 Jun 11:00 AM", status: "Stored", remarks: "Stored in Locker A-15 until guest flight at 7 PM." }
 ];

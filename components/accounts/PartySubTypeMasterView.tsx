@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Tag,
   Building2,
@@ -17,6 +17,9 @@ import {
   Layers,
   Lock,
   AlertTriangle,
+  Trash2,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -27,111 +30,79 @@ import {
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
 import {
-  samplePartySubTypesList,
-  PartySubTypeModel,
-} from "@/app/data/accounts/partySubTypeData";
+  accPartySubTypeService,
+  accPartyTypeService,
+  type PartySubType,
+  type PartyType,
+  type Status,
+} from "@/services/accounts";
 import {
-  samplePartyTypesList,
-  PartyTypeModel,
-} from "@/app/data/accounts/partyTypeData";
-import {
-  samplePartyMasterData,
-  PartyMasterRecord,
-} from "@/app/data/accounts/partyMasterData";
+  accErrorMessage,
+  invalidateAccLookups,
+  useAccQuery,
+} from "@/components/accounts/accountsApi";
 import { cn } from "@/lib/utils";
 
-export function PartySubTypeMasterView() {
-  // Master Party Types & Sub Types State
-  const [partyTypes] = useState<PartyTypeModel[]>(samplePartyTypesList);
-  const [subTypes, setSubTypes] = useState<PartySubTypeModel[]>(samplePartySubTypesList);
-  const [selectedSubTypeId, setSelectedSubTypeId] = useState<string>("PST-001");
+type SubTypeForm = Pick<
+  PartySubType,
+  "partyTypeId" | "subTypeCode" | "subTypeName" | "description" | "sequence" | "status"
+>;
 
-  // Filter & Search State
+const toForm = (s: PartySubType): SubTypeForm => ({
+  partyTypeId: s.partyTypeId,
+  subTypeCode: s.subTypeCode,
+  subTypeName: s.subTypeName,
+  description: s.description ?? "",
+  sequence: s.sequence,
+  status: s.status,
+});
+
+export function PartySubTypeMasterView() {
+  const typesQ = useAccQuery(() => accPartyTypeService.list(), []);
+  const subTypesQ = useAccQuery(() => accPartySubTypeService.list(), []);
+  const partyTypes = useMemo(
+    () => [...(typesQ.data ?? [])].sort((a, b) => a.sequence - b.sequence),
+    [typesQ.data]
+  );
+  const subTypes = useMemo(() => subTypesQ.data ?? [], [subTypesQ.data]);
+  const activePartyTypes = useMemo(() => partyTypes.filter((pt) => pt.status === "Active"), [partyTypes]);
+
+  const [selectedSubTypeId, setSelectedSubTypeId] = useState<string>("");
+
   const [parentTypeFilter, setParentTypeFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Inactive">("All");
 
-  // Toast Notification State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const notify = (message: string, variant: "success" | "error" = "success") => {
+    setToastVariant(variant);
+    setToastMessage(message);
+  };
+  const [saving, setSaving] = useState(false);
 
-  // Create Modal State
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
-
-  // Deactivate Confirmation Modal State
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState<boolean>(false);
 
-  // Helper map for quick party type name lookup
   const partyTypeMap = useMemo(() => {
-    const map = new Map<string, PartyTypeModel>();
-    partyTypes.forEach((pt) => map.set(pt.partyTypeId, pt));
+    const map = new Map<string, PartyType>();
+    partyTypes.forEach((pt) => map.set(pt.id, pt));
     return map;
   }, [partyTypes]);
 
-  // Active Selected Sub Type
-  const activeSubType = useMemo(
-    () => subTypes.find((s) => s.partySubTypeId === selectedSubTypeId) || subTypes[0],
-    [subTypes, selectedSubTypeId]
-  );
-
-  // Form State (for editing active record)
-  const [formData, setFormData] = useState<PartySubTypeModel>(activeSubType);
-
-  // Sync Form State when active selection changes
-  useEffect(() => {
-    if (activeSubType) {
-      setFormData({ ...activeSubType });
-    }
-  }, [activeSubType]);
-
-  // Check if current active Sub Type is referenced by any Party Master record
-  const referencedParties = useMemo(() => {
-    if (!activeSubType) return [];
-    return samplePartyMasterData.filter(
-      (pm) => pm.partySubTypeId === activeSubType.partySubTypeId
-    );
-  }, [activeSubType]);
-
-  const isParentLocked = referencedParties.length > 0;
-
-  // Create Sub Type Form State
-  const [createForm, setCreateForm] = useState<Omit<PartySubTypeModel, "partySubTypeId" | "createdAt" | "updatedAt">>({
-    partyTypeId: "PTY-001",
-    subTypeCode: "",
-    subTypeName: "",
-    description: "",
-    sequence: 1,
-    status: "Active",
-  });
-
-  // Calculate default sequence when parent party type changes in create modal
-  useEffect(() => {
-    if (showCreateModal) {
-      const existingInParent = subTypes.filter((s) => s.partyTypeId === createForm.partyTypeId);
-      setCreateForm((prev) => ({
-        ...prev,
-        sequence: existingInParent.length + 1,
-      }));
-    }
-  }, [createForm.partyTypeId, showCreateModal, subTypes]);
-
-  // Filtered List
   const filteredSubTypes = useMemo(() => {
     return subTypes
       .filter((s) => {
-        // Parent Type Filter
         if (parentTypeFilter !== "ALL" && s.partyTypeId !== parentTypeFilter) {
           return false;
         }
-        // Status Filter
         if (statusFilter !== "All" && s.status !== statusFilter) {
           return false;
         }
-        // Search Query Filter
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase().trim();
-          const parentName = partyTypeMap.get(s.partyTypeId)?.typeName?.toLowerCase() || "";
+          const parentName = (s.partyTypeName ?? partyTypeMap.get(s.partyTypeId)?.typeName ?? "").toLowerCase();
           return (
-            s.partySubTypeId.toLowerCase().includes(q) ||
             s.subTypeCode.toLowerCase().includes(q) ||
             s.subTypeName.toLowerCase().includes(q) ||
             (s.description || "").toLowerCase().includes(q) ||
@@ -141,54 +112,81 @@ export function PartySubTypeMasterView() {
         return true;
       })
       .sort((a, b) => {
-        // Group by parent type first if all types are displayed, then sequence
-        if (parentTypeFilter === "ALL") {
-          if (a.partyTypeId !== b.partyTypeId) {
-            return a.partyTypeId.localeCompare(b.partyTypeId);
-          }
+        if (parentTypeFilter === "ALL" && a.partyTypeId !== b.partyTypeId) {
+          const sa = partyTypeMap.get(a.partyTypeId)?.sequence ?? 0;
+          const sb = partyTypeMap.get(b.partyTypeId)?.sequence ?? 0;
+          return sa - sb || (a.partyTypeName ?? "").localeCompare(b.partyTypeName ?? "");
         }
         return a.sequence - b.sequence;
       });
   }, [subTypes, parentTypeFilter, statusFilter, searchQuery, partyTypeMap]);
 
-  // Form Field Change Handler
-  const handleFormChange = (field: keyof PartySubTypeModel, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const activeSubType = useMemo(
+    () => subTypes.find((s) => s.id === selectedSubTypeId) ?? filteredSubTypes[0] ?? null,
+    [subTypes, filteredSubTypes, selectedSubTypeId]
+  );
+
+  const [formData, setFormData] = useState<SubTypeForm | null>(null);
+  const [syncedSubType, setSyncedSubType] = useState<PartySubType | null>(null);
+  if (activeSubType !== syncedSubType) {
+    setSyncedSubType(activeSubType);
+    setFormData(activeSubType ? toForm(activeSubType) : null);
+  }
+
+  const referencedCount = activeSubType?.partyCount ?? 0;
+  const isParentLocked = referencedCount > 0;
+
+  const nextSequenceFor = (partyTypeId: string) =>
+    subTypes.filter((s) => s.partyTypeId === partyTypeId).length + 1;
+
+  const [createForm, setCreateForm] = useState<SubTypeForm>({
+    partyTypeId: "",
+    subTypeCode: "",
+    subTypeName: "",
+    description: "",
+    sequence: 1,
+    status: "Active",
+  });
+
+  const handleFormChange = <K extends keyof SubTypeForm>(field: K, value: SubTypeForm[K]) => {
+    setFormData((prev) => (prev ? { ...prev, [field]: value } : prev));
   };
 
-  // Save Active Party Sub Type Edits
-  const handleSaveSubType = () => {
-    if (!formData) return;
+  const reloadAll = async () => {
+    await Promise.all([typesQ.reload(), subTypesQ.reload()]);
+  };
+
+  const handleSaveSubType = async () => {
+    if (!formData || !activeSubType) return;
 
     const normCode = formData.subTypeCode.trim().toUpperCase();
     const normName = formData.subTypeName.trim();
 
     if (!formData.partyTypeId) {
-      setToastMessage("Please select a valid Parent Party Type.");
+      notify("Please select a valid Parent Party Type.", "error");
       return;
     }
 
-    // Protection: If referenced, Parent Party Type cannot be changed
     if (isParentLocked && formData.partyTypeId !== activeSubType.partyTypeId) {
-      setToastMessage(
-        `Cannot change Parent Party Type: This Sub Type is referenced by ${referencedParties.length} Party Master record(s).`
+      notify(
+        `Cannot change Parent Party Type: This Sub Type is referenced by ${referencedCount} Party Master record(s).`,
+        "error"
       );
       return;
     }
 
     if (!normCode) {
-      setToastMessage("Please enter a valid Sub Type Code.");
+      notify("Please enter a valid Sub Type Code.", "error");
       return;
     }
     if (!normName) {
-      setToastMessage("Please enter a Sub Type Name.");
+      notify("Please enter a Sub Type Name.", "error");
       return;
     }
 
-    // Check duplicate code or name within the selected Parent Party Type
     const isDuplicate = subTypes.some(
       (s) =>
-        s.partySubTypeId !== formData.partySubTypeId &&
+        s.id !== activeSubType.id &&
         s.partyTypeId === formData.partyTypeId &&
         (s.subTypeCode.toUpperCase() === normCode ||
           s.subTypeName.toLowerCase() === normName.toLowerCase())
@@ -196,83 +194,89 @@ export function PartySubTypeMasterView() {
 
     if (isDuplicate) {
       const parentName = partyTypeMap.get(formData.partyTypeId)?.typeName || "selected Party Type";
-      setToastMessage(`Sub Type code '${normCode}' or name '${normName}' already exists under '${parentName}'.`);
+      notify(`Sub Type code '${normCode}' or name '${normName}' already exists under '${parentName}'.`, "error");
       return;
     }
 
-    setSubTypes((prev) =>
-      prev.map((s) =>
-        s.partySubTypeId === formData.partySubTypeId
-          ? {
-              ...formData,
-              subTypeCode: normCode,
-              subTypeName: normName,
-              updatedAt: new Date().toLocaleDateString("en-IN"),
-            }
-          : s
-      )
-    );
-    setToastMessage(`Saved Party Sub Type classification for '${normName}'.`);
-  };
-
-  // Toggle Active / Inactive Status
-  const handleToggleStatus = () => {
-    if (!formData) return;
-
-    if (formData.status === "Active") {
-      // Prompt confirmation before deactivating
-      setShowDeactivateConfirm(true);
-    } else {
-      // Direct reactivate
-      const nextStatus = "Active";
-      setSubTypes((prev) =>
-        prev.map((s) =>
-          s.partySubTypeId === formData.partySubTypeId
-            ? { ...s, status: nextStatus, updatedAt: new Date().toLocaleDateString("en-IN") }
-            : s
-        )
-      );
-      setFormData((prev) => ({ ...prev, status: nextStatus }));
-      setToastMessage(`Activated Party Sub Type '${formData.subTypeName}'.`);
+    setSaving(true);
+    try {
+      await accPartySubTypeService.update(activeSubType.id, {
+        ...formData,
+        subTypeCode: normCode,
+        subTypeName: normName,
+        description: formData.description.trim(),
+      });
+      invalidateAccLookups();
+      await reloadAll();
+      notify(`Saved Party Sub Type classification for '${normName}'.`);
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
     }
   };
 
-  // Confirm Deactivation Action
-  const handleConfirmDeactivate = () => {
-    const nextStatus = "Inactive";
-    setSubTypes((prev) =>
-      prev.map((s) =>
-        s.partySubTypeId === formData.partySubTypeId
-          ? { ...s, status: nextStatus, updatedAt: new Date().toLocaleDateString("en-IN") }
-          : s
-      )
-    );
-    setFormData((prev) => ({ ...prev, status: nextStatus }));
-    setShowDeactivateConfirm(false);
-    setToastMessage(
-      `Deactivated Party Sub Type '${formData.subTypeName}'. This classification will no longer be available for new Party Master records.`
-    );
+  const setSubTypeStatus = async (nextStatus: Status) => {
+    if (!activeSubType) return;
+    try {
+      await accPartySubTypeService.update(activeSubType.id, { status: nextStatus });
+      invalidateAccLookups();
+      await reloadAll();
+      notify(
+        nextStatus === "Active"
+          ? `Activated Party Sub Type '${activeSubType.subTypeName}'.`
+          : `Deactivated Party Sub Type '${activeSubType.subTypeName}'. This classification will no longer be available for new Party Master records.`
+      );
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    }
   };
 
-  // Create New Party Sub Type Handler
-  const handleCreateSubType = () => {
+  const handleToggleStatus = () => {
+    if (!activeSubType) return;
+    if (activeSubType.status === "Active") {
+      setShowDeactivateConfirm(true);
+    } else {
+      void setSubTypeStatus("Active");
+    }
+  };
+
+  const handleConfirmDeactivate = async () => {
+    setShowDeactivateConfirm(false);
+    await setSubTypeStatus("Inactive");
+  };
+
+  const handleDeleteSubType = async () => {
+    if (!activeSubType) return;
+    if (!window.confirm(`Delete Party Sub Type '${activeSubType.subTypeName}' (${activeSubType.subTypeCode})?`)) return;
+    try {
+      await accPartySubTypeService.remove(activeSubType.id);
+      invalidateAccLookups();
+      setSelectedSubTypeId("");
+      await reloadAll();
+      notify(`Deleted Party Sub Type '${activeSubType.subTypeName}'.`);
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    }
+  };
+
+  const handleCreateSubType = async () => {
     const normCode = createForm.subTypeCode.trim().toUpperCase();
     const normName = createForm.subTypeName.trim();
 
     if (!createForm.partyTypeId) {
-      setToastMessage("Please select a Parent Party Type.");
+      notify("Please select a Parent Party Type.", "error");
       return;
     }
     if (!normCode) {
-      setToastMessage("Please enter a Sub Type Code (e.g. CUST-VIP, VEND-IT).");
+      notify("Please enter a Sub Type Code (e.g. CUST-VIP, VEND-IT).", "error");
       return;
     }
     if (!normName) {
-      setToastMessage("Please enter the Sub Type Name.");
+      notify("Please enter the Sub Type Name.", "error");
       return;
     }
 
-    // Duplicate validation within parent party type
     const exists = subTypes.some(
       (s) =>
         s.partyTypeId === createForm.partyTypeId &&
@@ -282,36 +286,52 @@ export function PartySubTypeMasterView() {
 
     if (exists) {
       const parentName = partyTypeMap.get(createForm.partyTypeId)?.typeName || "selected Party Type";
-      setToastMessage(`Sub Type '${normCode}' or '${normName}' already exists under '${parentName}'.`);
+      notify(`Sub Type '${normCode}' or '${normName}' already exists under '${parentName}'.`, "error");
       return;
     }
 
-    const nextIdNum = subTypes.length + 1;
-    const padStr = nextIdNum < 10 ? `00${nextIdNum}` : nextIdNum < 100 ? `0${nextIdNum}` : `${nextIdNum}`;
-    const newRecord: PartySubTypeModel = {
-      ...createForm,
-      partySubTypeId: `PST-${padStr}`,
-      subTypeCode: normCode,
-      subTypeName: normName,
-      createdAt: new Date().toLocaleDateString("en-IN"),
-      updatedAt: new Date().toLocaleDateString("en-IN"),
-    };
+    setSaving(true);
+    try {
+      const created = await accPartySubTypeService.create({
+        ...createForm,
+        subTypeCode: normCode,
+        subTypeName: normName,
+        description: createForm.description.trim(),
+      });
+      invalidateAccLookups();
+      await reloadAll();
+      setSelectedSubTypeId(created.id);
+      setShowCreateModal(false);
+      notify(`Created new Party Sub Type '${created.subTypeName}' (${created.subTypeCode}).`);
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
-    setSubTypes([...subTypes, newRecord]);
-    setSelectedSubTypeId(newRecord.partySubTypeId);
-    setShowCreateModal(false);
+  const openCreateModal = () => {
+    const preferred =
+      parentTypeFilter !== "ALL" && activePartyTypes.some((pt) => pt.id === parentTypeFilter)
+        ? parentTypeFilter
+        : createForm.partyTypeId && activePartyTypes.some((pt) => pt.id === createForm.partyTypeId)
+          ? createForm.partyTypeId
+          : activePartyTypes[0]?.id ?? "";
     setCreateForm({
-      partyTypeId: createForm.partyTypeId,
+      partyTypeId: preferred,
       subTypeCode: "",
       subTypeName: "",
       description: "",
-      sequence: 1,
+      sequence: preferred ? nextSequenceFor(preferred) : 1,
       status: "Active",
     });
-    setToastMessage(`Created new Party Sub Type '${newRecord.subTypeName}' (${newRecord.subTypeCode}).`);
+    setShowCreateModal(true);
   };
 
-  const currentParentType = partyTypeMap.get(formData?.partyTypeId);
+  const currentParentType = formData ? partyTypeMap.get(formData.partyTypeId) : undefined;
+
+  const initialLoading = (typesQ.loading && !typesQ.data) || (subTypesQ.loading && !subTypesQ.data);
+  const loadError = (!typesQ.data && typesQ.error) || (!subTypesQ.data && subTypesQ.error) || null;
 
   return (
     <ModulePageShell
@@ -324,19 +344,15 @@ export function PartySubTypeMasterView() {
         { label: "Party Sub Type Master" },
       ]}
       toast={toastMessage}
+      toastVariant={toastVariant}
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex items-center gap-2">
           <Button
             type="button"
             size="sm"
-            onClick={() => {
-              // Pre-select current filter if specific parent is selected
-              if (parentTypeFilter !== "ALL") {
-                setCreateForm((prev) => ({ ...prev, partyTypeId: parentTypeFilter }));
-              }
-              setShowCreateModal(true);
-            }}
+            onClick={openCreateModal}
+            disabled={initialLoading || !!loadError}
             className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
@@ -347,7 +363,8 @@ export function PartySubTypeMasterView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleSaveSubType}
+            onClick={() => void handleSaveSubType()}
+            disabled={!formData || saving}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-800 cursor-pointer"
           >
             <Save className="h-3.5 w-3.5 mr-1 text-emerald-700" />
@@ -358,10 +375,11 @@ export function PartySubTypeMasterView() {
             type="button"
             variant="outline"
             size="sm"
+            disabled={!activeSubType}
             onClick={() => {
               if (activeSubType) {
-                setFormData({ ...activeSubType });
-                setToastMessage("Reset unsaved edits.");
+                setFormData(toForm(activeSubType));
+                notify("Reset unsaved edits.");
               }
             }}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
@@ -372,7 +390,6 @@ export function PartySubTypeMasterView() {
         </div>
       }
     >
-      {/* Top Company Context Header & Scope Banner */}
       <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 flex-1 min-w-[280px]">
@@ -394,9 +411,28 @@ export function PartySubTypeMasterView() {
         </div>
       </div>
 
-      {/* Main 2-Column Split Layout */}
+      {initialLoading ? (
+        <div className="flex min-h-[320px] items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin text-emerald-700" />
+          Loading party sub types…
+        </div>
+      ) : loadError ? (
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/60 p-6 text-center">
+          <AlertTriangle className="h-6 w-6 text-rose-600" />
+          <p className="text-sm font-semibold text-rose-800">{loadError}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void reloadAll()}
+            className="rounded-xl text-xs font-bold border-rose-300 text-rose-700 bg-white hover:bg-rose-50"
+          >
+            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+            Retry
+          </Button>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
-        {/* LEFT COLUMN: Party Sub Types Table / List (5 Cols) */}
         <div className="md:col-span-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col min-h-[580px]">
           <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5">
             <div className="flex items-center gap-2">
@@ -410,9 +446,7 @@ export function PartySubTypeMasterView() {
             </span>
           </div>
 
-          {/* Filters Bar: Parent Party Type, Search & Status Filters */}
           <div className="space-y-2.5 mb-3">
-            {/* Parent Party Type Filter Selector */}
             <div>
               <label className="text-[11px] font-bold text-slate-600 block mb-1">
                 Parent Party Type:
@@ -424,21 +458,20 @@ export function PartySubTypeMasterView() {
               >
                 <option value="ALL">All Parent Party Types</option>
                 {partyTypes.map((pt) => (
-                  <option key={pt.partyTypeId} value={pt.partyTypeId}>
+                  <option key={pt.id} value={pt.id}>
                     {pt.typeName} ({pt.typeCode})
                   </option>
                 ))}
               </SelectInput>
             </div>
 
-            {/* Quick Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search sub type code, name, ID..."
+                placeholder="Search sub type code, name, parent..."
                 className="h-8 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-8 text-xs font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none"
               />
               {searchQuery && (
@@ -452,7 +485,6 @@ export function PartySubTypeMasterView() {
               )}
             </div>
 
-            {/* Status Filter Buttons */}
             <div className="flex items-center gap-1 text-[11px]">
               {(["All", "Active", "Inactive"] as const).map((st) => (
                 <button
@@ -472,15 +504,13 @@ export function PartySubTypeMasterView() {
             </div>
           </div>
 
-          {/* Party Sub Types Cards List */}
           <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[460px]">
             {filteredSubTypes.map((s) => {
-              const isSelected = s.partySubTypeId === selectedSubTypeId;
-              const parent = partyTypeMap.get(s.partyTypeId);
+              const isSelected = s.id === activeSubType?.id;
               return (
                 <div
-                  key={s.partySubTypeId}
-                  onClick={() => setSelectedSubTypeId(s.partySubTypeId)}
+                  key={s.id}
+                  onClick={() => setSelectedSubTypeId(s.id)}
                   className={cn(
                     "p-3 rounded-xl border transition-all cursor-pointer select-none space-y-1.5",
                     isSelected
@@ -528,10 +558,10 @@ export function PartySubTypeMasterView() {
 
                   <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500 font-mono">
                     <span className="flex items-center gap-1">
-                      <span className="text-slate-400">{s.partySubTypeId}</span>
+                      <span className="text-slate-400">{s.partyCount} parties</span>
                       <span>•</span>
                       <span className="text-emerald-800 font-bold font-sans">
-                        {parent?.typeName || "Unknown Parent"}
+                        {s.partyTypeName || "Unknown Parent"}
                       </span>
                     </span>
                     <span className="text-slate-600 font-semibold font-sans">Order #{s.sequence}</span>
@@ -542,15 +572,22 @@ export function PartySubTypeMasterView() {
 
             {filteredSubTypes.length === 0 && (
               <div className="text-center py-10 text-xs text-slate-400">
-                No party sub types match your search criteria.
+                {subTypes.length === 0
+                  ? "No party sub types yet. Create the first one to get started."
+                  : "No party sub types match your search criteria."}
               </div>
             )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Selected Party Sub Type Details / Form (7 Cols) */}
         <div className="md:col-span-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-          {/* Header Bar */}
+          {!activeSubType || !formData ? (
+            <div className="flex min-h-[320px] flex-col items-center justify-center gap-2 text-center">
+              <Tag className="h-6 w-6 text-slate-400" />
+              <p className="text-xs font-semibold text-slate-600">Select or create a party sub type to view its configuration.</p>
+            </div>
+          ) : (
+          <>
           <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -571,48 +608,60 @@ export function PartySubTypeMasterView() {
                 {isParentLocked && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
                     <Lock className="h-3 w-3 text-amber-700" />
-                    {referencedParties.length} Party Master Ref{referencedParties.length > 1 ? "s" : ""}
+                    {referencedCount} Party Master Ref{referencedCount > 1 ? "s" : ""}
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
                 Parent Party Type:{" "}
                 <strong className="text-emerald-800 font-bold">
-                  {currentParentType?.typeName} ({currentParentType?.typeCode})
+                  {currentParentType
+                    ? `${currentParentType.typeName} (${currentParentType.typeCode})`
+                    : activeSubType.partyTypeName ?? "—"}
                 </strong>{" "}
-                • ID: <strong className="font-mono text-slate-700">{formData.partySubTypeId}</strong> • Display Sequence:{" "}
+                • Display Sequence:{" "}
                 <strong className="font-bold text-slate-800">#{formData.sequence}</strong>
               </p>
             </div>
 
-            {/* Toggle Status Action */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleToggleStatus}
-              className={cn(
-                "rounded-xl text-xs font-bold border cursor-pointer",
-                formData.status === "Active"
-                  ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
-                  : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
-              )}
-            >
-              {formData.status === "Active" ? (
-                <>
-                  <Ban className="h-3.5 w-3.5 mr-1 text-slate-500" />
-                  Deactivate Sub Type
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-                  Activate Sub Type
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleToggleStatus}
+                className={cn(
+                  "rounded-xl text-xs font-bold border cursor-pointer",
+                  activeSubType.status === "Active"
+                    ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
+                    : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                )}
+              >
+                {activeSubType.status === "Active" ? (
+                  <>
+                    <Ban className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                    Deactivate Sub Type
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                    Activate Sub Type
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleDeleteSubType()}
+                className="rounded-xl text-xs font-semibold bg-white border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
+                Delete
+              </Button>
+            </div>
           </div>
 
-          {/* Form Content */}
           <div className="text-xs space-y-4 pt-1">
             <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-200 space-y-4">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
@@ -620,14 +669,13 @@ export function PartySubTypeMasterView() {
                 Classification Particulars
               </h4>
 
-              {/* Referenced Warning Alert */}
               {isParentLocked && (
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
                   <Lock className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold block">Parent Party Type Protected:</span>
                     <span className="text-[11px] text-amber-800 leading-relaxed block mt-0.5">
-                      This Sub Type is referenced by <strong>{referencedParties.length}</strong> Party Master record(s) (e.g. <em>{referencedParties.slice(0, 2).map((p) => p.partyName).join(", ")}{referencedParties.length > 2 ? "..." : ""}</em>). Parent Party Type is locked to prevent invalidating existing party accounting relationships.
+                      This Sub Type is referenced by <strong>{referencedCount}</strong> Party Master record(s). Parent Party Type is locked to prevent invalidating existing party accounting relationships.
                     </span>
                   </div>
                 </div>
@@ -636,8 +684,9 @@ export function PartySubTypeMasterView() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="Party Sub Type ID">
                   <TextInput
-                    value={formData.partySubTypeId}
+                    value={activeSubType.id}
                     readOnly
+                    title={activeSubType.id}
                     className="bg-slate-100 font-mono font-bold text-slate-700 cursor-not-allowed h-9"
                   />
                 </FormField>
@@ -655,11 +704,13 @@ export function PartySubTypeMasterView() {
                       isParentLocked ? "bg-slate-100 text-slate-600 cursor-not-allowed border-slate-200" : "bg-white"
                     )}
                   >
-                    {partyTypes.map((pt) => (
-                      <option key={pt.partyTypeId} value={pt.partyTypeId}>
-                        {pt.typeName} ({pt.typeCode})
-                      </option>
-                    ))}
+                    {partyTypes
+                      .filter((pt) => pt.status === "Active" || pt.id === formData.partyTypeId)
+                      .map((pt) => (
+                        <option key={pt.id} value={pt.id}>
+                          {pt.typeName} ({pt.typeCode})
+                        </option>
+                      ))}
                   </SelectInput>
                 </FormField>
               </div>
@@ -667,7 +718,7 @@ export function PartySubTypeMasterView() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="Sub Type Code" required>
                   <TextInput
-                    value={formData.subTypeCode || ""}
+                    value={formData.subTypeCode}
                     onChange={(e) => handleFormChange("subTypeCode", e.target.value.toUpperCase())}
                     maxLength={15}
                     placeholder="e.g. CUST-GUEST"
@@ -677,7 +728,7 @@ export function PartySubTypeMasterView() {
 
                 <FormField label="Sub Type Name" required>
                   <TextInput
-                    value={formData.subTypeName || ""}
+                    value={formData.subTypeName}
                     onChange={(e) => handleFormChange("subTypeName", e.target.value)}
                     placeholder="e.g. Individual Guest"
                     className="bg-white font-bold text-slate-900 h-9"
@@ -699,7 +750,7 @@ export function PartySubTypeMasterView() {
                 <FormField label="System Status" required>
                   <SelectInput
                     value={formData.status}
-                    onChange={(e) => handleFormChange("status", e.target.value)}
+                    onChange={(e) => handleFormChange("status", e.target.value as Status)}
                     className="bg-white font-bold h-9"
                   >
                     <option value="Active">Active</option>
@@ -711,14 +762,13 @@ export function PartySubTypeMasterView() {
               <FormField label="Description (Optional)">
                 <TextAreaInput
                   rows={3}
-                  value={formData.description || ""}
+                  value={formData.description}
                   onChange={(e) => handleFormChange("description", e.target.value)}
                   placeholder="Describe the nature of this specific classification within the selected Party Type..."
                   className="bg-white text-xs leading-relaxed"
                 />
               </FormField>
 
-              {/* Informational Guidance on PMS Hierarchy */}
               <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200 text-slate-700 text-[11px] space-y-1.5">
                 <div className="flex items-center gap-1.5 font-bold text-emerald-950">
                   <Info className="h-4 w-4 text-emerald-700 shrink-0" />
@@ -737,19 +787,22 @@ export function PartySubTypeMasterView() {
                 <Button
                   type="button"
                   size="sm"
-                  onClick={handleSaveSubType}
+                  onClick={() => void handleSaveSubType()}
+                  disabled={saving}
                   className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs"
                 >
-                  <Save className="h-3.5 w-3.5 mr-1" />
+                  {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
                   Save Changes
                 </Button>
               </div>
             </div>
           </div>
+          </>
+          )}
         </div>
       </div>
+      )}
 
-      {/* CREATE PARTY SUB TYPE MODAL */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs">
@@ -772,17 +825,20 @@ export function PartySubTypeMasterView() {
                 <SelectInput
                   value={createForm.partyTypeId}
                   onChange={(e) =>
-                    setCreateForm((prev) => ({ ...prev, partyTypeId: e.target.value }))
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      partyTypeId: e.target.value,
+                      sequence: nextSequenceFor(e.target.value),
+                    }))
                   }
                   className="bg-white font-bold h-9 text-slate-900"
                 >
-                  {partyTypes
-                    .filter((pt) => pt.status === "Active")
-                    .map((pt) => (
-                      <option key={pt.partyTypeId} value={pt.partyTypeId}>
-                        {pt.typeName} ({pt.typeCode})
-                      </option>
-                    ))}
+                  {activePartyTypes.length === 0 && <option value="">No active party types</option>}
+                  {activePartyTypes.map((pt) => (
+                    <option key={pt.id} value={pt.id}>
+                      {pt.typeName} ({pt.typeCode})
+                    </option>
+                  ))}
                 </SelectInput>
               </FormField>
 
@@ -839,7 +895,7 @@ export function PartySubTypeMasterView() {
                 <SelectInput
                   value={createForm.status}
                   onChange={(e) =>
-                    setCreateForm((prev) => ({ ...prev, status: e.target.value as any }))
+                    setCreateForm((prev) => ({ ...prev, status: e.target.value as Status }))
                   }
                   className="bg-white font-bold h-9"
                 >
@@ -862,9 +918,11 @@ export function PartySubTypeMasterView() {
               <Button
                 type="button"
                 size="sm"
-                onClick={handleCreateSubType}
+                onClick={() => void handleCreateSubType()}
+                disabled={saving}
                 className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs"
               >
+                {saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
                 Create Party Sub Type
               </Button>
             </div>
@@ -872,8 +930,7 @@ export function PartySubTypeMasterView() {
         </div>
       )}
 
-      {/* CONFIRM DEACTIVATION MODAL */}
-      {showDeactivateConfirm && (
+      {showDeactivateConfirm && activeSubType && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-sm w-full p-5 space-y-4 text-xs">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
@@ -884,7 +941,7 @@ export function PartySubTypeMasterView() {
             <p className="text-slate-600 leading-relaxed">
               Are you sure you want to deactivate{" "}
               <strong className="text-slate-900 font-bold">
-                {formData.subTypeName} ({formData.subTypeCode})
+                {activeSubType.subTypeName} ({activeSubType.subTypeCode})
               </strong>
               ?
               <br />
@@ -905,7 +962,7 @@ export function PartySubTypeMasterView() {
               <Button
                 type="button"
                 size="sm"
-                onClick={handleConfirmDeactivate}
+                onClick={() => void handleConfirmDeactivate()}
                 className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs"
               >
                 Confirm Deactivation

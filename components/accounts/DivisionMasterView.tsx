@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Building2,
-  FolderTree,
   Plus,
   Save,
   RotateCcw,
@@ -13,8 +12,8 @@ import {
   Trash2,
   Layers,
   FileText,
-  CheckCircle2,
-  Info,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -24,11 +23,7 @@ import {
   TextAreaInput,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
-import {
-  sampleDivisionsList,
-  DivisionModel,
-  DivisionType,
-} from "@/app/data/accounts/divisionData";
+import { accDivisionService, type Division } from "@/services/accounts";
 import {
   CompanySelector,
   MasterFormSection,
@@ -37,14 +32,56 @@ import {
   MasterDeleteProtectionDialog,
 } from "@/components/accounts/MasterComponents";
 import { cn } from "@/lib/utils";
+import { accErrorMessage, invalidateAccLookups, useAccQuery } from "./accountsApi";
+
+type DivisionType = "Revenue Department" | "Support Department" | "Administrative Department" | "Other";
+
+type DivisionForm = Pick<
+  Division,
+  "divisionCode" | "divisionName" | "shortName" | "divisionType" | "sequence" | "description" | "status" | "parentDivisionId" | "companyId"
+> & {
+  id: string | null;
+  transactionCount: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  updatedBy: string | null;
+};
+
+function toDivisionForm(d: Division): DivisionForm {
+  return {
+    id: d.id,
+    divisionCode: d.divisionCode ?? "",
+    divisionName: d.divisionName ?? "",
+    shortName: d.shortName ?? "",
+    divisionType: d.divisionType || "Support Department",
+    sequence: d.sequence ?? 0,
+    description: d.description ?? "",
+    status: d.status ?? "Active",
+    parentDivisionId: d.parentDivisionId,
+    companyId: d.companyId,
+    transactionCount: d.transactionCount ?? 0,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+    createdBy: d.createdBy ?? null,
+    updatedBy: d.updatedBy ?? null,
+  };
+}
 
 export function DivisionMasterView() {
   // Master Divisions State
-  const [divisions, setDivisions] = useState<DivisionModel[]>(sampleDivisionsList);
-  const [selectedDivisionId, setSelectedDivisionId] = useState<string>("DIV-001");
+  const { data, loading, error, reload } = useAccQuery(() => accDivisionService.list(), []);
+  const allDivisions = useMemo(() => data ?? [], [data]);
+  const [selectedDivisionId, setSelectedDivisionId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Company Selector State
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("comp-101");
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
+
+  const divisions = useMemo(
+    () => allDivisions.filter((d) => !d.companyId || !selectedCompanyId || d.companyId === selectedCompanyId),
+    [allDivisions, selectedCompanyId]
+  );
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
@@ -52,7 +89,12 @@ export function DivisionMasterView() {
   const [typeFilter, setTypeFilter] = useState<"All" | DivisionType>("All");
 
   // Toast Notification State
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessageRaw] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const setToastMessage = (msg: string | null, variant: "success" | "error" = "success") => {
+    setToastVariant(variant);
+    setToastMessageRaw(msg);
+  };
 
   // Modals & Protection Dialog State
   const [showActivationDialog, setShowActivationDialog] = useState(false);
@@ -68,37 +110,39 @@ export function DivisionMasterView() {
     transactionCount: 0,
   });
 
+  // Unsaved edits (null = show the selected record as stored)
+  const [draft, setDraft] = useState<DivisionForm | null>(null);
+  const isDraftNew = draft !== null && draft.id === null;
+
   // Active Selected Record
-  const activeRecord = useMemo(() => {
-    return (
-      divisions.find((d) => d.divisionId === selectedDivisionId) ||
-      divisions[0] || {
-        divisionId: "DIV-001",
-        divisionCode: "ROOMS",
-        divisionName: "Rooms",
-        shortName: "RMS",
-        divisionType: "Revenue Department" as DivisionType,
-        sequence: 1,
-        status: "Active" as const,
-        description: "",
-        companyId: "CMP-001",
-        createdAt: "01 Apr 2024",
-        updatedAt: "01 Apr 2024",
-        createdBy: "Finance Admin",
-        updatedBy: "Finance Admin",
-        hasTransactions: false,
-        transactionCount: 0,
-      }
-    );
-  }, [divisions, selectedDivisionId]);
+  const activeRecord = useMemo(
+    () => (isDraftNew ? undefined : divisions.find((d) => d.id === selectedDivisionId) || divisions[0]),
+    [divisions, selectedDivisionId, isDraftNew]
+  );
+
+  const nextSequence = divisions.reduce((m, d) => Math.max(m, d.sequence ?? 0), 0) + 1;
+  const newDivisionForm = (): DivisionForm => ({
+    id: null,
+    divisionCode: "",
+    divisionName: "",
+    shortName: "",
+    divisionType: "Support Department",
+    sequence: nextSequence,
+    description: "",
+    status: "Active",
+    parentDivisionId: null,
+    companyId: selectedCompanyId || null,
+    transactionCount: 0,
+    createdAt: "",
+    updatedAt: "",
+    createdBy: null,
+    updatedBy: null,
+  });
 
   // Form State
-  const [formData, setFormData] = useState<DivisionModel>(activeRecord);
-
-  // Sync Form State when selection changes
-  useEffect(() => {
-    setFormData({ ...activeRecord });
-  }, [activeRecord]);
+  const formData: DivisionForm =
+    draft ?? (activeRecord ? toDivisionForm(activeRecord) : newDivisionForm());
+  const isNew = formData.id === null;
 
   // Filtered Divisions List
   const filteredDivisions = useMemo(() => {
@@ -112,10 +156,10 @@ export function DivisionMasterView() {
         if (searchQuery) {
           const q = searchQuery.toLowerCase();
           return (
-            d.divisionId.toLowerCase().includes(q) ||
             d.divisionCode.toLowerCase().includes(q) ||
             d.divisionName.toLowerCase().includes(q) ||
             (d.shortName && d.shortName.toLowerCase().includes(q)) ||
+            (d.parentDivisionName && d.parentDivisionName.toLowerCase().includes(q)) ||
             (d.description && d.description.toLowerCase().includes(q))
           );
         }
@@ -124,134 +168,133 @@ export function DivisionMasterView() {
       .sort((a, b) => a.sequence - b.sequence);
   }, [divisions, searchQuery, statusFilter, typeFilter]);
 
-  // Available Parent Divisions (excluding self and any circular descendants)
+  // Available Parent Divisions (excluding self and any descendants)
   const availableParents = useMemo(() => {
-    return divisions.filter((d) => d.divisionId !== formData.divisionId);
-  }, [divisions, formData.divisionId]);
+    if (!formData.id) return divisions;
+    const descendants = new Set<string>([formData.id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const d of allDivisions) {
+        if (d.parentDivisionId && descendants.has(d.parentDivisionId) && !descendants.has(d.id)) {
+          descendants.add(d.id);
+          grew = true;
+        }
+      }
+    }
+    return divisions.filter((d) => !descendants.has(d.id));
+  }, [divisions, allDivisions, formData.id]);
 
   // Child divisions count for current record
   const childDivisions = useMemo(() => {
-    return divisions.filter((d) => d.parentDivisionId === formData.divisionId);
-  }, [divisions, formData.divisionId]);
+    return formData.id ? allDivisions.filter((d) => d.parentDivisionId === formData.id) : [];
+  }, [allDivisions, formData.id]);
 
   // Form Change Handler
-  const handleFormChange = (field: keyof DivisionModel, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const handleFormChange = <K extends keyof DivisionForm>(field: K, value: DivisionForm[K]) => {
+    setDraft((prev) => ({ ...(prev ?? formData), [field]: value }));
+  };
+
+  const handleSelectDivision = (id: string) => {
+    setSelectedDivisionId(id);
+    setDraft(null);
   };
 
   // Create New Division Handler
   const handleNewDivision = () => {
-    const nextSeq = divisions.length + 1;
-    const nextNum = nextSeq < 10 ? `00${nextSeq}` : nextSeq < 100 ? `0${nextSeq}` : `${nextSeq}`;
-    const newDivisionId = `DIV-${nextNum}`;
-    const now = new Date().toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-
-    const newRecord: DivisionModel = {
-      divisionId: newDivisionId,
-      divisionCode: `DEPT${nextSeq}`,
-      divisionName: "New Department",
-      shortName: `D${nextSeq}`,
-      divisionType: "Support Department",
-      sequence: nextSeq,
-      status: "Active",
-      description: "",
-      companyId: selectedCompanyId,
-      createdAt: now,
-      updatedAt: now,
-      createdBy: "Finance Admin",
-      updatedBy: "Finance Admin",
-      hasTransactions: false,
-      transactionCount: 0,
-    };
-
-    setDivisions((prev) => [newRecord, ...prev]);
-    setSelectedDivisionId(newRecord.divisionId);
-    setFormData(newRecord);
-    setToastMessage(`Created new Division '${newRecord.divisionName}' (${newRecord.divisionId}).`);
+    setDraft(newDivisionForm());
+    setToastMessage("Prepared a new Division record. Fill in the details and Save.");
   };
 
   // Save Division Changes
-  const handleSaveDivision = () => {
+  const handleSaveDivision = async () => {
     if (!formData.divisionCode.trim()) {
-      setToastMessage("Division Code is required.");
+      setToastMessage("Division Code is required.", "error");
       return;
     }
     if (!formData.divisionName.trim()) {
-      setToastMessage("Division Name is required.");
+      setToastMessage("Division Name is required.", "error");
       return;
     }
 
     // Check code uniqueness among other records
-    const codeExists = divisions.some(
+    const codeExists = allDivisions.some(
       (d) =>
-        d.divisionId !== formData.divisionId &&
+        d.id !== formData.id &&
         d.divisionCode.trim().toUpperCase() === formData.divisionCode.trim().toUpperCase()
     );
 
     if (codeExists) {
-      setToastMessage(`Division Code '${formData.divisionCode.toUpperCase()}' is already in use.`);
+      setToastMessage(`Division Code '${formData.divisionCode.toUpperCase()}' is already in use.`, "error");
       return;
     }
 
-    const now = new Date().toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-
-    const updatedRecord: DivisionModel = {
-      ...formData,
+    const body: Partial<Division> = {
       divisionCode: formData.divisionCode.trim().toUpperCase(),
       divisionName: formData.divisionName.trim(),
       shortName: (formData.shortName || "").trim().toUpperCase(),
-      updatedAt: now,
-      updatedBy: "Finance Admin",
+      divisionType: formData.divisionType,
+      sequence: formData.sequence,
+      description: formData.description,
+      status: formData.status,
+      parentDivisionId: formData.parentDivisionId || null,
+      companyId: formData.companyId || selectedCompanyId || null,
     };
 
-    setDivisions((prev) =>
-      prev.map((d) => (d.divisionId === updatedRecord.divisionId ? updatedRecord : d))
-    );
-    setFormData(updatedRecord);
-    setToastMessage(`Saved Division '${updatedRecord.divisionName}' successfully.`);
+    setSaving(true);
+    try {
+      const saved = formData.id
+        ? await accDivisionService.update(formData.id, body)
+        : await accDivisionService.create(body);
+      invalidateAccLookups();
+      await reload();
+      setSelectedDivisionId(saved.id);
+      setDraft(null);
+      setToastMessage(`Saved Division '${saved.divisionName}' successfully.`);
+    } catch (e) {
+      setToastMessage(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Revert Form Edits
-  const handleResetForm = () => {
-    setFormData({ ...activeRecord });
-    setToastMessage(`Reverted changes for '${activeRecord.divisionName}'.`);
+  const handleResetForm = async () => {
+    setDraft(null);
+    await reload();
+    setToastMessage(
+      activeRecord ? `Reverted changes for '${activeRecord.divisionName}'.` : "Discarded unsaved division."
+    );
   };
 
   // Toggle Activation Flow
-  const handleToggleActivation = () => {
-    const targetStatus = formData.status === "Active" ? "Inactive" : "Active";
-    const now = new Date().toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-
-    const updatedRecord: DivisionModel = {
-      ...formData,
-      status: targetStatus,
-      updatedAt: now,
-      updatedBy: "Finance Admin",
-    };
-
-    setDivisions((prev) =>
-      prev.map((d) => (d.divisionId === updatedRecord.divisionId ? updatedRecord : d))
-    );
-    setFormData(updatedRecord);
-    setToastMessage(
-      `Division '${updatedRecord.divisionName}' is now ${targetStatus.toUpperCase()}.`
-    );
+  const handleToggleActivation = async () => {
+    const targetStatus: Division["status"] = formData.status === "Active" ? "Inactive" : "Active";
+    if (!formData.id) {
+      handleFormChange("status", targetStatus);
+      return;
+    }
+    setSaving(true);
+    try {
+      await accDivisionService.update(formData.id, { status: targetStatus });
+      invalidateAccLookups();
+      await reload();
+      setDraft((prev) => (prev ? { ...prev, status: targetStatus } : null));
+      setToastMessage(`Division '${formData.divisionName}' is now ${targetStatus.toUpperCase()}.`);
+    } catch (e) {
+      setToastMessage(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Attempt Delete Flow with Protection Checks
-  const handleDeleteAttempt = () => {
+  const handleDeleteAttempt = async () => {
+    if (!formData.id) {
+      setDraft(null);
+      return;
+    }
+
     // Check 1: Child Divisions Protection
     if (childDivisions.length > 0) {
       setDeleteDialogProps({
@@ -264,7 +307,7 @@ export function DivisionMasterView() {
     }
 
     // Check 2: Transaction Reference Protection
-    if (formData.hasTransactions || (formData.transactionCount || 0) > 0) {
+    if ((formData.transactionCount || 0) > 0) {
       setDeleteDialogProps({
         isOpen: true,
         reason: "has_transactions",
@@ -274,10 +317,21 @@ export function DivisionMasterView() {
       return;
     }
 
-    // Permitted to delete if 0 transactions and 0 child divisions
-    setDivisions((prev) => prev.filter((d) => d.divisionId !== formData.divisionId));
-    setSelectedDivisionId(divisions[0]?.divisionId || "DIV-001");
-    setToastMessage(`Deleted Division '${formData.divisionName}'.`);
+    if (!window.confirm(`Delete division '${formData.divisionName}'? This cannot be undone.`)) return;
+
+    setSaving(true);
+    try {
+      await accDivisionService.remove(formData.id);
+      invalidateAccLookups();
+      setSelectedDivisionId(null);
+      setDraft(null);
+      await reload();
+      setToastMessage(`Deleted Division '${formData.divisionName}'.`);
+    } catch (e) {
+      setToastMessage(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -291,6 +345,7 @@ export function DivisionMasterView() {
         { label: "Division Master" },
       ]}
       toast={toastMessage}
+      toastVariant={toastVariant}
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex flex-wrap items-center gap-2">
@@ -298,6 +353,7 @@ export function DivisionMasterView() {
             type="button"
             size="sm"
             onClick={handleNewDivision}
+            disabled={saving || loading}
             className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer shadow-xs"
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
@@ -307,10 +363,11 @@ export function DivisionMasterView() {
           <Button
             type="button"
             size="sm"
-            onClick={handleSaveDivision}
+            onClick={() => void handleSaveDivision()}
+            disabled={saving || loading}
             className="rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white shadow-xs cursor-pointer"
           >
-            <Save className="h-3.5 w-3.5 mr-1" />
+            {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
             Save Changes
           </Button>
 
@@ -318,7 +375,8 @@ export function DivisionMasterView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setShowActivationDialog(true)}
+            disabled={saving || loading}
+            onClick={() => (isNew ? void handleToggleActivation() : setShowActivationDialog(true))}
             className={cn(
               "rounded-xl text-xs font-bold border cursor-pointer",
               formData.status === "Active"
@@ -334,18 +392,20 @@ export function DivisionMasterView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleDeleteAttempt}
+            onClick={() => void handleDeleteAttempt()}
+            disabled={saving || loading}
             className="rounded-xl text-xs font-semibold bg-white border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
           >
             <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
-            Delete
+            {isNew ? "Discard" : "Delete"}
           </Button>
 
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleResetForm}
+            disabled={saving}
+            onClick={() => void handleResetForm()}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
           >
             <RotateCcw className="h-3.5 w-3.5 mr-1 text-slate-500" />
@@ -441,17 +501,52 @@ export function DivisionMasterView() {
 
           {/* Divisions List Cards */}
           <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[500px]">
-            {filteredDivisions.length === 0 ? (
+            {isNew && (
+              <div className="p-3 rounded-xl border bg-emerald-50/90 border-emerald-500 ring-1 ring-emerald-500 shadow-2xs space-y-1">
+                <h4 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.2 bg-amber-100 text-amber-900 rounded font-mono font-bold text-[10px] border border-amber-200">
+                    UNSAVED
+                  </span>
+                  <span>{formData.divisionName || "New Division"}</span>
+                </h4>
+              </div>
+            )}
+
+            {loading && !data ? (
+              <div className="flex items-center justify-center gap-2 p-6 text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                Loading divisions…
+              </div>
+            ) : error && !data ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-800 space-y-2">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Could not load divisions
+                </div>
+                <p>{error}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void reload()}
+                  className="h-7 text-xs font-semibold bg-white"
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : filteredDivisions.length === 0 ? (
               <div className="p-6 text-center text-slate-400 font-medium">
-                No divisions match your search or filter.
+                {divisions.length === 0
+                  ? "No divisions yet. Use New Division to create one."
+                  : "No divisions match your search or filter."}
               </div>
             ) : (
               filteredDivisions.map((item) => {
-                const isSelected = selectedDivisionId === item.divisionId;
+                const isSelected = formData.id === item.id;
                 return (
                   <div
-                    key={item.divisionId}
-                    onClick={() => setSelectedDivisionId(item.divisionId)}
+                    key={item.id}
+                    onClick={() => handleSelectDivision(item.id)}
                     className={cn(
                       "p-3 rounded-xl border transition-all duration-150 cursor-pointer space-y-2 select-none",
                       isSelected
@@ -470,6 +565,11 @@ export function DivisionMasterView() {
                         {item.shortName && (
                           <span className="text-[11px] font-medium text-slate-500 block mt-0.5">
                             Short: <strong className="text-slate-700 font-semibold">{item.shortName}</strong>
+                          </span>
+                        )}
+                        {item.parentDivisionName && (
+                          <span className="text-[11px] font-medium text-slate-500 block mt-0.5">
+                            Under: <strong className="text-slate-700 font-semibold">{item.parentDivisionName}</strong>
                           </span>
                         )}
                       </div>
@@ -514,8 +614,9 @@ export function DivisionMasterView() {
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Selected: <strong className="text-slate-900">{formData.divisionName}</strong>{" "}
-                  ({formData.divisionCode})
+                  {isNew ? "New record: " : "Selected: "}
+                  <strong className="text-slate-900">{formData.divisionName || "—"}</strong>{" "}
+                  ({formData.divisionCode || "no code"})
                 </p>
               </div>
 
@@ -558,7 +659,7 @@ export function DivisionMasterView() {
               {/* Division ID (Read-only) */}
               <FormField label="Division ID">
                 <TextInput
-                  value={formData.divisionId}
+                  value={formData.id ?? "Auto-generated on save"}
                   readOnly
                   className="bg-slate-50 font-mono font-bold text-slate-700 cursor-not-allowed"
                 />
@@ -608,13 +709,17 @@ export function DivisionMasterView() {
                 <SelectInput
                   value={formData.divisionType || "Support Department"}
                   onChange={(e) =>
-                    handleFormChange("divisionType", e.target.value as DivisionType)
+                    handleFormChange("divisionType", e.target.value)
                   }
                 >
                   <option value="Revenue Department">Revenue Department</option>
                   <option value="Support Department">Support Department</option>
                   <option value="Administrative Department">Administrative Department</option>
                   <option value="Other">Other</option>
+                  {formData.divisionType &&
+                    !["Revenue Department", "Support Department", "Administrative Department", "Other"].includes(
+                      formData.divisionType
+                    ) && <option value={formData.divisionType}>{formData.divisionType}</option>}
                 </SelectInput>
               </FormField>
 
@@ -626,12 +731,12 @@ export function DivisionMasterView() {
                 <SelectInput
                   value={formData.parentDivisionId || ""}
                   onChange={(e) =>
-                    handleFormChange("parentDivisionId", e.target.value || undefined)
+                    handleFormChange("parentDivisionId", e.target.value || null)
                   }
                 >
                   <option value="">None (Top-Level Division)</option>
                   {availableParents.map((parent) => (
-                    <option key={parent.divisionId} value={parent.divisionId}>
+                    <option key={parent.id} value={parent.id}>
                       {parent.divisionCode} - {parent.divisionName} ({parent.divisionType})
                     </option>
                   ))}
@@ -647,7 +752,7 @@ export function DivisionMasterView() {
                   type="number"
                   value={formData.sequence}
                   onChange={(e) =>
-                    handleFormChange("sequence", parseInt(e.target.value, 10) || 1)
+                    handleFormChange("sequence", parseInt(e.target.value, 10) || 0)
                   }
                   className="font-mono font-bold"
                 />
@@ -657,7 +762,7 @@ export function DivisionMasterView() {
               <FormField label="Status">
                 <SelectInput
                   value={formData.status}
-                  onChange={(e) => handleFormChange("status", e.target.value)}
+                  onChange={(e) => handleFormChange("status", e.target.value as Division["status"])}
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
@@ -679,13 +784,13 @@ export function DivisionMasterView() {
           {/* Section 2: Audit & System Information */}
           <MasterAuditInfo
             idLabel="Division ID"
-            idValue={formData.divisionId}
+            idValue={formData.id ?? "New (unsaved)"}
             sequence={formData.sequence}
             status={formData.status}
             createdAt={formData.createdAt}
             updatedAt={formData.updatedAt}
-            createdBy={formData.createdBy || "Finance Admin"}
-            updatedBy={formData.updatedBy || "Finance Admin"}
+            createdBy={formData.createdBy ?? undefined}
+            updatedBy={formData.updatedBy ?? undefined}
             transactionCount={formData.transactionCount || 0}
           />
         </div>
@@ -695,7 +800,7 @@ export function DivisionMasterView() {
       <MasterActivationDialog
         isOpen={showActivationDialog}
         onClose={() => setShowActivationDialog(false)}
-        onConfirm={handleToggleActivation}
+        onConfirm={() => void handleToggleActivation()}
         recordName={formData.divisionName}
         currentStatus={formData.status}
         hasDependents={

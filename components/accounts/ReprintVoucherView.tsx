@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Printer,
   Search,
   SlidersHorizontal,
   Calendar,
-  Building2,
   CheckCircle2,
   Download,
   Eye,
@@ -14,210 +14,260 @@ import {
   Filter,
   ChevronDown,
   X,
-  RotateCcw,
-  CheckSquare,
-  Square,
-  ShieldCheck,
   CreditCard,
-  Layers,
   Loader2,
-  Hash,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import {
-  FormField,
-  StatMiniCard,
-  Drawer,
-  FODatePicker,
-  formatINR,
-} from "@/components/frontoffice/ui";
+import { StatMiniCard, Drawer, FODatePicker } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
-import {
-  sampleVoucherTypes,
-  sampleReprintVouchersData,
-  VoucherEntryItem,
-} from "@/app/data/accounts/reprintVoucherData";
 import { cn } from "@/lib/utils";
+import { accCompanyService, accVoucherService, type Voucher, type VoucherDetail } from "@/services/accounts";
+import {
+  accErrorMessage,
+  formatDate,
+  formatINR,
+  fyStartIso,
+  todayIso,
+  useAccLookups,
+  useAccQuery,
+} from "@/components/accounts/accountsApi";
+
+type Toast = { message: string; variant: "success" | "error" } | null;
+
+type AppliedFilters = {
+  voucherTypeId: string;
+  enableDate: boolean;
+  from: string;
+  to: string;
+  provisional: boolean;
+};
+
+function downloadCsv(filename: string, header: string[], rows: (string | number | null | undefined)[][]) {
+  const esc = (v: string | number | null | undefined) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = [header, ...rows].map((r) => r.map(esc).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+const ONES = [
+  "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve",
+  "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen",
+];
+const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+
+function belowThousand(n: number): string {
+  const parts: string[] = [];
+  if (n >= 100) {
+    parts.push(`${ONES[Math.floor(n / 100)]} Hundred`);
+    n %= 100;
+  }
+  if (n >= 20) {
+    parts.push(TENS[Math.floor(n / 10)] + (n % 10 ? ` ${ONES[n % 10]}` : ""));
+  } else if (n > 0) {
+    parts.push(ONES[n]);
+  }
+  return parts.join(" ");
+}
+
+/** Indian numbering (Crore / Lakh / Thousand) amount in words. */
+function amountToWords(value: number): string {
+  const rupees = Math.floor(Math.abs(value));
+  const paise = Math.round((Math.abs(value) - rupees) * 100);
+  const words = (n: number): string => {
+    if (n === 0) return "Zero";
+    const parts: string[] = [];
+    const crore = Math.floor(n / 10000000);
+    n %= 10000000;
+    const lakh = Math.floor(n / 100000);
+    n %= 100000;
+    const thousand = Math.floor(n / 1000);
+    n %= 1000;
+    if (crore) parts.push(`${words(crore)} Crore`);
+    if (lakh) parts.push(`${belowThousand(lakh)} Lakh`);
+    if (thousand) parts.push(`${belowThousand(thousand)} Thousand`);
+    if (n) parts.push(belowThousand(n));
+    return parts.join(" ");
+  };
+  return `Rupees ${words(rupees)}${paise ? ` and ${belowThousand(paise)} Paise` : ""} Only.`;
+}
 
 export function ReprintVoucherView() {
-  // Desktop & Mobile filter state
+  const { lookups } = useAccLookups();
+  const companies = useAccQuery(() => accCompanyService.list(), []);
+
   const [showFilters, setShowFilters] = useState(false);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
-  // WINHMS Reference Parameters
-  const [selectedVoucherType, setSelectedVoucherType] = useState("All Voucher Types");
-
-  // Voucher Date Filter Box
+  // Filter form (applied on Display)
+  const [selectedVoucherType, setSelectedVoucherType] = useState("");
   const [enableVoucherDate, setEnableVoucherDate] = useState(true);
-  const [fromDate, setFromDate] = useState("2026-07-23");
-  const [toDate, setToDate] = useState("2027-03-31");
+  const [fromDate, setFromDate] = useState(fyStartIso);
+  const [toDate, setToDate] = useState(todayIso);
+  const [provisionalTransaction, setProvisionalTransaction] = useState(false);
+  const [printAnalysisCode, setPrintAnalysisCode] = useState(false);
+  const [applied, setApplied] = useState<AppliedFilters>(() => ({
+    voucherTypeId: "",
+    enableDate: true,
+    from: fyStartIso(),
+    to: todayIso(),
+    provisional: false,
+  }));
 
-  // Voucher No Range Filter Box (WINHMS exact fields)
+  // Client-side filters
   const [enableVoucherNo, setEnableVoucherNo] = useState(false);
   const [fromVoucherNo, setFromVoucherNo] = useState("");
   const [toVoucherNo, setToVoucherNo] = useState("");
-
-  // WINHMS Specific Option Checkboxes
-  const [pdcTransaction, setPdcTransaction] = useState(false);
-  const [provisionalTransaction, setProvisionalTransaction] = useState(false);
-  const [printAnalysisCode, setPrintAnalysisCode] = useState(false);
-
-  // WINHMS Print Display Options
-  const [fullNarration, setFullNarration] = useState(true);
-  const [includeLedgerAccounts, setIncludeLedgerAccounts] = useState(true);
-  const [printSignatures, setPrintSignatures] = useState(true);
-  const [printDuplicateWatermark, setPrintDuplicateWatermark] = useState(false);
-  const [batchPrint, setBatchPrint] = useState(true);
-
-  // Display Action State
-  const [isDisplayLoading, setIsDisplayLoading] = useState(false);
   const [vouchNoSearch, setVouchNoSearch] = useState("");
 
-  // Selection & Items State
-  const [vouchers, setVouchers] = useState<VoucherEntryItem[]>(sampleReprintVouchersData);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(["v-608"]));
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [printBatch, setPrintBatch] = useState<VoucherDetail[] | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [toast, setToast] = useState<Toast>(null);
+  const notify = (message: string, variant: "success" | "error" = "success") => setToast({ message, variant });
 
-  // Preview Modal State
-  const [previewVoucher, setPreviewVoucher] = useState<VoucherEntryItem | null>(null);
+  const list = useAccQuery(
+    () =>
+      accVoucherService.list({
+        status: applied.provisional ? "Provisional,Converted,Reversed" : "Posted,Reversed",
+        provisional: applied.provisional,
+        voucherTypeId: applied.voucherTypeId || undefined,
+        from: applied.enableDate ? applied.from || undefined : undefined,
+        to: applied.enableDate ? applied.to || undefined : undefined,
+        limit: 2000,
+      }),
+    [applied],
+  );
+  const vouchers = useMemo(() => list.data ?? [], [list.data]);
 
-  // WINHMS Printer Selection Dialog State (matching Image 2)
-  const [showPrinterDialog, setShowPrinterDialog] = useState(false);
-  const [selectedPrinter, setSelectedPrinter] = useState("Canon");
+  const voucherTypes = lookups?.voucherTypes ?? [];
+  const appliedTypeName = voucherTypes.find((vt) => vt.id === applied.voucherTypeId)?.voucherTypeName ?? "All Voucher Types";
 
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Available System Printers (WINHMS exact list from screenshot)
-  const printerList = ["Canon", "Fax", "OneNote", "PDF", "AnyDesk Printer", "OneNote for Windows 10"];
-
-  // Filtered Vouchers Logic matching WINHMS parameters
   const filteredVouchers = useMemo(() => {
+    const q = vouchNoSearch.trim().toLowerCase();
+    const cmp = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
     return vouchers.filter((item) => {
-      // Voucher Type
-      if (
-        selectedVoucherType !== "All Voucher Types" &&
-        !item.vouchType.includes(selectedVoucherType.split(" ")[0])
-      ) {
-        return false;
+      if (enableVoucherNo) {
+        if (fromVoucherNo.trim() && cmp(item.voucherNo, fromVoucherNo.trim()) < 0) return false;
+        if (toVoucherNo.trim() && cmp(item.voucherNo, toVoucherNo.trim()) > 0) return false;
       }
-
-      // Provisional Filter
-      if (provisionalTransaction && item.status !== "Provisional") {
-        return false;
-      }
-
-      // Voucher No Range Filter
-      if (enableVoucherNo && (fromVoucherNo || toVoucherNo)) {
-        if (fromVoucherNo && item.vouchNo < fromVoucherNo) return false;
-        if (toVoucherNo && item.vouchNo > toVoucherNo) return false;
-      }
-
-      // Search Query
-      if (vouchNoSearch) {
-        const q = vouchNoSearch.toLowerCase();
-        return (
-          item.vouchNo.toLowerCase().includes(q) ||
-          item.narration.toLowerCase().includes(q) ||
-          item.accountName.toLowerCase().includes(q) ||
-          item.preparedBy.toLowerCase().includes(q)
-        );
-      }
-
-      return true;
+      if (!q) return true;
+      return [item.voucherNo, item.narration, item.partyName, item.debitAccounts, item.creditAccounts, item.preparedBy, item.referenceNo]
+        .some((s) => (s ?? "").toLowerCase().includes(q));
     });
-  }, [
-    vouchers,
-    selectedVoucherType,
-    provisionalTransaction,
-    enableVoucherNo,
-    fromVoucherNo,
-    toVoucherNo,
-    vouchNoSearch,
-  ]);
+  }, [vouchers, enableVoucherNo, fromVoucherNo, toVoucherNo, vouchNoSearch]);
 
-  // Statistics
+  const visibleSelected = filteredVouchers.filter((v) => selectedIds.has(v.id));
   const totalFound = filteredVouchers.length;
-  const selectedCount = selectedIds.size;
-  const selectedTotalAmount = useMemo(() => {
-    return vouchers
-      .filter((v) => selectedIds.has(v.id))
-      .reduce((sum, v) => sum + v.debitAmt, 0);
-  }, [vouchers, selectedIds]);
+  const selectedCount = visibleSelected.length;
+  const selectedTotalAmount = visibleSelected.reduce((sum, v) => sum + v.totalAmount, 0);
+  const printedBeforeCount = filteredVouchers.filter((v) => v.reprintCount > 0).length;
 
-  // Handle Display Button Click
   const handleDisplayVouchers = () => {
-    setIsDisplayLoading(true);
-    setTimeout(() => {
-      setIsDisplayLoading(false);
-      setToastMessage(`Displayed ${filteredVouchers.length} vouchers matching parameters.`);
-    }, 300);
+    setApplied({
+      voucherTypeId: selectedVoucherType,
+      enableDate: enableVoucherDate,
+      from: fromDate,
+      to: toDate,
+      provisional: provisionalTransaction,
+    });
+    setSelectedIds(new Set());
+    setMobileFilterOpen(false);
   };
 
-  // Selection Handlers
   const handleToggleSelect = (id: string) => {
     const next = new Set(selectedIds);
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
-    }
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
     setSelectedIds(next);
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.size === filteredVouchers.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredVouchers.map((v) => v.id)));
-    }
+    if (selectedCount === filteredVouchers.length && filteredVouchers.length > 0) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredVouchers.map((v) => v.id)));
   };
 
-  // Batch Print Action (Triggers WINHMS Printer Dialog)
-  const handleBatchPrint = () => {
-    if (selectedIds.size === 0) {
-      setToastMessage("Please select at least one voucher to reprint.");
+  const openPreview = async (ids: string[]) => {
+    if (ids.length === 0) {
+      notify("Please select at least one voucher to reprint.", "error");
       return;
     }
-    setShowPrinterDialog(true);
-  };
-
-  // Execute Printer Dialog OK
-  const handleConfirmPrinterDialog = () => {
-    setShowPrinterDialog(false);
-    if (!previewVoucher && selectedIds.size > 0) {
-      const firstId = Array.from(selectedIds)[0];
-      const found = vouchers.find((v) => v.id === firstId);
-      if (found) setPreviewVoucher(found);
+    setLoadingPreview(true);
+    try {
+      setPrintBatch(await Promise.all(ids.map((id) => accVoucherService.get(id))));
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
+      setLoadingPreview(false);
     }
-    setTimeout(() => {
+  };
+
+  const handlePrint = async () => {
+    if (!printBatch?.length) return;
+    setPrinting(true);
+    try {
+      const updated = await Promise.all(printBatch.map((v) => accVoucherService.print(v.id)));
+      setPrintBatch(updated);
+      void list.reload();
       window.print();
-      setToastMessage(`Sent voucher(s) to printer '${selectedPrinter}'.`);
-    }, 150);
+      notify(`Sent ${updated.length} voucher(s) to the printer.`);
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
+      setPrinting(false);
+    }
   };
 
-  // Convert Number to Words Utility for Voucher Receipt (matching WINHMS screenshot format)
-  const amountToWords = (num: number): string => {
-    if (num === 13597) return "Thirteen Thousand Five Hundred Ninety Seven Only.";
-    return `Rupees ${num.toLocaleString("en-IN")} Only.`;
+  const handleExport = () => {
+    if (filteredVouchers.length === 0) {
+      notify("Nothing to export for the selected filters.", "error");
+      return;
+    }
+    downloadCsv(
+      "vouchers-reprint-list.csv",
+      ["Voucher No", "Date", "Type", "Party", "Debit Accounts", "Credit Accounts", "Narration", "Amount", "Status", "Print Count"],
+      filteredVouchers.map((v) => [
+        v.voucherNo,
+        v.voucherDate,
+        v.voucherTypeName,
+        v.partyName,
+        v.debitAccounts,
+        v.creditAccounts,
+        v.narration,
+        v.totalAmount,
+        v.status,
+        v.reprintCount,
+      ]),
+    );
+    notify(`Exported ${filteredVouchers.length} vouchers to CSV.`);
   };
 
-  // WINHMS Reference Parameter Form Layout
-  const FilterFormContent = () => (
+  const ledgerLabel = (v: Voucher) => v.partyName ?? (v.debitAccounts || v.creditAccounts || "—");
+  const company = companies.data?.[0];
+
+  const filterFormContent = (
     <div className="space-y-4">
-      {/* Top Grid: Voucher Type, Voucher Date Box, Voucher No Box, Display Button & WINHMS Checks */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 items-start">
         {/* 1. Voucher Type Dropdown */}
         <div className="lg:col-span-3 rounded-xl bg-slate-50/70 p-3 border border-slate-200/70 space-y-2">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block">
-            Voucher Type
-          </label>
+          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block">Voucher Type</label>
           <select
             value={selectedVoucherType}
             onChange={(e) => setSelectedVoucherType(e.target.value)}
             className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
           >
-            {sampleVoucherTypes.map((vt) => (
-              <option key={vt} value={vt}>
-                {vt}
+            <option value="">All Voucher Types</option>
+            {voucherTypes.map((vt) => (
+              <option key={vt.id} value={vt.id}>
+                {vt.voucherTypeName}
               </option>
             ))}
           </select>
@@ -272,7 +322,7 @@ export function ReprintVoucherView() {
                 type="text"
                 value={fromVoucherNo}
                 onChange={(e) => setFromVoucherNo(e.target.value)}
-                placeholder="e.g. 608"
+                placeholder="e.g. JV/2026-27/00001"
                 className="h-7 flex-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none"
               />
             </div>
@@ -282,14 +332,14 @@ export function ReprintVoucherView() {
                 type="text"
                 value={toVoucherNo}
                 onChange={(e) => setToVoucherNo(e.target.value)}
-                placeholder="e.g. 999"
+                placeholder="e.g. JV/2026-27/00099"
                 className="h-7 flex-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none"
               />
             </div>
           </div>
         </div>
 
-        {/* 4. Display Button & WINHMS Controls */}
+        {/* 4. Display Button & Options */}
         <div className="lg:col-span-3 rounded-xl bg-slate-50/70 p-3 border border-slate-200/70 space-y-2.5 flex flex-col justify-between h-full">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700">Action</span>
@@ -297,29 +347,15 @@ export function ReprintVoucherView() {
               type="button"
               size="sm"
               onClick={handleDisplayVouchers}
-              disabled={isDisplayLoading}
+              disabled={list.loading}
               className="h-7 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
             >
-              {isDisplayLoading ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-              ) : (
-                <Search className="h-3.5 w-3.5 mr-1" />
-              )}
+              {list.loading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Search className="h-3.5 w-3.5 mr-1" />}
               Display
             </Button>
           </div>
 
           <div className="space-y-1 text-xs font-medium text-slate-700">
-            <label className="flex items-center gap-1.5 cursor-pointer hover:text-emerald-900">
-              <input
-                type="checkbox"
-                checked={pdcTransaction}
-                onChange={(e) => setPdcTransaction(e.target.checked)}
-                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
-              />
-              <span className="text-[11px]">PDC Transaction</span>
-            </label>
-
             <label className="flex items-center gap-1.5 cursor-pointer hover:text-emerald-900">
               <input
                 type="checkbox"
@@ -355,26 +391,27 @@ export function ReprintVoucherView() {
         { label: "Transactions", href: "/accounts/transactions" },
         { label: "Reprint Voucher" },
       ]}
-      toast={toastMessage}
-      onDismissToast={() => setToastMessage(null)}
+      toast={toast?.message ?? null}
+      toastVariant={toast?.variant}
+      onDismissToast={() => setToast(null)}
       secondaryActions={
         <div className="flex items-center gap-2">
           <Button
             type="button"
             size="sm"
-            disabled={selectedIds.size === 0}
-            onClick={handleBatchPrint}
+            disabled={selectedCount === 0 || loadingPreview}
+            onClick={() => void openPreview(visibleSelected.map((v) => v.id))}
             className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs disabled:opacity-50 cursor-pointer"
           >
-            <Printer className="h-3.5 w-3.5 mr-1" />
-            Reprint Selected ({selectedIds.size})
+            {loadingPreview ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Printer className="h-3.5 w-3.5 mr-1" />}
+            Reprint Selected ({selectedCount})
           </Button>
 
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => alert("Voucher audit summary exported to CSV.")}
+            onClick={handleExport}
             className="rounded-xl text-xs font-medium bg-white shadow-xs"
           >
             <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
@@ -395,12 +432,7 @@ export function ReprintVoucherView() {
           >
             <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-600" />
             <span>{showFilters ? "Hide Search Options" : "Voucher Search Options"}</span>
-            <ChevronDown
-              className={cn(
-                "h-3.5 w-3.5 transition-transform duration-200",
-                showFilters && "rotate-180"
-              )}
-            />
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", showFilters && "rotate-180")} />
           </Button>
 
           <Button
@@ -415,16 +447,16 @@ export function ReprintVoucherView() {
           </Button>
         </div>
 
-        {/* Status Badges */}
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
             <FileText className="h-3.5 w-3.5 text-emerald-700" />
-            Type: {selectedVoucherType}
+            Type: {appliedTypeName}
+            {applied.provisional && " (Provisional)"}
           </span>
 
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
             <Calendar className="h-3.5 w-3.5 text-slate-600" />
-            {enableVoucherDate ? `${fromDate} to ${toDate}` : "All Dates"}
+            {applied.enableDate ? `${formatDate(applied.from)} to ${formatDate(applied.to)}` : "All Dates"}
           </span>
         </div>
       </div>
@@ -436,34 +468,23 @@ export function ReprintVoucherView() {
             <div className="flex items-center gap-2">
               <SlidersHorizontal className="h-4 w-4 text-emerald-600" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                WINHMS Voucher Search & Print Parameters
+                Voucher Search &amp; Print Parameters
               </h3>
             </div>
-            <button
-              onClick={() => setShowFilters(false)}
-              className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
-            >
+            <button onClick={() => setShowFilters(false)} className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer">
               ✕ Hide Options
             </button>
           </div>
-          <FilterFormContent />
+          {filterFormContent}
         </div>
       )}
 
       {/* Mobile Drawer */}
-      <Drawer
-        open={mobileFilterOpen}
-        onClose={() => setMobileFilterOpen(false)}
-        title="Voucher Search Options"
-      >
+      <Drawer open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)} title="Voucher Search Options">
         <div className="p-4">
-          <FilterFormContent />
+          {filterFormContent}
           <div className="mt-4 border-t border-slate-100 pt-3">
-            <Button
-              type="button"
-              className="w-full bg-emerald-700 text-white"
-              onClick={() => setMobileFilterOpen(false)}
-            >
+            <Button type="button" className="w-full bg-emerald-700 text-white" onClick={handleDisplayVouchers}>
               Apply Filter
             </Button>
           </div>
@@ -489,14 +510,14 @@ export function ReprintVoucherView() {
         <StatMiniCard
           label="Selected Batch Value"
           value={formatINR(selectedTotalAmount)}
-          sublabel="Total debit total"
+          sublabel="Total voucher amount"
           accent="#8b5cf6"
           icon={CreditCard}
         />
         <StatMiniCard
-          label="Print Queue Status"
-          value="Ready"
-          sublabel="WINHMS Voucher Spooler"
+          label="Printed Before"
+          value={`${printedBeforeCount} Vouchers`}
+          sublabel="Will print as reprints"
           accent="#e11d48"
           icon={CheckCircle2}
         />
@@ -531,14 +552,11 @@ export function ReprintVoucherView() {
               onClick={handleSelectAll}
               className="text-xs border-slate-300 font-semibold cursor-pointer"
             >
-              {selectedIds.size === filteredVouchers.length && filteredVouchers.length > 0
-                ? "Deselect All"
-                : "Select All"}
+              {selectedCount === filteredVouchers.length && filteredVouchers.length > 0 ? "Deselect All" : "Select All"}
             </Button>
           </div>
         </div>
 
-        {/* WINHMS Table View */}
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full text-left text-xs">
             <thead>
@@ -553,7 +571,29 @@ export function ReprintVoucherView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredVouchers.length === 0 ? (
+              {list.error ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-rose-700 font-medium">
+                    <AlertCircle className="inline h-4 w-4 mr-1" />
+                    {list.error}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void list.reload()}
+                      className="ml-3 rounded-xl bg-white text-xs"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5 mr-1" /> Retry
+                    </Button>
+                  </td>
+                </tr>
+              ) : list.loading && !list.data ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-slate-500 font-medium">
+                    <Loader2 className="inline h-4 w-4 mr-1 animate-spin text-emerald-600" /> Loading vouchers…
+                  </td>
+                </tr>
+              ) : filteredVouchers.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-slate-400 font-medium">
                     No vouchers found matching search criteria.
@@ -562,26 +602,27 @@ export function ReprintVoucherView() {
               ) : (
                 filteredVouchers.map((row) => {
                   const isSelected = selectedIds.has(row.id);
-
                   return (
                     <tr
                       key={row.id}
-                      className={cn(
-                        "hover:bg-slate-50 transition-colors",
-                        isSelected && "bg-amber-50/60 font-semibold"
-                      )}
+                      className={cn("hover:bg-slate-50 transition-colors", isSelected && "bg-amber-50/60 font-semibold")}
                     >
-                      <td className="px-3 py-2.5 text-slate-700 font-medium">{row.vouchDt}</td>
-                      <td className="px-3.5 py-2.5 font-bold text-slate-900">{row.vouchNo}</td>
+                      <td className="px-3 py-2.5 text-slate-700 font-medium">{formatDate(row.voucherDate)}</td>
+                      <td className="px-3.5 py-2.5 font-bold text-slate-900">
+                        {row.voucherNo}
+                        {row.status !== "Posted" && (
+                          <span className="block text-[9px] font-bold uppercase text-rose-600">{row.status}</span>
+                        )}
+                      </td>
                       <td className="px-3.5 py-2.5 text-slate-800 font-semibold">
-                        <span className="block font-bold text-slate-900">{row.accountName}</span>
+                        <span className="block font-bold text-slate-900">{ledgerLabel(row)}</span>
+                        <span className="block text-[10px] font-normal text-slate-400">
+                          {row.voucherTypeName}
+                          {row.reprintCount > 0 && ` • printed ${row.reprintCount}×`}
+                        </span>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-800 font-medium leading-tight">
-                        {row.narration}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-bold text-slate-900 text-xs">
-                        {row.debitAmt.toFixed(2)}
-                      </td>
+                      <td className="px-4 py-2.5 text-slate-800 font-medium leading-tight">{row.narration || "—"}</td>
+                      <td className="px-3 py-2.5 text-right font-bold text-slate-900 text-xs">{row.totalAmount.toFixed(2)}</td>
                       <td className="px-3 py-2.5 text-center">
                         <input
                           type="checkbox"
@@ -594,7 +635,7 @@ export function ReprintVoucherView() {
                         <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
-                            onClick={() => setPreviewVoucher(row)}
+                            onClick={() => void openPreview([row.id])}
                             className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
                             title="Preview Printable Voucher"
                           >
@@ -604,7 +645,7 @@ export function ReprintVoucherView() {
                             type="button"
                             onClick={() => {
                               setSelectedIds(new Set([row.id]));
-                              setShowPrinterDialog(true);
+                              void openPreview([row.id]);
                             }}
                             className="p-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 cursor-pointer"
                             title="Print Voucher"
@@ -621,14 +662,14 @@ export function ReprintVoucherView() {
           </table>
         </div>
 
-        {/* WINHMS Bottom Footer Action Bar */}
+        {/* Bottom Footer Action Bar */}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 bg-slate-50/60 p-2.5 rounded-xl border border-slate-200">
           <div className="flex items-center gap-4 text-xs font-semibold text-slate-700">
             <label className="flex items-center gap-1.5 cursor-pointer hover:text-emerald-700">
               <input
                 type="radio"
                 name="selection-mode"
-                checked={selectedIds.size === filteredVouchers.length && filteredVouchers.length > 0}
+                checked={selectedCount === filteredVouchers.length && filteredVouchers.length > 0}
                 onChange={handleSelectAll}
                 className="text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
               />
@@ -639,7 +680,7 @@ export function ReprintVoucherView() {
               <input
                 type="radio"
                 name="selection-mode"
-                checked={selectedIds.size === 0}
+                checked={selectedCount === 0}
                 onChange={() => setSelectedIds(new Set())}
                 className="text-rose-600 focus:ring-rose-500 h-3.5 w-3.5"
               />
@@ -652,12 +693,8 @@ export function ReprintVoucherView() {
               type="button"
               variant="outline"
               size="sm"
-              disabled={selectedIds.size === 0}
-              onClick={() => {
-                const firstId = Array.from(selectedIds)[0];
-                const found = vouchers.find((v) => v.id === firstId);
-                if (found) setPreviewVoucher(found);
-              }}
+              disabled={selectedCount === 0 || loadingPreview}
+              onClick={() => void openPreview(visibleSelected.map((v) => v.id))}
               className="text-xs font-semibold bg-white border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
             >
               <Eye className="h-3.5 w-3.5 mr-1 text-slate-600" />
@@ -667,115 +704,54 @@ export function ReprintVoucherView() {
             <Button
               type="button"
               size="sm"
-              disabled={selectedIds.size === 0}
-              onClick={handleBatchPrint}
+              disabled={selectedCount === 0 || loadingPreview}
+              onClick={() => void openPreview(visibleSelected.map((v) => v.id))}
               className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50"
             >
               <Printer className="h-3.5 w-3.5 mr-1" />
               Print
             </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => (window.location.href = "/accounts/dashboard")}
-              className="text-xs font-semibold bg-white border-slate-300 text-slate-600 hover:bg-slate-50 cursor-pointer"
-            >
-              Exit
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* WINHMS Printer Selection Dialog Modal (matching Image 2 screenshot) */}
-      {showPrinterDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50 print:hidden">
-          <div className="w-full max-w-sm rounded-xl bg-white p-4 shadow-2xl border border-slate-300 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-              <h3 className="text-xs font-bold text-slate-800">Print</h3>
-              <button
-                type="button"
-                onClick={() => setShowPrinterDialog(false)}
-                className="text-slate-400 hover:text-slate-600 text-xs"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-2 text-xs font-medium">
-              <div className="flex items-center justify-between gap-2">
-                <label className="text-slate-600 font-semibold w-16">Name</label>
-                <select
-                  value={selectedPrinter}
-                  onChange={(e) => setSelectedPrinter(e.target.value)}
-                  className="h-8 flex-1 rounded border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
-                >
-                  {printerList.map((printer) => (
-                    <option key={printer} value={printer}>
-                      {printer}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 pt-1">
-                <span>Driver:</span>
-                <span className="font-semibold text-slate-700">{selectedPrinter} Driver</span>
-              </div>
-              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-                <span>Where:</span>
-                <span className="font-semibold text-slate-700">Local System Port</span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleConfirmPrinterDialog}
-                className="px-4 h-7 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs"
-              >
-                OK
-              </Button>
+            <Link href="/accounts/dashboard">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setShowPrinterDialog(false)}
-                className="px-4 h-7 text-xs font-semibold text-slate-600"
+                className="text-xs font-semibold bg-white border-slate-300 text-slate-600 hover:bg-slate-50 cursor-pointer"
               >
-                Cancel
+                Exit
               </Button>
-            </div>
+            </Link>
           </div>
         </div>
-      )}
+      </section>
 
-      {/* WINHMS Voucher Printable Document Modal (matching Images 3 & 4 screenshots) */}
-      {previewVoucher && (
+      {/* Printable Voucher Document Modal */}
+      {printBatch && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50 print:relative print:inset-auto print:z-auto print:bg-white print:p-0 print:block">
-          <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[92vh] overflow-y-auto print:max-w-none print:w-full print:p-0 print:border-none print:shadow-none">
-            {/* Modal Header Actions */}
+          <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[92vh] overflow-y-auto print:max-w-none print:w-full print:p-0 print:border-none print:shadow-none print:max-h-none print:overflow-visible">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3 print:hidden">
               <div className="flex items-center gap-2">
                 <Printer className="h-5 w-5 text-emerald-600" />
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  WINHMS Printable Voucher Sheet ({previewVoucher.vouchNo})
+                  Printable Voucher Sheet
+                  {printBatch.length === 1 ? ` (${printBatch[0].voucherNo})` : ` (${printBatch.length} vouchers)`}
                 </h3>
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => setShowPrinterDialog(true)}
+                  disabled={printing}
+                  onClick={() => void handlePrint()}
                   className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs cursor-pointer"
                 >
-                  <Printer className="h-3.5 w-3.5 mr-1" /> Print Voucher
+                  {printing ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Printer className="h-3.5 w-3.5 mr-1" />}
+                  Print Voucher{printBatch.length > 1 ? "s" : ""}
                 </Button>
                 <button
                   type="button"
-                  onClick={() => setPreviewVoucher(null)}
+                  onClick={() => setPrintBatch(null)}
                   className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
                 >
                   <X className="h-4 w-4" />
@@ -783,109 +759,139 @@ export function ReprintVoucherView() {
               </div>
             </div>
 
-            {/* Formatted WINHMS Voucher Document Paper Sheet (Matching Image 3 & Image 4 Reference) */}
-            <div className="rounded-xl border border-slate-300 bg-white p-6 shadow-xs space-y-3 font-sans text-slate-900">
-              {/* Hotel Header Block */}
-              <div className="text-center space-y-1 border-b border-slate-300 pb-3">
-                <h1 className="text-lg font-bold tracking-wide text-slate-900 font-sans">
-                  Hotel & Resorts Private Limited
-                </h1>
-                <p className="text-[11px] text-slate-600 leading-tight">
-                  GACL Chowkdi, Dahej Bharuch Main Road, Dahej, Dist Bharuch. Gujarat 392130
-                </p>
-                <p className="text-[11px] text-slate-600">
-                  Phone: +91 7069990770
-                </p>
-                <p className="text-[11px] text-slate-600">
-                  E-Mail: accounts@hotelresorts.com Web: www.hotelresorts.com
-                </p>
-                <p className="text-[11px] font-bold text-slate-800">
-                  GSTIN: 24AAIFL8217G1ZC State: GUJARAT
-                </p>
-              </div>
-
-              {/* Voucher Title Header Box */}
-              <div className="border border-slate-300 p-2 space-y-1">
-                <div className="text-center">
-                  <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                    {previewVoucher.vouchType.includes("Receipt") ? "Receipts Voucher" : previewVoucher.vouchType}
-                  </h2>
+            {printBatch.map((v) => (
+              <div
+                key={v.id}
+                className="rounded-xl border border-slate-300 bg-white p-6 shadow-xs space-y-3 font-sans text-slate-900 break-after-page"
+              >
+                {/* Company Header Block */}
+                <div className="text-center space-y-1 border-b border-slate-300 pb-3">
+                  <h1 className="text-lg font-bold tracking-wide text-slate-900 font-sans">
+                    {company ? company.legalName || company.tradeName : companies.loading ? "Loading company…" : "Company not configured"}
+                  </h1>
+                  {company && (
+                    <>
+                      <p className="text-[11px] text-slate-600 leading-tight">
+                        {[company.addressLine1, company.addressLine2, company.city, company.district, company.state, company.pincode]
+                          .filter(Boolean)
+                          .join(", ")}
+                      </p>
+                      {(company.telephone || company.mobile) && (
+                        <p className="text-[11px] text-slate-600">Phone: {company.telephone || company.mobile}</p>
+                      )}
+                      {(company.email || company.website) && (
+                        <p className="text-[11px] text-slate-600">
+                          {company.email && `E-Mail: ${company.email}`} {company.website && `Web: ${company.website}`}
+                        </p>
+                      )}
+                      {company.gstNumber && (
+                        <p className="text-[11px] font-bold text-slate-800">
+                          GSTIN: {company.gstNumber} {company.state && `State: ${company.state.toUpperCase()}`}
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
-                <div className="flex items-center justify-between text-xs font-semibold px-2">
-                  <span>ReceiptNo : {previewVoucher.vouchNo}</span>
-                  <span>Date : {previewVoucher.vouchDt}</span>
-                </div>
-              </div>
 
-              {/* Particulars Grid Table matching WINHMS Image 3 */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border border-slate-300">
-                  <thead>
-                    <tr className="bg-slate-100 font-bold text-[11px] border-b border-slate-300">
-                      <th className="px-2.5 py-1.5 border-r border-slate-300 w-20">GLCode</th>
-                      <th className="px-3 py-1.5 border-r border-slate-300">Account Head</th>
-                      <th className="px-3 py-1.5 border-r border-slate-300">Description</th>
-                      <th className="px-3 py-1.5 text-right border-r border-slate-300 w-28">Debit Amt</th>
-                      <th className="px-3 py-1.5 text-right w-28">Credit Amt</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {(previewVoucher.entries || [
-                      {
-                        accountCode: previewVoucher.accountCode,
-                        accountName: previewVoucher.accountName,
-                        description: previewVoucher.refNo,
-                        debit: 0,
-                        credit: previewVoucher.creditAmt,
-                      },
-                    ]).map((e, idx) => (
-                      <tr key={idx} className="h-10">
-                        <td className="px-2.5 py-1.5 border-r border-slate-200 font-mono text-[11px]">
-                          {e.accountCode}
+                {/* Voucher Title Header Box */}
+                <div className="border border-slate-300 p-2 space-y-1">
+                  <div className="text-center">
+                    <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                      {v.voucherTypeName ?? v.voucherCategory}
+                      {v.status === "Reversed" && " (Reversed)"}
+                    </h2>
+                    {v.reprintCount > 0 && (
+                      <p className="text-[10px] font-bold uppercase text-rose-700">Duplicate — Reprint #{v.reprintCount}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-semibold px-2">
+                    <span>Voucher No : {v.voucherNo}</span>
+                    <span>Date : {formatDate(v.voucherDate)}</span>
+                  </div>
+                  {(v.partyName || v.referenceNo || v.instrumentNo) && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] px-2 text-slate-700">
+                      {v.partyName && <span>Party : {v.partyName}</span>}
+                      {v.referenceNo && <span>Ref : {v.referenceNo}</span>}
+                      {v.instrumentNo && (
+                        <span>
+                          Instrument : {v.instrumentNo}
+                          {v.instrumentDate ? ` (${formatDate(v.instrumentDate)})` : ""}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Particulars Grid Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border border-slate-300">
+                    <thead>
+                      <tr className="bg-slate-100 font-bold text-[11px] border-b border-slate-300">
+                        <th className="px-2.5 py-1.5 border-r border-slate-300 w-20">GLCode</th>
+                        <th className="px-3 py-1.5 border-r border-slate-300">Account Head</th>
+                        <th className="px-3 py-1.5 border-r border-slate-300">Description</th>
+                        <th className="px-3 py-1.5 text-right border-r border-slate-300 w-28">Debit Amt</th>
+                        <th className="px-3 py-1.5 text-right w-28">Credit Amt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {v.lines.map((l) => (
+                        <tr key={l.id} className="h-10">
+                          <td className="px-2.5 py-1.5 border-r border-slate-200 font-mono text-[11px]">{l.accountCode}</td>
+                          <td className="px-3 py-1.5 border-r border-slate-200 font-bold text-slate-900">{l.accountName}</td>
+                          <td className="px-3 py-1.5 border-r border-slate-200 text-slate-700 text-[11px]">
+                            {[l.partyName, l.narration, l.chequeNo && `Chq ${l.chequeNo}`, printAnalysisCode && l.divisionName]
+                              .filter(Boolean)
+                              .join(" • ") || "-"}
+                          </td>
+                          <td className="px-3 py-1.5 text-right border-r border-slate-200 font-semibold">
+                            {l.debit > 0 ? l.debit.toFixed(2) : ""}
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-semibold">{l.credit > 0 ? l.credit.toFixed(2) : ""}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-50 font-bold border-t border-slate-300 text-xs">
+                        <td colSpan={3} className="px-3 py-2 text-right uppercase font-bold text-slate-800">
+                          Total
                         </td>
-                        <td className="px-3 py-1.5 border-r border-slate-200 font-bold text-slate-900">
-                          {e.accountName}
+                        <td className="px-3 py-2 text-right border-x border-slate-300 font-bold text-slate-900">
+                          {v.lines.reduce((s, l) => s + l.debit, 0).toFixed(2)}
                         </td>
-                        <td className="px-3 py-1.5 border-r border-slate-200 text-slate-700 text-[11px]">
-                          {e.description || "-"}
-                        </td>
-                        <td className="px-3 py-1.5 text-right border-r border-slate-200 font-semibold">
-                          {e.debit > 0 ? e.debit.toFixed(2) : ""}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-semibold">
-                          {e.credit > 0 ? e.credit.toFixed(2) : ""}
+                        <td className="px-3 py-2 text-right font-bold text-slate-900">
+                          {v.lines.reduce((s, l) => s + l.credit, 0).toFixed(2)}
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-slate-50 font-bold border-t border-slate-300 text-xs">
-                      <td colSpan={3} className="px-3 py-2 text-right uppercase font-bold text-slate-800">
-                        Total
-                      </td>
-                      <td className="px-3 py-2 text-right border-x border-slate-300 font-bold text-slate-900">
-                        {previewVoucher.debitAmt.toFixed(2)}
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold text-slate-900">
-                        {previewVoucher.creditAmt.toFixed(2)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                    </tfoot>
+                  </table>
+                </div>
 
-              {/* Amount In Words & Narration Box (Matching Image 4) */}
-              <div className="border border-slate-300 p-2.5 text-xs space-y-1 bg-slate-50/50">
-                <p>
-                  <strong className="text-slate-800">Amount In Words:</strong>{" "}
-                  <span className="font-bold text-slate-900">{amountToWords(previewVoucher.debitAmt)}</span>
-                </p>
-                <p>
-                  <strong className="text-slate-800">Narration :</strong>{" "}
-                  <span className="font-semibold text-slate-900">{previewVoucher.narration}</span>
-                </p>
+                {/* Amount In Words & Narration Box */}
+                <div className="border border-slate-300 p-2.5 text-xs space-y-1 bg-slate-50/50">
+                  <p>
+                    <strong className="text-slate-800">Amount In Words:</strong>{" "}
+                    <span className="font-bold text-slate-900">{amountToWords(v.totalAmount)}</span>
+                  </p>
+                  <p>
+                    <strong className="text-slate-800">Narration :</strong>{" "}
+                    <span className="font-semibold text-slate-900">{v.narration || "—"}</span>
+                  </p>
+                </div>
+
+                <div className="pt-8 grid grid-cols-3 gap-4 text-center text-xs text-slate-800 font-semibold">
+                  <div>
+                    <p className="border-t border-slate-400 pt-1">Prepared By{v.preparedBy ? ` (${v.preparedBy})` : ""}</p>
+                  </div>
+                  <div>
+                    <p className="border-t border-slate-400 pt-1">Checked By</p>
+                  </div>
+                  <div>
+                    <p className="border-t border-slate-400 pt-1">Authorised Signatory</p>
+                  </div>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       )}

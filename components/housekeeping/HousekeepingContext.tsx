@@ -12,7 +12,6 @@ import type {
   HKDamageReport,
   HKRequisition,
   HKHistoryLog,
-  HKLuggageJob,
   HousekeepingRequest,
   MaintenanceRequest,
   LostFoundItem
@@ -40,7 +39,6 @@ import {
   hkDamageService,
   hkRequisitionService,
   hkHistoryService,
-  hkLuggageService,
   hkGuestRequestService,
   hkMaintenanceService,
   hkLostFoundService,
@@ -58,7 +56,6 @@ interface HousekeepingContextType {
   damageReports: HKDamageReport[];
   requisitions: HKRequisition[];
   history: HKHistoryLog[];
-  luggageJobs: HKLuggageJob[];
   requests: HousekeepingRequest[];
   maintenance: MaintenanceRequest[];
   lostFound: LostFoundItem[];
@@ -121,8 +118,6 @@ interface HousekeepingContextType {
   updateLaundryStatus: (id: string, newStatus: HKLaundryJob["status"]) => void;
   cancelLaundryJob: (id: string) => void;
   settleLaundryJob: (id: string, paymentMode: string) => void;
-  addLuggageJob: (job: Omit<HKLuggageJob, "id" | "status" | "pickupTime">) => void;
-  deliverLuggage: (id: string) => void;
   addDamageReport: (report: DamageReportCreateInput) => void;
   updateDamageStatus: (id: string, status: string, actualCost?: number) => void;
   addRequisition: (req: Omit<HKRequisition, "id" | "requestNo" | "status" | "requestedAt" | "requestedBy">) => void;
@@ -156,7 +151,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
   const [damageReports, setDamageReports] = useState<HKDamageReport[]>([]);
   const [requisitions, setRequisitions] = useState<HKRequisition[]>([]);
   const [history, setHistory] = useState<HKHistoryLog[]>([]);
-  const [luggageJobs, setLuggageJobs] = useState<HKLuggageJob[]>([]);
   const [requests, setRequests] = useState<HousekeepingRequest[]>([]);
   const [maintenance, setMaintenance] = useState<MaintenanceRequest[]>([]);
   const [lostFound, setLostFound] = useState<LostFoundItem[]>([]);
@@ -188,7 +182,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
     setDamageReports([]);
     setRequisitions([]);
     setHistory([]);
-    setLuggageJobs([]);
     setRequests([]);
     setMaintenance([]);
     setLostFound([]);
@@ -209,7 +202,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         hkDamageService.list(),
         hkRequisitionService.list(),
         hkHistoryService.list(),
-        hkLuggageService.list(),
         hkGuestRequestService.list(),
         hkMaintenanceService.list(),
         hkLostFoundService.list(),
@@ -240,26 +232,25 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
       );
       setRequisitions(value(6, []));
       setHistory(value(7, []));
-      setLuggageJobs(value<HKLuggageJob[]>(8, []));
       setRequests(
-        value<import("./guestRequestUtils").GuestRequestDto[]>(9, []).map(
+        value<import("./guestRequestUtils").GuestRequestDto[]>(8, []).map(
           normalizeGuestRequest,
         ),
       );
       setMaintenance(
         value<import("./maintenanceRequestUtils").MaintenanceRequestDto[]>(
-          10,
+          9,
           [],
         ).map(normalizeMaintenanceRequest),
       );
       setLostFound(
-        value<import("./lostFoundItemUtils").LostFoundItemDto[]>(11, []).map(
+        value<import("./lostFoundItemUtils").LostFoundItemDto[]>(10, []).map(
           normalizeLostFoundItem,
         ),
       );
-      setStaff(value(12, []));
-      setChecklists(value(13, []));
-      setShifts(value(14, []));
+      setStaff(value(11, []));
+      setChecklists(value(12, []));
+      setShifts(value(13, []));
       setApiConnected(true);
     } catch (e) {
       console.warn("[HK] API unavailable", e);
@@ -287,7 +278,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
     setDamageReports,
     setRequisitions,
     setHistory,
-    setLuggageJobs,
     setRequests,
     setMaintenance,
     setLostFound,
@@ -409,14 +399,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
 
   const settleLaundryJob = (id: string, paymentMode: string) => {
     actions.settleLaundryJob(id, paymentMode, laundryJobs, dispatchers);
-  };
-
-  const addLuggageJob = (job: Omit<HKLuggageJob, "id" | "status" | "pickupTime">) => {
-    actions.addLuggageJob(job, luggageJobs.length, dispatchers);
-  };
-
-  const deliverLuggage = (id: string) => {
-    actions.deliverLuggage(id, luggageJobs, dispatchers);
   };
 
   const addDamageReport = (report: DamageReportCreateInput) => {
@@ -542,7 +524,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         damageReports,
         requisitions,
         history,
-        luggageJobs,
         requests,
         maintenance,
         lostFound,
@@ -579,8 +560,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         updateLaundryStatus,
         cancelLaundryJob,
         settleLaundryJob,
-        addLuggageJob,
-        deliverLuggage,
         addDamageReport,
         updateDamageStatus,
         addRequisition,

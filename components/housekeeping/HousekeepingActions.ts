@@ -7,7 +7,6 @@ import type {
   HKDamageReport,
   HKRequisition,
   HKHistoryLog,
-  HKLuggageJob,
   HousekeepingRequest,
   MaintenanceRequest,
   LostFoundItem,
@@ -23,7 +22,6 @@ export interface HousekeepingDispatchers {
   setDamageReports: React.Dispatch<React.SetStateAction<HKDamageReport[]>>;
   setRequisitions: React.Dispatch<React.SetStateAction<HKRequisition[]>>;
   setHistory: React.Dispatch<React.SetStateAction<HKHistoryLog[]>>;
-  setLuggageJobs: React.Dispatch<React.SetStateAction<HKLuggageJob[]>>;
   setRequests: React.Dispatch<React.SetStateAction<HousekeepingRequest[]>>;
   setMaintenance: React.Dispatch<React.SetStateAction<MaintenanceRequest[]>>;
   setLostFound: React.Dispatch<React.SetStateAction<LostFoundItem[]>>;

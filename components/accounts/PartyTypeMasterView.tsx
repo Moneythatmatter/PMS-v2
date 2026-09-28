@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Users,
   Building2,
@@ -10,12 +10,15 @@ import {
   RotateCcw,
   Search,
   X,
-  ShieldCheck,
   Info,
   ChevronRight,
   Sliders,
   Tag,
   Ban,
+  Trash2,
+  Loader2,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -25,51 +28,46 @@ import {
   TextAreaInput,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
+import { accPartyTypeService, type PartyType, type Status } from "@/services/accounts";
 import {
-  samplePartyTypesList,
-  PartyTypeModel,
-} from "@/app/data/accounts/partyTypeData";
+  accErrorMessage,
+  invalidateAccLookups,
+  useAccLookups,
+  useAccQuery,
+} from "@/components/accounts/accountsApi";
 import { cn } from "@/lib/utils";
 
-export function PartyTypeMasterView() {
-  // Master Party Types State
-  const [partyTypes, setPartyTypes] = useState<PartyTypeModel[]>(samplePartyTypesList);
-  const [selectedTypeId, setSelectedTypeId] = useState<string>("PTY-001");
+type PartyTypeForm = Pick<PartyType, "typeCode" | "typeName" | "description" | "sequence" | "status">;
 
-  // Search & Filter State
+const toForm = (p: PartyType): PartyTypeForm => ({
+  typeCode: p.typeCode,
+  typeName: p.typeName,
+  description: p.description ?? "",
+  sequence: p.sequence,
+  status: p.status,
+});
+
+export function PartyTypeMasterView() {
+  const typesQ = useAccQuery(() => accPartyTypeService.list(), []);
+  const partyTypes = useMemo(() => typesQ.data ?? [], [typesQ.data]);
+  const { lookups } = useAccLookups();
+  const company = lookups?.companies[0];
+
+  const [selectedTypeId, setSelectedTypeId] = useState<string>("");
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Inactive">("All");
 
-  // Toast Notification State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const notify = (message: string, variant: "success" | "error" = "success") => {
+    setToastVariant(variant);
+    setToastMessage(message);
+  };
+  const [saving, setSaving] = useState(false);
 
-  // Create Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Active Selected Party Type
-  const activePartyType = useMemo(
-    () => partyTypes.find((p) => p.partyTypeId === selectedTypeId) || partyTypes[0],
-    [partyTypes, selectedTypeId]
-  );
-
-  // Form State (for editing active record)
-  const [formData, setFormData] = useState<PartyTypeModel>(activePartyType);
-
-  // Sync Form State when selection changes
-  useEffect(() => {
-    setFormData({ ...activePartyType });
-  }, [activePartyType]);
-
-  // Create Party Type Form State
-  const [createForm, setCreateForm] = useState<Omit<PartyTypeModel, "partyTypeId" | "createdAt" | "updatedAt">>({
-    typeCode: "",
-    typeName: "",
-    description: "",
-    sequence: partyTypes.length + 1,
-    status: "Active",
-  });
-
-  // Filtered List
   const filteredPartyTypes = useMemo(() => {
     return partyTypes
       .filter((p) => {
@@ -79,8 +77,7 @@ export function PartyTypeMasterView() {
           return (
             p.typeCode.toLowerCase().includes(q) ||
             p.typeName.toLowerCase().includes(q) ||
-            (p.description || "").toLowerCase().includes(q) ||
-            p.partyTypeId.toLowerCase().includes(q)
+            (p.description || "").toLowerCase().includes(q)
           );
         }
         return true;
@@ -88,114 +85,152 @@ export function PartyTypeMasterView() {
       .sort((a, b) => a.sequence - b.sequence);
   }, [partyTypes, searchQuery, statusFilter]);
 
-  // Form Field Change Handler
-  const handleFormChange = (field: keyof PartyTypeModel, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const activePartyType = useMemo(
+    () => partyTypes.find((p) => p.id === selectedTypeId) ?? filteredPartyTypes[0] ?? null,
+    [partyTypes, filteredPartyTypes, selectedTypeId]
+  );
+
+  const [formData, setFormData] = useState<PartyTypeForm | null>(null);
+  const [syncedType, setSyncedType] = useState<PartyType | null>(null);
+  if (activePartyType !== syncedType) {
+    setSyncedType(activePartyType);
+    setFormData(activePartyType ? toForm(activePartyType) : null);
+  }
+
+  const emptyCreateForm = (): PartyTypeForm => ({
+    typeCode: "",
+    typeName: "",
+    description: "",
+    sequence: partyTypes.length + 1,
+    status: "Active",
+  });
+  const [createForm, setCreateForm] = useState<PartyTypeForm>(emptyCreateForm);
+
+  const handleFormChange = <K extends keyof PartyTypeForm>(field: K, value: PartyTypeForm[K]) => {
+    setFormData((prev) => (prev ? { ...prev, [field]: value } : prev));
   };
 
-  // Save Active Party Type Edits
-  const handleSavePartyType = () => {
+  const handleSavePartyType = async () => {
+    if (!formData || !activePartyType) return;
     const normCode = formData.typeCode.trim().toUpperCase();
     const normName = formData.typeName.trim();
 
     if (!normCode) {
-      setToastMessage("Please enter a valid Party Type Code.");
+      notify("Please enter a valid Party Type Code.", "error");
       return;
     }
     if (!normName) {
-      setToastMessage("Please enter a Party Type Name.");
+      notify("Please enter a Party Type Name.", "error");
       return;
     }
 
-    // Check duplicate code or name with other records
     const isDuplicate = partyTypes.some(
       (p) =>
-        p.partyTypeId !== formData.partyTypeId &&
+        p.id !== activePartyType.id &&
         (p.typeCode.toUpperCase() === normCode || p.typeName.toLowerCase() === normName.toLowerCase())
     );
     if (isDuplicate) {
-      setToastMessage(`Party Type code '${normCode}' or name '${normName}' already exists.`);
+      notify(`Party Type code '${normCode}' or name '${normName}' already exists.`, "error");
       return;
     }
 
-    setPartyTypes((prev) =>
-      prev.map((p) =>
-        p.partyTypeId === formData.partyTypeId
-          ? {
-              ...formData,
-              typeCode: normCode,
-              typeName: normName,
-              updatedAt: new Date().toLocaleDateString("en-IN"),
-            }
-          : p
-      )
-    );
-    setToastMessage(`Saved Party Type configuration for '${normName}'.`);
+    setSaving(true);
+    try {
+      await accPartyTypeService.update(activePartyType.id, {
+        ...formData,
+        typeCode: normCode,
+        typeName: normName,
+        description: formData.description.trim(),
+      });
+      invalidateAccLookups();
+      await typesQ.reload();
+      notify(`Saved Party Type configuration for '${normName}'.`);
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // Toggle Active / Inactive Status
-  const handleToggleStatus = () => {
-    const nextStatus = formData.status === "Active" ? "Inactive" : "Active";
-    setPartyTypes((prev) =>
-      prev.map((p) =>
-        p.partyTypeId === formData.partyTypeId
-          ? { ...p, status: nextStatus, updatedAt: new Date().toLocaleDateString("en-IN") }
-          : p
-      )
-    );
-    setFormData((prev) => ({ ...prev, status: nextStatus }));
-    setToastMessage(
-      nextStatus === "Inactive"
-        ? `Deactivated Party Type '${formData.typeName}'. New parties cannot be created under this type.`
-        : `Activated Party Type '${formData.typeName}'.`
-    );
+  const handleToggleStatus = async () => {
+    if (!activePartyType) return;
+    const nextStatus: Status = activePartyType.status === "Active" ? "Inactive" : "Active";
+    try {
+      await accPartyTypeService.update(activePartyType.id, { status: nextStatus });
+      invalidateAccLookups();
+      await typesQ.reload();
+      notify(
+        nextStatus === "Inactive"
+          ? `Deactivated Party Type '${activePartyType.typeName}'. New parties cannot be created under this type.`
+          : `Activated Party Type '${activePartyType.typeName}'.`
+      );
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    }
   };
 
-  // Create New Party Type Handler
-  const handleCreatePartyType = () => {
+  const handleDeletePartyType = async () => {
+    if (!activePartyType) return;
+    if (!window.confirm(`Delete Party Type '${activePartyType.typeName}' (${activePartyType.typeCode})?`)) return;
+    try {
+      await accPartyTypeService.remove(activePartyType.id);
+      invalidateAccLookups();
+      setSelectedTypeId("");
+      await typesQ.reload();
+      notify(`Deleted Party Type '${activePartyType.typeName}'.`);
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    }
+  };
+
+  const handleCreatePartyType = async () => {
     const normCode = createForm.typeCode.trim().toUpperCase();
     const normName = createForm.typeName.trim();
 
     if (!normCode) {
-      setToastMessage("Please enter a Party Type Code (e.g. CUST, VEND).");
+      notify("Please enter a Party Type Code (e.g. CUST, VEND).", "error");
       return;
     }
     if (!normName) {
-      setToastMessage("Please enter the Party Type Name.");
+      notify("Please enter the Party Type Name.", "error");
       return;
     }
 
-    // Duplicate validation
     const exists = partyTypes.some(
       (p) => p.typeCode.toUpperCase() === normCode || p.typeName.toLowerCase() === normName.toLowerCase()
     );
     if (exists) {
-      setToastMessage(`Party Type '${normCode}' or '${normName}' already exists.`);
+      notify(`Party Type '${normCode}' or '${normName}' already exists.`, "error");
       return;
     }
 
-    const nextNum = partyTypes.length + 1;
-    const newRecord: PartyTypeModel = {
-      ...createForm,
-      typeCode: normCode,
-      typeName: normName,
-      partyTypeId: `PTY-00${nextNum}`,
-      createdAt: new Date().toLocaleDateString("en-IN"),
-      updatedAt: new Date().toLocaleDateString("en-IN"),
-    };
-
-    setPartyTypes([...partyTypes, newRecord]);
-    setSelectedTypeId(newRecord.partyTypeId);
-    setShowCreateModal(false);
-    setCreateForm({
-      typeCode: "",
-      typeName: "",
-      description: "",
-      sequence: partyTypes.length + 2,
-      status: "Active",
-    });
-    setToastMessage(`Created new Party Type '${newRecord.typeName}' (${newRecord.typeCode}).`);
+    setSaving(true);
+    try {
+      const created = await accPartyTypeService.create({
+        ...createForm,
+        typeCode: normCode,
+        typeName: normName,
+        description: createForm.description.trim(),
+      });
+      invalidateAccLookups();
+      await typesQ.reload();
+      setSelectedTypeId(created.id);
+      setShowCreateModal(false);
+      notify(`Created new Party Type '${created.typeName}' (${created.typeCode}).`);
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const openCreateModal = () => {
+    setCreateForm(emptyCreateForm());
+    setShowCreateModal(true);
+  };
+
+  const initialLoading = typesQ.loading && !typesQ.data;
+  const loadError = !typesQ.data ? typesQ.error : null;
 
   return (
     <ModulePageShell
@@ -208,13 +243,15 @@ export function PartyTypeMasterView() {
         { label: "Party Type" },
       ]}
       toast={toastMessage}
+      toastVariant={toastVariant}
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex items-center gap-2">
           <Button
             type="button"
             size="sm"
-            onClick={() => setShowCreateModal(true)}
+            onClick={openCreateModal}
+            disabled={initialLoading || !!loadError}
             className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
@@ -225,7 +262,8 @@ export function PartyTypeMasterView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleSavePartyType}
+            onClick={() => void handleSavePartyType()}
+            disabled={!formData || saving}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-800 cursor-pointer"
           >
             <Save className="h-3.5 w-3.5 mr-1 text-emerald-700" />
@@ -236,9 +274,11 @@ export function PartyTypeMasterView() {
             type="button"
             variant="outline"
             size="sm"
+            disabled={!activePartyType}
             onClick={() => {
-              setFormData({ ...activePartyType });
-              setToastMessage("Reset unsaved edits.");
+              if (!activePartyType) return;
+              setFormData(toForm(activePartyType));
+              notify("Reset unsaved edits.");
             }}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
           >
@@ -248,7 +288,6 @@ export function PartyTypeMasterView() {
         </div>
       }
     >
-      {/* Top Company Context Header & Scope Banner */}
       <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 flex-1 min-w-[280px]">
@@ -256,7 +295,7 @@ export function PartyTypeMasterView() {
             <div>
               <span className="text-[11px] font-bold text-slate-500 block uppercase">Target Company Entity:</span>
               <span className="font-bold text-xs text-slate-900">
-                HOTEL & RESORTS PRIVATE LIMITED (CMP-001)
+                {company ? `${company.legalName || company.tradeName} (${company.companyCode})` : "—"}
               </span>
             </div>
           </div>
@@ -270,9 +309,28 @@ export function PartyTypeMasterView() {
         </div>
       </div>
 
-      {/* Main 2-Column Split Layout */}
+      {initialLoading ? (
+        <div className="flex min-h-[320px] items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin text-emerald-700" />
+          Loading party types…
+        </div>
+      ) : loadError ? (
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/60 p-6 text-center">
+          <AlertTriangle className="h-6 w-6 text-rose-600" />
+          <p className="text-sm font-semibold text-rose-800">{loadError}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void typesQ.reload()}
+            className="rounded-xl text-xs font-bold border-rose-300 text-rose-700 bg-white hover:bg-rose-50"
+          >
+            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+            Retry
+          </Button>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
-        {/* LEFT COLUMN: Party Types Table / List (5 Cols) */}
         <div className="md:col-span-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col min-h-[560px]">
           <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5">
             <div className="flex items-center gap-2">
@@ -286,7 +344,6 @@ export function PartyTypeMasterView() {
             </span>
           </div>
 
-          {/* Search & Status Filters */}
           <div className="space-y-2 mb-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -327,14 +384,13 @@ export function PartyTypeMasterView() {
             </div>
           </div>
 
-          {/* Party Types Cards List */}
           <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[440px]">
             {filteredPartyTypes.map((p) => {
-              const isSelected = p.partyTypeId === selectedTypeId;
+              const isSelected = p.id === activePartyType?.id;
               return (
                 <div
-                  key={p.partyTypeId}
-                  onClick={() => setSelectedTypeId(p.partyTypeId)}
+                  key={p.id}
+                  onClick={() => setSelectedTypeId(p.id)}
                   className={cn(
                     "p-3 rounded-xl border transition-all cursor-pointer select-none space-y-1.5",
                     isSelected
@@ -381,7 +437,9 @@ export function PartyTypeMasterView() {
                   </div>
 
                   <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                    <span>{p.partyTypeId}</span>
+                    <span>
+                      {p.subTypeCount} sub types · {p.partyCount} parties
+                    </span>
                     <span className="text-slate-600 font-semibold font-sans">Order #{p.sequence}</span>
                   </div>
                 </div>
@@ -390,15 +448,22 @@ export function PartyTypeMasterView() {
 
             {filteredPartyTypes.length === 0 && (
               <div className="text-center py-8 text-xs text-slate-400">
-                No party types match your search.
+                {partyTypes.length === 0
+                  ? "No party types yet. Create the first one to get started."
+                  : "No party types match your search."}
               </div>
             )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Selected Party Type Configuration (7 Cols) */}
         <div className="md:col-span-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-          {/* Header Bar */}
+          {!activePartyType || !formData ? (
+            <div className="flex min-h-[320px] flex-col items-center justify-center gap-2 text-center">
+              <Users className="h-6 w-6 text-slate-400" />
+              <p className="text-xs font-semibold text-slate-600">Select or create a party type to view its configuration.</p>
+            </div>
+          ) : (
+          <>
           <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
             <div>
               <div className="flex items-center gap-2">
@@ -418,39 +483,50 @@ export function PartyTypeMasterView() {
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Party Type ID: <strong className="font-mono text-slate-700">{formData.partyTypeId}</strong> • Display Sequence:{" "}
+                Sub Types: <strong className="text-slate-800">{activePartyType.subTypeCount}</strong> • Parties:{" "}
+                <strong className="text-slate-800">{activePartyType.partyCount}</strong> • Display Sequence:{" "}
                 <strong className="font-bold text-slate-800">#{formData.sequence}</strong>
               </p>
             </div>
 
-            {/* Toggle Status Action */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleToggleStatus}
-              className={cn(
-                "rounded-xl text-xs font-bold border cursor-pointer",
-                formData.status === "Active"
-                  ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
-                  : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
-              )}
-            >
-              {formData.status === "Active" ? (
-                <>
-                  <Ban className="h-3.5 w-3.5 mr-1 text-slate-500" />
-                  Deactivate Type
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-                  Activate Type
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleToggleStatus()}
+                className={cn(
+                  "rounded-xl text-xs font-bold border cursor-pointer",
+                  activePartyType.status === "Active"
+                    ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
+                    : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                )}
+              >
+                {activePartyType.status === "Active" ? (
+                  <>
+                    <Ban className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                    Deactivate Type
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                    Activate Type
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleDeletePartyType()}
+                className="rounded-xl text-xs font-semibold bg-white border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
+                Delete
+              </Button>
+            </div>
           </div>
 
-          {/* Form Content */}
           <div className="text-xs space-y-4 pt-1">
             <div className="p-4 rounded-xl bg-slate-50/70 border border-slate-200 space-y-4">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
@@ -461,15 +537,16 @@ export function PartyTypeMasterView() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <FormField label="Party Type ID">
                   <TextInput
-                    value={formData.partyTypeId}
+                    value={activePartyType.id}
                     readOnly
+                    title={activePartyType.id}
                     className="bg-slate-100 font-mono font-bold text-slate-700 cursor-not-allowed h-9"
                   />
                 </FormField>
 
                 <FormField label="Type Code" required>
                   <TextInput
-                    value={formData.typeCode || ""}
+                    value={formData.typeCode}
                     onChange={(e) => handleFormChange("typeCode", e.target.value.toUpperCase())}
                     maxLength={6}
                     placeholder="e.g. CUST"
@@ -479,7 +556,7 @@ export function PartyTypeMasterView() {
 
                 <FormField label="Party Type Name" required>
                   <TextInput
-                    value={formData.typeName || ""}
+                    value={formData.typeName}
                     onChange={(e) => handleFormChange("typeName", e.target.value)}
                     placeholder="e.g. Customer"
                     className="bg-white font-bold text-slate-900 h-9"
@@ -501,7 +578,7 @@ export function PartyTypeMasterView() {
                 <FormField label="System Status" required>
                   <SelectInput
                     value={formData.status}
-                    onChange={(e) => handleFormChange("status", e.target.value)}
+                    onChange={(e) => handleFormChange("status", e.target.value as Status)}
                     className="bg-white font-bold h-9"
                   >
                     <option value="Active">Active</option>
@@ -513,14 +590,13 @@ export function PartyTypeMasterView() {
               <FormField label="Description (Optional)">
                 <TextAreaInput
                   rows={3}
-                  value={formData.description || ""}
+                  value={formData.description}
                   onChange={(e) => handleFormChange("description", e.target.value)}
                   placeholder="Describe the nature of this accounting relationship..."
                   className="bg-white text-xs leading-relaxed"
                 />
               </FormField>
 
-              {/* Informational Guidance on PMS Hierarchy */}
               <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200 text-slate-700 text-[11px] space-y-1.5">
                 <div className="flex items-center gap-1.5 font-bold text-emerald-950">
                   <Info className="h-4 w-4 text-emerald-700 shrink-0" />
@@ -535,19 +611,22 @@ export function PartyTypeMasterView() {
                 <Button
                   type="button"
                   size="sm"
-                  onClick={handleSavePartyType}
+                  onClick={() => void handleSavePartyType()}
+                  disabled={saving}
                   className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs"
                 >
-                  <Save className="h-3.5 w-3.5 mr-1" />
+                  {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
                   Save Changes
                 </Button>
               </div>
             </div>
           </div>
+          </>
+          )}
         </div>
       </div>
+      )}
 
-      {/* CREATE PARTY TYPE MODAL */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs">
@@ -619,7 +698,7 @@ export function PartyTypeMasterView() {
                 <SelectInput
                   value={createForm.status}
                   onChange={(e) =>
-                    setCreateForm((prev) => ({ ...prev, status: e.target.value as any }))
+                    setCreateForm((prev) => ({ ...prev, status: e.target.value as Status }))
                   }
                   className="bg-white font-bold h-9"
                 >
@@ -642,9 +721,11 @@ export function PartyTypeMasterView() {
               <Button
                 type="button"
                 size="sm"
-                onClick={handleCreatePartyType}
+                onClick={() => void handleCreatePartyType()}
+                disabled={saving}
                 className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs"
               >
+                {saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
                 Create Party Type
               </Button>
             </div>

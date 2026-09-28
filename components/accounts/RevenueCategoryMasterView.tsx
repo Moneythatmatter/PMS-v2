@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   PieChart,
   Plus,
@@ -11,7 +11,7 @@ import {
   Power,
   Trash2,
   FileText,
-  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -21,10 +21,7 @@ import {
   TextAreaInput,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
-import {
-  sampleRevenueCategoriesList,
-  RevenueCategoryModel,
-} from "@/app/data/accounts/revenueCategoryData";
+import { accRevenueCategoryService, type RevenueCategory, type Status } from "@/services/accounts";
 import {
   CompanySelector,
   MasterFormSection,
@@ -32,15 +29,53 @@ import {
   MasterActivationDialog,
   MasterDeleteProtectionDialog,
 } from "@/components/accounts/MasterComponents";
+import {
+  accErrorMessage,
+  invalidateAccLookups,
+  useAccLookups,
+  useAccQuery,
+} from "@/components/accounts/accountsApi";
 import { cn } from "@/lib/utils";
 
+type RevenueCategoryForm = Pick<
+  RevenueCategory,
+  "revenueCategoryCode" | "revenueCategoryName" | "incomeAccountId" | "description" | "status" | "companyId"
+>;
+
+function blankForm(companyId: string | null): RevenueCategoryForm {
+  return {
+    revenueCategoryCode: "",
+    revenueCategoryName: "",
+    incomeAccountId: null,
+    description: "",
+    status: "Active",
+    companyId,
+  };
+}
+
+function toForm(c: RevenueCategory): RevenueCategoryForm {
+  return {
+    revenueCategoryCode: c.revenueCategoryCode,
+    revenueCategoryName: c.revenueCategoryName,
+    incomeAccountId: c.incomeAccountId,
+    description: c.description ?? "",
+    status: c.status,
+    companyId: c.companyId,
+  };
+}
+
 export function RevenueCategoryMasterView() {
-  // Master Revenue Categories State (strictly 2 initial seed records)
-  const [categories, setCategories] = useState<RevenueCategoryModel[]>(sampleRevenueCategoriesList);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("RC-001");
+  const { data, loading, error, reload } = useAccQuery(() => accRevenueCategoryService.list(), []);
+  const { lookups } = useAccLookups();
+  const categories = useMemo(() => data ?? [], [data]);
+
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [draft, setDraft] = useState<RevenueCategoryForm | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Company Selector State
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("comp-101");
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
@@ -48,215 +83,165 @@ export function RevenueCategoryMasterView() {
 
   // Toast Notification State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const notify = (message: string, variant: "success" | "error" = "success") => {
+    setToastVariant(variant);
+    setToastMessage(message);
+  };
 
   // Modals & Protection Dialog State
   const [showActivationDialog, setShowActivationDialog] = useState(false);
-  const [deleteDialogProps, setDeleteDialogProps] = useState<{
-    isOpen: boolean;
-    reason: "system_account" | "has_transactions" | "has_children";
-    childCount: number;
-    transactionCount: number;
-  }>({
+  const [deleteDialogProps, setDeleteDialogProps] = useState<{ isOpen: boolean; childCount: number }>({
     isOpen: false,
-    reason: "has_transactions",
     childCount: 0,
-    transactionCount: 0,
   });
 
-  // Active Selected Record
-  const activeRecord = useMemo(() => {
-    return (
-      categories.find((c) => c.revenueCategoryId === selectedCategoryId) ||
-      categories[0] || {
-        revenueCategoryId: "RC-001",
-        revenueCategoryCode: "ROOMS",
-        revenueCategoryName: "Rooms",
-        status: "Active" as const,
-        description: "",
-        companyId: "comp-101",
-        createdAt: "01 Apr 2024",
-        updatedAt: "01 Apr 2024",
-        createdBy: "Finance Admin",
-        updatedBy: "Finance Admin",
-        hasTransactions: false,
-        transactionCount: 0,
-      }
-    );
-  }, [categories, selectedCategoryId]);
+  const incomeLedgers = useMemo(
+    () => (lookups?.ledgers ?? []).filter((a) => a.nature === "Income"),
+    [lookups]
+  );
 
-  // Form State
-  const [formData, setFormData] = useState<RevenueCategoryModel>(activeRecord);
-
-  // Sync Form State when selection changes
-  useEffect(() => {
-    setFormData({ ...activeRecord });
-  }, [activeRecord]);
+  // Records shared across companies (no company) plus those of the selected company
+  const companyCategories = useMemo(
+    () =>
+      categories.filter(
+        (c) => !selectedCompanyId || !c.companyId || c.companyId === selectedCompanyId
+      ),
+    [categories, selectedCompanyId]
+  );
 
   // Filtered Revenue Categories List
   const filteredCategories = useMemo(() => {
-    return categories.filter((c) => {
-      // Status Filter
+    return companyCategories.filter((c) => {
       if (statusFilter !== "All" && c.status !== statusFilter) return false;
-      // Search Query
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         return (
-          c.revenueCategoryId.toLowerCase().includes(q) ||
           c.revenueCategoryCode.toLowerCase().includes(q) ||
           c.revenueCategoryName.toLowerCase().includes(q) ||
-          (c.description && c.description.toLowerCase().includes(q))
+          (c.incomeAccountName ?? "").toLowerCase().includes(q) ||
+          (c.description ?? "").toLowerCase().includes(q)
         );
       }
       return true;
     });
-  }, [categories, searchQuery, statusFilter]);
+  }, [companyCategories, searchQuery, statusFilter]);
+
+  // Active Selected Record (falls back to the first visible record)
+  const activeRecord: RevenueCategory | null = isCreating
+    ? null
+    : categories.find((c) => c.id === selectedCategoryId) ?? filteredCategories[0] ?? null;
+
+  const formData: RevenueCategoryForm =
+    draft ?? (activeRecord ? toForm(activeRecord) : blankForm(selectedCompanyId || null));
+  const showForm = isCreating || activeRecord !== null;
+
+  const selectRecord = (id: string) => {
+    setSelectedCategoryId(id);
+    setIsCreating(false);
+    setDraft(null);
+  };
 
   // Form Field Change Handler
-  const handleFormChange = (field: keyof RevenueCategoryModel, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const handleFormChange = <K extends keyof RevenueCategoryForm>(field: K, value: RevenueCategoryForm[K]) => {
+    setDraft((prev) => ({ ...(prev ?? formData), [field]: value }));
   };
 
   // Create New Revenue Category Handler
   const handleNewCategory = () => {
-    const nextSeq = categories.length + 1;
-    const nextNum = nextSeq < 10 ? `00${nextSeq}` : nextSeq < 100 ? `0${nextSeq}` : `${nextSeq}`;
-    const newCategoryId = `RC-${nextNum}`;
-    const now = new Date().toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    setIsCreating(true);
+    setDraft(blankForm(selectedCompanyId || null));
+    notify("Fill in the fields and click Save Changes to create a new Revenue Category.");
+  };
 
-    const newRecord: RevenueCategoryModel = {
-      revenueCategoryId: newCategoryId,
-      revenueCategoryCode: `CAT${nextSeq}`,
-      revenueCategoryName: "Banquet",
-      status: "Active",
-      description: "",
-      companyId: selectedCompanyId,
-      createdAt: now,
-      updatedAt: now,
-      createdBy: "Finance Admin",
-      updatedBy: "Finance Admin",
-      hasTransactions: false,
-      transactionCount: 0,
-    };
-
-    setCategories((prev) => [newRecord, ...prev]);
-    setSelectedCategoryId(newRecord.revenueCategoryId);
-    setFormData(newRecord);
-    setToastMessage(`Created new Revenue Category '${newRecord.revenueCategoryName}' (${newRecord.revenueCategoryCode}).`);
+  const persist = async (form: RevenueCategoryForm, successMessage: (saved: RevenueCategory) => string) => {
+    setSaving(true);
+    try {
+      const payload: Partial<RevenueCategory> = {
+        ...form,
+        revenueCategoryCode: form.revenueCategoryCode.trim().toUpperCase(),
+        revenueCategoryName: form.revenueCategoryName.trim(),
+        companyId: form.companyId || selectedCompanyId || null,
+      };
+      const saved =
+        isCreating || !activeRecord
+          ? await accRevenueCategoryService.create(payload)
+          : await accRevenueCategoryService.update(activeRecord.id, payload);
+      invalidateAccLookups();
+      await reload();
+      setSelectedCategoryId(saved.id);
+      setIsCreating(false);
+      setDraft(null);
+      notify(successMessage(saved));
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Save Revenue Category Changes
   const handleSaveCategory = () => {
     if (!formData.revenueCategoryCode.trim()) {
-      setToastMessage("Revenue Category Code is required.");
+      notify("Revenue Category Code is required.", "error");
       return;
     }
     if (!formData.revenueCategoryName.trim()) {
-      setToastMessage("Revenue Category Name is required.");
+      notify("Revenue Category Name is required.", "error");
       return;
     }
-
-    const currentCompany = formData.companyId || selectedCompanyId;
-
-    // Check code uniqueness within current company
-    const codeExists = categories.some(
-      (c) =>
-        c.revenueCategoryId !== formData.revenueCategoryId &&
-        (c.companyId || selectedCompanyId) === currentCompany &&
-        c.revenueCategoryCode.trim().toUpperCase() === formData.revenueCategoryCode.trim().toUpperCase()
+    const creating = isCreating;
+    void persist(formData, (saved) =>
+      creating
+        ? `Created Revenue Category '${saved.revenueCategoryName}' (${saved.revenueCategoryCode}).`
+        : `Saved Revenue Category '${saved.revenueCategoryName}' successfully.`
     );
-
-    if (codeExists) {
-      setToastMessage(`Revenue Category Code '${formData.revenueCategoryCode.toUpperCase()}' is already in use for this company.`);
-      return;
-    }
-
-    // Check name uniqueness within current company
-    const nameExists = categories.some(
-      (c) =>
-        c.revenueCategoryId !== formData.revenueCategoryId &&
-        (c.companyId || selectedCompanyId) === currentCompany &&
-        c.revenueCategoryName.trim().toLowerCase() === formData.revenueCategoryName.trim().toLowerCase()
-    );
-
-    if (nameExists) {
-      setToastMessage(`Revenue Category Name '${formData.revenueCategoryName}' is already in use for this company.`);
-      return;
-    }
-
-    const now = new Date().toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-
-    const updatedRecord: RevenueCategoryModel = {
-      ...formData,
-      revenueCategoryCode: formData.revenueCategoryCode.trim().toUpperCase(),
-      revenueCategoryName: formData.revenueCategoryName.trim(),
-      companyId: currentCompany,
-      updatedAt: now,
-      updatedBy: "Finance Admin",
-    };
-
-    setCategories((prev) =>
-      prev.map((c) => (c.revenueCategoryId === updatedRecord.revenueCategoryId ? updatedRecord : c))
-    );
-    setFormData(updatedRecord);
-    setToastMessage(`Saved Revenue Category '${updatedRecord.revenueCategoryName}' successfully.`);
   };
 
   // Revert Form Edits
   const handleResetForm = () => {
-    setFormData({ ...activeRecord });
-    setToastMessage(`Reverted changes for '${activeRecord.revenueCategoryName}'.`);
+    if (isCreating) {
+      setDraft(blankForm(selectedCompanyId || null));
+      notify("Cleared the new Revenue Category form.");
+      return;
+    }
+    setDraft(null);
+    if (activeRecord) notify(`Reverted changes for '${activeRecord.revenueCategoryName}'.`);
   };
 
   // Toggle Activation Flow
   const handleToggleActivation = () => {
-    const targetStatus = formData.status === "Active" ? "Inactive" : "Active";
-    const now = new Date().toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-
-    const updatedRecord: RevenueCategoryModel = {
-      ...formData,
-      status: targetStatus,
-      updatedAt: now,
-      updatedBy: "Finance Admin",
-    };
-
-    setCategories((prev) =>
-      prev.map((c) => (c.revenueCategoryId === updatedRecord.revenueCategoryId ? updatedRecord : c))
-    );
-    setFormData(updatedRecord);
-    setToastMessage(
-      `Revenue Category '${updatedRecord.revenueCategoryName}' is now ${targetStatus.toUpperCase()}.`
+    if (!activeRecord) return;
+    const targetStatus: Status = activeRecord.status === "Active" ? "Inactive" : "Active";
+    void persist(
+      { ...toForm(activeRecord), status: targetStatus },
+      (saved) => `Revenue Category '${saved.revenueCategoryName}' is now ${targetStatus.toUpperCase()}.`
     );
   };
 
   // Attempt Delete Flow with Protection Checks
-  const handleDeleteAttempt = () => {
-    // Transaction Reference Protection
-    if (formData.hasTransactions || (formData.transactionCount || 0) > 0) {
-      setDeleteDialogProps({
-        isOpen: true,
-        reason: "has_transactions",
-        childCount: 0,
-        transactionCount: formData.transactionCount || 0,
-      });
+  const handleDeleteAttempt = async () => {
+    if (!activeRecord) return;
+    if (activeRecord.ruleCount > 0) {
+      setDeleteDialogProps({ isOpen: true, childCount: activeRecord.ruleCount });
       return;
     }
-
-    // Permitted to delete if 0 transactions
-    setCategories((prev) => prev.filter((c) => c.revenueCategoryId !== formData.revenueCategoryId));
-    setSelectedCategoryId(categories[0]?.revenueCategoryId || "RC-001");
-    setToastMessage(`Deleted Revenue Category '${formData.revenueCategoryName}'.`);
+    if (!window.confirm(`Delete revenue category '${activeRecord.revenueCategoryName}'? This cannot be undone.`)) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await accRevenueCategoryService.remove(activeRecord.id);
+      invalidateAccLookups();
+      setSelectedCategoryId(null);
+      setDraft(null);
+      await reload();
+      notify(`Deleted Revenue Category '${activeRecord.revenueCategoryName}'.`);
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -270,6 +255,7 @@ export function RevenueCategoryMasterView() {
         { label: "Revenue Category Master" },
       ]}
       toast={toastMessage}
+      toastVariant={toastVariant}
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex flex-wrap items-center gap-2">
@@ -277,6 +263,7 @@ export function RevenueCategoryMasterView() {
             type="button"
             size="sm"
             onClick={handleNewCategory}
+            disabled={saving}
             className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer shadow-xs"
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
@@ -287,49 +274,77 @@ export function RevenueCategoryMasterView() {
             type="button"
             size="sm"
             onClick={handleSaveCategory}
+            disabled={saving || !showForm}
             className="rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white shadow-xs cursor-pointer"
           >
-            <Save className="h-3.5 w-3.5 mr-1" />
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5 mr-1" />
+            )}
             Save Changes
           </Button>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowActivationDialog(true)}
-            className={cn(
-              "rounded-xl text-xs font-bold border cursor-pointer",
-              formData.status === "Active"
-                ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
-                : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
-            )}
-          >
-            <Power className="h-3.5 w-3.5 mr-1" />
-            {formData.status === "Active" ? "Deactivate" : "Activate"}
-          </Button>
+          {!isCreating && activeRecord && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowActivationDialog(true)}
+                disabled={saving}
+                className={cn(
+                  "rounded-xl text-xs font-bold border cursor-pointer",
+                  activeRecord.status === "Active"
+                    ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                    : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                )}
+              >
+                <Power className="h-3.5 w-3.5 mr-1" />
+                {activeRecord.status === "Active" ? "Deactivate" : "Activate"}
+              </Button>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleDeleteAttempt}
-            className="rounded-xl text-xs font-semibold bg-white border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
-          >
-            <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
-            Delete
-          </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleDeleteAttempt()}
+                disabled={saving}
+                className="rounded-xl text-xs font-semibold bg-white border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
+                Delete
+              </Button>
+            </>
+          )}
 
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={handleResetForm}
+            disabled={saving || !showForm}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
           >
             <RotateCcw className="h-3.5 w-3.5 mr-1 text-slate-500" />
-            Reset
+            {isCreating ? "Clear" : "Reset"}
           </Button>
+
+          {isCreating && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsCreating(false);
+                setDraft(null);
+              }}
+              disabled={saving}
+              className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
+            >
+              Cancel
+            </Button>
+          )}
         </div>
       }
     >
@@ -399,17 +414,37 @@ export function RevenueCategoryMasterView() {
 
           {/* Revenue Category List Cards */}
           <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[440px]">
-            {filteredCategories.length === 0 ? (
+            {loading && !data ? (
+              <div className="p-6 flex items-center justify-center gap-2 text-slate-400 font-medium">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading revenue categories…
+              </div>
+            ) : error && !data ? (
+              <div className="p-6 text-center space-y-2">
+                <p className="text-rose-600 font-semibold">{error}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void reload()}
+                  className="rounded-xl text-xs font-semibold"
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : filteredCategories.length === 0 ? (
               <div className="p-6 text-center text-slate-400 font-medium">
-                No revenue categories match your search or filter.
+                {companyCategories.length === 0
+                  ? "No revenue categories yet. Click “New Revenue Category” to create one."
+                  : "No revenue categories match your search or filter."}
               </div>
             ) : (
               filteredCategories.map((item) => {
-                const isSelected = selectedCategoryId === item.revenueCategoryId;
+                const isSelected = !isCreating && activeRecord?.id === item.id;
                 return (
                   <div
-                    key={item.revenueCategoryId}
-                    onClick={() => setSelectedCategoryId(item.revenueCategoryId)}
+                    key={item.id}
+                    onClick={() => selectRecord(item.id)}
                     className={cn(
                       "p-3 rounded-xl border transition-all duration-150 cursor-pointer space-y-2 select-none",
                       isSelected
@@ -444,12 +479,12 @@ export function RevenueCategoryMasterView() {
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-[11px]">
-                      <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                        Classification
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-[11px]">
+                      <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded truncate">
+                        {item.incomeAccountName ?? "No income ledger"}
                       </span>
-                      <span className="font-mono text-slate-500 text-[10px] font-semibold">
-                        {item.revenueCategoryId}
+                      <span className="font-mono text-slate-500 text-[10px] font-semibold shrink-0">
+                        {item.ruleCount} tax rules
                       </span>
                     </div>
                   </div>
@@ -461,146 +496,188 @@ export function RevenueCategoryMasterView() {
 
         {/* RIGHT PANEL: Master Details & Form (Single Page with 2 Sections) */}
         <div className="md:col-span-8 space-y-4">
-          {/* Header Card */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <PieChart className="h-5 w-5 text-emerald-700" />
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                    Revenue Category Details
-                  </h3>
-                </div>
-                <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Selected: <strong className="text-slate-900">{formData.revenueCategoryName}</strong>{" "}
-                  ({formData.revenueCategoryCode})
-                </p>
-              </div>
+          {!showForm ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-2xs">
+              <PieChart className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-sm font-bold text-slate-700">No revenue category selected</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {loading
+                  ? "Loading revenue categories…"
+                  : "Select a revenue category from the list or create a new one."}
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Header Card */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <PieChart className="h-5 w-5 text-emerald-700" />
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                        {isCreating ? "New Revenue Category" : "Revenue Category Details"}
+                      </h3>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      {isCreating ? (
+                        "Define a new revenue classification for billing and reporting."
+                      ) : (
+                        <>
+                          Selected: <strong className="text-slate-900">{formData.revenueCategoryName}</strong>{" "}
+                          ({formData.revenueCategoryCode})
+                        </>
+                      )}
+                    </p>
+                  </div>
 
-              {/* Badges */}
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-bold border",
-                    formData.status === "Active"
-                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                      : "bg-slate-100 text-slate-600 border-slate-200"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "h-1.5 w-1.5 rounded-full",
-                      formData.status === "Active"
-                        ? "bg-emerald-600"
-                        : "bg-slate-400"
+                  {/* Badges */}
+                  <div className="flex items-center gap-2">
+                    {activeRecord && (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-xl bg-slate-100 text-xs font-bold text-slate-700 border border-slate-200">
+                        {activeRecord.ruleCount} Tax Rules
+                      </span>
                     )}
-                  />
-                  {formData.status}
-                </span>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-bold border",
+                        formData.status === "Active"
+                          ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                          : "bg-slate-100 text-slate-600 border-slate-200"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "h-1.5 w-1.5 rounded-full",
+                          formData.status === "Active" ? "bg-emerald-600" : "bg-slate-400"
+                        )}
+                      />
+                      {formData.status}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* Section 1: General Information */}
-          <MasterFormSection
-            title="General Information"
-            subtitle="Revenue classification identity, reporting code, and operational description."
-            icon={<FileText className="h-4 w-4" />}
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Revenue Category ID (Read-only) */}
-              <FormField label="Revenue Category ID">
-                <TextInput
-                  value={formData.revenueCategoryId}
-                  readOnly
-                  className="bg-slate-50 font-mono font-bold text-slate-700 cursor-not-allowed"
-                />
-              </FormField>
-
-              {/* Revenue Category Code (Required, unique per company) */}
-              <FormField
-                label="Revenue Category Code"
-                required
-                helperText="Short uppercase code unique within company (e.g. ROOMS, FNB, BANQUET, SPA, LAUNDRY)."
+              {/* Section 1: General Information */}
+              <MasterFormSection
+                title="General Information"
+                subtitle="Revenue classification identity, reporting code, and operational description."
+                icon={<FileText className="h-4 w-4" />}
               >
-                <TextInput
-                  value={formData.revenueCategoryCode}
-                  onChange={(e) =>
-                    handleFormChange("revenueCategoryCode", e.target.value.toUpperCase())
-                  }
-                  placeholder="e.g. ROOMS, FNB"
-                  className="font-mono font-bold text-slate-900"
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Revenue Category ID (Read-only) */}
+                  <FormField label="Revenue Category ID">
+                    <TextInput
+                      value={activeRecord?.id ?? "Auto-generated on save"}
+                      readOnly
+                      className="bg-slate-50 font-mono font-bold text-slate-700 cursor-not-allowed"
+                    />
+                  </FormField>
+
+                  {/* Revenue Category Code (Required, unique per property) */}
+                  <FormField
+                    label="Revenue Category Code"
+                    required
+                    helperText="Short uppercase code (e.g. ROOMS, FNB, BANQUET, SPA, LAUNDRY)."
+                  >
+                    <TextInput
+                      value={formData.revenueCategoryCode}
+                      onChange={(e) =>
+                        handleFormChange("revenueCategoryCode", e.target.value.toUpperCase())
+                      }
+                      placeholder="e.g. ROOMS, FNB"
+                      className="font-mono font-bold text-slate-900"
+                    />
+                  </FormField>
+
+                  {/* Revenue Category Name (Required) */}
+                  <FormField label="Revenue Category Name" required>
+                    <TextInput
+                      value={formData.revenueCategoryName}
+                      onChange={(e) => handleFormChange("revenueCategoryName", e.target.value)}
+                      placeholder="e.g. Rooms, F&B, Banquet, Spa & Wellness..."
+                      className="font-bold text-slate-900"
+                    />
+                  </FormField>
+
+                  {/* Income Ledger */}
+                  <FormField
+                    label="Income Ledger Account"
+                    helperText="Income ledger credited for charges in this category."
+                  >
+                    <SelectInput
+                      value={formData.incomeAccountId ?? ""}
+                      onChange={(e) => handleFormChange("incomeAccountId", e.target.value || null)}
+                    >
+                      <option value="">-- Not mapped --</option>
+                      {incomeLedgers.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.code} — {a.name}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </FormField>
+
+                  {/* Status */}
+                  <FormField label="Status">
+                    <SelectInput
+                      value={formData.status}
+                      onChange={(e) => handleFormChange("status", e.target.value as Status)}
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </SelectInput>
+                  </FormField>
+
+                  {/* Description */}
+                  <FormField label="Description & Notes" className="sm:col-span-2">
+                    <TextAreaInput
+                      rows={2}
+                      value={formData.description || ""}
+                      onChange={(e) => handleFormChange("description", e.target.value)}
+                      placeholder="Revenue scope and departmental accounting classification guidance..."
+                    />
+                  </FormField>
+                </div>
+              </MasterFormSection>
+
+              {/* Section 2: Audit & System Information */}
+              {activeRecord && (
+                <MasterAuditInfo
+                  idLabel="Revenue Category ID"
+                  idValue={activeRecord.id}
+                  status={activeRecord.status}
+                  createdAt={activeRecord.createdAt}
+                  updatedAt={activeRecord.updatedAt}
+                  createdBy={activeRecord.createdBy ?? undefined}
+                  updatedBy={activeRecord.updatedBy ?? undefined}
                 />
-              </FormField>
-
-              {/* Revenue Category Name (Required, unique per company) */}
-              <FormField label="Revenue Category Name" required>
-                <TextInput
-                  value={formData.revenueCategoryName}
-                  onChange={(e) => handleFormChange("revenueCategoryName", e.target.value)}
-                  placeholder="e.g. Rooms, F&B, Banquet, Spa & Wellness..."
-                  className="font-bold text-slate-900"
-                />
-              </FormField>
-
-              {/* Status */}
-              <FormField label="Status">
-                <SelectInput
-                  value={formData.status}
-                  onChange={(e) => handleFormChange("status", e.target.value)}
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </SelectInput>
-              </FormField>
-
-              {/* Description */}
-              <FormField label="Description & Notes" className="sm:col-span-2">
-                <TextAreaInput
-                  rows={2}
-                  value={formData.description || ""}
-                  onChange={(e) => handleFormChange("description", e.target.value)}
-                  placeholder="Revenue scope and departmental accounting classification guidance..."
-                />
-              </FormField>
-            </div>
-          </MasterFormSection>
-
-          {/* Section 2: Audit & System Information */}
-          <MasterAuditInfo
-            idLabel="Revenue Category ID"
-            idValue={formData.revenueCategoryId}
-            status={formData.status}
-            createdAt={formData.createdAt}
-            updatedAt={formData.updatedAt}
-            createdBy={formData.createdBy || "Finance Admin"}
-            updatedBy={formData.updatedBy || "Finance Admin"}
-            transactionCount={formData.transactionCount || 0}
-          />
+              )}
+            </>
+          )}
         </div>
       </div>
 
       {/* Safe Activation / Deactivation Confirmation Dialog */}
-      <MasterActivationDialog
-        isOpen={showActivationDialog}
-        onClose={() => setShowActivationDialog(false)}
-        onConfirm={handleToggleActivation}
-        recordName={formData.revenueCategoryName}
-        currentStatus={formData.status}
-        hasDependents={(formData.transactionCount || 0) > 0}
-        dependentWarning={`Deactivating revenue category '${formData.revenueCategoryName}' (${formData.revenueCategoryCode}) will prevent billing registers and revenue reports from allocating new charges to this category.`}
-      />
+      {activeRecord && (
+        <MasterActivationDialog
+          isOpen={showActivationDialog}
+          onClose={() => setShowActivationDialog(false)}
+          onConfirm={handleToggleActivation}
+          recordName={activeRecord.revenueCategoryName}
+          currentStatus={activeRecord.status}
+          hasDependents={activeRecord.ruleCount > 0}
+          dependentWarning={`Deactivating revenue category '${activeRecord.revenueCategoryName}' (${activeRecord.revenueCategoryCode}) will prevent billing registers and revenue reports from allocating new charges to this category. It is referenced by ${activeRecord.ruleCount} tax rule(s).`}
+        />
+      )}
 
       {/* Delete Protection Alert Dialog */}
       <MasterDeleteProtectionDialog
         isOpen={deleteDialogProps.isOpen}
-        onClose={() =>
-          setDeleteDialogProps((prev) => ({ ...prev, isOpen: false }))
-        }
-        recordName={formData.revenueCategoryName}
-        reason={deleteDialogProps.reason}
-        childCount={0}
-        transactionCount={deleteDialogProps.transactionCount}
+        onClose={() => setDeleteDialogProps((prev) => ({ ...prev, isOpen: false }))}
+        recordName={activeRecord?.revenueCategoryName ?? ""}
+        reason="has_children"
+        childCount={deleteDialogProps.childCount}
+        transactionCount={0}
       />
     </ModulePageShell>
   );

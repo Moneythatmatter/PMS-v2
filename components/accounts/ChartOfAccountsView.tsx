@@ -1,25 +1,22 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Building2,
-  CheckCircle2,
   Plus,
   Save,
   RotateCcw,
-  Shield,
-  ShieldAlert,
-  Info,
   Layers,
   Lock,
   Trash2,
   Power,
-  RefreshCw,
   Sparkles,
   Sliders,
   FileText,
   FolderTree,
   AlertTriangle,
+  Loader2,
+  RefreshCw,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -31,18 +28,11 @@ import {
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
 import {
-  sampleCOATree,
-  COANode,
-  AccountNature,
-  AccountType,
-  AccountClassification,
-  OpeningBalanceType,
-  PostingType,
-  natureCategories,
-  findCOANodeById,
-  getAllGroupNodes,
-  generateAccountCode,
-} from "@/app/data/accounts/chartOfAccountsData";
+  accAccountService,
+  type Account,
+  type AccountNature,
+  type AccountTreeNode,
+} from "@/services/accounts";
 import {
   MasterFormSection,
   MasterAuditInfo,
@@ -50,30 +40,130 @@ import {
   MasterDeleteProtectionDialog,
 } from "@/components/accounts/MasterComponents";
 import { AccountTreeView } from "@/components/accounts/AccountTreeView";
+import {
+  accErrorMessage,
+  formatDate,
+  formatINR,
+  invalidateAccLookups,
+  useAccQuery,
+} from "@/components/accounts/accountsApi";
 import { cn } from "@/lib/utils";
 
+type AccountType = Account["accountType"];
+
+type AccountForm = {
+  parentId: string | null;
+  code: string;
+  name: string;
+  accountType: AccountType;
+  nature: AccountNature;
+  reportSection: string;
+  category: string;
+  classification: string;
+  description: string;
+  allowPosting: boolean;
+  isBankAccount: boolean;
+  isCashAccount: boolean;
+  bankAccountNo: string;
+  bankIfsc: string;
+  status: Account["status"];
+};
+
+const REPORT_SECTIONS = [
+  "Current Assets",
+  "Fixed Assets",
+  "Capital & Reserves",
+  "Current Liabilities",
+  "Non-Current Liabilities",
+  "Direct Income",
+  "Indirect Income",
+  "Direct Expenses",
+  "Indirect Expenses",
+];
+
+const CLASSIFICATIONS = ["Balance Sheet", "Profit & Loss"];
+
+const defaultClassification = (nature: AccountNature) =>
+  nature === "Asset" || nature === "Liability" ? "Balance Sheet" : "Profit & Loss";
+
+const toForm = (n: AccountTreeNode): AccountForm => ({
+  parentId: n.parentId,
+  code: n.code,
+  name: n.name,
+  accountType: n.accountType,
+  nature: n.nature,
+  reportSection: n.reportSection ?? "",
+  category: n.category ?? "",
+  classification: n.classification ?? "",
+  description: n.description ?? "",
+  allowPosting: n.allowPosting,
+  isBankAccount: n.isBankAccount,
+  isCashAccount: n.isCashAccount,
+  bankAccountNo: n.bankAccountNo ?? "",
+  bankIfsc: n.bankIfsc ?? "",
+  status: n.status,
+});
+
+function findNode(nodes: AccountTreeNode[], id: string): AccountTreeNode | null {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    const hit = findNode(n.children, id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** Next free numeric code under a parent (siblings' max + 1, or parent code + 1). */
+function suggestCode(accounts: Account[], parentId: string | null, excludeId?: string): string {
+  const pool = accounts.filter((a) => a.id !== excludeId);
+  const used = new Set(pool.map((a) => a.code));
+  const siblings = pool
+    .filter((a) => (a.parentId ?? null) === parentId && /^\d+$/.test(a.code))
+    .map((a) => Number(a.code));
+  const parent = parentId ? pool.find((a) => a.id === parentId) : undefined;
+  let next: number;
+  if (!parentId) {
+    next = siblings.length ? (Math.floor(Math.max(...siblings) / 1000) + 1) * 1000 : 1000;
+  } else if (siblings.length) {
+    next = Math.max(...siblings) + 1;
+  } else if (parent && /^\d+$/.test(parent.code)) {
+    next = Number(parent.code) + 1;
+  } else {
+    next = 1;
+  }
+  while (used.has(String(next))) next++;
+  return String(next);
+}
+
 export function ChartOfAccountsView() {
-  // Tree State
-  const [treeData, setTreeData] = useState<COANode[]>(sampleCOATree);
-  const [selectedNodeId, setSelectedNodeId] = useState<string>("ACC-001");
+  const treeQ = useAccQuery(() => accAccountService.tree(), []);
+  const listQ = useAccQuery(() => accAccountService.list(), []);
+  const treeData = useMemo(() => treeQ.data ?? [], [treeQ.data]);
+  const flatAccounts = useMemo(() => listQ.data ?? [], [listQ.data]);
+
+  const [selectedNodeId, setSelectedNodeId] = useState<string>("");
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
-  // Active Selected Node & Form State
-  const activeNode = useMemo(() => {
-    return findCOANodeById(treeData, selectedNodeId) || treeData[0];
-  }, [treeData, selectedNodeId]);
+  const activeNode = useMemo(
+    () => findNode(treeData, selectedNodeId) ?? treeData[0] ?? null,
+    [treeData, selectedNodeId]
+  );
 
-  const [formData, setFormData] = useState<COANode>(activeNode);
+  const [formData, setFormData] = useState<AccountForm | null>(null);
+  const [syncedNode, setSyncedNode] = useState<AccountTreeNode | null>(null);
+  if (activeNode !== syncedNode) {
+    setSyncedNode(activeNode);
+    setFormData(activeNode ? toForm(activeNode) : null);
+  }
 
-  // Synchronize form when selectedNodeId changes
-  useEffect(() => {
-    setFormData({ ...activeNode });
-  }, [activeNode]);
-
-  // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const notify = (message: string, variant: "success" | "error" = "success") => {
+    setToastVariant(variant);
+    setToastMessage(message);
+  };
+  const [saving, setSaving] = useState(false);
 
-  // Modals & Dialogs State
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showActivationDialog, setShowActivationDialog] = useState(false);
   const [deleteDialogProps, setDeleteDialogProps] = useState<{
@@ -90,28 +180,38 @@ export function ChartOfAccountsView() {
 
   // Create Modal Form State
   const [createType, setCreateType] = useState<AccountType>("Ledger");
-  const [createParentId, setCreateParentId] = useState<string>("ACC-100");
+  const [createParentId, setCreateParentId] = useState<string>("");
   const [createNature, setCreateNature] = useState<AccountNature>("Asset");
-  const [createCategory, setCreateCategory] = useState<string>("Bank");
+  const [createCategory, setCreateCategory] = useState<string>("");
   const [createName, setCreateName] = useState("");
-  const [createCode, setCreateCode] = useState("1113");
+  const [createCode, setCreateCode] = useState("");
   const [createDescription, setCreateDescription] = useState("");
-  const [createClassification, setCreateClassification] =
-    useState<AccountClassification>("Normal Account");
-  const [createOpeningBalanceType, setCreateOpeningBalanceType] =
-    useState<OpeningBalanceType>("Debit Only");
-  const [createPostingType, setCreatePostingType] =
-    useState<PostingType>("Both");
+  const [createClassification, setCreateClassification] = useState<string>("Balance Sheet");
+  const [createIsBank, setCreateIsBank] = useState(false);
+  const [createIsCash, setCreateIsCash] = useState(false);
 
-  // All Available Groups for Parent Selection
-  const allGroups = useMemo(() => getAllGroupNodes(treeData), [treeData]);
+  const allGroups = useMemo(
+    () => flatAccounts.filter((a) => a.accountType === "Group"),
+    [flatAccounts]
+  );
 
-  // Handle Tree Node Selection
-  const handleSelectNode = (node: COANode) => {
+  const categoriesByNature = useMemo(() => {
+    const map: Record<AccountNature, string[]> = { Asset: [], Liability: [], Income: [], Expense: [] };
+    for (const a of flatAccounts) {
+      if (a.category && !map[a.nature].includes(a.category)) map[a.nature].push(a.category);
+    }
+    for (const k of Object.keys(map) as AccountNature[]) map[k].sort();
+    return map;
+  }, [flatAccounts]);
+
+  const reloadAll = async () => {
+    await Promise.all([treeQ.reload(), listQ.reload()]);
+  };
+
+  const handleSelectNode = (node: AccountTreeNode) => {
     setSelectedNodeId(node.id);
   };
 
-  // Expand / Collapse Handlers
   const handleToggleExpand = (id: string) => {
     setExpandedNodes((prev) => {
       const next = new Set(prev);
@@ -123,288 +223,212 @@ export function ChartOfAccountsView() {
 
   const handleExpandAll = () => {
     const allIds = new Set<string>();
-    const traverse = (nodes: COANode[]) => {
+    const traverse = (nodes: AccountTreeNode[]) => {
       nodes.forEach((n) => {
         allIds.add(n.id);
-        if (n.children) traverse(n.children);
+        traverse(n.children);
       });
     };
     traverse(treeData);
     setExpandedNodes(allIds);
-    setToastMessage("Expanded all chart of accounts groups.");
+    notify("Expanded all chart of accounts groups.");
   };
 
   const handleCollapseAll = () => {
     setExpandedNodes(new Set());
-    setToastMessage("Collapsed all groups.");
+    notify("Collapsed all groups.");
   };
 
-  // Form Field Change Handler
-  const handleFormChange = (field: keyof COANode, value: any) => {
+  const handleFormChange = <K extends keyof AccountForm>(field: K, value: AccountForm[K]) => {
     setFormData((prev) => {
-      const updated = { ...prev, [field]: value };
-
-      // If nature changed, adapt category default
+      if (!prev) return prev;
+      const updated: AccountForm = { ...prev, [field]: value };
       if (field === "nature") {
-        const availableCategories = natureCategories[value as AccountNature] || [];
-        updated.category = availableCategories[0] || "General";
+        updated.classification = defaultClassification(value as AccountNature);
       }
-
-      // If type changed to Group, auto-disable posting
-      if (field === "type") {
+      if (field === "accountType") {
+        updated.allowPosting = value !== "Group";
         if (value === "Group") {
-          updated.allowPosting = false;
-        } else {
-          updated.allowPosting = true;
+          updated.isBankAccount = false;
+          updated.isCashAccount = false;
         }
       }
-
       return updated;
     });
   };
 
-  // Auto-generate code for current edit form
   const handleRegenerateCode = () => {
-    const parent = findCOANodeById(treeData, formData.parentId || "");
-    const newCode = generateAccountCode(parent, formData.nature, formData.type);
-    setFormData((prev) => ({ ...prev, code: newCode }));
-    setToastMessage(`Auto-generated Account Code '${newCode}'.`);
+    if (!formData || !activeNode) return;
+    const newCode = suggestCode(flatAccounts, formData.parentId, activeNode.id);
+    setFormData((prev) => (prev ? { ...prev, code: newCode } : prev));
+    notify(`Suggested Account Code '${newCode}'.`);
   };
 
-  // Save Current Form Edits
-  const handleSaveAccount = () => {
+  const handleSaveAccount = async () => {
+    if (!formData || !activeNode) return;
     if (!formData.name.trim()) {
-      setToastMessage("Account Name cannot be empty.");
+      notify("Account Name cannot be empty.", "error");
       return;
     }
-
-    const updatedNode: COANode = {
-      ...formData,
-      updatedAt: new Date().toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }),
-    };
-
-    setTreeData((prev) => {
-      const updateRecursive = (nodes: COANode[]): COANode[] => {
-        return nodes.map((n) => {
-          if (n.id === updatedNode.id) {
-            return {
-              ...n,
-              ...updatedNode,
-              children: n.children, // preserve children
-            };
-          }
-          if (n.children) {
-            return { ...n, children: updateRecursive(n.children) };
-          }
-          return n;
-        });
-      };
-      return updateRecursive(prev);
-    });
-
-    setToastMessage(`Successfully saved account '${formData.name}'.`);
+    if (!formData.code.trim()) {
+      notify("Account Code cannot be empty.", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      await accAccountService.update(activeNode.id, {
+        ...formData,
+        code: formData.code.trim(),
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        category: formData.category.trim(),
+      });
+      invalidateAccLookups();
+      await reloadAll();
+      notify(`Successfully saved account '${formData.name.trim()}'.`);
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // Reset Changes
   const handleResetForm = () => {
-    setFormData({ ...activeNode });
-    setToastMessage(`Reverted changes for '${activeNode.name}'.`);
+    if (!activeNode) return;
+    setFormData(toForm(activeNode));
+    notify(`Reverted changes for '${activeNode.name}'.`);
   };
 
-  // Toggle Activation Flow
-  const handleToggleActivation = () => {
-    const newStatus = formData.status === "Active" ? "Inactive" : "Active";
-    setFormData((prev) => ({ ...prev, status: newStatus }));
-
-    setTreeData((prev) => {
-      const updateRecursive = (nodes: COANode[]): COANode[] => {
-        return nodes.map((n) => {
-          if (n.id === formData.id) {
-            return {
-              ...n,
-              status: newStatus,
-              updatedAt: new Date().toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              }),
-            };
-          }
-          if (n.children) {
-            return { ...n, children: updateRecursive(n.children) };
-          }
-          return n;
-        });
-      };
-      return updateRecursive(prev);
-    });
-
-    setToastMessage(
-      `Account '${formData.name}' is now ${newStatus.toUpperCase()}.`
-    );
+  const handleToggleActivation = async () => {
+    if (!activeNode) return;
+    const newStatus = activeNode.status === "Active" ? "Inactive" : "Active";
+    try {
+      await accAccountService.update(activeNode.id, { status: newStatus });
+      invalidateAccLookups();
+      await reloadAll();
+      notify(`Account '${activeNode.name}' is now ${newStatus.toUpperCase()}.`);
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    }
   };
 
-  // Attempt Delete Flow (With Strict Delete Protection Checks)
-  const handleDeleteAttempt = () => {
-    // Check 1: System Account Lock
-    if (formData.isSystemAccount || formData.classification === "System Account") {
-      setDeleteDialogProps({
-        isOpen: true,
-        reason: "system_account",
-        childCount: (formData.children || []).length,
-        transactionCount: formData.transactionCount || 0,
-      });
+  const handleDeleteAttempt = async () => {
+    if (!activeNode) return;
+    const childCount = activeNode.children.length;
+    const transactionCount = activeNode.transactionCount || 0;
+
+    if (activeNode.isSystemAccount) {
+      setDeleteDialogProps({ isOpen: true, reason: "system_account", childCount, transactionCount });
+      return;
+    }
+    if (childCount > 0) {
+      setDeleteDialogProps({ isOpen: true, reason: "has_children", childCount, transactionCount });
+      return;
+    }
+    if (transactionCount > 0) {
+      setDeleteDialogProps({ isOpen: true, reason: "has_transactions", childCount: 0, transactionCount });
       return;
     }
 
-    // Check 2: Has Children
-    if (formData.children && formData.children.length > 0) {
-      setDeleteDialogProps({
-        isOpen: true,
-        reason: "has_children",
-        childCount: formData.children.length,
-        transactionCount: formData.transactionCount || 0,
-      });
+    if (!window.confirm(`Delete account '${activeNode.name}' (${activeNode.code})? This cannot be undone.`)) {
       return;
     }
-
-    // Check 3: Has Transactions
-    if (formData.hasTransactions || (formData.transactionCount || 0) > 0) {
-      setDeleteDialogProps({
-        isOpen: true,
-        reason: "has_transactions",
-        childCount: 0,
-        transactionCount: formData.transactionCount || 0,
-      });
-      return;
+    try {
+      await accAccountService.remove(activeNode.id);
+      invalidateAccLookups();
+      setSelectedNodeId(activeNode.parentId ?? "");
+      await reloadAll();
+      notify(`Deleted account '${activeNode.name}'.`);
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
     }
-
-    // Otherwise, safe to delete (only for freshly created accounts with 0 transactions & 0 children)
-    setTreeData((prev) => {
-      const deleteRecursive = (nodes: COANode[]): COANode[] => {
-        return nodes
-          .filter((n) => n.id !== formData.id)
-          .map((n) => ({
-            ...n,
-            children: n.children ? deleteRecursive(n.children) : undefined,
-          }));
-      };
-      return deleteRecursive(prev);
-    });
-
-    setSelectedNodeId("ACC-001");
-    setToastMessage(`Deleted custom account '${formData.name}'.`);
   };
 
-  // Open Create Account Modal
+  const applyCreateParent = (parentId: string, type: AccountType) => {
+    setCreateParentId(parentId);
+    const parent = allGroups.find((g) => g.id === parentId);
+    if (parent) {
+      setCreateNature(parent.nature);
+      setCreateClassification(parent.classification || defaultClassification(parent.nature));
+      setCreateCategory(type === "Group" ? "" : parent.category);
+    }
+    setCreateCode(suggestCode(flatAccounts, parentId || null));
+  };
+
   const handleOpenCreateModal = () => {
-    const parentNode = findCOANodeById(treeData, selectedNodeId);
     const parent =
-      parentNode && parentNode.type === "Group"
-        ? parentNode
-        : findCOANodeById(treeData, "ACC-001") || treeData[0];
-
-    const defaultNature = parent.nature || "Asset";
-    const defaultCategories = natureCategories[defaultNature];
-    const generatedCode = generateAccountCode(parent, defaultNature, "Ledger");
+      activeNode && activeNode.accountType === "Group"
+        ? activeNode
+        : activeNode?.parentId
+          ? findNode(treeData, activeNode.parentId)
+          : null;
 
     setCreateType("Ledger");
-    setCreateParentId(parent.id);
-    setCreateNature(defaultNature);
-    setCreateCategory(defaultCategories[0] || "General");
     setCreateName("");
-    setCreateCode(generatedCode);
     setCreateDescription("");
-    setCreateClassification("Normal Account");
-    setCreateOpeningBalanceType("Debit Only");
-    setCreatePostingType("Both");
+    setCreateIsBank(false);
+    setCreateIsCash(false);
+    if (parent) {
+      applyCreateParent(parent.id, "Ledger");
+    } else {
+      setCreateParentId("");
+      setCreateNature("Asset");
+      setCreateClassification("Balance Sheet");
+      setCreateCategory("");
+      setCreateCode(suggestCode(flatAccounts, null));
+    }
     setShowCreateModal(true);
   };
 
-  // Update Create Modal Parent Change & Auto-code
-  const handleCreateParentChange = (parentId: string) => {
-    setCreateParentId(parentId);
-    const parent = findCOANodeById(treeData, parentId);
-    if (parent) {
-      setCreateNature(parent.nature);
-      const cats = natureCategories[parent.nature];
-      setCreateCategory(cats[0] || "General");
-      const nextCode = generateAccountCode(parent, parent.nature, createType);
-      setCreateCode(nextCode);
-    }
-  };
-
-  // Handle Save New Account
-  const handleSaveNewAccount = () => {
+  const handleSaveNewAccount = async () => {
     if (!createName.trim()) {
-      setToastMessage("Please enter a valid Account Name.");
+      notify("Please enter a valid Account Name.", "error");
       return;
     }
-
-    const parent = findCOANodeById(treeData, createParentId);
-    const parentLevel = parent ? parent.level : 1;
-    const parentName = parent ? parent.name : "Root";
-
-    const newId = `ACC-${Math.floor(1000 + Math.random() * 9000)}`;
-    const now = new Date().toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-
-    const newNode: COANode = {
-      id: newId,
-      code: createCode.trim() || `${Math.floor(1000 + Math.random() * 9000)}`,
-      name: createName.trim(),
-      parentName: parentName,
-      parentId: createParentId,
-      nature: createNature,
-      category: createCategory,
-      type: createType,
-      status: "Active",
-      description: createDescription.trim(),
-      allowPosting: createType === "Ledger",
-      openingBalanceType: createOpeningBalanceType,
-      classification: createClassification,
-      postingType: createPostingType,
-      isSystemAccount: false,
-      level: parentLevel + 1,
-      createdAt: now,
-      updatedAt: now,
-      hasTransactions: false,
-      transactionCount: 0,
-      children: createType === "Group" ? [] : undefined,
-    };
-
-    setTreeData((prev) => {
-      const insertRecursive = (nodes: COANode[]): COANode[] => {
-        return nodes.map((n) => {
-          if (n.id === createParentId) {
-            return {
-              ...n,
-              children: [...(n.children || []), newNode],
-            };
-          }
-          if (n.children) {
-            return { ...n, children: insertRecursive(n.children) };
-          }
-          return n;
-        });
-      };
-      return insertRecursive(prev);
-    });
-
-    setExpandedNodes((prev) => new Set([...prev, createParentId]));
-    setSelectedNodeId(newNode.id);
-    setShowCreateModal(false);
-    setToastMessage(
-      `Created new ${createType} '${newNode.name}' (${newNode.code}) under '${parentName}'.`
-    );
+    if (!createCode.trim()) {
+      notify("Please enter an Account Code.", "error");
+      return;
+    }
+    const parent = allGroups.find((g) => g.id === createParentId);
+    setSaving(true);
+    try {
+      const created = await accAccountService.create({
+        parentId: createParentId || null,
+        code: createCode.trim(),
+        name: createName.trim(),
+        accountType: createType,
+        nature: createNature,
+        category: createCategory.trim(),
+        classification: createClassification,
+        description: createDescription.trim(),
+        allowPosting: createType === "Ledger",
+        isBankAccount: createType === "Ledger" && createIsBank,
+        isCashAccount: createType === "Ledger" && createIsCash,
+        status: "Active",
+      });
+      invalidateAccLookups();
+      await reloadAll();
+      if (createParentId) setExpandedNodes((prev) => new Set([...prev, createParentId]));
+      setSelectedNodeId(created.id);
+      setShowCreateModal(false);
+      notify(
+        `Created new ${createType} '${created.name}' (${created.code})${parent ? ` under '${parent.name}'` : ""}.`
+      );
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const parentLevel = formData?.parentId
+    ? flatAccounts.find((a) => a.id === formData.parentId)?.level
+    : undefined;
+  const displayLevel = formData?.parentId ? (parentLevel ?? 0) + 1 : 1;
+  const natureLocked = Boolean(activeNode?.isSystemAccount || formData?.parentId);
+
+  const initialLoading = (treeQ.loading && !treeQ.data) || (listQ.loading && !listQ.data);
+  const loadError = (!treeQ.data && treeQ.error) || (!listQ.data && listQ.error) || null;
 
   return (
     <ModulePageShell
@@ -417,66 +441,71 @@ export function ChartOfAccountsView() {
         { label: "Chart of Accounts" },
       ]}
       toast={toastMessage}
+      toastVariant={toastVariant}
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex flex-wrap items-center gap-2">
-          {/* Create Account Modal Trigger */}
           <Button
             type="button"
             size="sm"
             onClick={handleOpenCreateModal}
+            disabled={initialLoading || !!loadError}
             className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer shadow-xs"
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
             Create Account
           </Button>
 
-          {/* Save Current Account Edits */}
           <Button
             type="button"
             size="sm"
-            onClick={handleSaveAccount}
+            onClick={() => void handleSaveAccount()}
+            disabled={!formData || saving}
             className="rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white shadow-xs cursor-pointer"
           >
-            <Save className="h-3.5 w-3.5 mr-1" />
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5 mr-1" />
+            )}
             Save Changes
           </Button>
 
-          {/* Safe Activate / Deactivate Trigger */}
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => setShowActivationDialog(true)}
+            disabled={!activeNode}
             className={cn(
               "rounded-xl text-xs font-bold border cursor-pointer",
-              formData.status === "Active"
+              activeNode?.status === "Active"
                 ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
                 : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
             )}
           >
             <Power className="h-3.5 w-3.5 mr-1" />
-            {formData.status === "Active" ? "Deactivate" : "Activate"}
+            {activeNode?.status === "Active" ? "Deactivate" : "Activate"}
           </Button>
 
-          {/* Delete Account Trigger */}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleDeleteAttempt}
+            onClick={() => void handleDeleteAttempt()}
+            disabled={!activeNode}
             className="rounded-xl text-xs font-semibold bg-white border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
           >
             <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
             Delete
           </Button>
 
-          {/* Reset Changes */}
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={handleResetForm}
+            disabled={!activeNode}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
           >
             <RotateCcw className="h-3.5 w-3.5 mr-1 text-slate-500" />
@@ -485,13 +514,32 @@ export function ChartOfAccountsView() {
         </div>
       }
     >
-      {/* Main Split Layout: 40% Left Panel (Tree) & 60% Right Panel (Form) */}
+      {initialLoading ? (
+        <div className="flex min-h-[320px] items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin text-emerald-700" />
+          Loading chart of accounts…
+        </div>
+      ) : loadError ? (
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/60 p-6 text-center">
+          <AlertTriangle className="h-6 w-6 text-rose-600" />
+          <p className="text-sm font-semibold text-rose-800">{loadError}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void reloadAll()}
+            className="rounded-xl text-xs font-bold border-rose-300 text-rose-700 bg-white hover:bg-rose-50"
+          >
+            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+            Retry
+          </Button>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6 font-sans">
-        {/* LEFT PANEL: Reusable AccountTreeView */}
         <div className="md:col-span-5">
           <AccountTreeView
             treeData={treeData}
-            selectedNodeId={selectedNodeId}
+            selectedNodeId={activeNode?.id ?? ""}
             onSelectNode={handleSelectNode}
             expandedNodes={expandedNodes}
             onToggleExpand={handleToggleExpand}
@@ -501,42 +549,51 @@ export function ChartOfAccountsView() {
           />
         </div>
 
-        {/* RIGHT PANEL: Account Details Form */}
         <div className="md:col-span-7 space-y-4">
-          {/* Header Card */}
+          {!activeNode || !formData ? (
+            <div className="flex min-h-[320px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
+              <FolderTree className="h-6 w-6 text-slate-400" />
+              <p className="text-xs font-semibold text-slate-600">
+                No account selected. Create an account group to start building your chart of accounts.
+              </p>
+            </div>
+          ) : (
+          <>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
                   <Building2 className="h-5 w-5 text-emerald-700" />
                   <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                    {formData.type === "Group"
+                    {formData.accountType === "Group"
                       ? "Group Account Maintenance"
                       : "Ledger Account Maintenance"}
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Selected: <strong className="text-slate-900">{formData.name}</strong>{" "}
-                  ({formData.code})
+                  Selected: <strong className="text-slate-900">{activeNode.name}</strong>{" "}
+                  ({activeNode.code}) · Balance{" "}
+                  <strong className="text-slate-900 font-mono">
+                    {formatINR(activeNode.balance)} {activeNode.balanceSide}
+                  </strong>
                 </p>
               </div>
 
-              {/* Status & Level Badges */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-mono font-bold text-slate-700 border border-slate-200">
                   <Layers className="h-3.5 w-3.5 text-slate-500" />
-                  Level {formData.level}
+                  Level {displayLevel}
                 </span>
 
                 <span
                   className={cn(
                     "inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-bold border",
-                    formData.type === "Group"
+                    formData.accountType === "Group"
                       ? "bg-amber-50 text-amber-800 border-amber-200"
                       : "bg-indigo-50 text-indigo-800 border-indigo-200"
                   )}
                 >
-                  {formData.type}
+                  {formData.accountType}
                 </span>
 
                 <span
@@ -561,13 +618,12 @@ export function ChartOfAccountsView() {
             </div>
           </div>
 
-          {/* Section 1: General Information */}
           <MasterFormSection
             title="General Information"
             subtitle="Core identification, classification, and hierarchy details."
             icon={<FileText className="h-4 w-4" />}
             badge={
-              formData.isSystemAccount ? (
+              activeNode.isSystemAccount ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
                   <Lock className="h-3 w-3" />
                   System Account (Locked)
@@ -576,31 +632,37 @@ export function ChartOfAccountsView() {
             }
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Account ID (Read Only) */}
               <FormField label="Account ID">
                 <TextInput
-                  value={formData.id}
+                  value={activeNode.id}
                   readOnly
                   className="bg-slate-50 font-mono font-bold text-slate-700 cursor-not-allowed"
                 />
               </FormField>
 
-              {/* Account Code (Auto-generated with regenerate button) */}
-              <FormField label="Account Code" required>
+              <FormField
+                label="Account Code"
+                required
+                helperText={activeNode.isSystemAccount ? "System account codes cannot be changed." : undefined}
+              >
                 <div className="flex items-center gap-1.5">
                   <TextInput
                     value={formData.code}
+                    readOnly={activeNode.isSystemAccount}
                     onChange={(e) => handleFormChange("code", e.target.value)}
                     placeholder="e.g. 1111"
-                    className="font-mono font-bold text-slate-900"
+                    className={cn(
+                      "font-mono font-bold text-slate-900",
+                      activeNode.isSystemAccount && "bg-slate-50 cursor-not-allowed"
+                    )}
                   />
-                  {!formData.isSystemAccount && (
+                  {!activeNode.isSystemAccount && (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       onClick={handleRegenerateCode}
-                      title="Auto-calculate next sequence code"
+                      title="Suggest next available code under the parent"
                       className="h-9 px-2 text-xs font-bold bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100 shrink-0"
                     >
                       <Sparkles className="h-3.5 w-3.5 text-amber-600" />
@@ -609,7 +671,6 @@ export function ChartOfAccountsView() {
                 </div>
               </FormField>
 
-              {/* Account Name */}
               <FormField label="Account Name" required className="sm:col-span-2">
                 <TextInput
                   value={formData.name}
@@ -619,69 +680,60 @@ export function ChartOfAccountsView() {
                 />
               </FormField>
 
-              {/* Parent Group / Account */}
               <FormField
                 label="Parent Account / Group"
                 helperText={
-                  formData.isSystemAccount
+                  activeNode.isSystemAccount
                     ? "System accounts cannot change parent hierarchy."
-                    : "Organizes this ledger under the selected parent group."
+                    : "Organizes this account under the selected parent group."
                 }
               >
                 <SelectInput
                   value={formData.parentId || ""}
-                  disabled={formData.isSystemAccount || formData.level === 1}
+                  disabled={activeNode.isSystemAccount}
                   onChange={(e) => {
-                    const selectedParent = allGroups.find(
-                      (g) => g.id === e.target.value
+                    const selectedParent = allGroups.find((g) => g.id === e.target.value);
+                    setFormData((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            parentId: selectedParent ? selectedParent.id : null,
+                            nature: selectedParent ? selectedParent.nature : prev.nature,
+                          }
+                        : prev
                     );
-                    if (selectedParent) {
-                      setFormData((prev) => ({
-                        ...prev,
-                        parentId: selectedParent.id,
-                        parentName: selectedParent.name,
-                        nature: selectedParent.nature,
-                        level: selectedParent.level + 1,
-                      }));
-                    }
                   }}
                   className={cn(
-                    (formData.isSystemAccount || formData.level === 1) &&
-                      "bg-slate-50 cursor-not-allowed text-slate-600"
+                    activeNode.isSystemAccount && "bg-slate-50 cursor-not-allowed text-slate-600"
                   )}
                 >
-                  {formData.level === 1 ? (
-                    <option value="">Root Level (No Parent)</option>
-                  ) : (
-                    allGroups.map((grp) => (
+                  <option value="">Root Level (No Parent)</option>
+                  {allGroups
+                    .filter((grp) => grp.id !== activeNode.id)
+                    .map((grp) => (
                       <option key={grp.id} value={grp.id}>
                         {grp.code} - {grp.name} ({grp.nature})
                       </option>
-                    ))
-                  )}
+                    ))}
                 </SelectInput>
               </FormField>
 
-              {/* Account Nature */}
               <FormField
                 label="Account Nature"
                 required
                 helperText={
-                  formData.isSystemAccount
+                  activeNode.isSystemAccount
                     ? "Root nature is permanently locked for system accounts."
-                    : undefined
+                    : formData.parentId
+                      ? "Inherited automatically from the parent group."
+                      : undefined
                 }
               >
                 <SelectInput
                   value={formData.nature}
-                  disabled={formData.isSystemAccount || formData.level === 1}
-                  onChange={(e) =>
-                    handleFormChange("nature", e.target.value as AccountNature)
-                  }
-                  className={cn(
-                    (formData.isSystemAccount || formData.level === 1) &&
-                      "bg-slate-50 cursor-not-allowed text-slate-600 font-bold"
-                  )}
+                  disabled={natureLocked}
+                  onChange={(e) => handleFormChange("nature", e.target.value as AccountNature)}
+                  className={cn(natureLocked && "bg-slate-50 cursor-not-allowed text-slate-600 font-bold")}
                 >
                   <option value="Asset">Asset</option>
                   <option value="Liability">Liability</option>
@@ -690,38 +742,35 @@ export function ChartOfAccountsView() {
                 </SelectInput>
               </FormField>
 
-              {/* Account Category */}
-              <FormField label="Account Category" required>
-                <SelectInput
+              <FormField label="Account Category">
+                <TextInput
                   value={formData.category}
+                  list="coa-edit-categories"
                   onChange={(e) => handleFormChange("category", e.target.value)}
-                >
-                  {(natureCategories[formData.nature] || []).map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
+                  placeholder="e.g. Cash & Bank, Receivables..."
+                />
+                <datalist id="coa-edit-categories">
+                  {categoriesByNature[formData.nature].map((cat) => (
+                    <option key={cat} value={cat} />
                   ))}
-                </SelectInput>
+                </datalist>
               </FormField>
 
-              {/* Account Type */}
               <FormField
                 label="Account Type"
                 required
                 helperText={
-                  formData.type === "Group"
+                  formData.accountType === "Group"
                     ? "Group accounts strictly categorize ledgers; transactions cannot post to groups."
                     : "Ledger accounts allow active voucher posting."
                 }
               >
                 <SelectInput
-                  value={formData.type}
-                  disabled={formData.isSystemAccount}
-                  onChange={(e) =>
-                    handleFormChange("type", e.target.value as AccountType)
-                  }
+                  value={formData.accountType}
+                  disabled={activeNode.isSystemAccount}
+                  onChange={(e) => handleFormChange("accountType", e.target.value as AccountType)}
                   className={cn(
-                    formData.isSystemAccount &&
+                    activeNode.isSystemAccount &&
                       "bg-slate-50 cursor-not-allowed text-slate-600 font-bold"
                   )}
                 >
@@ -730,112 +779,77 @@ export function ChartOfAccountsView() {
                 </SelectInput>
               </FormField>
 
-              {/* Status */}
               <FormField label="Status">
                 <SelectInput
                   value={formData.status}
-                  onChange={(e) => handleFormChange("status", e.target.value)}
+                  onChange={(e) => handleFormChange("status", e.target.value as AccountForm["status"])}
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
                 </SelectInput>
               </FormField>
 
-              {/* Description */}
               <FormField label="Description & Purpose" className="sm:col-span-2">
                 <TextAreaInput
                   rows={2}
-                  value={formData.description || ""}
-                  onChange={(e) =>
-                    handleFormChange("description", e.target.value)
-                  }
+                  value={formData.description}
+                  onChange={(e) => handleFormChange("description", e.target.value)}
                   placeholder="Add notes on accounting purpose, statutory mandates, or usage rules..."
                 />
               </FormField>
             </div>
           </MasterFormSection>
 
-          {/* Section 2: Accounting Configuration */}
           <MasterFormSection
             title="Accounting Configuration"
-            subtitle="Posting governance, balance policies, and classification tiers."
+            subtitle="Posting governance, financial statement placement, and bank / cash flags."
             icon={<Sliders className="h-4 w-4" />}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              {/* Account Classification */}
               <FormField
                 label="Account Classification"
-                required
-                helperText="Defines operational role: Normal (regular postings), Control (syncs party/guest sub-ledgers), or System (PMS core engine)."
+                helperText="Financial statement the account rolls up into."
               >
                 <SelectInput
                   value={formData.classification}
-                  disabled={formData.isSystemAccount}
-                  onChange={(e) =>
-                    handleFormChange(
-                      "classification",
-                      e.target.value as AccountClassification
-                    )
-                  }
-                  className={cn(
-                    formData.isSystemAccount &&
-                      "bg-slate-50 cursor-not-allowed font-bold text-slate-700"
+                  onChange={(e) => handleFormChange("classification", e.target.value)}
+                >
+                  <option value="">— Not set —</option>
+                  {CLASSIFICATIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                  {formData.classification && !CLASSIFICATIONS.includes(formData.classification) && (
+                    <option value={formData.classification}>{formData.classification}</option>
                   )}
-                >
-                  <option value="Normal Account">Normal Account</option>
-                  <option value="Control Account">Control Account</option>
-                  <option value="System Account">System Account</option>
                 </SelectInput>
               </FormField>
 
-              {/* Posting Type */}
               <FormField
-                label="Posting Type"
-                required
-                helperText="Controls allowed transaction origin: System (auto posting only), Manual (vouchers only), or Both."
+                label="Report Section"
+                helperText="Section used in Balance Sheet / Profit & Loss. Blank inherits from the parent group."
               >
                 <SelectInput
-                  value={formData.postingType}
-                  onChange={(e) =>
-                    handleFormChange(
-                      "postingType",
-                      e.target.value as PostingType
-                    )
-                  }
+                  value={formData.reportSection}
+                  onChange={(e) => handleFormChange("reportSection", e.target.value)}
                 >
-                  <option value="Both">Both (Manual Vouchers & System Auto-Posting)</option>
-                  <option value="System">System Only (Front Office / POS / Night Audit)</option>
-                  <option value="Manual">Manual Only (Accountant Voucher Entry)</option>
+                  <option value="">— Inherit / Not set —</option>
+                  {REPORT_SECTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                  {formData.reportSection && !REPORT_SECTIONS.includes(formData.reportSection) && (
+                    <option value={formData.reportSection}>{formData.reportSection}</option>
+                  )}
                 </SelectInput>
               </FormField>
 
-              {/* Opening Balance Type */}
-              <FormField
-                label="Opening Balance Type"
-                required
-                helperText="Dictates permissible opening balance sign (e.g. Debit Only for Cash/Bank, Credit Only for Vendors, None for Revenue/Expense)."
-              >
-                <SelectInput
-                  value={formData.openingBalanceType}
-                  onChange={(e) =>
-                    handleFormChange(
-                      "openingBalanceType",
-                      e.target.value as OpeningBalanceType
-                    )
-                  }
-                >
-                  <option value="None">None (P&L / Revenue / Expense)</option>
-                  <option value="Debit Only">Debit Only (Cash / Bank / Assets)</option>
-                  <option value="Credit Only">Credit Only (Payables / Loans / Capital)</option>
-                  <option value="Both">Both (Guest Folios / Clearing Accounts)</option>
-                </SelectInput>
-              </FormField>
-
-              {/* Allow Posting Flag */}
               <FormField
                 label="Allow Posting"
                 helperText={
-                  formData.type === "Group"
+                  formData.accountType === "Group"
                     ? "Disabled for Group accounts. Only Ledgers allow transaction postings."
                     : "Enables journal and voucher line items to select this ledger."
                 }
@@ -844,39 +858,87 @@ export function ChartOfAccountsView() {
                   <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 select-none">
                     <input
                       type="checkbox"
-                      checked={Boolean(formData.allowPosting)}
-                      disabled={formData.type === "Group"}
-                      onChange={(e) =>
-                        handleFormChange("allowPosting", e.target.checked)
-                      }
+                      checked={formData.allowPosting}
+                      disabled={formData.accountType === "Group"}
+                      onChange={(e) => handleFormChange("allowPosting", e.target.checked)}
                       className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
                     />
                     <span>
-                      {formData.allowPosting
-                        ? "Posting Enabled"
-                        : "Posting Prohibited"}
+                      {formData.allowPosting ? "Posting Enabled" : "Posting Prohibited"}
                     </span>
                   </label>
                 </div>
               </FormField>
+
+              <FormField
+                label="Bank / Cash Ledger"
+                helperText="Marks the ledger for receipts, payments, contra and bank reconciliation."
+              >
+                <div className="flex items-center gap-4 pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 select-none">
+                    <input
+                      type="checkbox"
+                      checked={formData.isBankAccount}
+                      disabled={formData.accountType === "Group"}
+                      onChange={(e) => handleFormChange("isBankAccount", e.target.checked)}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                    />
+                    <span>Bank A/c</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 select-none">
+                    <input
+                      type="checkbox"
+                      checked={formData.isCashAccount}
+                      disabled={formData.accountType === "Group"}
+                      onChange={(e) => handleFormChange("isCashAccount", e.target.checked)}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                    />
+                    <span>Cash A/c</span>
+                  </label>
+                </div>
+              </FormField>
+
+              {formData.isBankAccount && (
+                <>
+                  <FormField label="Bank Account No.">
+                    <TextInput
+                      value={formData.bankAccountNo}
+                      onChange={(e) => handleFormChange("bankAccountNo", e.target.value)}
+                      placeholder="e.g. 50200012345678"
+                      className="font-mono"
+                    />
+                  </FormField>
+                  <FormField label="Bank IFSC">
+                    <TextInput
+                      value={formData.bankIfsc}
+                      onChange={(e) => handleFormChange("bankIfsc", e.target.value.toUpperCase())}
+                      placeholder="e.g. HDFC0001234"
+                      className="font-mono"
+                    />
+                  </FormField>
+                </>
+              )}
             </div>
           </MasterFormSection>
 
-          {/* Section 3: Usage & Audit Information (Read Only) */}
           <MasterAuditInfo
             idLabel="Account ID"
-            idValue={formData.id}
-            level={formData.level}
-            isSystem={formData.isSystemAccount}
-            status={formData.status}
-            createdAt={formData.createdAt}
-            updatedAt={formData.updatedAt}
-            transactionCount={formData.transactionCount || 0}
+            idValue={activeNode.id}
+            level={activeNode.level}
+            isSystem={activeNode.isSystemAccount}
+            status={activeNode.status}
+            createdAt={formatDate(activeNode.createdAt)}
+            updatedAt={formatDate(activeNode.updatedAt)}
+            createdBy={activeNode.createdBy ?? undefined}
+            updatedBy={activeNode.updatedBy ?? undefined}
+            transactionCount={activeNode.transactionCount || 0}
           />
+          </>
+          )}
         </div>
       </div>
+      )}
 
-      {/* Unified + Create Account Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50">
           <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl border border-slate-200 space-y-4 font-sans text-xs max-h-[90vh] overflow-y-auto">
@@ -896,7 +958,6 @@ export function ChartOfAccountsView() {
               </button>
             </div>
 
-            {/* Segmented Account Type Selector: Group vs Ledger */}
             <div>
               <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Account Type
@@ -904,15 +965,7 @@ export function ChartOfAccountsView() {
               <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
                 <button
                   type="button"
-                  onClick={() => {
-                    setCreateType("Group");
-                    const parent = findCOANodeById(treeData, createParentId);
-                    if (parent) {
-                      setCreateCode(
-                        generateAccountCode(parent, createNature, "Group")
-                      );
-                    }
-                  }}
+                  onClick={() => setCreateType("Group")}
                   className={cn(
                     "flex items-center justify-center gap-1.5 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer",
                     createType === "Group"
@@ -925,15 +978,7 @@ export function ChartOfAccountsView() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setCreateType("Ledger");
-                    const parent = findCOANodeById(treeData, createParentId);
-                    if (parent) {
-                      setCreateCode(
-                        generateAccountCode(parent, createNature, "Ledger")
-                      );
-                    }
-                  }}
+                  onClick={() => setCreateType("Ledger")}
                   className={cn(
                     "flex items-center justify-center gap-1.5 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer",
                     createType === "Ledger"
@@ -949,12 +994,12 @@ export function ChartOfAccountsView() {
 
             <div className="space-y-3 pt-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Parent Group Selector */}
-                <FormField label="Parent Group" required>
+                <FormField label="Parent Group" required={createType === "Ledger"}>
                   <SelectInput
                     value={createParentId}
-                    onChange={(e) => handleCreateParentChange(e.target.value)}
+                    onChange={(e) => applyCreateParent(e.target.value, createType)}
                   >
+                    <option value="">Root Level (No Parent)</option>
                     {allGroups.map((grp) => (
                       <option key={grp.id} value={grp.id}>
                         {grp.code} - {grp.name} ({grp.nature})
@@ -963,18 +1008,16 @@ export function ChartOfAccountsView() {
                   </SelectInput>
                 </FormField>
 
-                {/* Auto-generated Code */}
                 <FormField label="Account Code" required>
                   <TextInput
                     value={createCode}
                     onChange={(e) => setCreateCode(e.target.value)}
-                    placeholder="Auto-calculated code"
+                    placeholder="Suggested code"
                     className="font-mono font-bold"
                   />
                 </FormField>
               </div>
 
-              {/* Account Name */}
               <FormField label="Account Title / Name" required>
                 <TextInput
                   value={createName}
@@ -985,20 +1028,20 @@ export function ChartOfAccountsView() {
               </FormField>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Nature */}
-                <FormField label="Nature" required>
+                <FormField
+                  label="Nature"
+                  required
+                  helperText={createParentId ? "Inherited from the parent group." : undefined}
+                >
                   <SelectInput
                     value={createNature}
+                    disabled={!!createParentId}
                     onChange={(e) => {
                       const nat = e.target.value as AccountNature;
                       setCreateNature(nat);
-                      const cats = natureCategories[nat];
-                      setCreateCategory(cats[0] || "General");
-                      const parent = findCOANodeById(treeData, createParentId);
-                      setCreateCode(
-                        generateAccountCode(parent, nat, createType)
-                      );
+                      setCreateClassification(defaultClassification(nat));
                     }}
+                    className={cn(createParentId && "bg-slate-50 cursor-not-allowed text-slate-600")}
                   >
                     <option value="Asset">Asset</option>
                     <option value="Liability">Liability</option>
@@ -1007,70 +1050,61 @@ export function ChartOfAccountsView() {
                   </SelectInput>
                 </FormField>
 
-                {/* Category */}
-                <FormField label="Category" required>
-                  <SelectInput
+                <FormField label="Category">
+                  <TextInput
                     value={createCategory}
+                    list="coa-create-categories"
                     onChange={(e) => setCreateCategory(e.target.value)}
+                    placeholder="e.g. Cash & Bank"
+                  />
+                  <datalist id="coa-create-categories">
+                    {categoriesByNature[createNature].map((cat) => (
+                      <option key={cat} value={cat} />
+                    ))}
+                  </datalist>
+                </FormField>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <FormField label="Classification">
+                  <SelectInput
+                    value={createClassification}
+                    onChange={(e) => setCreateClassification(e.target.value)}
                   >
-                    {(natureCategories[createNature] || []).map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
+                    {CLASSIFICATIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
                       </option>
                     ))}
                   </SelectInput>
                 </FormField>
+
+                {createType === "Ledger" && (
+                  <FormField label="Ledger Flags">
+                    <div className="flex items-center gap-4 pt-2">
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 select-none">
+                        <input
+                          type="checkbox"
+                          checked={createIsBank}
+                          onChange={(e) => setCreateIsBank(e.target.checked)}
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                        />
+                        <span>Bank A/c</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 select-none">
+                        <input
+                          type="checkbox"
+                          checked={createIsCash}
+                          onChange={(e) => setCreateIsCash(e.target.checked)}
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                        />
+                        <span>Cash A/c</span>
+                      </label>
+                    </div>
+                  </FormField>
+                )}
               </div>
 
-              {createType === "Ledger" && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <FormField label="Classification">
-                    <SelectInput
-                      value={createClassification}
-                      onChange={(e) =>
-                        setCreateClassification(
-                          e.target.value as AccountClassification
-                        )
-                      }
-                    >
-                      <option value="Normal Account">Normal Account</option>
-                      <option value="Control Account">Control Account</option>
-                      <option value="System Account">System Account</option>
-                    </SelectInput>
-                  </FormField>
-
-                  <FormField label="Posting Type">
-                    <SelectInput
-                      value={createPostingType}
-                      onChange={(e) =>
-                        setCreatePostingType(e.target.value as PostingType)
-                      }
-                    >
-                      <option value="Both">Both</option>
-                      <option value="System">System Only</option>
-                      <option value="Manual">Manual Only</option>
-                    </SelectInput>
-                  </FormField>
-
-                  <FormField label="Opening Balance">
-                    <SelectInput
-                      value={createOpeningBalanceType}
-                      onChange={(e) =>
-                        setCreateOpeningBalanceType(
-                          e.target.value as OpeningBalanceType
-                        )
-                      }
-                    >
-                      <option value="None">None</option>
-                      <option value="Debit Only">Debit Only</option>
-                      <option value="Credit Only">Credit Only</option>
-                      <option value="Both">Both</option>
-                    </SelectInput>
-                  </FormField>
-                </div>
-              )}
-
-              {/* Description */}
               <FormField label="Description">
                 <TextAreaInput
                   rows={2}
@@ -1094,9 +1128,11 @@ export function ChartOfAccountsView() {
               <Button
                 type="button"
                 size="sm"
-                onClick={handleSaveNewAccount}
+                onClick={() => void handleSaveNewAccount()}
+                disabled={saving}
                 className="px-5 h-8 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
               >
+                {saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
                 Create {createType}
               </Button>
             </div>
@@ -1104,31 +1140,26 @@ export function ChartOfAccountsView() {
         </div>
       )}
 
-      {/* Safe Activation / Deactivation Confirmation Dialog */}
-      <MasterActivationDialog
-        isOpen={showActivationDialog}
-        onClose={() => setShowActivationDialog(false)}
-        onConfirm={handleToggleActivation}
-        recordName={formData.name}
-        currentStatus={formData.status}
-        hasDependents={
-          (formData.children && formData.children.length > 0) ||
-          (formData.transactionCount || 0) > 0
-        }
-        dependentWarning={
-          formData.type === "Group"
-            ? `Deactivating group '${formData.name}' will restrict visibility of its child accounts during active entry selection.`
-            : `Deactivating ledger '${formData.name}' will prevent front desk night audits and manual vouchers from posting to this account.`
-        }
-      />
+      {activeNode && (
+        <MasterActivationDialog
+          isOpen={showActivationDialog}
+          onClose={() => setShowActivationDialog(false)}
+          onConfirm={() => void handleToggleActivation()}
+          recordName={activeNode.name}
+          currentStatus={activeNode.status}
+          hasDependents={activeNode.children.length > 0 || (activeNode.transactionCount || 0) > 0}
+          dependentWarning={
+            activeNode.accountType === "Group"
+              ? `Deactivating group '${activeNode.name}' will restrict visibility of its child accounts during active entry selection.`
+              : `Deactivating ledger '${activeNode.name}' will prevent front desk night audits and manual vouchers from posting to this account.`
+          }
+        />
+      )}
 
-      {/* Delete Protection Alert Dialog */}
       <MasterDeleteProtectionDialog
         isOpen={deleteDialogProps.isOpen}
-        onClose={() =>
-          setDeleteDialogProps((prev) => ({ ...prev, isOpen: false }))
-        }
-        recordName={formData.name}
+        onClose={() => setDeleteDialogProps((prev) => ({ ...prev, isOpen: false }))}
+        recordName={activeNode?.name ?? ""}
         reason={deleteDialogProps.reason}
         childCount={deleteDialogProps.childCount}
         transactionCount={deleteDialogProps.transactionCount}

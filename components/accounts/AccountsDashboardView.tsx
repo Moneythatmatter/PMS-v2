@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import {
   TrendingUp,
@@ -11,15 +12,26 @@ import {
   FileText,
   Layers,
   Bell,
+  Loader2,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { ModulePageShell } from "@/components/pms";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { DeskActivityFeed } from "@/components/frontoffice/DeskActivityFeed";
 import { DepartmentRevenueChart } from "@/components/charts/DepartmentRevenueChart";
 import { BookingPlatformRevenueChart } from "@/components/charts/BookingPlatformRevenueChart";
 import { UpcomingVendorPayments } from "@/components/accounts/UpcomingVendorPayments";
+import { formatDate, formatINR, useAccQuery } from "@/components/accounts/accountsApi";
+import {
+  accAccountService,
+  accAuditLogService,
+  accPartyBillService,
+  accReportService,
+  type AccountTreeNode,
+  type AuditLog,
+} from "@/services/accounts";
 import { cn } from "@/lib/utils";
 
 const quickLinks = [
@@ -73,191 +85,241 @@ const quickLinks = [
   },
 ];
 
-const alerts = [
-  {
-    id: "bank-recon",
-    tone: "warning" as const,
-    title: "3 Bank Reconciliations Pending",
-    detail: "HDFC Bank · 3 unverified entries awaiting match",
-    href: "/accounts/transactions/bank-reconciliation",
-    action: "Reconcile now",
-  },
-  {
-    id: "prov-vouchers",
-    tone: "danger" as const,
-    title: "5 Provisional Vouchers Awaiting Approval",
-    detail: "Review and approve before month-end posting",
-    href: "/accounts/transactions/provisional-transactions",
-    action: "Review vouchers",
-  },
-  {
-    id: "month-close",
-    tone: "info" as const,
-    title: "Fiscal Period Closing Reminder",
-    detail: "Period Jun 2026 closing due in 4 days",
-    href: "/accounts/transactions/fiscal-period-closing",
-    action: "Period status",
-  },
-  {
-    id: "party-overdue",
-    tone: "warning" as const,
-    title: "2 Party Overdue Invoices (>30 Days)",
-    detail: "Global Travel Corp · 8,400 overdue",
-    href: "/accounts/party-outstanding/bills-aging",
-    action: "View aging",
-  },
-];
+const CHART_COLORS = ["#15803d", "#0284c7", "#8b5cf6", "#d97706", "#06b6d4", "#ec4899", "#64748b"];
 
-const recentTransactions = [
-  {
-    id: "VCH-2026-104",
-    type: "General Journal",
-    account: "Room Sales Income",
-    amount: "12,500.00",
-    status: "Posted",
-    statusTone: "emerald",
-  },
-  {
-    id: "VCH-2026-103",
-    type: "Receipt Voucher",
-    account: "Grand Event Corp",
-    amount: "8,400.00",
-    status: "Approved",
-    statusTone: "emerald",
-  },
-  {
-    id: "VCH-2026-102",
-    type: "Payment Voucher",
-    account: "City Utilities Ltd",
-    amount: "3,250.00",
-    status: "Posted",
-    statusTone: "emerald",
-  },
-  {
-    id: "VCH-2026-101",
-    type: "Provisional Journal",
-    account: "Inventory Stock Adjustment",
-    amount: "1,800.00",
-    status: "Provisional",
-    statusTone: "amber",
-  },
-  {
-    id: "VCH-2026-100",
-    type: "Receipt Voucher",
-    account: "Express Booking Services",
-    amount: "5,600.00",
-    status: "Posted",
-    statusTone: "emerald",
-  },
-];
+const ENTITY_LABELS: Record<string, string> = {
+  voucher: "Voucher",
+  party_bill: "Party bill",
+  covering_letter: "Covering letter",
+  fiscal_period: "Fiscal period",
+  fiscal_year: "Fiscal year",
+  bank_reconciliation: "Bank reconciliation",
+  closing_stock: "Closing stock",
+};
 
-const partyOutstanding = [
-  {
-    name: "Grand Event Corp",
-    category: "Debtor (AR)",
-    dueDate: "28 Jun 2026",
-    amount: "8,400.00",
-    status: "Pending",
-    statusTone: "amber",
-  },
-  {
-    name: "Prime Supplies Ltd",
-    category: "Creditor (AP)",
-    dueDate: "25 Jun 2026",
-    amount: "6,200.00",
-    status: "Overdue",
-    statusTone: "red",
-  },
-  {
-    name: "Skyline Travel Bureau",
-    category: "Debtor (AR)",
-    dueDate: "30 Jun 2026",
-    amount: "4,850.00",
-    status: "Pending",
-    statusTone: "amber",
-  },
-  {
-    name: "Fresh Produce Wholesalers",
-    category: "Creditor (AP)",
-    dueDate: "22 Jun 2026",
-    amount: "3,900.00",
-    status: "Overdue",
-    statusTone: "red",
-  },
-  {
-    name: "Metropolis Catering",
-    category: "Debtor (AR)",
-    dueDate: "02 Jul 2026",
-    amount: "2,750.00",
-    status: "Settled",
-    statusTone: "emerald",
-  },
-];
+type Tone = "emerald" | "amber" | "red";
 
-const treasuryAccounts = [
-  { label: "HDFC Operational Bank", amount: "48,000.00", percent: 56, color: "#15803d" },
-  { label: "ICICI Merchant Bank", amount: "24,500.00", percent: 29, color: "#0284c7" },
-  { label: "Cash in Hand", amount: "9,400.00", percent: 11, color: "#d97706" },
-  { label: "Petty Cash Float", amount: "3,500.00", percent: 4, color: "#64748b" },
-];
+function voucherTone(status: string): Tone {
+  if (status === "Posted" || status === "Converted") return "emerald";
+  if (status === "Reversed") return "red";
+  return "amber";
+}
 
-const expenseBudgets = [
-  { label: "Food & Beverages", count: 32400, max: 50000, color: "#15803d" },
-  { label: "Staff Payroll & Benefits", count: 28100, max: 45000, color: "#0284c7" },
-  { label: "Utilities & Energy", count: 14200, max: 20000, color: "#d97706" },
-  { label: "Repairs & Maintenance", count: 8500, max: 15000, color: "#64748b" },
-];
+function flattenTree(nodes: AccountTreeNode[]): AccountTreeNode[] {
+  return nodes.flatMap((n) => [n, ...flattenTree(n.children)]);
+}
 
-const activityLogs = [
-  { id: "1", message: "Voucher #VCH-2026-104 posted for 12,500 by Admin", timestamp: "10 mins ago" },
-  { id: "2", message: "Bank reconciliation matched 14 entries for HDFC Bank", timestamp: "35 mins ago" },
-  { id: "3", message: "Payment advice #PA-104 generated for Prime Supplies Ltd", timestamp: "1 hr ago" },
-  { id: "4", message: "Provisional voucher #VCH-2026-101 submitted for approval", timestamp: "2 hrs ago" },
-  { id: "5", message: "Party master updated for Grand Event Corp", timestamp: "4 hrs ago" },
-];
+function compactAmount(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1e7) return `${(n / 1e7).toFixed(1)}Cr`;
+  if (abs >= 1e5) return `${(n / 1e5).toFixed(1)}L`;
+  if (abs >= 1e3) return `${Math.round(n / 1e3)}k`;
+  return String(Math.round(n));
+}
 
-const summaryStats = [
-  {
-    label: "Total Revenue",
-    value: "₹148,250.00",
-    accent: "#15803d",
-    icon: TrendingUp,
-    sublabel: "+12.4% vs last month",
-  },
-  {
-    label: "Accounts Receivable",
-    value: "₹34,120.00",
-    accent: "#d97706",
-    icon: Users,
-    sublabel: "18 receivables pending",
-  },
-  {
-    label: "Accounts Payable",
-    value: "₹25,500.00",
-    accent: "#0284c7",
-    icon: Wallet,
-    sublabel: "5 vendor payables due",
-  },
-  {
-    label: "Net Margin (P&L)",
-    value: "₹42,600.00",
-    accent: "#059669",
-    icon: Scale,
-    sublabel: "28.7% net margin",
-  },
-];
+function timeAgo(iso: string): string {
+  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min${mins === 1 ? "" : "s"} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr${hrs === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return formatDate(iso);
+}
+
+function activityMessage(log: AuditLog): string {
+  const d = log.details ?? {};
+  const ref = [d.voucherNo, d.billNo, d.letterNo].find((v) => typeof v === "string" && v) as string | undefined;
+  const label = ENTITY_LABELS[log.entityType] ?? log.entityType.replace(/_/g, " ");
+  const parts = [`${label}${ref ? ` ${ref}` : ""}`, log.action.toLowerCase()];
+  if (log.actor) parts.push(`by ${log.actor}`);
+  let msg = parts.join(" ");
+  if (log.reason) msg += ` · ${log.reason}`;
+  return msg;
+}
+
+async function loadDashboard() {
+  const [dashboard, activity, tree, openBills] = await Promise.all([
+    accReportService.dashboard(),
+    accAuditLogService.list({ limit: 10 }),
+    accAccountService.tree(),
+    accPartyBillService.list({ pendingOnly: true, status: "Open" }),
+  ]);
+  return { dashboard, activity, tree, openBills };
+}
 
 export function AccountsDashboardView() {
+  const { data, loading, error, reload } = useAccQuery(loadDashboard, []);
+
+  const view = useMemo(() => {
+    if (!data) return null;
+    const { dashboard, activity, tree, openBills } = data;
+    const k = dashboard.kpis;
+
+    const summaryStats = [
+      {
+        label: "Revenue (MTD)",
+        value: formatINR(k.revenueMtd),
+        accent: "#15803d",
+        icon: TrendingUp,
+        sublabel: `YTD ${formatINR(k.revenueYtd, { decimals: 0 })}`,
+      },
+      {
+        label: "Accounts Receivable",
+        value: formatINR(k.receivables),
+        accent: "#d97706",
+        icon: Users,
+        sublabel: `${formatINR(k.overdueReceivables, { decimals: 0 })} overdue`,
+      },
+      {
+        label: "Accounts Payable",
+        value: formatINR(k.payables),
+        accent: "#0284c7",
+        icon: Wallet,
+        sublabel: `${dashboard.upcomingVendorPayments.length} vendor bill${dashboard.upcomingVendorPayments.length === 1 ? "" : "s"} due in 30 days`,
+      },
+      {
+        label: "Net Profit (YTD)",
+        value: formatINR(k.netProfitYtd),
+        accent: "#059669",
+        icon: Scale,
+        sublabel: `${k.netMarginYtd.toFixed(1)}% net margin`,
+      },
+    ];
+
+    const overdueParties = openBills.filter((b) => b.moduleType === "AR" && b.overdueDays > 30);
+    const alerts = [
+      k.unreconciledBankEntries > 0 && {
+        id: "bank-recon",
+        tone: "warning" as const,
+        title: `${k.unreconciledBankEntries} Unreconciled Bank ${k.unreconciledBankEntries === 1 ? "Entry" : "Entries"}`,
+        detail: `Bank balance ${formatINR(k.bankBalance)} awaiting statement match`,
+        href: "/accounts/transactions/bank-reconciliation",
+      },
+      k.provisionalEntries > 0 && {
+        id: "prov-vouchers",
+        tone: "danger" as const,
+        title: `${k.provisionalEntries} Provisional ${k.provisionalEntries === 1 ? "Entry" : "Entries"} Pending`,
+        detail: "Convert or reverse before period closing",
+        href: "/accounts/transactions/provisional-transactions",
+      },
+      k.draftVouchers > 0 && {
+        id: "draft-vouchers",
+        tone: "info" as const,
+        title: `${k.draftVouchers} Draft Voucher${k.draftVouchers === 1 ? "" : "s"} Not Posted`,
+        detail: "Drafts block fiscal period closing",
+        href: "/accounts/transactions/gl-transaction",
+      },
+      overdueParties.length > 0 && {
+        id: "party-overdue",
+        tone: "warning" as const,
+        title: `${overdueParties.length} Party Overdue Invoice${overdueParties.length === 1 ? "" : "s"} (>30 Days)`,
+        detail: `${formatINR(overdueParties.reduce((s, b) => s + b.balance, 0))} overdue`,
+        href: "/accounts/party-outstanding/bills-aging",
+      },
+    ].filter(Boolean) as {
+      id: string;
+      tone: "warning" | "danger" | "info";
+      title: string;
+      detail: string;
+      href: string;
+    }[];
+
+    const deptTotal = dashboard.departmentRevenue.reduce((s, d) => s + d.value, 0);
+    const departmentData = dashboard.departmentRevenue.map((d, i) => ({
+      module: d.name,
+      revenue: d.value,
+      share: deptTotal ? Math.round((d.value / deptTotal) * 1000) / 10 : 0,
+      color: CHART_COLORS[i % CHART_COLORS.length],
+    }));
+    const channelTotal = dashboard.channelRevenue.reduce((s, d) => s + d.value, 0);
+    const channelData = dashboard.channelRevenue.map((d, i) => ({
+      platform: d.name,
+      revenue: d.value,
+      percentage: channelTotal ? Math.round((d.value / channelTotal) * 100) : 0,
+      color: CHART_COLORS[i % CHART_COLORS.length],
+    }));
+
+    const partyOutstanding = [...openBills]
+      .sort((a, b) => b.overdueDays - a.overdueDays || b.balance - a.balance)
+      .slice(0, 5);
+
+    const liquidTotal = k.cashBalance + k.bankBalance;
+    const treasuryAccounts = flattenTree(tree)
+      .filter((n) => n.accountType === "Ledger" && (n.isBankAccount || n.isCashAccount) && n.net !== 0)
+      .sort((a, b) => b.net - a.net)
+      .map((n, i) => ({
+        id: n.id,
+        label: n.name,
+        amount: n.net,
+        percent: liquidTotal > 0 ? Math.max(0, Math.round((n.net / liquidTotal) * 100)) : 0,
+        color: CHART_COLORS[i % CHART_COLORS.length],
+      }));
+    const bankShare = liquidTotal > 0 ? Math.max(0, Math.min(100, Math.round((k.bankBalance / liquidTotal) * 100))) : 0;
+
+    return {
+      dashboard,
+      activity,
+      summaryStats,
+      alerts,
+      departmentData,
+      channelData,
+      partyOutstanding,
+      liquidTotal,
+      treasuryAccounts,
+      bankShare,
+    };
+  }, [data]);
+
   return (
     <ModulePageShell
       eyebrow="Accounts"
       title="Dashboard"
-      description="Real-time financial overview, departmental revenue analytics, booking channel mix, vendor payments schedule, and ledger summaries."
+      description={
+        view
+          ? `Real-time financial overview as on ${formatDate(view.dashboard.asOn)}${view.dashboard.fiscalYearName ? ` · FY ${view.dashboard.fiscalYearName}` : ""}.`
+          : "Real-time financial overview, departmental revenue analytics, booking channel mix, vendor payments schedule, and ledger summaries."
+      }
       wrapChildren={false}
+      actionButtons={
+        <Button type="button" size="sm" variant="outline" onClick={() => void reload()} disabled={loading}>
+          <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", loading && "animate-spin")} />
+          Refresh
+        </Button>
+      }
     >
+      {!view ? (
+        <Card className="flex min-h-[16rem] flex-col items-center justify-center gap-3 text-center">
+          {loading ? (
+            <>
+              <Loader2 className="h-6 w-6 animate-spin text-emerald-700" />
+              <p className="text-sm text-slate-500">Loading dashboard…</p>
+            </>
+          ) : (
+            <>
+              <AlertTriangle className="h-6 w-6 text-red-600" />
+              <p className="text-sm text-slate-700">{error ?? "Could not load dashboard"}</p>
+              <Button type="button" size="sm" variant="outline" onClick={() => void reload()}>
+                Retry
+              </Button>
+            </>
+          )}
+        </Card>
+      ) : (
       <div className="min-w-0 space-y-4 sm:space-y-6 lg:space-y-8">
+        {error && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            <span>{error}</span>
+            <Button type="button" size="sm" variant="outline" onClick={() => void reload()}>
+              Retry
+            </Button>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6">
-          {summaryStats.map((stat) => {
+          {view.summaryStats.map((stat) => {
             const Icon = stat.icon;
             return (
               <Card key={stat.label} className="h-full min-w-0 p-3 sm:p-5">
@@ -285,11 +347,11 @@ export function AccountsDashboardView() {
           })}
         </div>
 
-        {alerts.length > 0 && (
+        {view.alerts.length > 0 && (
           <Card className="min-w-0">
             <CardHeader
               title="Needs attention"
-              subtitle={`${alerts.length} item${alerts.length === 1 ? "" : "s"} to review`}
+              subtitle={`${view.alerts.length} item${view.alerts.length === 1 ? "" : "s"} to review`}
               action={
                 <Link
                   href="/accounts/transactions/provisional-transactions"
@@ -301,7 +363,7 @@ export function AccountsDashboardView() {
               }
             />
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {alerts.map((alert) => (
+              {view.alerts.map((alert) => (
                 <Link
                   key={alert.id}
                   href={alert.href}
@@ -346,22 +408,26 @@ export function AccountsDashboardView() {
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
           <DepartmentRevenueChart
+            data={view.departmentData}
             title="Departmental Revenue Distribution"
-            subtitle="Revenue contributed by operational module"
+            subtitle="Year-to-date revenue by division"
+            emptyMessage="No division-wise revenue posted this year"
           />
           <BookingPlatformRevenueChart
+            data={view.channelData}
             title="Booking Platform Revenue"
-            subtitle="Revenue contribution by reservation channel"
+            subtitle="Year-to-date room revenue by booking channel"
+            emptyMessage="No room revenue posted this year"
           />
         </div>
 
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
-          <UpcomingVendorPayments />
+          <UpcomingVendorPayments payments={view.dashboard.upcomingVendorPayments} />
 
           <Card className="flex h-full min-w-0 flex-col">
             <CardHeader
               title="Recent GL Vouchers"
-              subtitle={`${recentTransactions.length} latest entries`}
+              subtitle={`${view.dashboard.recentVouchers.length} latest posted entries`}
               action={
                 <Link href="/accounts/transactions/gl-transaction">
                   <Button type="button" size="sm" variant="outline">
@@ -371,32 +437,43 @@ export function AccountsDashboardView() {
               }
             />
             <ul className="flex flex-1 flex-col divide-y divide-slate-100">
-              {recentTransactions.map((trx) => (
-                <li
-                  key={trx.id}
-                  className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">
-                      {trx.id} <span className="font-normal text-slate-500">· {trx.type}</span>
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{trx.account}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-xs font-bold text-slate-900">₹{trx.amount}</span>
-                    <span
-                      className={cn(
-                        "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset",
-                        trx.statusTone === "emerald" && "bg-emerald-50 text-emerald-700 ring-emerald-200",
-                        trx.statusTone === "amber" && "bg-amber-50 text-amber-700 ring-amber-200",
-                        trx.statusTone === "red" && "bg-red-50 text-red-700 ring-red-200",
-                      )}
-                    >
-                      {trx.status}
-                    </span>
-                  </div>
-                </li>
-              ))}
+              {view.dashboard.recentVouchers.map((trx) => {
+                const tone = voucherTone(trx.status);
+                return (
+                  <li
+                    key={trx.id}
+                    className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900">
+                        {trx.voucherNo}{" "}
+                        <span className="font-normal text-slate-500">
+                          · {trx.voucherTypeName ?? trx.voucherCategory}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                        {formatDate(trx.voucherDate)} · {trx.partyName || trx.narration || "—"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs font-bold text-slate-900">{formatINR(trx.totalAmount)}</span>
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset",
+                          tone === "emerald" && "bg-emerald-50 text-emerald-700 ring-emerald-200",
+                          tone === "amber" && "bg-amber-50 text-amber-700 ring-amber-200",
+                          tone === "red" && "bg-red-50 text-red-700 ring-red-200",
+                        )}
+                      >
+                        {trx.status}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+              {view.dashboard.recentVouchers.length === 0 && (
+                <li className="py-8 text-center text-sm text-slate-500">No posted vouchers yet</li>
+              )}
             </ul>
           </Card>
         </div>
@@ -415,32 +492,39 @@ export function AccountsDashboardView() {
               }
             />
             <ul className="flex flex-1 flex-col divide-y divide-slate-100">
-              {partyOutstanding.map((party) => (
-                <li
-                  key={party.name}
-                  className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">{party.name}</p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">
-                      {party.category} · Due: {party.dueDate}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-xs font-bold text-slate-900">₹{party.amount}</span>
-                    <span
-                      className={cn(
-                        "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset",
-                        party.statusTone === "emerald" && "bg-emerald-50 text-emerald-700 ring-emerald-200",
-                        party.statusTone === "amber" && "bg-amber-50 text-amber-700 ring-amber-200",
-                        party.statusTone === "red" && "bg-red-50 text-red-700 ring-red-200",
-                      )}
-                    >
-                      {party.status}
-                    </span>
-                  </div>
-                </li>
-              ))}
+              {view.partyOutstanding.map((bill) => {
+                const overdue = bill.overdueDays > 0;
+                return (
+                  <li
+                    key={bill.id}
+                    className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900">{bill.partyName ?? "—"}</p>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                        {bill.moduleType === "AR" ? "Debtor (AR)" : "Creditor (AP)"} · {bill.billNo} · Due:{" "}
+                        {formatDate(bill.dueDate)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs font-bold text-slate-900">{formatINR(bill.balance)}</span>
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset",
+                          overdue
+                            ? "bg-red-50 text-red-700 ring-red-200"
+                            : "bg-amber-50 text-amber-700 ring-amber-200",
+                        )}
+                      >
+                        {overdue ? `Overdue ${bill.overdueDays}d` : "Pending"}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+              {view.partyOutstanding.length === 0 && (
+                <li className="py-8 text-center text-sm text-slate-500">No outstanding party bills</li>
+              )}
             </ul>
           </Card>
 
@@ -450,7 +534,7 @@ export function AccountsDashboardView() {
               subtitle="Liquid assets"
               action={
                 <Link
-                  href="/accounts/masters/currency"
+                  href="/accounts/transactions/bank-reconciliation"
                   className="text-xs font-medium text-emerald-700 hover:underline"
                 >
                   Details
@@ -461,40 +545,68 @@ export function AccountsDashboardView() {
               <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
                 <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
                   <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" strokeWidth="3" />
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="15.5"
-                    fill="none"
-                    stroke="#15803d"
-                    strokeWidth="3"
-                    strokeDasharray="85 15"
-                    strokeLinecap="round"
-                  />
+                  {view.bankShare > 0 && (
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="15.5"
+                      fill="none"
+                      stroke="#15803d"
+                      strokeWidth="3"
+                      pathLength={100}
+                      strokeDasharray={`${view.bankShare} ${100 - view.bankShare}`}
+                      strokeLinecap="round"
+                    />
+                  )}
                 </svg>
-                <span className="absolute text-sm font-bold text-slate-900">85k</span>
+                <span className="absolute text-sm font-bold text-slate-900">
+                  {compactAmount(view.liquidTotal)}
+                </span>
               </div>
               <div className="min-w-0">
-                <p className="text-2xl font-bold tracking-tight text-slate-900">₹85,400.00</p>
-                <p className="mt-0.5 text-xs text-slate-500">Total liquid balance</p>
+                <p className="text-2xl font-bold tracking-tight text-slate-900">{formatINR(view.liquidTotal)}</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Bank {formatINR(view.dashboard.kpis.bankBalance, { decimals: 0 })} · Cash{" "}
+                  {formatINR(view.dashboard.kpis.cashBalance, { decimals: 0 })}
+                </p>
               </div>
             </div>
             <div className="mt-auto space-y-2">
-              {treasuryAccounts.map((acc) => (
-                <div key={acc.label}>
+              {view.treasuryAccounts.map((acc) => (
+                <div key={acc.id}>
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <span className="text-slate-600">{acc.label}</span>
-                    <span className="font-medium text-slate-900">₹{acc.amount}</span>
+                    <span className="font-medium text-slate-900">{formatINR(acc.amount)}</span>
                   </div>
                   <ProgressBar value={acc.percent} max={100} color={acc.color} />
                 </div>
               ))}
+              {view.treasuryAccounts.length === 0 && (
+                <p className="py-4 text-center text-sm text-slate-500">No bank or cash balances yet</p>
+              )}
             </div>
           </Card>
 
-          <DeskActivityFeed activities={activityLogs} />
+          <Card className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+            <CardHeader title="Recent activity" subtitle="Accounts audit log" />
+            <ul className="min-h-0 max-h-[16.5rem] flex-1 space-y-2.5 overflow-y-auto overscroll-contain pr-1">
+              {view.activity.map((log) => (
+                <li key={log.id} className="flex gap-2.5">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-sm leading-snug text-slate-700">{activityMessage(log)}</p>
+                    <p className="mt-0.5 text-[11px] text-slate-400">{timeAgo(log.createdAt)}</p>
+                  </div>
+                </li>
+              ))}
+              {view.activity.length === 0 && (
+                <li className="py-6 text-center text-sm text-slate-500">No activity yet</li>
+              )}
+            </ul>
+          </Card>
         </div>
       </div>
+      )}
     </ModulePageShell>
   );
 }

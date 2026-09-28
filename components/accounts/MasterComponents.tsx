@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import {
   Shield,
   ShieldAlert,
@@ -9,18 +9,18 @@ import {
   Calendar,
   Clock,
   Layers,
-  FileCheck2,
   Lock,
   X,
   CheckCircle2,
-  Ban,
-  Trash2,
   Building2,
-  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { sampleCompaniesList, CompanyRecord } from "@/app/data/accounts/companyCreationData";
+import type { Company } from "@/services/accounts";
 import { cn } from "@/lib/utils";
+import { formatDate, useAccLookups } from "./accountsApi";
+
+export type CompanyOption = Pick<Company, "id" | "companyCode" | "tradeName" | "legalName"> &
+  Partial<Pick<Company, "status">>;
 
 /**
  * Reusable Company Selector Component for Master Pages
@@ -28,19 +28,67 @@ import { cn } from "@/lib/utils";
 export interface CompanySelectorProps {
   selectedCompanyId?: string;
   onCompanyChange?: (companyId: string) => void;
-  companies?: CompanyRecord[];
+  /** Defaults to the companies from the shared accounts lookups. */
+  companies?: CompanyOption[];
   className?: string;
 }
 
 export function CompanySelector({
-  selectedCompanyId = "comp-101",
+  selectedCompanyId,
   onCompanyChange,
-  companies = sampleCompaniesList,
+  companies: companiesProp,
   className,
 }: CompanySelectorProps) {
+  const { lookups, loading, error, reload } = useAccLookups();
+  const companies: CompanyOption[] = companiesProp ?? lookups?.companies ?? [];
   const activeCompany =
     companies.find((c) => c.id === selectedCompanyId || c.companyCode === selectedCompanyId) ||
     companies[0];
+
+  useEffect(() => {
+    if (activeCompany && activeCompany.id !== selectedCompanyId) onCompanyChange?.(activeCompany.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCompany?.id, selectedCompanyId]);
+
+  if (!activeCompany) {
+    return (
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-2xs",
+          className
+        )}
+      >
+        <div className="flex items-center gap-3 flex-1 min-w-[280px]">
+          <div className="h-9 w-9 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
+            <Building2 className="h-4.5 w-4.5" />
+          </div>
+          <div className="flex-1">
+            <span className="font-bold text-[11px] text-slate-500 block uppercase tracking-wider">
+              Target Company Entity
+            </span>
+            <span className="text-xs font-semibold text-slate-500">
+              {!companiesProp && loading
+                ? "Loading companies…"
+                : !companiesProp && error
+                  ? error
+                  : "No companies configured yet"}
+            </span>
+          </div>
+        </div>
+        {!companiesProp && error && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void reload(true)}
+            className="h-8 text-xs font-semibold"
+          >
+            Retry
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -130,6 +178,21 @@ export function MasterFormSection({
   );
 }
 
+function displayAuditDate(value: string): string {
+  if (!value) return "—";
+  if (!/^\d{4}-\d{2}-\d{2}/.test(value)) return value;
+  if (value.length <= 10) return formatDate(value);
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /**
  * Reusable Master Audit Information Panel (Read-only)
  */
@@ -157,8 +220,8 @@ export function MasterAuditInfo({
   status,
   createdAt,
   updatedAt,
-  createdBy = "Finance Admin",
-  updatedBy = "Finance Admin",
+  createdBy,
+  updatedBy,
   transactionCount = 0,
   className,
 }: MasterAuditInfoProps) {
@@ -251,11 +314,13 @@ export function MasterAuditInfo({
       <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/60 font-medium">
         <span className="flex items-center gap-1">
           <Calendar className="h-3.5 w-3.5 text-slate-400" />
-          Created: <strong className="text-slate-700">{createdAt}</strong> ({createdBy})
+          Created: <strong className="text-slate-700">{displayAuditDate(createdAt)}</strong>
+          {createdBy ? ` (${createdBy})` : ""}
         </span>
         <span className="flex items-center gap-1">
           <Clock className="h-3.5 w-3.5 text-slate-400" />
-          Last Updated: <strong className="text-slate-700">{updatedAt}</strong> ({updatedBy})
+          Last Updated: <strong className="text-slate-700">{displayAuditDate(updatedAt)}</strong>
+          {updatedBy ? ` (${updatedBy})` : ""}
         </span>
       </div>
     </div>
@@ -315,7 +380,7 @@ export function MasterActivationDialog({
         <div className="space-y-2.5 text-slate-700">
           <p className="text-xs leading-relaxed">
             Are you sure you want to change the status of{" "}
-            <strong className="text-slate-900 font-bold">"{recordName}"</strong> to{" "}
+            <strong className="text-slate-900 font-bold">&ldquo;{recordName}&rdquo;</strong> to{" "}
             <span
               className={cn(
                 "font-bold uppercase px-1.5 py-0.5 rounded text-[11px]",
@@ -418,7 +483,7 @@ export function MasterDeleteProtectionDialog({
 
         <div className="space-y-3 text-slate-700">
           <p className="text-xs">
-            Cannot delete record <strong className="text-slate-900 font-bold">"{recordName}"</strong>.
+            Cannot delete record <strong className="text-slate-900 font-bold">&ldquo;{recordName}&rdquo;</strong>.
           </p>
 
           <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 text-rose-900 text-[11px] leading-relaxed space-y-1.5">

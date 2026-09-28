@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Building2,
   Search,
@@ -8,7 +8,6 @@ import {
   Save,
   X,
   Phone,
-  Mail,
   MapPin,
   FileCheck2,
   RefreshCw,
@@ -20,7 +19,9 @@ import {
   Ban,
   CheckCircle2,
   Coins,
-  Globe,
+  Trash2,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -30,39 +31,146 @@ import {
   FODatePicker,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
-import {
-  sampleCompaniesList,
-  CompanyRecord,
-} from "@/app/data/accounts/companyCreationData";
+import { accCompanyService, type Company } from "@/services/accounts";
 import { cn } from "@/lib/utils";
+import { accErrorMessage, invalidateAccLookups, useAccLookups, useAccQuery } from "./accountsApi";
+
+type CompanyForm = Omit<
+  Company,
+  "id" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy" | "baseCurrencyCode" | "logoUrl" | "registrationDate" | "baseCurrencyId"
+> & {
+  id: string | null;
+  logoUrl: string;
+  registrationDate: string;
+  baseCurrencyId: string;
+};
+
+function suggestCompanyCode(list: Company[]): string {
+  let max = 0;
+  for (const c of list) {
+    const m = (c.companyCode || "").match(/^CMP-(\d+)$/i);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `CMP-${String(max + 1).padStart(3, "0")}`;
+}
+
+function emptyCompanyForm(companyCode: string, baseCurrencyId = ""): CompanyForm {
+  return {
+    id: null,
+    companyCode,
+    tradeName: "",
+    legalName: "",
+    alias: "",
+    companyType: "Private Limited",
+    businessNature: "Hospitality & Hotel Operations",
+    status: "Active",
+    logoUrl: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    district: "",
+    state: "",
+    pincode: "",
+    country: "India",
+    primaryContact: "",
+    mobile: "",
+    telephone: "",
+    email: "",
+    website: "",
+    gstNumber: "",
+    panNumber: "",
+    tanNumber: "",
+    cinNumber: "",
+    msmeNumber: "",
+    registrationDate: "",
+    taxRegion: "",
+    gstApplicable: true,
+    baseCurrencyId,
+  };
+}
+
+function toCompanyForm(c: Company): CompanyForm {
+  return {
+    id: c.id,
+    companyCode: c.companyCode ?? "",
+    tradeName: c.tradeName ?? "",
+    legalName: c.legalName ?? "",
+    alias: c.alias ?? "",
+    companyType: c.companyType || "Private Limited",
+    businessNature: c.businessNature ?? "",
+    status: c.status ?? "Active",
+    logoUrl: c.logoUrl ?? "",
+    addressLine1: c.addressLine1 ?? "",
+    addressLine2: c.addressLine2 ?? "",
+    city: c.city ?? "",
+    district: c.district ?? "",
+    state: c.state ?? "",
+    pincode: c.pincode ?? "",
+    country: c.country ?? "",
+    primaryContact: c.primaryContact ?? "",
+    mobile: c.mobile ?? "",
+    telephone: c.telephone ?? "",
+    email: c.email ?? "",
+    website: c.website ?? "",
+    gstNumber: c.gstNumber ?? "",
+    panNumber: c.panNumber ?? "",
+    tanNumber: c.tanNumber ?? "",
+    cinNumber: c.cinNumber ?? "",
+    msmeNumber: c.msmeNumber ?? "",
+    registrationDate: c.registrationDate ? c.registrationDate.slice(0, 10) : "",
+    taxRegion: c.taxRegion ?? "",
+    gstApplicable: Boolean(c.gstApplicable),
+    baseCurrencyId: c.baseCurrencyId ?? "",
+  };
+}
+
+function toCompanyBody(f: CompanyForm): Partial<Company> {
+  const { id: _id, ...rest } = f;
+  void _id;
+  return {
+    ...rest,
+    logoUrl: f.logoUrl.trim() || null,
+    registrationDate: f.registrationDate || null,
+    baseCurrencyId: f.baseCurrencyId || null,
+  };
+}
 
 export function CompanyCreationView() {
   // Master Company List & Active Selection State
-  const [companies, setCompanies] = useState<CompanyRecord[]>(sampleCompaniesList);
-  const [selectedId, setSelectedId] = useState<string>(sampleCompaniesList[0].id);
+  const { data, loading, error, reload } = useAccQuery(() => accCompanyService.list(), []);
+  const companies = useMemo(() => data ?? [], [data]);
+  const { lookups } = useAccLookups();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Selected Active Company Record
+  // Unsaved edits (null = show the selected record as stored)
+  const [draft, setDraft] = useState<CompanyForm | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const isDraftNew = draft !== null && draft.id === null;
   const activeCompany = useMemo(
-    () => companies.find((c) => c.id === selectedId) || companies[0],
-    [companies, selectedId]
+    () => (isDraftNew ? undefined : companies.find((c) => c.id === selectedId) || companies[0]),
+    [companies, selectedId, isDraftNew]
   );
 
-  // Form State (Derived from active company for editing)
-  const [formData, setFormData] = useState<CompanyRecord>(activeCompany);
-
-  // Update formData when activeCompany changes
-  useEffect(() => {
-    setFormData({ ...activeCompany });
-  }, [activeCompany]);
+  const baseCurrencyDefault = lookups?.currencies.find((c) => c.isBaseCurrency)?.id ?? "";
+  const formData: CompanyForm =
+    draft ?? (activeCompany ? toCompanyForm(activeCompany) : emptyCompanyForm(suggestCompanyCode(companies), baseCurrencyDefault));
+  const isNew = formData.id === null;
+  const currentFiscalYear = lookups?.fiscalYears.find((fy) => fy.isCurrent);
 
   // Sectional Tab State (3 Core Identity Tabs Only)
   const [formTab, setFormTab] = useState<"general" | "address" | "registration">("general");
 
   // Notification Toast State
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessageRaw] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const setToastMessage = (msg: string | null, variant: "success" | "error" = "success") => {
+    setToastVariant(variant);
+    setToastMessageRaw(msg);
+  };
 
   // Filtered Companies List
   const filteredCompanies = useMemo(() => {
@@ -84,119 +192,130 @@ export function CompanyCreationView() {
   }, [companies, searchQuery]);
 
   // Form Field Change Handler
-  const handleFormChange = (field: keyof CompanyRecord, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const handleFormChange = <K extends keyof CompanyForm>(field: K, value: CompanyForm[K]) => {
+    setDraft((prev) => ({ ...(prev ?? formData), [field]: value }));
+  };
+
+  const handleSelectCompany = (id: string) => {
+    setSelectedId(id);
+    setDraft(null);
+  };
+
+  const startNewCompany = (list: Company[]) => {
+    const newRecord = emptyCompanyForm(suggestCompanyCode(list), baseCurrencyDefault);
+    setDraft(newRecord);
+    setFormTab("general");
+    return newRecord;
   };
 
   // Handlers for Top Action Buttons
   const handleNewCompany = () => {
-    const nextNum = Math.floor(100 + Math.random() * 900);
-    const newRecord: CompanyRecord = {
-      id: `cmp-${Date.now()}`,
-      companyCode: `CMP-${nextNum}`,
-      tradeName: "",
-      legalName: "",
-      alias: "",
-      companyType: "Private Limited",
-      businessNature: "Hospitality & Hotel Operations",
-      status: "Active",
-
-      addressLine1: "",
-      addressLine2: "",
-      city: "",
-      district: "",
-      state: "",
-      pincode: "",
-      country: "India",
-
-      primaryContact: "",
-      mobile: "",
-      telephone: "",
-      email: "",
-      website: "",
-
-      gstNumber: "",
-      panNumber: "",
-      tanNumber: "",
-      cinNumber: "",
-      msmeNumber: "",
-      registrationDate: "",
-      taxRegion: "",
-
-      gstApplicable: true,
-
-      baseCurrencyId: "INR",
-      currentFiscalYearId: "FY-2026-27",
-
-      createdAt: "Today",
-      updatedAt: "Today",
-    };
-
-    setCompanies([newRecord, ...companies]);
-    setSelectedId(newRecord.id);
-    setFormData(newRecord);
-    setFormTab("general");
+    const newRecord = startNewCompany(companies);
     setToastMessage(`Prepared new Company Creation record (${newRecord.companyCode}).`);
   };
 
   // Validation & Save Handler
-  const handleSaveCompany = (andNew = false) => {
-    if (!formData.tradeName?.trim()) {
-      setToastMessage("Please enter the Company Trade Name.");
+  const handleSaveCompany = async (andNew = false) => {
+    if (!formData.companyCode.trim()) {
+      setToastMessage("Please enter the Company Code.", "error");
       setFormTab("general");
       return;
     }
 
-    if (!formData.legalName?.trim()) {
-      setToastMessage("Please enter the Legal Registered Name.");
+    if (!formData.tradeName.trim()) {
+      setToastMessage("Please enter the Company Trade Name.", "error");
+      setFormTab("general");
+      return;
+    }
+
+    if (!formData.legalName.trim()) {
+      setToastMessage("Please enter the Legal Registered Name.", "error");
       setFormTab("general");
       return;
     }
 
     // Duplicate Company Code check (for newly edited or altered codes)
     const isDuplicateCode = companies.some(
-      (c) => c.id !== formData.id && c.companyCode.toUpperCase() === formData.companyCode.toUpperCase()
+      (c) => c.id !== formData.id && c.companyCode.toUpperCase() === formData.companyCode.trim().toUpperCase()
     );
     if (isDuplicateCode) {
-      setToastMessage(`Company Code '${formData.companyCode}' is already in use by another entity.`);
+      setToastMessage(`Company Code '${formData.companyCode}' is already in use by another entity.`, "error");
       return;
     }
 
-    setCompanies((prev) =>
-      prev.map((c) =>
-        c.id === formData.id
-          ? {
-              ...formData,
-              updatedAt: "Just now",
-            }
-          : c
-      )
-    );
-
-    setToastMessage(`Saved Legal Company Record for '${formData.tradeName}'.`);
-
-    if (andNew) {
-      handleNewCompany();
+    setSaving(true);
+    try {
+      const body = toCompanyBody(formData);
+      const saved = formData.id
+        ? await accCompanyService.update(formData.id, body)
+        : await accCompanyService.create(body);
+      invalidateAccLookups();
+      const fresh = await reload();
+      setToastMessage(`Saved Legal Company Record for '${saved.tradeName}'.`);
+      if (andNew) {
+        startNewCompany(fresh ?? companies);
+      } else {
+        setSelectedId(saved.id);
+        setDraft(null);
+      }
+    } catch (e) {
+      setToastMessage(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
     }
   };
 
   // Non-destructive Deactivation / Activation Handler
-  const handleToggleDeactivate = () => {
-    const nextStatus = formData.status === "Active" ? "Inactive" : "Active";
-    const updated = { ...formData, status: nextStatus as "Active" | "Inactive", updatedAt: "Just now" };
-    setFormData(updated);
-    setCompanies((prev) => prev.map((c) => (c.id === formData.id ? updated : c)));
-    setToastMessage(
-      nextStatus === "Inactive"
-        ? `Deactivated company '${formData.tradeName}'. Transactions will be protected.`
-        : `Activated company '${formData.tradeName}'.`
-    );
+  const handleToggleDeactivate = async () => {
+    const nextStatus: Company["status"] = formData.status === "Active" ? "Inactive" : "Active";
+    if (!formData.id) {
+      handleFormChange("status", nextStatus);
+      return;
+    }
+    setSaving(true);
+    try {
+      await accCompanyService.update(formData.id, { status: nextStatus });
+      invalidateAccLookups();
+      await reload();
+      setDraft((prev) => (prev ? { ...prev, status: nextStatus } : null));
+      setToastMessage(
+        nextStatus === "Inactive"
+          ? `Deactivated company '${formData.tradeName}'. Transactions will be protected.`
+          : `Activated company '${formData.tradeName}'.`
+      );
+    } catch (e) {
+      setToastMessage(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteCompany = async () => {
+    if (!formData.id) {
+      setDraft(null);
+      return;
+    }
+    if (!window.confirm(`Delete company '${formData.tradeName || formData.companyCode}'? This cannot be undone.`)) return;
+    setSaving(true);
+    try {
+      await accCompanyService.remove(formData.id);
+      invalidateAccLookups();
+      setSelectedId(null);
+      setDraft(null);
+      await reload();
+      setToastMessage(`Deleted company '${formData.tradeName || formData.companyCode}'.`);
+    } catch (e) {
+      setToastMessage(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Refresh / Reset Edits Handler
-  const handleRefresh = () => {
-    setFormData({ ...activeCompany });
-    setToastMessage("Reset unsaved changes to active company record.");
+  const handleRefresh = async () => {
+    setDraft(null);
+    await reload();
+    setToastMessage("Reloaded company records and discarded unsaved changes.");
   };
 
   return (
@@ -210,6 +329,7 @@ export function CompanyCreationView() {
         { label: "Company Creation" },
       ]}
       toast={toastMessage}
+      toastVariant={toastVariant}
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex flex-wrap items-center gap-2">
@@ -227,10 +347,11 @@ export function CompanyCreationView() {
           <Button
             type="button"
             size="sm"
-            onClick={() => handleSaveCompany(false)}
+            onClick={() => void handleSaveCompany(false)}
+            disabled={saving || loading}
             className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
           >
-            <Save className="h-3.5 w-3.5 mr-1" />
+            {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
             Save
           </Button>
 
@@ -238,7 +359,8 @@ export function CompanyCreationView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => handleSaveCompany(true)}
+            onClick={() => void handleSaveCompany(true)}
+            disabled={saving || loading}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
           >
             Save & New
@@ -248,7 +370,20 @@ export function CompanyCreationView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleToggleDeactivate}
+            onClick={() => void handleDeleteCompany()}
+            disabled={saving || loading}
+            className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-rose-50 text-rose-700 cursor-pointer"
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
+            {isNew ? "Discard" : "Delete"}
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={saving || loading}
+            onClick={() => void handleToggleDeactivate()}
             className={cn(
               "rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 cursor-pointer",
               formData.status === "Active" ? "text-amber-700 hover:text-amber-800" : "text-emerald-700 hover:text-emerald-800"
@@ -271,10 +406,11 @@ export function CompanyCreationView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleRefresh}
+            onClick={() => void handleRefresh()}
+            disabled={saving}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
           >
-            <RefreshCw className="h-3.5 w-3.5 mr-1 text-slate-500" />
+            <RefreshCw className={cn("h-3.5 w-3.5 mr-1 text-slate-500", loading && "animate-spin")} />
             Refresh
           </Button>
         </div>
@@ -330,12 +466,54 @@ export function CompanyCreationView() {
 
           {/* Company Cards List */}
           <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[540px]">
+            {loading && !data && (
+              <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                Loading companies…
+              </div>
+            )}
+
+            {error && !data && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 space-y-2">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Could not load companies
+                </div>
+                <p>{error}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void reload()}
+                  className="h-7 text-xs font-semibold bg-white"
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
+
+            {isNew && (
+              <div className="p-3 rounded-xl border border-emerald-600 bg-emerald-50/80 shadow-xs ring-1 ring-emerald-600/30">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                    {formData.companyCode || "NEW"}
+                  </span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase bg-amber-100 text-amber-800">
+                    Unsaved
+                  </span>
+                </div>
+                <h4 className="text-xs font-bold text-slate-900 line-clamp-1 mt-0.5">
+                  {formData.tradeName || "New Company"}
+                </h4>
+              </div>
+            )}
+
             {filteredCompanies.map((c) => {
-              const isSelected = c.id === selectedId;
+              const isSelected = c.id === formData.id;
               return (
                 <div
                   key={c.id}
-                  onClick={() => setSelectedId(c.id)}
+                  onClick={() => handleSelectCompany(c.id)}
                   className={cn(
                     "p-3 rounded-xl border transition-all cursor-pointer select-none",
                     isSelected
@@ -379,15 +557,17 @@ export function CompanyCreationView() {
 
                   <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-medium text-slate-500">
                     <span>{c.companyType}</span>
-                    <span>{c.state || c.country || "India"}</span>
+                    <span>{c.state || c.country || "—"}</span>
                   </div>
                 </div>
               );
             })}
 
-            {filteredCompanies.length === 0 && (
+            {data && filteredCompanies.length === 0 && (
               <div className="text-center py-8 text-xs text-slate-400">
-                No registered entities match your search.
+                {companies.length === 0
+                  ? "No companies registered yet. Fill in the form to create the first entity."
+                  : "No registered entities match your search."}
               </div>
             )}
           </div>
@@ -488,11 +668,12 @@ export function CompanyCreationView() {
                   </h3>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <FormField label="Company Code (System Auto)" required>
+                    <FormField label="Company Code" required>
                       <TextInput
                         value={formData.companyCode || ""}
-                        readOnly
-                        className="bg-slate-100 font-mono font-bold text-slate-800 cursor-not-allowed h-9"
+                        onChange={(e) => handleFormChange("companyCode", e.target.value.toUpperCase())}
+                        placeholder="e.g. CMP-001"
+                        className="bg-white font-mono font-bold uppercase text-slate-800 h-9"
                       />
                     </FormField>
 
@@ -552,7 +733,7 @@ export function CompanyCreationView() {
                     <FormField label="System Status">
                       <SelectInput
                         value={formData.status || "Active"}
-                        onChange={(e) => handleFormChange("status", e.target.value)}
+                        onChange={(e) => handleFormChange("status", e.target.value as Company["status"])}
                         className="bg-white font-bold h-9 text-slate-900"
                       >
                         <option value="Active">Active</option>
@@ -561,22 +742,32 @@ export function CompanyCreationView() {
                     </FormField>
                   </div>
 
-                  {/* Reference Indicators Box (Read-Only Cross-Master References) */}
+                  {/* Reference Indicators Box (Cross-Master References) */}
                   <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-4">
                       <div className="flex items-center gap-1.5 text-slate-600">
                         <Coins className="h-3.5 w-3.5 text-amber-600" />
                         <span className="font-semibold">Base Currency:</span>
-                        <span className="font-bold text-slate-900 bg-amber-50 px-2 py-0.5 rounded text-[11px] border border-amber-200">
-                          {formData.baseCurrencyId || "INR"}
-                        </span>
+                        <select
+                          value={formData.baseCurrencyId}
+                          onChange={(e) => handleFormChange("baseCurrencyId", e.target.value)}
+                          className="h-7 rounded-lg border border-amber-200 bg-amber-50 px-2 text-[11px] font-bold text-slate-900 focus:border-emerald-600 focus:outline-none cursor-pointer"
+                        >
+                          <option value="">— Select —</option>
+                          {(lookups?.currencies ?? []).map((cur) => (
+                            <option key={cur.id} value={cur.id}>
+                              {cur.code} – {cur.name}
+                              {cur.isBaseCurrency ? " (Base)" : ""}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       <div className="flex items-center gap-1.5 text-slate-600">
                         <Calendar className="h-3.5 w-3.5 text-blue-600" />
                         <span className="font-semibold">Current FY:</span>
                         <span className="font-bold text-slate-900 bg-blue-50 px-2 py-0.5 rounded text-[11px] border border-blue-200">
-                          {formData.currentFiscalYearId || "FY-2026-27"}
+                          {currentFiscalYear?.fiscalYearName || "Not set"}
                         </span>
                       </div>
                     </div>
@@ -585,22 +776,19 @@ export function CompanyCreationView() {
                     </span>
                   </div>
 
-                  {/* Logo Upload Box */}
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                  {/* Logo Box */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <Upload className="h-4 w-4 text-emerald-600" />
                       <span className="font-bold text-slate-800">Company Logo & Branding:</span>
-                      <span className="text-[11px] text-slate-500">(Optional PNG / JPEG)</span>
+                      <span className="text-[11px] text-slate-500">(Optional image URL)</span>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setToastMessage("Company logo uploaded.")}
-                      className="h-8 text-xs font-bold bg-white border-slate-300 hover:bg-slate-50 text-slate-800 cursor-pointer"
-                    >
-                      Browse File
-                    </Button>
+                    <TextInput
+                      value={formData.logoUrl}
+                      onChange={(e) => handleFormChange("logoUrl", e.target.value)}
+                      placeholder="https://…/logo.png"
+                      className="bg-white h-8 text-xs max-w-xs"
+                    />
                   </div>
                 </div>
               </div>
@@ -677,7 +865,8 @@ export function CompanyCreationView() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField label="Country">
                       <TextInput
-                        value={formData.country || "India"}
+                        value={formData.country || ""}
+                        placeholder="Country"
                         onChange={(e) => handleFormChange("country", e.target.value)}
                         className="bg-white h-9 font-semibold"
                       />

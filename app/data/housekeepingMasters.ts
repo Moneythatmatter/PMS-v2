@@ -74,7 +74,7 @@ export const MASTER_CATEGORIES_DATA: MasterCategory[] = [
     masters: [
       { id: "building", code: "MST-BLD", name: "Building Master", recordCount: 4, description: "Hotel towers and auxiliary structures", dependentModules: ["Room Cleaning", "Public Area", "Inspection", "Maintenance"] },
       { id: "wing", code: "MST-WNG", name: "Wing Master", recordCount: 8, description: "East, West, Executive & Presidential Wings", dependentModules: ["Room Cleaning", "Public Area", "Inspection"] },
-      { id: "floor", code: "MST-FLR", name: "Floor Master", recordCount: 12, description: "Floor levels and elevator zone assignments", dependentModules: ["Room Cleaning", "Public Area", "Inspection", "Luggage"] },
+      { id: "floor", code: "MST-FLR", name: "Floor Master", recordCount: 12, description: "Floor levels and elevator zone assignments", dependentModules: ["Room Cleaning", "Public Area", "Inspection"] },
       { id: "area", code: "MST-ARA", name: "Area Master", recordCount: 18, description: "Public lobbies, restaurants, spa & pool zones", dependentModules: ["Public Area", "Deep Cleaning", "Maintenance"] },
       { id: "room", code: "MST-RM", name: "Room Master", recordCount: 120, description: "Guest room numbers, floor maps and layouts", dependentModules: ["Room Cleaning", "Inspection", "Lost & Found", "Maintenance", "Damage Reports"] },
       { id: "room-type", code: "MST-RMT", name: "Room Type Master", recordCount: 8, description: "Standard, Deluxe, Executive Suite, Villa", dependentModules: ["Room Cleaning", "Inspection", "Requisitions"] },
@@ -86,7 +86,7 @@ export const MASTER_CATEGORIES_DATA: MasterCategory[] = [
     iconName: "Users",
     description: "Staff rosters, shift timings, team hierarchies and assignment rules",
     masters: [
-      { id: "staff", code: "MST-STF", name: "Staff Master", recordCount: 45, description: "Housekeepers, Supervisors, Inspectors & Attendants", dependentModules: ["Room Cleaning", "Public Area", "Inspection", "Laundry", "Luggage"] },
+      { id: "staff", code: "MST-STF", name: "Staff Master", recordCount: 45, description: "Housekeepers, Supervisors, Inspectors & Attendants", dependentModules: ["Room Cleaning", "Public Area", "Inspection", "Laundry"] },
       { id: "shift", code: "MST-SFT", name: "Shift Master", recordCount: 4, description: "Morning, Evening, Night & General Shifts", dependentModules: ["Room Cleaning", "Public Area", "Inspection"] },
       { id: "team", code: "MST-TM", name: "Team Master", recordCount: 6, description: "Floor Teams, Deep Clean Crew & Public Area Squad", dependentModules: ["Room Cleaning", "Deep Cleaning"] },
       { id: "role", code: "MST-ROL", name: "Role Master", recordCount: 8, description: "Housekeeper, Supervisor, Executive Housekeeper", dependentModules: ["All Housekeeping Modules"] },
@@ -126,11 +126,10 @@ export const MASTER_CATEGORIES_DATA: MasterCategory[] = [
     id: "services",
     name: "Guest Services",
     iconName: "ConciergeBell",
-    description: "Laundry tariffs, Lost & Found vaults, luggage bays, damage pricing",
+    description: "Laundry tariffs, Lost & Found vaults, damage pricing",
     masters: [
       { id: "laundry-svc", code: "MST-LND", name: "Laundry Services Master", recordCount: 18, description: "Dry cleaning, pressing, washing price tiers", dependentModules: ["Laundry"] },
       { id: "lf-storage", code: "MST-LFS", name: "Lost & Found Storage Master", recordCount: 8, description: "Security lockers, safes, perishable holding bins", dependentModules: ["Lost & Found"] },
-      { id: "luggage-bay", code: "MST-LGB", name: "Luggage Storage Master", recordCount: 6, description: "Bell desk holding bays and VIP luggage racks", dependentModules: ["Luggage"] },
       { id: "damage-cat", code: "MST-DMC", name: "Damage Categories Master", recordCount: 9, description: "Electronics, Furniture, Linen, Glass, Flooring", dependentModules: ["Damage Reports"] },
       { id: "damage-tariff", code: "MST-DMT", name: "Damage Tariffs Master", recordCount: 35, description: "Standard guest recovery charge price catalog", dependentModules: ["Damage Reports", "Finance"] },
       { id: "amenity-std", code: "MST-AST", name: "Room Amenity Standards Master", recordCount: 8, description: "Standard par setup per room category (BOM)", dependentModules: ["Room Cleaning", "Requisitions"] },
@@ -451,7 +450,7 @@ export const MASTER_SYNC_STATUSES: MasterSyncStatus[] = [
     status: "Healthy",
     syncedRecords: 45,
     failedRecords: 0,
-    affectedModules: ["Room Cleaning", "Public Area", "Inspection", "Laundry", "Luggage"],
+    affectedModules: ["Room Cleaning", "Public Area", "Inspection", "Laundry"],
   },
   {
     id: "SYNC-02",

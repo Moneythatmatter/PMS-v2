@@ -1,27 +1,17 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   Calendar,
-  Clock,
-  Download,
   Filter,
   Printer,
   Search,
   SlidersHorizontal,
-  Users,
   ChevronDown,
-  X,
-  Building2,
-  FileText,
-  AlertTriangle,
   AlertCircle,
-  CheckCircle2,
   PieChart,
-  ArrowUpRight,
-  ArrowDownLeft,
   Loader2,
-  Info,
   RotateCcw,
   ShieldAlert,
   FileSpreadsheet,
@@ -29,133 +19,174 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import {
-  FormField,
   StatMiniCard,
   Drawer,
   FODatePicker,
   formatINR,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
+import { accCoveringLetterService } from "@/services/accounts";
 import {
-  sampleCoveringReversalData,
-  CoveringLetterVoucherItem,
-} from "@/app/data/accounts/billCoveringLetterReversalData";
-import { sampleCoveringGroups } from "@/app/data/accounts/billCoveringLetterData";
+  accErrorMessage,
+  formatDate,
+  fyStartIso,
+  todayIso,
+  useAccLookups,
+  useAccQuery,
+} from "@/components/accounts/accountsApi";
+import {
+  ALL_GROUPS,
+  LETTER_PARTY_GROUPS,
+  TableStatusRow,
+  type LetterToast,
+} from "@/components/accounts/ReminderLetterView";
 import { cn } from "@/lib/utils";
 
+type ReversalParams = { from: string; to: string; partyId: string };
+
+const STATUS_OPTIONS = ["All", "Active", "Reversed"] as const;
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 export function BillCoveringLetterReversalView() {
+  const router = useRouter();
+  const { lookups, error: lookupsError } = useAccLookups();
+
   // Desktop & Mobile filter state
   const [showFilters, setShowFilters] = useState(false);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
-  // WINHMS Reference Parameters
-  const [selectedGroup, setSelectedGroup] = useState("SUNDRY DEBTORS");
-  const [partySearch, setPartySearch] = useState("");
+  // Parameters
+  const [selectedGroup, setSelectedGroup] = useState(ALL_GROUPS);
+  const [partyId, setPartyId] = useState("");
   const [trnNoSearch, setTrnNoSearch] = useState("");
-  const [fromDate, setFromDate] = useState("2026-04-01");
-  const [toDate, setToDate] = useState("2027-03-31");
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]>("All");
+  const [fromDate, setFromDate] = useState(fyStartIso());
+  const [toDate, setToDate] = useState(todayIso());
+
+  const [params, setParams] = useState<ReversalParams>(() => ({ from: fyStartIso(), to: todayIso(), partyId: "" }));
+  const [appliedGroup, setAppliedGroup] = useState(ALL_GROUPS);
+
+  const { data, loading, error, reload } = useAccQuery(
+    () =>
+      accCoveringLetterService.list({
+        from: params.from,
+        to: params.to,
+        partyId: params.partyId || undefined,
+      }),
+    [params],
+  );
 
   // Reversal Remark / Reason State
-  const [reversalReason, setReversalReason] = useState("Client requested invoice re-billing with revised GSTIN & PO details.");
-
-  // Table Data & Selection State
-  const [vouchers, setVouchers] = useState<CoveringLetterVoucherItem[]>(sampleCoveringReversalData);
-  const [selectedId, setSelectedId] = useState<string | null>(sampleCoveringReversalData[0].id);
+  const [reversalReason, setReversalReason] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Single-Step Reversal Modal State
   const [showReversalModal, setShowReversalModal] = useState(false);
   const [isAuthorised, setIsAuthorised] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Search & Loading State
   const [searchQuery, setSearchQuery] = useState("");
-  const [isDisplayLoading, setIsDisplayLoading] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<LetterToast | null>(null);
 
-  // Filtered Vouchers Logic
-  const filteredVouchers = useMemo(() => {
-    return vouchers.filter((item) => {
-      // Group
-      if (selectedGroup !== "All Groups" && item.partyGroup !== selectedGroup) {
-        return false;
-      }
-
-      // Party Search
-      if (partySearch && !item.partyName.toLowerCase().includes(partySearch.toLowerCase())) {
-        return false;
-      }
-
-      // Trn No Search
-      if (trnNoSearch && !item.trnNo.toLowerCase().includes(trnNoSearch.toLowerCase())) {
-        return false;
-      }
-
-      // Search Query
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return (
-          item.trnNo.toLowerCase().includes(q) ||
-          item.partyName.toLowerCase().includes(q) ||
-          item.preparedBy.toLowerCase().includes(q)
-        );
-      }
-
-      return true;
-    });
-  }, [vouchers, selectedGroup, partySearch, trnNoSearch, searchQuery]);
-
-  // Selected Voucher Item
-  const selectedVoucher = useMemo(
-    () => vouchers.find((v) => v.id === selectedId),
-    [vouchers, selectedId]
+  const partyOptions = useMemo(
+    () =>
+      (lookups?.parties ?? []).filter((p) => selectedGroup === ALL_GROUPS || p.partyGroup === selectedGroup),
+    [lookups, selectedGroup],
   );
 
-  // Handle Display Button
+  const filteredVouchers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const trn = trnNoSearch.trim().toLowerCase();
+    return (data ?? []).filter((item) => {
+      if (appliedGroup !== ALL_GROUPS && item.partyGroup !== appliedGroup) return false;
+      if (statusFilter !== "All" && item.status !== statusFilter) return false;
+      if (trn && !item.letterNo.toLowerCase().includes(trn)) return false;
+      if (!q) return true;
+      return (
+        item.letterNo.toLowerCase().includes(q) ||
+        (item.partyName ?? "").toLowerCase().includes(q) ||
+        (item.preparedBy ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [data, appliedGroup, statusFilter, trnNoSearch, searchQuery]);
+
+  const selectedVoucher = useMemo(
+    () => (data ?? []).find((v) => v.id === selectedId) ?? null,
+    [data, selectedId],
+  );
+
+  const activeVouchers = filteredVouchers.filter((v) => v.status === "Active");
+
   const handleDisplayReport = () => {
-    setIsDisplayLoading(true);
-    setTimeout(() => {
-      setIsDisplayLoading(false);
-      setToastMessage(`Displayed ${filteredVouchers.length} active bill covering letter vouchers for reversal.`);
-    }, 300);
+    if (toDate < fromDate) {
+      setToast({ message: "'To' date must be on or after the 'From' date.", variant: "error" });
+      return;
+    }
+    setSelectedId(null);
+    setAppliedGroup(selectedGroup);
+    setParams({ from: fromDate, to: toDate, partyId });
+    setMobileFilterOpen(false);
   };
 
-  // Confirm Single-Step Reversal Execution
-  const handleExecuteReversal = () => {
+  const openReversalModal = () => {
     if (!selectedVoucher) return;
     if (!reversalReason.trim()) {
-      setToastMessage("Please enter a valid reason for reversing the Bill Covering Letter.");
+      setToast({ message: "Please enter a reason for reversing the Bill Covering Letter.", variant: "error" });
+      return;
+    }
+    setIsAuthorised(false);
+    setShowReversalModal(true);
+  };
+
+  const handleExecuteReversal = async () => {
+    if (!selectedVoucher) return;
+    if (!reversalReason.trim()) {
+      setToast({ message: "Please enter a reason for reversing the Bill Covering Letter.", variant: "error" });
       return;
     }
     if (!isAuthorised) {
-      setToastMessage("Please check the authorization box to confirm reversal.");
+      setToast({ message: "Please check the authorization box to confirm reversal.", variant: "error" });
       return;
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      const reversed = await accCoveringLetterService.reverse(selectedVoucher.id, reversalReason.trim());
       setShowReversalModal(false);
-      setVouchers((prev) =>
-        prev.map((v) => (v.id === selectedVoucher.id ? { ...v, status: "Reversed" } : v))
-      );
-      setToastMessage(`Bill Covering Letter '${selectedVoucher.trnNo}' successfully reversed & bills unlinked.`);
-    }, 500);
+      setReversalReason("");
+      setToast({
+        message: `Bill Covering Letter '${reversed.letterNo}' reversed; ${reversed.billsCount} bill(s) released for re-issue.`,
+        variant: "success",
+      });
+      void reload();
+    } catch (e) {
+      setToast({ message: accErrorMessage(e), variant: "error" });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Shared WINHMS Parameter Form Layout
-  const FilterFormContent = () => (
+  const filterForm = (
     <div className="space-y-3 text-xs">
-      {/* Row 1: Group Dropdown, Party Search, Covering Letter No, Date Range & Display Button */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 items-center bg-slate-50/80 p-3 rounded-xl border border-slate-200">
         {/* Group Dropdown */}
         <div className="lg:col-span-4 flex items-center gap-2">
           <span className="font-semibold text-slate-600 shrink-0">Group:</span>
           <select
             value={selectedGroup}
-            onChange={(e) => setSelectedGroup(e.target.value as any)}
+            onChange={(e) => {
+              setSelectedGroup(e.target.value);
+              setPartyId("");
+            }}
             className="h-8 flex-1 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
           >
-            {sampleCoveringGroups.map((g) => (
+            {[ALL_GROUPS, ...LETTER_PARTY_GROUPS].map((g) => (
               <option key={g} value={g}>
                 {g}
               </option>
@@ -163,16 +194,21 @@ export function BillCoveringLetterReversalView() {
           </select>
         </div>
 
-        {/* Party Input */}
+        {/* Party selector */}
         <div className="lg:col-span-4 flex items-center gap-2">
           <span className="font-semibold text-slate-600 shrink-0">Party:</span>
-          <input
-            type="text"
-            value={partySearch}
-            onChange={(e) => setPartySearch(e.target.value)}
-            placeholder="Type party name..."
+          <select
+            value={partyId}
+            onChange={(e) => setPartyId(e.target.value)}
             className="h-8 flex-1 rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none"
-          />
+          >
+            <option value="">{lookupsError ? "Parties unavailable" : "All parties"}</option>
+            {partyOptions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.partyCode} - {p.partyName}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Trn No Input */}
@@ -182,13 +218,13 @@ export function BillCoveringLetterReversalView() {
             type="text"
             value={trnNoSearch}
             onChange={(e) => setTrnNoSearch(e.target.value)}
-            placeholder="e.g. BCL-2026-0041"
+            placeholder="e.g. BCL/2026-27/0001"
             className="h-8 flex-1 font-mono font-bold rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-emerald-500 focus:outline-none"
           />
         </div>
       </div>
 
-      {/* Row 2: Date Range (From - To) & Display Button */}
+      {/* Row 2: Date Range, Status & Display Button */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 items-center bg-slate-50/80 p-3 rounded-xl border border-slate-200">
         <div className="lg:col-span-8 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
@@ -200,6 +236,21 @@ export function BillCoveringLetterReversalView() {
             <span className="font-semibold text-slate-600">To:</span>
             <FODatePicker value={toDate} onChange={setToDate} className="w-32" />
           </div>
+
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-600">Status:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as (typeof STATUS_OPTIONS)[number])}
+              className="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
+            >
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="lg:col-span-4 flex items-center gap-2 justify-end">
@@ -207,10 +258,10 @@ export function BillCoveringLetterReversalView() {
             type="button"
             size="sm"
             onClick={handleDisplayReport}
-            disabled={isDisplayLoading}
+            disabled={loading}
             className="h-8 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs shrink-0 cursor-pointer"
           >
-            {isDisplayLoading ? (
+            {loading ? (
               <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
             ) : (
               <Search className="h-3.5 w-3.5 mr-1" />
@@ -232,8 +283,9 @@ export function BillCoveringLetterReversalView() {
         { label: "Party Outstanding", href: "/accounts/party-outstanding" },
         { label: "Bill Covering Letter Reversal" },
       ]}
-      toast={toastMessage}
-      onDismissToast={() => setToastMessage(null)}
+      toast={toast?.message ?? null}
+      toastVariant={toast?.variant}
+      onDismissToast={() => setToast(null)}
       secondaryActions={
         <div className="flex items-center gap-2">
           <Button
@@ -285,12 +337,12 @@ export function BillCoveringLetterReversalView() {
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-rose-50 px-3 py-1 text-xs font-bold text-rose-800 border border-rose-200">
             <RotateCcw className="h-3.5 w-3.5 text-rose-700" />
-            Target: {selectedVoucher ? selectedVoucher.trnNo : "None Selected"}
+            Target: {selectedVoucher ? selectedVoucher.letterNo : "None Selected"}
           </span>
 
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
             <Calendar className="h-3.5 w-3.5 text-slate-600" />
-            Period: {fromDate} to {toDate}
+            Period: {formatDate(params.from)} to {formatDate(params.to)}
           </span>
         </div>
       </div>
@@ -312,7 +364,7 @@ export function BillCoveringLetterReversalView() {
               ✕ Hide Options
             </button>
           </div>
-          <FilterFormContent />
+          {filterForm}
         </div>
       )}
 
@@ -323,12 +375,12 @@ export function BillCoveringLetterReversalView() {
         title="Reversal Filter Options"
       >
         <div className="p-4">
-          <FilterFormContent />
+          {filterForm}
           <div className="mt-4 border-t border-slate-100 pt-3">
             <Button
               type="button"
               className="w-full bg-emerald-700 text-white"
-              onClick={() => setMobileFilterOpen(false)}
+              onClick={handleDisplayReport}
             >
               Apply Filter Options
             </Button>
@@ -336,21 +388,21 @@ export function BillCoveringLetterReversalView() {
         </div>
       </Drawer>
 
-      {/* WINHMS Security Warning Banner & Reversal Reason Input */}
-      <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50/70 p-4 shadow-xs space-y-3 font-sans text-xs">
+      {/* Security Warning Banner & Reversal Reason Input */}
+      <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50/70 p-4 shadow-xs space-y-3 font-sans text-xs print:hidden">
         <div className="flex items-start gap-2 text-rose-900 font-semibold">
           <ShieldAlert className="h-5 w-5 text-rose-700 shrink-0 mt-0.5" />
           <div className="space-y-0.5">
             <h4 className="font-bold text-sm text-rose-900">WINHMS Reversal Audit Impact Notice</h4>
             <p className="text-[11px] text-rose-800 leading-tight">
-              Reversing a Bill Covering Letter will cancel the transaction voucher and release all enclosed customer invoices back into open unassigned status for re-billing or re-issue.
+              Reversing a Bill Covering Letter marks it as reversed and releases all enclosed customer invoices back into open unassigned status for re-billing or re-issue.
             </p>
           </div>
         </div>
 
         <div className="space-y-1">
           <label className="font-bold text-slate-800 text-[11px] uppercase tracking-wider block">
-            Reversal Reason / Audit Remark:
+            Reversal Reason / Audit Remark: <span className="text-rose-600">*</span>
           </label>
           <input
             type="text"
@@ -366,29 +418,29 @@ export function BillCoveringLetterReversalView() {
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatMiniCard
           label="Active Covering Letters"
-          value={`${filteredVouchers.filter((v) => v.status === "Active").length} Vouchers`}
+          value={`${activeVouchers.length} Vouchers`}
           sublabel="Eligible for reversal"
           accent="#0284c7"
           icon={FileSpreadsheet}
         />
         <StatMiniCard
           label="Total Enclosed Value"
-          value={formatINR(filteredVouchers.reduce((sum, v) => sum + v.totalAmount, 0))}
-          sublabel="Enclosed bill total"
+          value={formatINR(activeVouchers.reduce((sum, v) => sum + v.totalAmount, 0))}
+          sublabel="Active letters' bill total"
           accent="#16a34a"
           icon={PieChart}
         />
         <StatMiniCard
           label="Selected Target Voucher"
-          value={selectedVoucher ? selectedVoucher.trnNo : "None"}
-          sublabel={selectedVoucher ? selectedVoucher.partyName.slice(0, 16) + "..." : "Select below"}
+          value={selectedVoucher ? selectedVoucher.letterNo : "None"}
+          sublabel={selectedVoucher ? selectedVoucher.partyName ?? "—" : "Select below"}
           accent="#e11d48"
           icon={RotateCcw}
         />
         <StatMiniCard
           label="Impacted Bills Count"
           value={selectedVoucher ? `${selectedVoucher.billsCount} Invoices` : "0"}
-          sublabel="Will be un-linked"
+          sublabel={selectedVoucher?.status === "Reversed" ? "Already released" : "Will be un-linked"}
           accent="#8b5cf6"
           icon={AlertCircle}
         />
@@ -405,11 +457,11 @@ export function BillCoveringLetterReversalView() {
               </h2>
             </div>
             <p className="text-[11px] text-slate-600 font-semibold mt-0.5">
-              Select a covering letter voucher below and click 'Reverse Covering Letter' to process reversal
+              Select an active covering letter voucher below and click &apos;Reverse Covering Letter&apos; to process reversal
             </p>
           </div>
 
-          <div className="relative flex-1 sm:w-64">
+          <div className="relative flex-1 sm:w-64 print:hidden">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -421,7 +473,6 @@ export function BillCoveringLetterReversalView() {
           </div>
         </div>
 
-        {/* WINHMS Table Format */}
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full text-left text-xs font-sans">
             <thead>
@@ -437,12 +488,14 @@ export function BillCoveringLetterReversalView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredVouchers.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
-                    No active bill covering letter vouchers found for reversal.
-                  </td>
-                </tr>
+              {loading || error || filteredVouchers.length === 0 ? (
+                <TableStatusRow
+                  colSpan={8}
+                  loading={loading}
+                  error={error}
+                  onRetry={() => void reload()}
+                  emptyText="No bill covering letter vouchers found for the selected criteria."
+                />
               ) : (
                 filteredVouchers.map((row) => (
                   <tr
@@ -453,13 +506,19 @@ export function BillCoveringLetterReversalView() {
                       selectedId === row.id && "bg-rose-50/60 font-semibold"
                     )}
                   >
-                    <td className="px-3 py-2.5 font-bold font-mono text-slate-900 border-r border-slate-100">{row.trnNo}</td>
-                    <td className="px-3 py-2.5 text-slate-600 font-medium border-r border-slate-100">{row.trnDt}</td>
+                    <td className="px-3 py-2.5 font-bold font-mono text-slate-900 border-r border-slate-100">{row.letterNo}</td>
+                    <td className="px-3 py-2.5 text-slate-600 font-medium border-r border-slate-100">{formatDate(row.letterDate)}</td>
                     <td className="px-3.5 py-2.5 border-r border-slate-100">
-                      <span className="font-bold text-slate-900 block">{row.partyName}</span>
-                      <span className="text-[10px] text-slate-500 font-medium block">Prepared By: {row.preparedBy}</span>
+                      <span className="font-bold text-slate-900 block">{row.partyName ?? "—"}</span>
+                      <span className="text-[10px] text-slate-500 font-medium block">Prepared By: {row.preparedBy ?? "—"}</span>
+                      {row.status === "Reversed" && (
+                        <span className="text-[10px] text-rose-700 font-medium block">
+                          Reversed by {row.reversedBy ?? "—"} on {formatDateTime(row.reversedAt)}
+                          {row.reversalReason && ` — ${row.reversalReason}`}
+                        </span>
+                      )}
                     </td>
-                    <td className="px-3 py-2.5 text-slate-700 font-medium border-r border-slate-100">{row.partyGroup}</td>
+                    <td className="px-3 py-2.5 text-slate-700 font-medium border-r border-slate-100">{row.partyGroup ?? "—"}</td>
                     <td className="px-2.5 py-2.5 text-center font-bold text-slate-800 border-r border-slate-100">
                       {row.billsCount} Bills
                     </td>
@@ -493,9 +552,9 @@ export function BillCoveringLetterReversalView() {
         </div>
 
         {/* Footer Action Bar */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 bg-slate-50/80 p-3 rounded-xl">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 bg-slate-50/80 p-3 rounded-xl print:hidden">
           <div className="text-xs text-slate-600 font-semibold">
-            Selected Voucher for Reversal: <strong className="text-slate-900">{selectedVoucher ? selectedVoucher.trnNo : "None"}</strong>
+            Selected Voucher for Reversal: <strong className="text-slate-900">{selectedVoucher ? selectedVoucher.letterNo : "None"}</strong>
           </div>
 
           <div className="flex items-center gap-2">
@@ -503,10 +562,7 @@ export function BillCoveringLetterReversalView() {
               type="button"
               size="sm"
               disabled={!selectedVoucher || selectedVoucher.status === "Reversed"}
-              onClick={() => {
-                setIsAuthorised(false);
-                setShowReversalModal(true);
-              }}
+              onClick={openReversalModal}
               className="h-8 px-4 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs shadow-xs cursor-pointer"
             >
               <RotateCcw className="h-3.5 w-3.5 mr-1" />
@@ -517,7 +573,7 @@ export function BillCoveringLetterReversalView() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setToastMessage("Bill covering letter reversal process exited.")}
+              onClick={() => router.push("/accounts/dashboard")}
               className="h-8 px-4 text-xs font-semibold text-slate-600 bg-white"
             >
               Exit
@@ -538,15 +594,15 @@ export function BillCoveringLetterReversalView() {
             <div className="space-y-3 bg-rose-50/70 p-3.5 rounded-xl border border-rose-200 text-slate-800">
               <div className="flex justify-between">
                 <span>Voucher No:</span>
-                <strong className="font-mono text-slate-900">{selectedVoucher.trnNo}</strong>
+                <strong className="font-mono text-slate-900">{selectedVoucher.letterNo}</strong>
               </div>
               <div className="flex justify-between">
                 <span>Voucher Date:</span>
-                <span>{selectedVoucher.trnDt}</span>
+                <span>{formatDate(selectedVoucher.letterDate)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Party Name:</span>
-                <strong className="text-slate-900">{selectedVoucher.partyName}</strong>
+                <strong className="text-slate-900">{selectedVoucher.partyName ?? "—"}</strong>
               </div>
               <div className="flex justify-between">
                 <span>Enclosed Bills:</span>
@@ -573,7 +629,7 @@ export function BillCoveringLetterReversalView() {
                 className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 h-4 w-4 shrink-0 mt-0.5"
               />
               <span className="text-[11px] text-slate-700 font-semibold leading-tight">
-                I authorize the reversal of Covering Letter '{selectedVoucher.trnNo}' and confirm unlinking enclosed customer invoices.
+                I authorize the reversal of Covering Letter &apos;{selectedVoucher.letterNo}&apos; and confirm unlinking enclosed customer invoices.
               </span>
             </label>
 
@@ -582,7 +638,7 @@ export function BillCoveringLetterReversalView() {
                 type="button"
                 size="sm"
                 disabled={!isAuthorised || isSubmitting}
-                onClick={handleExecuteReversal}
+                onClick={() => void handleExecuteReversal()}
                 className="px-5 h-8 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs shadow-xs"
               >
                 {isSubmitting ? (

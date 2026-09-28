@@ -1,238 +1,393 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Clock,
   CheckCircle2,
-  TrendingUp,
-  TrendingDown,
   Printer,
   Download,
   Search,
-  Calendar,
-  Filter,
   Loader2,
   FileText,
   AlertCircle,
-  ArrowRightLeft,
   X,
-  SlidersHorizontal,
-  ChevronDown,
   RotateCcw,
   Check,
+  Pencil,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   FormField,
   TextInput,
   StatMiniCard,
-  Drawer,
   FODatePicker,
-  formatINR,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
-import {
-  sampleProvisionalData,
-  sampleProvisionalCategories,
-  sampleProvisionalVoucherTypes,
-  ProvisionalTransaction,
-} from "@/app/data/accounts/provisionalTransactionsData";
 import { cn } from "@/lib/utils";
+import { accVoucherService, type Voucher, type VoucherInput } from "@/services/accounts";
+import {
+  accErrorMessage,
+  formatDate,
+  formatINR,
+  todayIso,
+  useAccLookups,
+  useAccQuery,
+} from "@/components/accounts/accountsApi";
+
+const PROVISION_CATEGORIES = [
+  "Accrued Expenses",
+  "Unbilled Revenue",
+  "Provision for Utilities",
+  "Vendor Provision",
+  "Tax Provision",
+];
+
+const PROVISIONAL_TYPES = [
+  "Provisional Journal",
+  "Provisional Receipt",
+  "Provisional Payment",
+  "Provisional Purchase",
+];
+
+const EXPENSE_CATEGORIES = ["Accrued Expenses", "Provision for Utilities", "Vendor Provision"];
+
+type StatusFilter = "<ALL>" | "Provisional" | "Converted" | "Reversed";
+const STATUS_LABEL: Record<StatusFilter, string> = {
+  "<ALL>": "<ALL>",
+  Provisional: "Provisional",
+  Converted: "Converted to GL",
+  Reversed: "Reversed",
+};
+
+type Toast = { message: string; variant: "success" | "error" } | null;
+
+interface VerificationState {
+  type: "POST" | "CONVERT" | "REVERSE";
+  item?: Voucher | null;
+  confirmedCheckbox: boolean;
+  reason: string;
+  convertDate: string;
+}
+
+function downloadCsv(filename: string, header: string[], rows: (string | number | null | undefined)[][]) {
+  const esc = (v: string | number | null | undefined) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = [header, ...rows].map((r) => r.map(esc).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+const addDays = (iso: string, days: number) => {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+};
+
+/** The first line is the provision ledger, the second its offset. */
+const mainLine = (v: Voucher) => v.lines[0];
+const contraLine = (v: Voucher) => v.lines[1];
 
 export function ProvisionalTransactionsView() {
-  // Mobile Filter Drawer State
-  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const { lookups, loading: lookupsLoading, error: lookupsError, reload: reloadLookups } = useAccLookups();
 
   // Provisional Entry Form State
-  const [vouchNo, setVouchNo] = useState("PRV-2026-0017");
-  const [vouchDt, setVouchDt] = useState("2026-04-28");
-  const [expiryDt, setExpiryDt] = useState("2026-05-05");
-  const [category, setCategory] = useState<any>("Provision for Utilities");
-  const [vouchType, setVouchType] = useState<any>("Provisional Journal");
-  const [accountLedger, setAccountLedger] = useState("HEAT LIGHT POWER");
-  const [partyName, setPartyName] = useState("State Electricity Distribution Board");
-  const [drAmt, setDrAmt] = useState<number>(38000);
+  const [editing, setEditing] = useState<Voucher | null>(null);
+  const [vouchDt, setVouchDt] = useState(todayIso());
+  const [expiryDt, setExpiryDt] = useState(addDays(todayIso(), 30));
+  const [category, setCategory] = useState(PROVISION_CATEGORIES[0]);
+  const [vouchType, setVouchType] = useState(PROVISIONAL_TYPES[0]);
+  const [accountId, setAccountId] = useState("");
+  const [contraAccountId, setContraAccountId] = useState("");
+  const [partyId, setPartyId] = useState("");
+  const [drAmt, setDrAmt] = useState<number>(0);
   const [crAmt, setCrAmt] = useState<number>(0);
-  const [narration, setNarration] = useState(
-    "Provisional accrual entry for estimated monthly utility power consumption"
-  );
+  const [narration, setNarration] = useState("");
+  const [preview, setPreview] = useState<{ key: string; voucherNo: string } | null>(null);
+  const [previewNonce, setPreviewNonce] = useState(0);
 
-  // Provisional Transactions List & Filters
-  const [transactions, setTransactions] = useState<ProvisionalTransaction[]>(
-    sampleProvisionalData
-  );
+  // List filters
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"<ALL>" | "Provisional" | "Converted to GL" | "Reversed">("<ALL>");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("<ALL>");
 
-  // Loading & Toast Notification State
   const [isPosting, setIsPosting] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<Toast>(null);
+  const notify = (message: string, variant: "success" | "error" = "success") => setToast({ message, variant });
+  const [verificationModal, setVerificationModal] = useState<VerificationState | null>(null);
 
-  // Double Verification State
-  interface DoubleVerificationState {
-    type: "POST" | "CONVERT" | "REVERSE";
-    item?: ProvisionalTransaction | null;
-    confirmedCheckbox: boolean;
-    verifierName: string;
-  }
+  const list = useAccQuery(() => accVoucherService.list({ provisional: true, limit: 1000 }), []);
+  const transactions = useMemo(() => list.data ?? [], [list.data]);
 
-  const [verificationModal, setVerificationModal] = useState<DoubleVerificationState | null>(null);
+  const prvType = lookups?.voucherTypes.find((vt) => vt.shortCode === "PRV");
+  const ledgers = lookups?.ledgers ?? [];
+  const ledgerName = (id: string) => {
+    const l = ledgers.find((x) => x.id === id);
+    return l ? `${l.code} - ${l.name}` : "—";
+  };
+  const partyName = lookups?.parties.find((p) => p.id === partyId)?.partyName ?? "";
 
-  // Trigger Post with Double Verification
+  const previewKey = `${prvType?.id}|${vouchDt}`;
+  useEffect(() => {
+    if (!prvType?.id || !vouchDt || editing) return;
+    let cancelled = false;
+    const key = `${prvType.id}|${vouchDt}`;
+    accVoucherService
+      .nextNumber(prvType.id, vouchDt)
+      .then((r) => {
+        if (!cancelled) setPreview({ key, voucherNo: r.voucherNo });
+      })
+      .catch(() => {
+        if (!cancelled) setPreview({ key, voucherNo: "" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [prvType, vouchDt, editing, previewNonce]);
+  const vouchNo = editing
+    ? editing.voucherNo
+    : !prvType
+    ? "Assigned on save"
+    : preview?.key === previewKey
+    ? preview.voucherNo || "—"
+    : "…";
+
+  const amount = drAmt > 0 ? drAmt : crAmt;
+
+  const resetForm = () => {
+    setEditing(null);
+    setDrAmt(0);
+    setCrAmt(0);
+    setNarration("");
+    setPartyId("");
+    setAccountId("");
+    setContraAccountId("");
+    setPreviewNonce((n) => n + 1);
+  };
+
+  const startEdit = (v: Voucher) => {
+    if (v.lines.length !== 2) {
+      notify(`${v.voucherNo} has ${v.lines.length} lines and cannot be edited on this screen.`, "error");
+      return;
+    }
+    const main = mainLine(v);
+    setEditing(v);
+    setVouchDt(v.voucherDate);
+    setExpiryDt(v.expiryDate ?? "");
+    setCategory(v.provisionalCategory || PROVISION_CATEGORIES[0]);
+    setVouchType(v.provisionalType || PROVISIONAL_TYPES[0]);
+    setAccountId(main.accountId);
+    setContraAccountId(contraLine(v).accountId);
+    setPartyId(v.partyId ?? "");
+    setDrAmt(main.debit);
+    setCrAmt(main.credit);
+    setNarration(v.narration ?? "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const initiatePostProvisional = (e: React.FormEvent) => {
     e.preventDefault();
-    if (drAmt <= 0 && crAmt <= 0) {
-      setToastMessage("Please enter a valid Debit or Credit amount greater than zero.");
+    if (!accountId || !contraAccountId) {
+      notify("Select both the provision ledger and its offset (contra) ledger.", "error");
       return;
     }
-    setVerificationModal({
-      type: "POST",
-      confirmedCheckbox: false,
-      verifierName: "Abhijit (Senior Auditor)",
-    });
+    if (accountId === contraAccountId) {
+      notify("The provision ledger and the offset ledger must be different.", "error");
+      return;
+    }
+    if ((drAmt > 0) === (crAmt > 0)) {
+      notify("Enter either a Debit or a Credit amount greater than zero (not both).", "error");
+      return;
+    }
+    if (expiryDt && expiryDt < vouchDt) {
+      notify("Target expiry date cannot be before the posting date.", "error");
+      return;
+    }
+    setVerificationModal({ type: "POST", confirmedCheckbox: false, reason: "", convertDate: todayIso() });
   };
 
-  // Trigger Convert with Double Verification
-  const initiateConvert = (item: ProvisionalTransaction) => {
-    setVerificationModal({
-      type: "CONVERT",
-      item: item,
-      confirmedCheckbox: false,
-      verifierName: "Abhijit (Senior Auditor)",
-    });
+  const initiateConvert = (item: Voucher) =>
+    setVerificationModal({ type: "CONVERT", item, confirmedCheckbox: false, reason: "", convertDate: todayIso() });
+
+  const initiateReverse = (item: Voucher) =>
+    setVerificationModal({ type: "REVERSE", item, confirmedCheckbox: false, reason: "", convertDate: todayIso() });
+
+  const buildInput = (): VoucherInput => {
+    const isDebit = drAmt > 0;
+    return {
+      voucherTypeCode: "PRV",
+      voucherTypeId: prvType?.id,
+      voucherDate: vouchDt,
+      narration: narration.trim(),
+      status: "Provisional",
+      partyId: partyId || null,
+      provisionalCategory: category,
+      provisionalType: vouchType,
+      expiryDate: expiryDt || null,
+      lines: [
+        { accountId, debit: isDebit ? amount : 0, credit: isDebit ? 0 : amount, narration: narration.trim() },
+        { accountId: contraAccountId, debit: isDebit ? 0 : amount, credit: isDebit ? amount : 0, narration: narration.trim() },
+      ],
+    };
   };
 
-  // Trigger Reverse with Double Verification
-  const initiateReverse = (item: ProvisionalTransaction) => {
-    setVerificationModal({
-      type: "REVERSE",
-      item: item,
-      confirmedCheckbox: false,
-      verifierName: "Abhijit (Senior Auditor)",
-    });
-  };
-
-  // Execute Double Verified Action
-  const handleExecuteDoubleVerifiedAction = () => {
-    if (!verificationModal) return;
-    if (!verificationModal.confirmedCheckbox) {
-      alert("Please check the Double Verification confirmation box before proceeding.");
+  const handleExecuteDoubleVerifiedAction = async () => {
+    if (!verificationModal?.confirmedCheckbox) return;
+    const { type, item, reason, convertDate } = verificationModal;
+    if (type === "REVERSE" && !reason.trim()) {
+      notify("A reversal reason is required.", "error");
       return;
     }
 
-    const { type, item } = verificationModal;
-    setVerificationModal(null);
-
-    if (type === "POST") {
-      setIsPosting(true);
-      setTimeout(() => {
-        const newEntry: ProvisionalTransaction = {
-          id: `prv-${Date.now()}`,
-          vouchNo: vouchNo,
-          vouchDt: vouchDt,
-          expiryDt: expiryDt,
-          category: category,
-          vouchType: vouchType,
-          accountLedger: accountLedger,
-          partyName: partyName || "General Provision",
-          drAmt: Number(drAmt) || 0,
-          crAmt: Number(crAmt) || 0,
-          narration: narration,
-          status: "Provisional",
-        };
-
-        setTransactions([newEntry, ...transactions]);
-        setIsPosting(false);
-        setToastMessage(
-          `✓ Double Verified: Provisional entry ${vouchNo} for ${formatINR(
-            drAmt > 0 ? drAmt : crAmt
-          )} created successfully.`
-        );
-
-        // Reset form
-        setVouchNo(`PRV-2026-00${Math.floor(Math.random() * 90 + 18)}`);
-        setDrAmt(0);
-        setCrAmt(0);
-        setNarration("");
-      }, 300);
-    } else if (type === "CONVERT" && item) {
-      setTransactions(
-        transactions.map((t) =>
-          t.id === item.id ? { ...t, status: "Converted to GL" } : t
-        )
-      );
-      setToastMessage(
-        `✓ Double Verified: Provisional Voucher ${item.vouchNo} converted to permanent General Ledger voucher.`
-      );
-    } else if (type === "REVERSE" && item) {
-      setTransactions(
-        transactions.map((t) => (t.id === item.id ? { ...t, status: "Reversed" } : t))
-      );
-      setToastMessage(`✓ Double Verified: Provisional Voucher ${item.vouchNo} reversed successfully.`);
+    setIsPosting(true);
+    try {
+      if (type === "POST") {
+        if (editing) {
+          const saved = await accVoucherService.update(editing.id, buildInput());
+          notify(`✓ Provisional entry ${saved.voucherNo} updated.`);
+        } else {
+          const saved = await accVoucherService.create(buildInput());
+          notify(`✓ Provisional entry ${saved.voucherNo} for ${formatINR(saved.totalAmount)} created successfully.`);
+        }
+        resetForm();
+      } else if (type === "CONVERT" && item) {
+        const res = await accVoucherService.convert(item.id, { voucherDate: convertDate || undefined });
+        notify(`✓ Provisional voucher ${item.voucherNo} converted to GL voucher ${res.voucher.voucherNo}.`);
+      } else if (type === "REVERSE" && item) {
+        await accVoucherService.reverse(item.id, reason.trim());
+        notify(`✓ Provisional voucher ${item.voucherNo} reversed.`);
+        if (editing?.id === item.id) resetForm();
+      }
+      setVerificationModal(null);
+      void list.reload();
+    } catch (e) {
+      notify(accErrorMessage(e), "error");
+    } finally {
+      setIsPosting(false);
     }
   };
 
-  // Filtered Data
   const filteredData = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return transactions.filter((item) => {
       if (statusFilter !== "<ALL>" && item.status !== statusFilter) return false;
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return (
-          item.vouchNo.toLowerCase().includes(q) ||
-          item.partyName.toLowerCase().includes(q) ||
-          item.accountLedger.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q)
-        );
-      }
-      return true;
+      if (!q) return true;
+      return [item.voucherNo, item.partyName, item.debitAccounts, item.creditAccounts, item.provisionalCategory, item.narration]
+        .some((s) => (s ?? "").toLowerCase().includes(q));
     });
   }, [transactions, statusFilter, searchQuery]);
 
-  // KPI Calculations
-  const activeProvisionalTotal = useMemo(() => {
-    return transactions
-      .filter((t) => t.status === "Provisional")
-      .reduce((sum, t) => sum + (t.drAmt > 0 ? t.drAmt : t.crAmt), 0);
-  }, [transactions]);
+  const active = transactions.filter((t) => t.status === "Provisional");
+  const activeProvisionalTotal = active.reduce((sum, t) => sum + t.totalAmount, 0);
+  const accruedExpenseTotal = active
+    .filter((t) => EXPENSE_CATEGORIES.includes(t.provisionalCategory ?? ""))
+    .reduce((sum, t) => sum + t.totalAmount, 0);
+  const unbilledRevenueTotal = active
+    .filter((t) => t.provisionalCategory === "Unbilled Revenue")
+    .reduce((sum, t) => sum + t.totalAmount, 0);
 
-  const accruedExpenseTotal = useMemo(() => {
-    return transactions
-      .filter(
-        (t) =>
-          t.status === "Provisional" &&
-          (t.category === "Accrued Expenses" || t.category === "Provision for Utilities")
-      )
-      .reduce((sum, t) => sum + t.drAmt, 0);
-  }, [transactions]);
-
-  const unbilledRevenueTotal = useMemo(() => {
-    return transactions
-      .filter((t) => t.status === "Provisional" && t.category === "Unbilled Revenue")
-      .reduce((sum, t) => sum + t.crAmt, 0);
-  }, [transactions]);
-
-  // Badge Styling Helper for Status
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case "Provisional":
         return "bg-amber-100 text-amber-900 border-amber-300";
-      case "Converted to GL":
+      case "Converted":
         return "bg-emerald-100 text-emerald-900 border-emerald-300";
-      case "Reversed":
-        return "bg-slate-100 text-slate-700 border-slate-300";
       default:
         return "bg-slate-100 text-slate-700 border-slate-300";
     }
   };
+  const statusLabel = (s: string) => (s === "Converted" ? "Converted to GL" : s);
+
+  const handleExport = () => {
+    if (filteredData.length === 0) {
+      notify("Nothing to export for the selected filters.", "error");
+      return;
+    }
+    downloadCsv(
+      "provisional-transactions.csv",
+      ["Voucher No", "Date", "Expiry", "Category", "Type", "Party", "Ledger", "Offset Ledger", "Debit", "Credit", "Status", "Narration"],
+      filteredData.map((v) => [
+        v.voucherNo,
+        v.voucherDate,
+        v.expiryDate,
+        v.provisionalCategory,
+        v.provisionalType,
+        v.partyName,
+        mainLine(v)?.accountName,
+        contraLine(v)?.accountName,
+        mainLine(v)?.debit,
+        mainLine(v)?.credit,
+        statusLabel(v.status),
+        v.narration,
+      ]),
+    );
+    notify(`Exported ${filteredData.length} provisional entries to CSV.`);
+  };
+
+  const selectClass =
+    "h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 font-semibold focus:border-blue-500 focus:outline-none";
+
+  const renderRowActions = (row: Voucher, compact: boolean) =>
+    row.status === "Provisional" ? (
+      <div className={cn("flex items-center gap-1", compact ? "justify-center" : "justify-end w-full")}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => initiateConvert(row)}
+          className={cn(
+            "font-bold bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 cursor-pointer",
+            compact ? "h-6 px-2 text-[10px] rounded-md" : "h-7 text-xs flex-1 justify-center",
+          )}
+          title="Convert to Permanent GL Voucher"
+        >
+          <Check className="h-3 w-3 mr-0.5" /> Convert to GL
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => startEdit(row)}
+          className={cn(
+            "font-bold bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 cursor-pointer",
+            compact ? "h-6 px-2 text-[10px] rounded-md" : "h-7 text-xs",
+          )}
+          title="Edit Provision"
+        >
+          <Pencil className="h-3 w-3" />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => initiateReverse(row)}
+          className={cn(
+            "font-bold bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 cursor-pointer",
+            compact ? "h-6 px-2 text-[10px] rounded-md" : "h-7 text-xs",
+          )}
+          title="Reverse Provision"
+        >
+          <RotateCcw className="h-3 w-3" />
+        </Button>
+      </div>
+    ) : (
+      <span className="text-[10px] text-slate-400 font-medium">Completed</span>
+    );
+
+  const modalItem = verificationModal?.item;
 
   return (
     <ModulePageShell
       eyebrow="Accounts & Period-End Accruals"
       title="Provisional Transactions"
       description="Post temporary accruals, unbilled revenue provisions, and estimated expenses prior to permanent GL audit posting."
-      toast={toastMessage}
-      onDismissToast={() => setToastMessage(null)}
+      toast={toast?.message ?? null}
+      toastVariant={toast?.variant}
+      onDismissToast={() => setToast(null)}
       secondaryActions={
         <div className="flex items-center gap-2">
           <Button
@@ -250,7 +405,7 @@ export function ProvisionalTransactionsView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => alert("Provisional transactions exported to CSV.")}
+            onClick={handleExport}
             className="rounded-xl text-xs font-medium bg-white shadow-xs"
           >
             <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
@@ -259,12 +414,28 @@ export function ProvisionalTransactionsView() {
         </div>
       }
     >
+      {lookupsError ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+          <span className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            Could not load ledgers and parties: {lookupsError}
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={() => void reloadLookups(true)} className="rounded-xl bg-white text-xs">
+            <RefreshCw className="h-3.5 w-3.5 mr-1" /> Retry
+          </Button>
+        </div>
+      ) : lookupsLoading && !lookups ? (
+        <div className="mb-4 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-600">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-600" /> Loading ledgers and parties…
+        </div>
+      ) : null}
+
       {/* KPI Cards Grid */}
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatMiniCard
           label="Active Provisional Entries"
           value={formatINR(activeProvisionalTotal)}
-          sublabel="Pending period-end accruals"
+          sublabel={`${active.length} pending period-end accruals`}
           accent="#0284c7"
           icon={Clock}
         />
@@ -293,7 +464,7 @@ export function ProvisionalTransactionsView() {
             </span>
             <div>
               <h2 className="text-base font-bold text-slate-900">
-                New Provisional Entry / Accrual
+                {editing ? `Edit Provisional Entry ${editing.voucherNo}` : "New Provisional Entry / Accrual"}
               </h2>
               <p className="text-[11px] text-slate-500 font-medium">
                 Record temporary estimated provisions prior to final bill verification.
@@ -311,35 +482,20 @@ export function ProvisionalTransactionsView() {
         <form onSubmit={initiatePostProvisional} className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-xl bg-slate-50/70 p-3.5 border border-slate-200/70">
             <FormField label="Prov Voucher No">
-              <TextInput
-                value={vouchNo}
-                onChange={(e) => setVouchNo(e.target.value)}
-                readOnly
-                className="h-8 text-xs font-bold bg-white text-blue-800 border-slate-200"
-              />
+              <TextInput value={vouchNo} readOnly className="h-8 text-xs font-bold bg-white text-blue-800 border-slate-200" />
             </FormField>
 
-            <FormField label="Posting Date">
-              <FODatePicker
-                value={vouchDt}
-                onChange={(val) => setVouchDt(val)}
-              />
+            <FormField label="Posting Date" required>
+              <FODatePicker value={vouchDt} onChange={(val) => setVouchDt(val)} />
             </FormField>
 
             <FormField label="Target Expiry Date">
-              <FODatePicker
-                value={expiryDt}
-                onChange={(val) => setExpiryDt(val)}
-              />
+              <FODatePicker value={expiryDt} onChange={(val) => setExpiryDt(val)} />
             </FormField>
 
             <FormField label="Provision Category">
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 font-semibold focus:border-blue-500 focus:outline-none"
-              >
-                {sampleProvisionalCategories.map((cat) => (
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className={selectClass}>
+                {PROVISION_CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>
@@ -348,12 +504,8 @@ export function ProvisionalTransactionsView() {
             </FormField>
 
             <FormField label="Voucher Type">
-              <select
-                value={vouchType}
-                onChange={(e) => setVouchType(e.target.value)}
-                className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 font-semibold focus:border-blue-500 focus:outline-none"
-              >
-                {sampleProvisionalVoucherTypes.map((vt) => (
+              <select value={vouchType} onChange={(e) => setVouchType(e.target.value)} className={selectClass}>
+                {PROVISIONAL_TYPES.map((vt) => (
                   <option key={vt} value={vt}>
                     {vt}
                   </option>
@@ -361,30 +513,50 @@ export function ProvisionalTransactionsView() {
               </select>
             </FormField>
 
-            <FormField label="Account Ledger">
-              <TextInput
-                value={accountLedger}
-                onChange={(e) => setAccountLedger(e.target.value)}
-                placeholder="e.g. HEAT LIGHT POWER..."
-                className="h-8 text-xs bg-white font-medium"
-              />
+            <FormField label="Account Ledger" required>
+              <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={selectClass}>
+                <option value="">Select ledger…</option>
+                {ledgers.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.code} - {l.name}
+                  </option>
+                ))}
+              </select>
             </FormField>
 
-            <FormField label="Party / Sub-Ledger" className="sm:col-span-2">
-              <TextInput
-                list="prov-party-suggestions"
-                value={partyName}
-                onChange={(e) => setPartyName(e.target.value)}
-                placeholder="Select party or type vendor..."
-                className="h-8 text-xs bg-white"
-              />
+            <FormField label="Offset (Contra) Ledger" required>
+              <select value={contraAccountId} onChange={(e) => setContraAccountId(e.target.value)} className={selectClass}>
+                <option value="">Select ledger…</option>
+                {ledgers.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.code} - {l.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            <FormField label="Party / Sub-Ledger">
+              <select value={partyId} onChange={(e) => setPartyId(e.target.value)} className={selectClass}>
+                <option value="">— General Provision —</option>
+                {(lookups?.parties ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.partyName} ({p.partyCode})
+                  </option>
+                ))}
+              </select>
             </FormField>
 
             <FormField label="Debit Amount (₹)">
               <input
                 type="number"
+                min={0}
+                step="0.01"
                 value={drAmt || ""}
-                onChange={(e) => setDrAmt(parseFloat(e.target.value) || 0)}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value) || 0;
+                  setDrAmt(v);
+                  if (v > 0) setCrAmt(0);
+                }}
                 placeholder="0.00"
                 className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 focus:border-blue-500 focus:outline-none"
               />
@@ -393,8 +565,14 @@ export function ProvisionalTransactionsView() {
             <FormField label="Credit Amount (₹)">
               <input
                 type="number"
+                min={0}
+                step="0.01"
                 value={crAmt || ""}
-                onChange={(e) => setCrAmt(parseFloat(e.target.value) || 0)}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value) || 0;
+                  setCrAmt(v);
+                  if (v > 0) setDrAmt(0);
+                }}
                 placeholder="0.00"
                 className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 focus:border-blue-500 focus:outline-none"
               />
@@ -410,28 +588,15 @@ export function ProvisionalTransactionsView() {
             </FormField>
           </div>
 
-          <datalist id="prov-party-suggestions">
-            <option value="State Electricity Distribution Board" />
-            <option value="Infosys Ltd" />
-            <option value="Fresh Foods Supplies Ltd" />
-            <option value="Mehta & Associates Statutory Auditors" />
-            <option value="CleanLinen Laundry Co." />
-            <option value="HVAC Elevator Services" />
-          </datalist>
-
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => {
-                setDrAmt(0);
-                setCrAmt(0);
-                setNarration("");
-              }}
+              onClick={resetForm}
               className="rounded-xl text-xs font-semibold bg-white"
             >
-              Clear Form
+              {editing ? "Cancel Edit" : "Clear Form"}
             </Button>
 
             <Button
@@ -440,12 +605,8 @@ export function ProvisionalTransactionsView() {
               disabled={isPosting}
               className="rounded-xl font-bold text-xs px-4 shadow-sm text-white bg-blue-700 hover:bg-blue-800 cursor-pointer disabled:opacity-75"
             >
-              {isPosting ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-              ) : (
-                <Clock className="h-3.5 w-3.5 mr-1" />
-              )}
-              Post Provisional Entry
+              {isPosting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Clock className="h-3.5 w-3.5 mr-1" />}
+              {editing ? "Update Provisional Entry" : "Post Provisional Entry"}
             </Button>
           </div>
         </form>
@@ -462,28 +623,22 @@ export function ProvisionalTransactionsView() {
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            {/* Status Filter Pills */}
             <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs font-semibold">
-              {(["<ALL>", "Provisional", "Converted to GL", "Reversed"] as const).map(
-                (st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => setStatusFilter(st)}
-                    className={cn(
-                      "px-2.5 py-1 rounded-md transition-all cursor-pointer select-none",
-                      statusFilter === st
-                        ? "bg-white text-slate-900 shadow-2xs font-bold"
-                        : "text-slate-600 hover:text-slate-900"
-                    )}
-                  >
-                    {st}
-                  </button>
-                )
-              )}
+              {(Object.keys(STATUS_LABEL) as StatusFilter[]).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setStatusFilter(st)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-md transition-all cursor-pointer select-none",
+                    statusFilter === st ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900",
+                  )}
+                >
+                  {STATUS_LABEL[st]}
+                </button>
+              ))}
             </div>
 
-            {/* Search Input */}
             <div className="relative flex-1 sm:w-56">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <input
@@ -497,139 +652,139 @@ export function ProvisionalTransactionsView() {
           </div>
         </div>
 
-        {/* Desktop Table (hidden md:block) */}
-        <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
-                <th className="px-3.5 py-2.5">Prov Vouch #</th>
-                <th className="px-3 py-2.5">Date</th>
-                <th className="px-3 py-2.5">Category</th>
-                <th className="px-3.5 py-2.5">Account / Party</th>
-                <th className="px-3.5 py-2.5 text-right">Debit (₹)</th>
-                <th className="px-3.5 py-2.5 text-right">Credit (₹)</th>
-                <th className="px-3.5 py-2.5 text-center">Status</th>
-                <th className="px-3.5 py-2.5 text-center">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredData.map((row) => (
-                <tr key={row.id} className="hover:bg-slate-50">
-                  <td className="px-3.5 py-2.5 font-bold text-slate-900">{row.vouchNo}</td>
-                  <td className="px-3 py-2.5 text-slate-600 font-medium">
-                    {row.vouchDt}
-                    <span className="block text-[10px] text-slate-400">Exp: {row.expiryDt}</span>
-                  </td>
-                  <td className="px-3 py-2.5 font-semibold text-slate-700">{row.category}</td>
-                  <td className="px-3.5 py-2.5 font-semibold text-slate-900">
-                    {row.partyName}
-                    <span className="block text-[10px] text-slate-400 font-normal">
-                      {row.accountLedger}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 text-right font-bold text-slate-900">
-                    {row.drAmt > 0 ? formatINR(row.drAmt) : "-"}
-                  </td>
-                  <td className="px-3.5 py-2.5 text-right font-bold text-slate-900">
-                    {row.crAmt > 0 ? formatINR(row.crAmt) : "-"}
-                  </td>
-                  <td className="px-3.5 py-2.5 text-center">
-                    <span
-                      className={cn(
-                        "inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider",
-                        getStatusBadgeClass(row.status)
-                      )}
-                    >
-                      {row.status}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 text-center">
-                    {row.status === "Provisional" ? (
-                      <div className="flex items-center justify-center gap-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => initiateConvert(row)}
-                          className="h-6 px-2 text-[10px] font-bold bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 rounded-md cursor-pointer"
-                          title="Convert to Permanent GL Voucher"
-                        >
-                          <Check className="h-3 w-3 mr-0.5" /> Convert to GL
-                        </Button>
-
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => initiateReverse(row)}
-                          className="h-6 px-2 text-[10px] font-bold bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 rounded-md cursor-pointer"
-                          title="Reverse Provision"
-                        >
-                          <RotateCcw className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 font-medium">Completed</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Stacked Card View (md:hidden) */}
-        <div className="md:hidden space-y-2.5">
-          {filteredData.map((row) => (
-            <div
-              key={row.id}
-              className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-slate-900">{row.vouchNo}</span>
-                <span
-                  className={cn(
-                    "px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider",
-                    getStatusBadgeClass(row.status)
-                  )}
-                >
-                  {row.status}
-                </span>
-              </div>
-
-              <p className="text-xs font-semibold text-slate-900">{row.partyName}</p>
-              <p className="text-[11px] text-slate-500">{row.accountLedger} • {row.category}</p>
-
-              <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
-                <span className="text-slate-500 font-medium">{row.vouchDt}</span>
-                <span className="font-bold text-slate-900">
-                  {row.drAmt > 0 ? `Dr ${formatINR(row.drAmt)}` : `Cr ${formatINR(row.crAmt)}`}
-                </span>
-              </div>
-
-              {row.status === "Provisional" && (
-                <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => initiateConvert(row)}
-                    className="h-7 text-xs font-bold bg-emerald-50 text-emerald-800 border-emerald-300 w-full justify-center cursor-pointer"
-                  >
-                    <Check className="h-3.5 w-3.5 mr-1" /> Convert to GL
-                  </Button>
-                </div>
-              )}
+        {list.error ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+            <span>{list.error}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void list.reload()} className="rounded-xl bg-white text-xs">
+              <RefreshCw className="h-3.5 w-3.5 mr-1" /> Retry
+            </Button>
+          </div>
+        ) : list.loading && !list.data ? (
+          <div className="flex items-center justify-center gap-2 py-8 text-xs font-medium text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-600" /> Loading provisional entries…
+          </div>
+        ) : filteredData.length === 0 ? (
+          <div className="py-8 text-center text-xs font-medium text-slate-400">
+            {transactions.length === 0 ? "No provisional entries have been recorded yet." : "No provisional entries match the filters."}
+          </div>
+        ) : (
+          <>
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                    <th className="px-3.5 py-2.5">Prov Vouch #</th>
+                    <th className="px-3 py-2.5">Date</th>
+                    <th className="px-3 py-2.5">Category</th>
+                    <th className="px-3.5 py-2.5">Account / Party</th>
+                    <th className="px-3.5 py-2.5 text-right">Debit (₹)</th>
+                    <th className="px-3.5 py-2.5 text-right">Credit (₹)</th>
+                    <th className="px-3.5 py-2.5 text-center">Status</th>
+                    <th className="px-3.5 py-2.5 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {filteredData.map((row) => {
+                    const main = mainLine(row);
+                    return (
+                      <tr key={row.id} className={cn("hover:bg-slate-50", editing?.id === row.id && "bg-blue-50/60")}>
+                        <td className="px-3.5 py-2.5 font-bold text-slate-900">
+                          {row.voucherNo}
+                          {row.provisionalType && (
+                            <span className="block text-[10px] text-slate-400 font-normal">{row.provisionalType}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-600 font-medium">
+                          {formatDate(row.voucherDate)}
+                          <span
+                            className={cn(
+                              "block text-[10px]",
+                              row.status === "Provisional" && row.expiryDate && row.expiryDate < todayIso()
+                                ? "text-rose-600 font-bold"
+                                : "text-slate-400",
+                            )}
+                          >
+                            Exp: {formatDate(row.expiryDate)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 font-semibold text-slate-700">{row.provisionalCategory ?? "—"}</td>
+                        <td className="px-3.5 py-2.5 font-semibold text-slate-900">
+                          {row.partyName ?? "General Provision"}
+                          <span className="block text-[10px] text-slate-400 font-normal">
+                            {main?.accountName ?? "—"}
+                            {contraLine(row) ? ` ↔ ${contraLine(row).accountName}` : ""}
+                          </span>
+                        </td>
+                        <td className="px-3.5 py-2.5 text-right font-bold text-slate-900">
+                          {main && main.debit > 0 ? formatINR(main.debit) : "-"}
+                        </td>
+                        <td className="px-3.5 py-2.5 text-right font-bold text-slate-900">
+                          {main && main.credit > 0 ? formatINR(main.credit) : "-"}
+                        </td>
+                        <td className="px-3.5 py-2.5 text-center">
+                          <span
+                            className={cn(
+                              "inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider",
+                              getStatusBadgeClass(row.status),
+                            )}
+                          >
+                            {statusLabel(row.status)}
+                          </span>
+                        </td>
+                        <td className="px-3.5 py-2.5 text-center">{renderRowActions(row, true)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
+
+            {/* Mobile Stacked Card View */}
+            <div className="md:hidden space-y-2.5">
+              {filteredData.map((row) => {
+                const main = mainLine(row);
+                return (
+                  <div key={row.id} className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-slate-900">{row.voucherNo}</span>
+                      <span
+                        className={cn(
+                          "px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider",
+                          getStatusBadgeClass(row.status),
+                        )}
+                      >
+                        {statusLabel(row.status)}
+                      </span>
+                    </div>
+
+                    <p className="text-xs font-semibold text-slate-900">{row.partyName ?? "General Provision"}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {main?.accountName ?? "—"} • {row.provisionalCategory ?? "—"}
+                    </p>
+
+                    <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
+                      <span className="text-slate-500 font-medium">{formatDate(row.voucherDate)}</span>
+                      <span className="font-bold text-slate-900">
+                        {main && main.debit > 0 ? `Dr ${formatINR(main.debit)}` : `Cr ${formatINR(main?.credit ?? 0)}`}
+                      </span>
+                    </div>
+
+                    {row.status === "Provisional" && (
+                      <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100">{renderRowActions(row, false)}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </section>
 
-      {/* 🔐 DOUBLE VERIFICATION CONFIRMATION MODAL */}
+      {/* DOUBLE VERIFICATION CONFIRMATION MODAL */}
       {verificationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50">
           <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl border border-slate-200 space-y-4 text-xs font-sans">
-            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-900 border border-amber-300 font-bold">
@@ -640,7 +795,8 @@ export function ProvisionalTransactionsView() {
                     Double Verification Confirmation
                   </h3>
                   <p className="text-[11px] text-slate-500 font-semibold">
-                    {verificationModal.type === "POST" && "Confirming New Provisional Accrual Entry"}
+                    {verificationModal.type === "POST" &&
+                      (editing ? "Confirming Provisional Entry Changes" : "Confirming New Provisional Accrual Entry")}
                     {verificationModal.type === "CONVERT" && "Converting Provisional Entry to Permanent GL Voucher"}
                     {verificationModal.type === "REVERSE" && "Reversing Provisional Transaction"}
                   </p>
@@ -665,11 +821,19 @@ export function ProvisionalTransactionsView() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 font-bold">Posting / Expiry Date:</span>
-                    <strong className="text-slate-900">{vouchDt} (Exp: {expiryDt})</strong>
+                    <strong className="text-slate-900">
+                      {formatDate(vouchDt)} (Exp: {formatDate(expiryDt)})
+                    </strong>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500 font-bold">Category &amp; Ledger:</span>
-                    <strong className="text-slate-900">{category} • {accountLedger}</strong>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-slate-500 font-bold shrink-0">Category &amp; Ledger:</span>
+                    <strong className="text-slate-900 text-right">
+                      {category} • {ledgerName(accountId)}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-slate-500 font-bold shrink-0">Offset Ledger:</span>
+                    <strong className="text-slate-900 text-right">{ledgerName(contraAccountId)}</strong>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 font-bold">Party Name:</span>
@@ -677,73 +841,78 @@ export function ProvisionalTransactionsView() {
                   </div>
                   <div className="flex justify-between border-t border-slate-200 pt-1.5 text-sm font-extrabold">
                     <span className="text-slate-700">Provisional Amount:</span>
-                    <span className="text-emerald-800">
-                      {drAmt > 0 ? `Dr ${formatINR(drAmt)}` : `Cr ${formatINR(crAmt)}`}
-                    </span>
+                    <span className="text-emerald-800">{drAmt > 0 ? `Dr ${formatINR(drAmt)}` : `Cr ${formatINR(crAmt)}`}</span>
                   </div>
                 </>
               ) : (
-                verificationModal.item && (
+                modalItem && (
                   <>
                     <div className="flex justify-between">
                       <span className="text-slate-500 font-bold">Provisional Voucher #:</span>
-                      <strong className="text-slate-900">{verificationModal.item.vouchNo}</strong>
+                      <strong className="text-slate-900">{modalItem.voucherNo}</strong>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500 font-bold">Posting / Expiry Date:</span>
                       <strong className="text-slate-900">
-                        {verificationModal.item.vouchDt} (Exp: {verificationModal.item.expiryDt})
+                        {formatDate(modalItem.voucherDate)} (Exp: {formatDate(modalItem.expiryDate)})
                       </strong>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 font-bold">Category &amp; Ledger:</span>
-                      <strong className="text-slate-900">
-                        {verificationModal.item.category} • {verificationModal.item.accountLedger}
+                    <div className="flex justify-between gap-2">
+                      <span className="text-slate-500 font-bold shrink-0">Category &amp; Ledger:</span>
+                      <strong className="text-slate-900 text-right">
+                        {modalItem.provisionalCategory ?? "—"} • {mainLine(modalItem)?.accountName ?? "—"}
                       </strong>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500 font-bold">Party Name:</span>
-                      <strong className="text-slate-900">{verificationModal.item.partyName}</strong>
+                      <strong className="text-slate-900">{modalItem.partyName ?? "General Provision"}</strong>
                     </div>
                     <div className="flex justify-between border-t border-slate-200 pt-1.5 text-sm font-extrabold">
                       <span className="text-slate-700">Provisional Amount:</span>
-                      <span className="text-emerald-800">
-                        {verificationModal.item.drAmt > 0
-                          ? `Dr ${formatINR(verificationModal.item.drAmt)}`
-                          : `Cr ${formatINR(verificationModal.item.crAmt)}`}
-                      </span>
+                      <span className="text-emerald-800">{formatINR(modalItem.totalAmount)}</span>
                     </div>
                   </>
                 )
               )}
             </div>
 
-            {/* Mandatory Verification Checkbox & Audit Stamp */}
+            {verificationModal.type === "CONVERT" && (
+              <FormField label="GL Voucher Date for Conversion">
+                <TextInput
+                  type="date"
+                  value={verificationModal.convertDate}
+                  onChange={(e) => setVerificationModal({ ...verificationModal, convertDate: e.target.value })}
+                  className="h-8 text-xs"
+                />
+              </FormField>
+            )}
+
+            {verificationModal.type === "REVERSE" && (
+              <FormField label="Reversal Reason" required>
+                <TextInput
+                  value={verificationModal.reason}
+                  onChange={(e) => setVerificationModal({ ...verificationModal, reason: e.target.value })}
+                  placeholder="Why is this provision being reversed?"
+                  className="h-8 text-xs"
+                />
+              </FormField>
+            )}
+
+            {/* Mandatory Verification Checkbox */}
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-xs">
               <label className="flex items-start gap-2.5 cursor-pointer font-bold text-amber-950">
                 <input
                   type="checkbox"
                   checked={verificationModal.confirmedCheckbox}
-                  onChange={(e) =>
-                    setVerificationModal({
-                      ...verificationModal,
-                      confirmedCheckbox: e.target.checked,
-                    })
-                  }
+                  onChange={(e) => setVerificationModal({ ...verificationModal, confirmedCheckbox: e.target.checked })}
                   className="rounded border-amber-400 text-emerald-700 h-4 w-4 mt-0.5"
                 />
                 <span>
                   Double Verification Check: I confirm that I have verified physical supporting invoices, GL ledger accounts, and authorized this financial action.
                 </span>
               </label>
-
-              <div className="text-[11px] font-mono text-amber-800 pt-1 border-t border-amber-200 flex justify-between">
-                <span>Verified By Auditor: <strong>{verificationModal.verifierName}</strong></span>
-                <span>Timestamp: <strong>{new Date().toLocaleTimeString()}</strong></span>
-              </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <Button
                 type="button"
@@ -757,17 +926,18 @@ export function ProvisionalTransactionsView() {
               <Button
                 type="button"
                 size="sm"
-                disabled={!verificationModal.confirmedCheckbox}
-                onClick={handleExecuteDoubleVerifiedAction}
+                disabled={
+                  !verificationModal.confirmedCheckbox ||
+                  isPosting ||
+                  (verificationModal.type === "REVERSE" && !verificationModal.reason.trim())
+                }
+                onClick={() => void handleExecuteDoubleVerifiedAction()}
                 className={cn(
-                  "rounded-xl font-bold text-xs px-4 text-white cursor-pointer transition-all",
-                  verificationModal.type === "REVERSE"
-                    ? "bg-rose-700 hover:bg-rose-800"
-                    : "bg-emerald-700 hover:bg-emerald-800",
-                  !verificationModal.confirmedCheckbox && "opacity-50 cursor-not-allowed"
+                  "rounded-xl font-bold text-xs px-4 text-white cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                  verificationModal.type === "REVERSE" ? "bg-rose-700 hover:bg-rose-800" : "bg-emerald-700 hover:bg-emerald-800",
                 )}
               >
-                <Check className="h-3.5 w-3.5 mr-1" />
+                {isPosting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
                 Confirm &amp; Execute Action
               </Button>
             </div>

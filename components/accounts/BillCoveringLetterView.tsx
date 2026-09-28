@@ -1,10 +1,9 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   Calendar,
-  Clock,
-  Download,
   Filter,
   Printer,
   Search,
@@ -12,13 +11,8 @@ import {
   Users,
   ChevronDown,
   X,
-  Building2,
   FileText,
-  AlertCircle,
-  CheckCircle2,
   PieChart,
-  ArrowUpRight,
-  ArrowDownLeft,
   Loader2,
   Info,
   CheckSquare,
@@ -29,7 +23,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
-  FormField,
   StatMiniCard,
   Drawer,
   FODatePicker,
@@ -37,151 +30,241 @@ import {
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
 import {
-  sampleCoveringGroups,
-  sampleCoveringLetterData,
-  BillCoveringItem,
-} from "@/app/data/accounts/billCoveringLetterData";
+  accCoveringLetterService,
+  accPartyService,
+  type CoveringLetter,
+  type PartyBill,
+} from "@/services/accounts";
+import {
+  accErrorMessage,
+  formatDate,
+  todayIso,
+  useAccLookups,
+  useAccQuery,
+} from "@/components/accounts/accountsApi";
+import {
+  ALL_GROUPS,
+  CompanyLetterhead,
+  LETTER_PARTY_GROUPS,
+  PrintConfirmDialog,
+  TableStatusRow,
+  companyDisplayName,
+  useLetterheadCompany,
+  type LetterToast,
+} from "@/components/accounts/ReminderLetterView";
+import {
+  CoveringLetterSheet,
+  coveringLetterDoc,
+  type CoveringLetterDoc,
+} from "@/components/accounts/BillCoveringLetterPrintView";
 import { cn } from "@/lib/utils";
 
+type CandidateParams = { partyGroup: string; partyId: string; asOnDate: string; forTheDay: boolean };
+
 export function BillCoveringLetterView() {
+  const router = useRouter();
+  const { lookups, error: lookupsError } = useAccLookups();
+  const letterhead = useLetterheadCompany();
+
   // Desktop & Mobile filter state
   const [showFilters, setShowFilters] = useState(false);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
-  // WINHMS Reference Parameters (Matching Image 1)
-  const [selectedGroup, setSelectedGroup] = useState("SUNDRY DEBTORS");
-  const [partySearch, setPartySearch] = useState("");
-  const [asOnDate, setAsOnDate] = useState("2026-07-24");
+  // Parameters (applied on Display)
+  const [selectedGroup, setSelectedGroup] = useState(ALL_GROUPS);
+  const [partyId, setPartyId] = useState("");
+  const [asOnDate, setAsOnDate] = useState(todayIso());
   const [forTheDay, setForTheDay] = useState(false);
 
-  // Transaction Voucher No & Date
-  const [trnNo, setTrnNo] = useState("BCL-2026-0041");
-  const [trnDt, setTrnDt] = useState("2026-07-24");
+  // Covering letter date & remarks (letter number is assigned by the server)
+  const [trnDt, setTrnDt] = useState(todayIso());
+  const [remarks, setRemarks] = useState("");
+  const [savedLetter, setSavedLetter] = useState<CoveringLetter | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Table Selection & Data State
-  const [bills, setBills] = useState<BillCoveringItem[]>(sampleCoveringLetterData);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    new Set(sampleCoveringLetterData.filter((b) => b.selected).map((b) => b.id))
+  const [params, setParams] = useState<CandidateParams>(() => ({
+    partyGroup: "",
+    partyId: "",
+    asOnDate: todayIso(),
+    forTheDay: false,
+  }));
+
+  const { data, loading, error, reload } = useAccQuery(
+    () =>
+      accCoveringLetterService.candidates({
+        partyGroup: params.partyGroup || undefined,
+        partyId: params.partyId || undefined,
+        asOnDate: params.asOnDate,
+        from: params.forTheDay ? params.asOnDate : undefined,
+        to: params.forTheDay ? params.asOnDate : undefined,
+      }),
+    [params],
   );
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   // Preview & Printer Dialog State
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewMode, setPreviewMode] = useState<"draft" | "saved" | null>(null);
   const [showPrinterDialog, setShowPrinterDialog] = useState(false);
-  const [selectedPrinter, setSelectedPrinter] = useState("Canon MF230 Series UFRII LT");
 
-  // Search & Loading State
   const [searchQuery, setSearchQuery] = useState("");
-  const [isDisplayLoading, setIsDisplayLoading] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<LetterToast | null>(null);
 
-  // Filtered Bills Logic
+  const partyOptions = useMemo(
+    () =>
+      (lookups?.parties ?? []).filter((p) => selectedGroup === ALL_GROUPS || p.partyGroup === selectedGroup),
+    [lookups, selectedGroup],
+  );
+
+  const bills = useMemo(() => data ?? [], [data]);
+
   const filteredBills = useMemo(() => {
-    return bills.filter((item) => {
-      // Group
-      if (selectedGroup !== "All Groups" && item.partyGroup !== selectedGroup) {
-        return false;
-      }
+    const q = searchQuery.trim().toLowerCase();
+    return bills.filter(
+      (item) =>
+        !q ||
+        item.billNo.toLowerCase().includes(q) ||
+        item.refType.toLowerCase().includes(q) ||
+        (item.partyName ?? "").toLowerCase().includes(q) ||
+        item.details.toLowerCase().includes(q),
+    );
+  }, [bills, searchQuery]);
 
-      // Party Search Filter
-      if (partySearch) {
-        const p = partySearch.toLowerCase();
-        if (!item.partyName.toLowerCase().includes(p)) return false;
-      }
+  const selectedBillsList = useMemo(() => bills.filter((b) => selectedIds.has(b.id)), [bills, selectedIds]);
+  const selectedPartyId = selectedBillsList[0]?.partyId ?? null;
+  const primaryBill = selectedBillsList[0] ?? null;
 
-      // General Search Query
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return (
-          item.vouchNo.toLowerCase().includes(q) ||
-          item.refName.toLowerCase().includes(q) ||
-          item.partyName.toLowerCase().includes(q) ||
-          item.details.toLowerCase().includes(q)
-        );
-      }
+  const totalSelectedAmt = useMemo(
+    () => selectedBillsList.reduce((sum, b) => sum + b.amount, 0),
+    [selectedBillsList],
+  );
 
-      return true;
-    });
-  }, [bills, selectedGroup, partySearch, searchQuery]);
+  // Recipient details for the draft preview
+  const { data: selectedParty } = useAccQuery(
+    () => (selectedPartyId ? accPartyService.get(selectedPartyId) : Promise.resolve(null)),
+    [selectedPartyId],
+  );
 
-  // Selection Handlers
-  const handleToggleSelect = (id: string) => {
+  const handleToggleSelect = (bill: PartyBill) => {
     const next = new Set(selectedIds);
-    if (next.has(id)) {
-      next.delete(id);
+    if (next.has(bill.id)) {
+      next.delete(bill.id);
     } else {
-      next.add(id);
+      if (selectedPartyId && bill.partyId !== selectedPartyId) {
+        setToast({
+          message: `All bills in a covering letter must belong to one party (${primaryBill?.partyName ?? "selected party"}). Clear the selection to switch party.`,
+          variant: "error",
+        });
+        return;
+      }
+      next.add(bill.id);
     }
     setSelectedIds(next);
   };
 
   const handleSelectAll = () => {
-    setSelectedIds(new Set(filteredBills.map((b) => b.id)));
+    const partyIds = new Set(filteredBills.map((b) => b.partyId));
+    if (partyIds.size > 1 || (selectedPartyId && !partyIds.has(selectedPartyId) && partyIds.size > 0)) {
+      setToast({
+        message: "Bills from multiple parties are listed. Filter by a single party before using Select All.",
+        variant: "error",
+      });
+      return;
+    }
+    setSelectedIds(new Set([...selectedIds, ...filteredBills.map((b) => b.id)]));
   };
 
-  const handleClearAll = () => {
-    setSelectedIds(new Set());
-  };
+  const handleClearAll = () => setSelectedIds(new Set());
 
-  // Calculations
-  const selectedBillsList = useMemo(
-    () => filteredBills.filter((b) => selectedIds.has(b.id)),
-    [filteredBills, selectedIds]
-  );
-
-  const totalSelectedAmt = useMemo(
-    () => selectedBillsList.reduce((sum, b) => sum + b.amount, 0),
-    [selectedBillsList]
-  );
-
-  // Primary Client for preview letter
-  const primaryParty = selectedBillsList.length > 0 ? selectedBillsList[0] : sampleCoveringLetterData[0];
-
-  // Handle Display Button
   const handleDisplayReport = () => {
-    setIsDisplayLoading(true);
-    setTimeout(() => {
-      setIsDisplayLoading(false);
-      setToastMessage(`Displayed ${filteredBills.length} pending bills for covering letter as on ${asOnDate}.`);
-    }, 300);
+    setSelectedIds(new Set());
+    setPreviewMode(null);
+    setParams({
+      partyGroup: selectedGroup === ALL_GROUPS ? "" : selectedGroup,
+      partyId,
+      asOnDate,
+      forTheDay,
+    });
+    setMobileFilterOpen(false);
   };
 
-  // Save Bill Covering Letter Voucher Action
-  const handleSaveCoveringLetter = () => {
-    setToastMessage(`Successfully saved Bill Covering Letter voucher '${trnNo}' with ${selectedIds.size} enclosed bills.`);
+  const handleSaveCoveringLetter = async () => {
+    if (selectedBillsList.length === 0) return;
+    setSaving(true);
+    try {
+      const letter = await accCoveringLetterService.create({
+        letterDate: trnDt,
+        billIds: selectedBillsList.map((b) => b.id),
+        remarks: remarks.trim() || undefined,
+      });
+      setSavedLetter(letter);
+      setSelectedIds(new Set());
+      setRemarks("");
+      setToast({
+        message: `Saved Bill Covering Letter '${letter.letterNo}' with ${letter.billsCount} enclosed bill(s).`,
+        variant: "success",
+      });
+      setPreviewMode("saved");
+      void reload();
+    } catch (e) {
+      setToast({ message: accErrorMessage(e), variant: "error" });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // Execute Printer Dialog OK
   const handleConfirmPrinterDialog = () => {
     setShowPrinterDialog(false);
-    if (!previewOpen) setPreviewOpen(true);
-    setTimeout(() => {
-      window.print();
-      setToastMessage(`Sent Bill Covering Letter '${trnNo}' to printer '${selectedPrinter}'.`);
-    }, 150);
+    setPreviewMode("saved");
+    setTimeout(() => window.print(), 150);
   };
 
-  // Utility to convert number to words for document
-  const amountToWords = (num: number): string => {
-    if (num === 295000) return "Rupees Two Lakh Ninety Five Thousand Only.";
-    if (num === 150000) return "Rupees One Lakh Fifty Thousand Only.";
-    if (num === 145000) return "Rupees One Lakh Forty Five Thousand Only.";
-    return `Rupees ${num.toLocaleString("en-IN")} Only.`;
-  };
+  const draftDoc: CoveringLetterDoc | null = primaryBill
+    ? {
+        key: "draft",
+        letterNo: null,
+        letterDate: trnDt,
+        partyName: primaryBill.partyName ?? "",
+        partyAddress: selectedParty
+          ? [selectedParty.addressLine1, selectedParty.addressLine2, selectedParty.city, selectedParty.state, selectedParty.postalCode]
+              .filter(Boolean)
+              .join(", ")
+          : "",
+        partyGstin: selectedParty?.gstin ?? "",
+        contactPersonName: selectedParty?.contactPersonName ?? "",
+        totalAmount: totalSelectedAmt,
+        bills: selectedBillsList.map((b) => ({
+          key: b.id,
+          billNo: b.billNo,
+          billDate: b.billDate,
+          dueDate: b.dueDate,
+          details: b.details,
+          amount: b.amount,
+        })),
+      }
+    : null;
 
-  // Shared WINHMS Parameter Form Layout (Matching Image 1)
-  const FilterFormContent = () => (
+  const previewDoc =
+    previewMode === "saved" && savedLetter ? coveringLetterDoc(savedLetter) : previewMode === "draft" ? draftDoc : null;
+
+  const companyName = companyDisplayName(letterhead.company);
+  const trnNoLabel = savedLetter?.letterNo ?? "Auto on save";
+
+  const filterForm = (
     <div className="space-y-3 text-xs">
-      {/* Row 1: Group Dropdown, Party Input, As On Date, Display Button, For the Day, Trn No & Trn Dt */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 items-center bg-slate-50/80 p-3 rounded-xl border border-slate-200">
         {/* Group Dropdown */}
         <div className="lg:col-span-4 flex items-center gap-2">
           <span className="font-semibold text-slate-600 shrink-0">Group:</span>
           <select
             value={selectedGroup}
-            onChange={(e) => setSelectedGroup(e.target.value as any)}
+            onChange={(e) => {
+              setSelectedGroup(e.target.value);
+              setPartyId("");
+            }}
             className="h-8 flex-1 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
           >
-            {sampleCoveringGroups.map((g) => (
+            {[ALL_GROUPS, ...LETTER_PARTY_GROUPS].map((g) => (
               <option key={g} value={g}>
                 {g}
               </option>
@@ -189,19 +272,21 @@ export function BillCoveringLetterView() {
           </select>
         </div>
 
-        {/* Party Input & Binoculars */}
+        {/* Party selector */}
         <div className="lg:col-span-4 flex items-center gap-2">
           <span className="font-semibold text-slate-600 shrink-0">Party:</span>
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={partySearch}
-              onChange={(e) => setPartySearch(e.target.value)}
-              placeholder="Search party name..."
-              className="h-8 w-full rounded-lg border border-slate-300 bg-white pl-2 pr-7 text-xs font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none"
-            />
-            <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-          </div>
+          <select
+            value={partyId}
+            onChange={(e) => setPartyId(e.target.value)}
+            className="h-8 flex-1 rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none"
+          >
+            <option value="">{lookupsError ? "Parties unavailable" : "All parties"}</option>
+            {partyOptions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.partyCode} - {p.partyName}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* As On Date & Display Button */}
@@ -212,10 +297,10 @@ export function BillCoveringLetterView() {
             type="button"
             size="sm"
             onClick={handleDisplayReport}
-            disabled={isDisplayLoading}
+            disabled={loading}
             className="h-8 px-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs shrink-0 cursor-pointer"
           >
-            {isDisplayLoading ? (
+            {loading ? (
               <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
             ) : (
               <Search className="h-3.5 w-3.5 mr-1" />
@@ -225,9 +310,9 @@ export function BillCoveringLetterView() {
         </div>
       </div>
 
-      {/* Row 2: For the Day Check, Trn No & Trn Dt Inputs */}
+      {/* Row 2: For the Day, Trn No, Trn Dt, Remarks */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 items-center bg-slate-50/80 p-3 rounded-xl border border-slate-200 text-[11px] font-semibold text-slate-700">
-        <div className="lg:col-span-4 flex items-center gap-2">
+        <div className="lg:col-span-2 flex items-center gap-2">
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input
               type="checkbox"
@@ -239,19 +324,31 @@ export function BillCoveringLetterView() {
           </label>
         </div>
 
-        <div className="lg:col-span-4 flex items-center gap-2">
+        <div className="lg:col-span-3 flex items-center gap-2">
           <span className="font-semibold text-slate-600 shrink-0">Trn No:</span>
           <input
             type="text"
-            value={trnNo}
-            onChange={(e) => setTrnNo(e.target.value)}
-            className="h-7 font-mono font-bold text-slate-900 w-36 rounded border border-slate-300 bg-white px-2 text-xs focus:border-emerald-500 focus:outline-none"
+            value={savedLetter?.letterNo ?? ""}
+            readOnly
+            placeholder="Auto-assigned on save"
+            className="h-7 font-mono font-bold text-slate-900 w-40 rounded border border-slate-300 bg-slate-100 px-2 text-xs focus:outline-none"
           />
         </div>
 
-        <div className="lg:col-span-4 flex items-center gap-2 justify-end">
+        <div className="lg:col-span-3 flex items-center gap-2">
           <span className="font-semibold text-slate-600 shrink-0">Trn Dt:</span>
           <FODatePicker value={trnDt} onChange={setTrnDt} className="w-32" />
+        </div>
+
+        <div className="lg:col-span-4 flex items-center gap-2">
+          <span className="font-semibold text-slate-600 shrink-0">Remarks:</span>
+          <input
+            type="text"
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            placeholder="Optional dispatch remarks..."
+            className="h-7 flex-1 rounded border border-slate-300 bg-white px-2 text-xs font-medium text-slate-900 focus:border-emerald-500 focus:outline-none"
+          />
         </div>
       </div>
     </div>
@@ -267,8 +364,9 @@ export function BillCoveringLetterView() {
         { label: "Party Outstanding", href: "/accounts/party-outstanding" },
         { label: "Bill Covering Letter" },
       ]}
-      toast={toastMessage}
-      onDismissToast={() => setToastMessage(null)}
+      toast={toast?.message ?? null}
+      toastVariant={toast?.variant}
+      onDismissToast={() => setToast(null)}
       secondaryActions={
         <div className="flex items-center gap-2">
           <Button
@@ -276,17 +374,17 @@ export function BillCoveringLetterView() {
             variant="outline"
             size="sm"
             onClick={() => setShowPrinterDialog(true)}
-            disabled={selectedIds.size === 0}
+            disabled={!savedLetter}
             className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs"
           >
             <Printer className="h-3.5 w-3.5 mr-1" />
-            Print Covering Letter ({selectedIds.size})
+            Print Covering Letter {savedLetter ? `(${savedLetter.letterNo})` : ""}
           </Button>
         </div>
       }
     >
       {/* Top Controls Toolbar Bar */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xs">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xs print:hidden">
         <div className="flex items-center gap-2">
           <Button
             type="button"
@@ -321,19 +419,19 @@ export function BillCoveringLetterView() {
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
             <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-700" />
-            Trn No: {trnNo}
+            Trn No: {trnNoLabel}
           </span>
 
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
             <Calendar className="h-3.5 w-3.5 text-slate-600" />
-            As On: {asOnDate}
+            As On: {formatDate(params.asOnDate)}
           </span>
         </div>
       </div>
 
       {/* Desktop Filter Panel */}
       {showFilters && (
-        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs animate-in fade-in-50">
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs animate-in fade-in-50 print:hidden">
           <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
             <div className="flex items-center gap-2">
               <SlidersHorizontal className="h-4 w-4 text-emerald-600" />
@@ -348,7 +446,7 @@ export function BillCoveringLetterView() {
               ✕ Hide Options
             </button>
           </div>
-          <FilterFormContent />
+          {filterForm}
         </div>
       )}
 
@@ -359,12 +457,12 @@ export function BillCoveringLetterView() {
         title="Covering Letter Options"
       >
         <div className="p-4">
-          <FilterFormContent />
+          {filterForm}
           <div className="mt-4 border-t border-slate-100 pt-3">
             <Button
               type="button"
               className="w-full bg-emerald-700 text-white"
-              onClick={() => setMobileFilterOpen(false)}
+              onClick={handleDisplayReport}
             >
               Apply Filter Options
             </Button>
@@ -373,10 +471,10 @@ export function BillCoveringLetterView() {
       </Drawer>
 
       {/* KPI Stat Cards Grid */}
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 print:hidden">
         <StatMiniCard
           label="Selected Enclosed Bills"
-          value={`${selectedIds.size} Bills`}
+          value={`${selectedBillsList.length} Bills`}
           sublabel="Attached to covering letter"
           accent="#0284c7"
           icon={FileText}
@@ -390,22 +488,22 @@ export function BillCoveringLetterView() {
         />
         <StatMiniCard
           label="Recipient Client"
-          value={primaryParty.partyName.slice(0, 18) + "..."}
-          sublabel={primaryParty.partyGroup}
+          value={primaryBill?.partyName ?? "—"}
+          sublabel={primaryBill?.partyGroup ?? "Select bills below"}
           accent="#f59e0b"
           icon={Users}
         />
         <StatMiniCard
           label="Voucher Reference"
-          value={trnNo}
-          sublabel={`Dated ${trnDt}`}
+          value={trnNoLabel}
+          sublabel={`Dated ${formatDate(savedLetter?.letterDate ?? trnDt)}`}
           accent="#8b5cf6"
           icon={FileSpreadsheet}
         />
       </div>
 
-      {/* Main Table Section (Matching Image 1 Screenshot) */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+      {/* Main Table Section */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs print:hidden">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -416,7 +514,7 @@ export function BillCoveringLetterView() {
             </div>
             <p className="text-[11px] text-emerald-700 font-semibold mt-0.5 flex items-center gap-1">
               <Info className="h-3 w-3" />
-              Select bills to enclose in the official Bill Covering Letter statement
+              Open receivable bills not yet sent. Select bills of one party to enclose in the covering letter
             </p>
           </div>
 
@@ -426,54 +524,63 @@ export function BillCoveringLetterView() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search voucher # or ref name..."
+              placeholder="Search bill # or ref type..."
               className="h-8 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-800 focus:border-emerald-500 focus:outline-none"
             />
           </div>
         </div>
 
-        {/* WINHMS Table Format (Matching Image 1) */}
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full text-left text-xs font-sans">
             <thead>
               <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
-                <th className="px-3 py-2.5 w-28 border-r border-slate-200">VouchNo</th>
-                <th className="px-3 py-2.5 w-24 border-r border-slate-200">VouchDt</th>
-                <th className="px-3 py-2.5 w-32 border-r border-slate-200">Ref Name</th>
+                <th className="px-3 py-2.5 w-28 border-r border-slate-200">Bill No</th>
+                <th className="px-3 py-2.5 w-24 border-r border-slate-200">Bill Dt</th>
+                <th className="px-3 py-2.5 w-32 border-r border-slate-200">Ref Type</th>
                 <th className="px-3.5 py-2.5 min-w-[260px] border-r border-slate-200">Details</th>
                 <th className="px-3 py-2.5 text-right w-36 border-r border-slate-200 font-bold bg-slate-200/50">Amount</th>
                 <th className="px-3 py-2.5 text-center w-20">Select</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredBills.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 font-medium">
-                    No pending bills found matching criteria.
-                  </td>
-                </tr>
+              {loading || error || filteredBills.length === 0 ? (
+                <TableStatusRow
+                  colSpan={6}
+                  loading={loading}
+                  error={error}
+                  onRetry={() => void reload()}
+                  emptyText="No pending receivable bills found matching criteria."
+                />
               ) : (
                 filteredBills.map((row) => (
                   <tr
                     key={row.id}
-                    onClick={() => handleToggleSelect(row.id)}
-                    className="hover:bg-amber-50/70 transition-colors cursor-pointer text-[11px]"
+                    onClick={() => handleToggleSelect(row)}
+                    className={cn(
+                      "hover:bg-amber-50/70 transition-colors cursor-pointer text-[11px]",
+                      selectedPartyId && row.partyId !== selectedPartyId && "opacity-50"
+                    )}
                   >
-                    <td className="px-3 py-2.5 font-bold font-mono text-slate-900 border-r border-slate-100">{row.vouchNo}</td>
-                    <td className="px-3 py-2.5 text-slate-600 font-medium border-r border-slate-100">{row.vouchDt}</td>
-                    <td className="px-3 py-2.5 font-semibold text-slate-800 border-r border-slate-100">{row.refName}</td>
+                    <td className="px-3 py-2.5 font-bold font-mono text-slate-900 border-r border-slate-100">{row.billNo}</td>
+                    <td className="px-3 py-2.5 text-slate-600 font-medium border-r border-slate-100">{formatDate(row.billDate)}</td>
+                    <td className="px-3 py-2.5 font-semibold text-slate-800 border-r border-slate-100">{row.refType || "—"}</td>
                     <td className="px-3.5 py-2.5 border-r border-slate-100">
-                      <span className="font-bold text-slate-900 block">{row.partyName}</span>
-                      <span className="text-[10px] text-slate-500 font-medium block">{row.details}</span>
+                      <span className="font-bold text-slate-900 block">{row.partyName ?? "—"}</span>
+                      <span className="text-[10px] text-slate-500 font-medium block">
+                        {[row.details, `Due ${formatDate(row.dueDate)}`].filter(Boolean).join(" • ")}
+                      </span>
                     </td>
                     <td className="px-3 py-2.5 text-right font-bold text-slate-900 border-r border-slate-100 bg-slate-50">
                       {formatINR(row.amount)}
+                      {row.balance < row.amount && (
+                        <span className="block text-[10px] font-medium text-slate-500">Bal {formatINR(row.balance)}</span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(row.id)}
-                        onChange={() => handleToggleSelect(row.id)}
+                        onChange={() => handleToggleSelect(row)}
                         onClick={(e) => e.stopPropagation()}
                         className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
                       />
@@ -482,11 +589,11 @@ export function BillCoveringLetterView() {
                 ))
               )}
             </tbody>
-            {filteredBills.length > 0 && (
+            {!loading && !error && filteredBills.length > 0 && (
               <tfoot>
                 <tr className="bg-slate-100 font-bold text-slate-900 border-t border-slate-300 text-xs">
                   <td colSpan={4} className="px-3 py-2.5 text-right uppercase text-[10px] tracking-wider border-r border-slate-300">
-                    Total Enclosed Bills Amount ({selectedIds.size} bills):
+                    Total Enclosed Bills Amount ({selectedBillsList.length} bills):
                   </td>
                   <td className="px-3 py-2.5 text-right font-bold text-slate-900 bg-slate-200/60 border-r border-slate-300">
                     {formatINR(totalSelectedAmt)}
@@ -498,7 +605,7 @@ export function BillCoveringLetterView() {
           </table>
         </div>
 
-        {/* WINHMS Action Footer Bar (Matching Image 1 Bottom Bar) */}
+        {/* Action Footer Bar */}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 bg-slate-50/80 p-3 rounded-xl">
           <div className="flex items-center gap-2">
             <Button
@@ -527,19 +634,19 @@ export function BillCoveringLetterView() {
             <Button
               type="button"
               size="sm"
-              disabled={selectedIds.size === 0}
-              onClick={handleSaveCoveringLetter}
+              disabled={selectedBillsList.length === 0 || saving}
+              onClick={() => void handleSaveCoveringLetter()}
               className="h-8 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
             >
-              <Save className="h-3.5 w-3.5 mr-1" />
+              {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
               Save Voucher
             </Button>
 
             <Button
               type="button"
               size="sm"
-              disabled={selectedIds.size === 0}
-              onClick={() => setPreviewOpen(true)}
+              disabled={selectedBillsList.length === 0}
+              onClick={() => setPreviewMode("draft")}
               className="h-8 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
             >
               <Eye className="h-3.5 w-3.5 mr-1" />
@@ -549,8 +656,9 @@ export function BillCoveringLetterView() {
             <Button
               type="button"
               size="sm"
-              disabled={selectedIds.size === 0}
+              disabled={!savedLetter}
               onClick={() => setShowPrinterDialog(true)}
+              title={savedLetter ? undefined : "Save the covering letter before printing"}
               className="h-8 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
             >
               <Printer className="h-3.5 w-3.5 mr-1" />
@@ -561,7 +669,7 @@ export function BillCoveringLetterView() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setToastMessage("Bill covering letter process cancelled.")}
+              onClick={() => router.push("/accounts/dashboard")}
               className="h-8 px-4 text-xs font-semibold text-slate-600 bg-white"
             >
               Exit
@@ -570,96 +678,50 @@ export function BillCoveringLetterView() {
         </div>
       </section>
 
-      {/* WINHMS Printer Selection Dialog Modal (matching Image 1 standard popup) */}
-      {showPrinterDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50 print:hidden">
-          <div className="w-full max-w-sm rounded-xl bg-white p-4 shadow-2xl border border-slate-300 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-              <h3 className="text-xs font-bold text-slate-800">Print</h3>
-              <button
-                type="button"
-                onClick={() => setShowPrinterDialog(false)}
-                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+      <PrintConfirmDialog
+        open={showPrinterDialog}
+        documentsLabel={savedLetter ? `${savedLetter.letterNo} (${savedLetter.billsCount} bills)` : "—"}
+        onConfirm={handleConfirmPrinterDialog}
+        onCancel={() => setShowPrinterDialog(false)}
+      />
 
-            <div className="space-y-3 font-sans text-xs">
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700 block">Printer Name:</label>
-                <select
-                  value={selectedPrinter}
-                  onChange={(e) => setSelectedPrinter(e.target.value)}
-                  className="w-full rounded border border-slate-300 bg-white p-2 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
-                >
-                  <option value="Canon MF230 Series UFRII LT">Canon MF230 Series UFRII LT</option>
-                  <option value="Fax">Fax</option>
-                  <option value="Microsoft Print to PDF">Microsoft Print to PDF</option>
-                  <option value="OneNote for Windows 10">OneNote for Windows 10</option>
-                  <option value="AnyDesk Printer">AnyDesk Printer</option>
-                </select>
-              </div>
-
-              <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200 text-[11px] space-y-1 text-slate-600">
-                <div className="flex justify-between">
-                  <span>Voucher No:</span>
-                  <span className="font-semibold text-slate-900">{trnNo}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Enclosed Bills:</span>
-                  <span className="font-semibold text-emerald-700">{selectedIds.size} Bills Attached</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleConfirmPrinterDialog}
-                className="px-4 h-7 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs"
-              >
-                OK
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowPrinterDialog(false)}
-                className="px-4 h-7 text-xs font-semibold text-slate-600"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Formatted WINHMS Bill Covering Letter Printable Document Sheet Modal */}
-      {previewOpen && (
+      {/* Formatted Bill Covering Letter Printable Document Sheet Modal */}
+      {previewDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50 print:relative print:inset-auto print:z-auto print:bg-white print:p-0 print:block">
-          <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[92vh] overflow-y-auto print:max-w-none print:w-full print:p-0 print:border-none print:shadow-none">
+          <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[92vh] overflow-y-auto print:max-w-none print:w-full print:p-0 print:border-none print:shadow-none print:max-h-none print:overflow-visible">
             {/* Modal Header Actions */}
             <div className="flex items-center justify-between border-b border-slate-200 pb-3 print:hidden">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  WINHMS Bill Covering Letter Sheet ({trnNo})
+                  WINHMS Bill Covering Letter Sheet ({previewDoc.letterNo ?? "Draft"})
                 </h3>
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setShowPrinterDialog(true)}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs cursor-pointer"
-                >
-                  <Printer className="h-3.5 w-3.5 mr-1" /> Print Letter
-                </Button>
+                {previewMode === "saved" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setShowPrinterDialog(true)}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs cursor-pointer"
+                  >
+                    <Printer className="h-3.5 w-3.5 mr-1" /> Print Letter
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={saving}
+                    onClick={() => void handleSaveCoveringLetter()}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs cursor-pointer"
+                  >
+                    {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+                    Save Voucher
+                  </Button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setPreviewOpen(false)}
+                  onClick={() => setPreviewMode(null)}
                   className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
                 >
                   <X className="h-4 w-4" />
@@ -667,119 +729,11 @@ export function BillCoveringLetterView() {
               </div>
             </div>
 
-            {/* Formatted WINHMS Bill Covering Letter Paper Sheet */}
-            <div className="rounded-xl border border-slate-300 bg-white p-6 shadow-xs space-y-4 font-sans text-slate-900">
-              {/* Hotel Header Block */}
-              <div className="text-center space-y-1 border-b border-slate-300 pb-3">
-                <h1 className="text-lg font-bold tracking-wide text-slate-900 font-sans">
-                  Hotel & Resorts Private Limited
-                </h1>
-                <p className="text-[11px] text-slate-600 leading-tight">
-                  GACL Chowkdi, Dahej Bharuch Main Road, Dahej, Dist Bharuch. Gujarat 392130
-                </p>
-                <p className="text-[11px] text-slate-600">
-                  Phone: +91 7069990770 • E-Mail: accounts@hotelresorts.com • Web: www.hotelresorts.com
-                </p>
-                <p className="text-[11px] font-bold text-slate-800">
-                  GSTIN: 24AAIFL8217G1ZC State: GUJARAT
-                </p>
-              </div>
-
-              {/* Document Header Box */}
-              <div className="border border-slate-300 p-2 space-y-1 bg-slate-50/50 text-center">
-                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  BILL COVERING LETTER
-                </h2>
-              </div>
-
-              {/* Date & Recipient Address */}
-              <div className="flex items-start justify-between text-xs pt-2">
-                <div className="space-y-1">
-                  <p className="font-bold text-slate-800">To,</p>
-                  <p className="font-bold text-slate-900 text-sm">{primaryParty.partyName}</p>
-                  <p className="text-slate-600 max-w-xs text-[11px]">{primaryParty.partyAddress}</p>
-                  <p className="text-slate-600 text-[11px]">Attn: {primaryParty.contactPerson} ({primaryParty.contactPhone})</p>
-                </div>
-                <div className="text-right space-y-1">
-                  <p className="font-semibold text-slate-700">Covering Letter No: <span className="font-mono font-bold text-slate-900">{trnNo}</span></p>
-                  <p className="font-semibold text-slate-700">Date: {trnDt}</p>
-                </div>
-              </div>
-
-              {/* Body Text */}
-              <div className="text-xs text-slate-700 space-y-2 leading-relaxed">
-                <p>Dear Sir/Madam,</p>
-                <p>
-                  Please find enclosed herewith our bills for the services rendered. We request you to kindly verify the enclosed invoices and process the payment at your earliest convenience.
-                </p>
-              </div>
-
-              {/* Enclosed Bills Table Grid */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border border-slate-300">
-                  <thead>
-                    <tr className="bg-slate-100 font-bold text-[11px] border-b border-slate-300">
-                      <th className="px-3 py-1.5 border-r border-slate-300 w-28">Voucher No</th>
-                      <th className="px-3 py-1.5 border-r border-slate-300 w-24">Voucher Date</th>
-                      <th className="px-3 py-1.5 border-r border-slate-300 w-28">Ref Invoice</th>
-                      <th className="px-3.5 py-1.5 border-r border-slate-300">Particulars / Details</th>
-                      <th className="px-3 py-1.5 text-right w-32 font-bold bg-slate-200/60">Amount (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {selectedBillsList.map((b, idx) => (
-                      <tr key={idx} className="h-8">
-                        <td className="px-3 py-1.5 border-r border-slate-200 font-bold font-mono">
-                          {b.vouchNo}
-                        </td>
-                        <td className="px-3 py-1.5 border-r border-slate-200 text-slate-700">
-                          {b.vouchDt}
-                        </td>
-                        <td className="px-3 py-1.5 border-r border-slate-200 font-semibold">
-                          {b.refName}
-                        </td>
-                        <td className="px-3.5 py-1.5 border-r border-slate-200 text-slate-700 text-[11px]">
-                          {b.details}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-bold text-slate-900 bg-slate-50">
-                          {b.amount.toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-slate-100 font-bold border-t border-slate-300 text-xs">
-                      <td colSpan={4} className="px-3 py-2 text-right uppercase font-bold text-slate-800 border-r border-slate-300">
-                        Total Enclosed Bills Amount:
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold text-slate-900 bg-slate-200/60">
-                        {totalSelectedAmt.toFixed(2)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Amount In Words */}
-              <div className="border border-slate-300 p-2.5 text-xs bg-slate-50/50">
-                <strong className="text-slate-800">Amount In Words:</strong>{" "}
-                <span className="font-bold text-slate-900">{amountToWords(totalSelectedAmt)}</span>
-              </div>
-
-              {/* Signatures Footer */}
-              <div className="pt-8 grid grid-cols-2 gap-4 text-xs text-slate-800 font-semibold">
-                <div>
-                  <p>Thanking You,</p>
-                  <p className="font-bold">Accounts & Finance Division</p>
-                  <p className="pt-8 border-t border-slate-400 mt-4">Authorized Signatory</p>
-                </div>
-
-                <div className="text-right border-l border-slate-200 pl-4 space-y-8">
-                  <p className="font-bold text-slate-900">Client Acknowledgement Slip:</p>
-                  <p className="border-t border-slate-400 pt-1">Received By / Signature & Stamp</p>
-                </div>
-              </div>
-            </div>
+            <CoveringLetterSheet
+              doc={previewDoc}
+              companyName={companyName}
+              letterhead={<CompanyLetterhead {...letterhead} />}
+            />
           </div>
         </div>
       )}

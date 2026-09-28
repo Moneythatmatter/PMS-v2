@@ -235,20 +235,6 @@ export interface HKHistoryLog {
   details: string;
 }
 
-export interface HKLuggageJob {
-  id: string;
-  guest: string;
-  room: string;
-  bellBoy: string;
-  tagNumber: string;
-  bagCount: number;
-  type: "Check-in" | "Check-out" | "Storage";
-  pickupTime: string;
-  deliveryTime?: string;
-  status: "Pending" | "In Transit" | "Delivered" | "Stored";
-  remarks?: string;
-}
-
 export type { HousekeepingRequest, MaintenanceRequest, LostFoundItem };
 
 export type HkTaskType =

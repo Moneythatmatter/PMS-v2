@@ -1,21 +1,21 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Coins,
   Building2,
-  CheckCircle2,
   Plus,
   Save,
   RotateCcw,
   Search,
   X,
-  ShieldCheck,
   Globe,
   Info,
   ChevronRight,
   AlertTriangle,
-  Calendar,
+  Loader2,
+  Trash2,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -25,60 +25,105 @@ import {
   FODatePicker,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
-import {
-  sampleCurrenciesList,
-  CurrencyModel,
-} from "@/app/data/accounts/currencyData";
+import { accCurrencyService, type Currency } from "@/services/accounts";
 import { cn } from "@/lib/utils";
+import {
+  accErrorMessage,
+  formatDate,
+  invalidateAccLookups,
+  todayIso,
+  useAccLookups,
+  useAccQuery,
+} from "./accountsApi";
+
+type CurrencyForm = Pick<
+  Currency,
+  | "code"
+  | "name"
+  | "symbol"
+  | "country"
+  | "decimalPlaces"
+  | "isBaseCurrency"
+  | "exchangeRateToBase"
+  | "rateSource"
+  | "foreignTransactionsAllowed"
+  | "status"
+> & { rateEffectiveDate: string };
+
+const emptyCreateForm = (): CurrencyForm => ({
+  code: "",
+  name: "",
+  symbol: "",
+  country: "",
+  decimalPlaces: 2,
+  isBaseCurrency: false,
+  exchangeRateToBase: 1,
+  rateEffectiveDate: todayIso(),
+  rateSource: "Manual",
+  foreignTransactionsAllowed: true,
+  status: "Active",
+});
+
+function toCurrencyBody(f: CurrencyForm): Partial<Currency> {
+  return {
+    code: f.code.trim().toUpperCase(),
+    name: f.name.trim(),
+    symbol: f.symbol.trim(),
+    country: f.country ?? "",
+    decimalPlaces: f.decimalPlaces,
+    isBaseCurrency: f.isBaseCurrency,
+    exchangeRateToBase: f.exchangeRateToBase,
+    rateEffectiveDate: f.rateEffectiveDate || null,
+    rateSource: f.rateSource,
+    foreignTransactionsAllowed: f.foreignTransactionsAllowed,
+    status: f.status,
+  };
+}
 
 export function CurrencyMasterView() {
   // Master Currencies State
-  const [currencies, setCurrencies] = useState<CurrencyModel[]>(sampleCurrenciesList);
-  const [selectedCurrencyId, setSelectedCurrencyId] = useState<string>("CUR-001");
+  const { data, loading, error, reload } = useAccQuery(() => accCurrencyService.list(), []);
+  const currencies = useMemo(() => data ?? [], [data]);
+  const { lookups } = useAccLookups();
+  const company = lookups?.companies[0];
+  const [selectedCurrencyId, setSelectedCurrencyId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Search Query State
   const [searchQuery, setSearchQuery] = useState("");
 
   // Toast Notification State
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessageRaw] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
+  const setToastMessage = (msg: string | null, variant: "success" | "error" = "success") => {
+    setToastVariant(variant);
+    setToastMessageRaw(msg);
+  };
 
   // Modal State for New Currency
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Active Selected Currency Record
   const activeCurrency = useMemo(
-    () => currencies.find((c) => c.currencyId === selectedCurrencyId) || currencies[0],
+    () => currencies.find((c) => c.id === selectedCurrencyId) || currencies[0],
     [currencies, selectedCurrencyId]
   );
 
-  // Form State (for editing active currency)
-  const [formData, setFormData] = useState<CurrencyModel>(activeCurrency);
-
-  // Sync Form State when active currency changes
-  useEffect(() => {
-    setFormData({ ...activeCurrency });
-  }, [activeCurrency]);
+  // Unsaved edits of the active currency (null = pristine)
+  const [draft, setDraft] = useState<(CurrencyForm & { id: string }) | null>(null);
+  const formData: (CurrencyForm & { id: string; createdAt?: string; updatedAt?: string }) | null =
+    draft && draft.id === activeCurrency?.id
+      ? draft
+      : activeCurrency
+        ? { ...activeCurrency, rateEffectiveDate: activeCurrency.rateEffectiveDate?.slice(0, 10) ?? "" }
+        : null;
 
   // Create Currency Form State
-  const [createForm, setCreateForm] = useState<Omit<CurrencyModel, "currencyId" | "createdAt" | "updatedAt">>({
-    code: "",
-    name: "",
-    symbol: "",
-    country: "",
-    decimalPlaces: 2,
-    isBaseCurrency: false,
-    exchangeRateToBase: 1.0,
-    rateEffectiveDate: new Date().toLocaleDateString("en-IN"),
-    rateSource: "Manual",
-    foreignTransactionsAllowed: true,
-    status: "Active",
-  });
+  const [createForm, setCreateForm] = useState<CurrencyForm>(emptyCreateForm);
 
   // Base Currency of the company
-  const baseCurrency = useMemo(
-    () => currencies.find((c) => c.isBaseCurrency) || currencies[0],
-    [currencies]
-  );
+  const baseCurrency = useMemo(() => currencies.find((c) => c.isBaseCurrency), [currencies]);
+  const baseCode = baseCurrency?.code ?? "base";
 
   // Filtered Currencies
   const filteredCurrencies = useMemo(() => {
@@ -89,7 +134,7 @@ export function CurrencyMasterView() {
           c.code.toLowerCase().includes(q) ||
           c.name.toLowerCase().includes(q) ||
           (c.country || "").toLowerCase().includes(q) ||
-          c.currencyId.toLowerCase().includes(q)
+          c.status.toLowerCase().includes(q)
         );
       }
       return true;
@@ -97,117 +142,145 @@ export function CurrencyMasterView() {
   }, [currencies, searchQuery]);
 
   // Handle Edit Form Field Change
-  const handleFormChange = (field: keyof CurrencyModel, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const handleFormChange = <K extends keyof CurrencyForm>(field: K, value: CurrencyForm[K]) => {
+    if (!formData) return;
+    setDraft({ ...formData, [field]: value });
+  };
+
+  const handleSelectCurrency = (id: string) => {
+    setSelectedCurrencyId(id);
+    setDraft(null);
+  };
+
+  const runAction = async (action: () => Promise<unknown>, successMessage: string) => {
+    setSaving(true);
+    try {
+      await action();
+      invalidateAccLookups();
+      await reload();
+      setToastMessage(successMessage);
+      return true;
+    } catch (e) {
+      setToastMessage(accErrorMessage(e), "error");
+      return false;
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Save Active Currency Edits
-  const handleSaveCurrency = () => {
+  const handleSaveCurrency = async () => {
+    if (!formData) return;
+    if (!/^[A-Z]{3}$/.test(formData.code.trim().toUpperCase())) {
+      setToastMessage("Currency Code must be a valid 3-letter ISO code (e.g. USD, EUR, CAD).", "error");
+      return;
+    }
     if (!formData.name?.trim()) {
-      setToastMessage("Please enter a valid currency name.");
+      setToastMessage("Please enter a valid currency name.", "error");
       return;
     }
     if (!formData.symbol?.trim()) {
-      setToastMessage("Please enter a currency symbol.");
+      setToastMessage("Please enter a currency symbol.", "error");
       return;
     }
 
-    setCurrencies((prev) =>
-      prev.map((c) =>
-        c.currencyId === formData.currencyId
-          ? {
-              ...formData,
-              updatedAt: new Date().toLocaleDateString("en-IN"),
-            }
-          : c
-      )
+    const ok = await runAction(
+      () => accCurrencyService.update(formData.id, toCurrencyBody(formData)),
+      `Saved currency configuration for ${formData.code} (${formData.name}).`
     );
-    setToastMessage(`Saved currency configuration for ${formData.code} (${formData.name}).`);
+    if (ok) setDraft(null);
   };
 
   // Toggle Active / Inactive Status
-  const handleToggleStatus = (currencyId: string) => {
-    const target = currencies.find((c) => c.currencyId === currencyId);
+  const handleToggleStatus = async (currencyId: string) => {
+    const target = currencies.find((c) => c.id === currencyId);
     if (!target) return;
 
     if (target.isBaseCurrency) {
-      setToastMessage("Cannot deactivate the company's Base Reporting Currency.");
+      setToastMessage("Cannot deactivate the company's Base Reporting Currency.", "error");
       return;
     }
 
-    const nextStatus = target.status === "Active" ? "Inactive" : "Active";
-    setCurrencies((prev) =>
-      prev.map((c) =>
-        c.currencyId === currencyId
-          ? { ...c, status: nextStatus, updatedAt: new Date().toLocaleDateString("en-IN") }
-          : c
-      )
-    );
-    if (formData.currencyId === currencyId) {
-      setFormData((prev) => ({ ...prev, status: nextStatus }));
-    }
-    setToastMessage(
+    const nextStatus: Currency["status"] = target.status === "Active" ? "Inactive" : "Active";
+    const ok = await runAction(
+      () => accCurrencyService.update(currencyId, { status: nextStatus }),
       nextStatus === "Inactive"
         ? `Deactivated ${target.code}. It will no longer appear in new transactions.`
         : `Activated ${target.code} for transactions.`
     );
+    if (ok) setDraft((prev) => (prev && prev.id === currencyId ? { ...prev, status: nextStatus } : prev));
+  };
+
+  const handleSetBase = async () => {
+    if (!formData || formData.isBaseCurrency) return;
+    if (
+      !window.confirm(
+        `Make ${formData.code} the base reporting currency? ${baseCurrency ? `${baseCurrency.code} will become a foreign currency.` : ""}`
+      )
+    )
+      return;
+    const ok = await runAction(
+      () => accCurrencyService.update(formData.id, { isBaseCurrency: true }),
+      `${formData.code} is now the base reporting currency.`
+    );
+    if (ok) setDraft(null);
+  };
+
+  const handleDeleteCurrency = async () => {
+    if (!formData) return;
+    if (!window.confirm(`Delete currency ${formData.code} (${formData.name})? This cannot be undone.`)) return;
+    const ok = await runAction(
+      () => accCurrencyService.remove(formData.id),
+      `Deleted currency ${formData.code}.`
+    );
+    if (ok) {
+      setDraft(null);
+      setSelectedCurrencyId(null);
+    }
   };
 
   // Handle Create New Currency
-  const handleCreateCurrency = () => {
+  const handleCreateCurrency = async () => {
     const normalizedCode = createForm.code.trim().toUpperCase();
 
     // Validate 3-letter code
     if (!/^[A-Z]{3}$/.test(normalizedCode)) {
-      setToastMessage("Currency Code must be a valid 3-letter ISO code (e.g. USD, EUR, CAD).");
+      setToastMessage("Currency Code must be a valid 3-letter ISO code (e.g. USD, EUR, CAD).", "error");
       return;
     }
 
     if (!createForm.name?.trim()) {
-      setToastMessage("Please enter the full Currency Name.");
+      setToastMessage("Please enter the full Currency Name.", "error");
       return;
     }
 
     if (!createForm.symbol?.trim()) {
-      setToastMessage("Please enter the Currency Symbol.");
+      setToastMessage("Please enter the Currency Symbol.", "error");
       return;
     }
 
     // Check duplicate
     const exists = currencies.some((c) => c.code.toUpperCase() === normalizedCode);
     if (exists) {
-      setToastMessage(`Currency ${normalizedCode} already exists in the system.`);
+      setToastMessage(`Currency ${normalizedCode} already exists in the system.`, "error");
       return;
     }
 
-    // Generate ID
-    const nextNum = Math.floor(100 + Math.random() * 900);
-    const newCurrency: CurrencyModel = {
-      ...createForm,
-      code: normalizedCode,
-      currencyId: `CUR-${nextNum}`,
-      isBaseCurrency: false, // Disallow extra base currencies
-      createdAt: new Date().toLocaleDateString("en-IN"),
-      updatedAt: new Date().toLocaleDateString("en-IN"),
-    };
-
-    setCurrencies([...currencies, newCurrency]);
-    setSelectedCurrencyId(newCurrency.currencyId);
-    setShowCreateModal(false);
-    setCreateForm({
-      code: "",
-      name: "",
-      symbol: "",
-      country: "",
-      decimalPlaces: 2,
-      isBaseCurrency: false,
-      exchangeRateToBase: 1.0,
-      rateEffectiveDate: new Date().toLocaleDateString("en-IN"),
-      rateSource: "Manual",
-      foreignTransactionsAllowed: true,
-      status: "Active",
-    });
-    setToastMessage(`Created supported foreign currency ${newCurrency.code} (${newCurrency.name}).`);
+    setSaving(true);
+    try {
+      const created = await accCurrencyService.create(toCurrencyBody({ ...createForm, isBaseCurrency: false }));
+      invalidateAccLookups();
+      await reload();
+      setSelectedCurrencyId(created.id);
+      setDraft(null);
+      setShowCreateModal(false);
+      setCreateForm(emptyCreateForm());
+      setToastMessage(`Created supported foreign currency ${created.code} (${created.name}).`);
+    } catch (e) {
+      setToastMessage(accErrorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -221,6 +294,7 @@ export function CurrencyMasterView() {
         { label: "Currency" },
       ]}
       toast={toastMessage}
+      toastVariant={toastVariant}
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex items-center gap-2">
@@ -228,6 +302,7 @@ export function CurrencyMasterView() {
             type="button"
             size="sm"
             onClick={() => setShowCreateModal(true)}
+            disabled={saving}
             className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
@@ -238,10 +313,15 @@ export function CurrencyMasterView() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleSaveCurrency}
+            onClick={() => void handleSaveCurrency()}
+            disabled={!formData || saving}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-800 cursor-pointer"
           >
-            <Save className="h-3.5 w-3.5 mr-1 text-emerald-700" />
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin text-emerald-700" />
+            ) : (
+              <Save className="h-3.5 w-3.5 mr-1 text-emerald-700" />
+            )}
             Save Currency
           </Button>
 
@@ -249,9 +329,11 @@ export function CurrencyMasterView() {
             type="button"
             variant="outline"
             size="sm"
+            disabled={saving}
             onClick={() => {
-              setFormData({ ...activeCurrency });
-              setToastMessage("Reset unsaved edits.");
+              setDraft(null);
+              void reload();
+              setToastMessage("Reset unsaved edits and reloaded currencies.");
             }}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
           >
@@ -269,7 +351,7 @@ export function CurrencyMasterView() {
             <div>
               <span className="text-[11px] font-bold text-slate-500 block uppercase">Target Company Entity:</span>
               <span className="font-bold text-xs text-slate-900">
-                HOTEL & RESORTS PRIVATE LIMITED (CMP-001)
+                {company ? `${company.legalName || company.tradeName} (${company.companyCode})` : "—"}
               </span>
             </div>
           </div>
@@ -280,7 +362,7 @@ export function CurrencyMasterView() {
               <Coins className="h-4 w-4 text-amber-700" />
               <span>Base Reporting Currency:</span>
               <span className="font-mono bg-amber-700 text-white px-2 py-0.5 rounded-md text-[11px]">
-                {baseCurrency.code} ({baseCurrency.symbol})
+                {baseCurrency ? `${baseCurrency.code} (${baseCurrency.symbol})` : "Not set"}
               </span>
             </div>
           </div>
@@ -326,12 +408,38 @@ export function CurrencyMasterView() {
 
           {/* Currencies Cards List */}
           <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 max-h-[480px]">
+            {loading && !data && (
+              <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                Loading currencies…
+              </div>
+            )}
+
+            {error && !data && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 space-y-2">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Could not load currencies
+                </div>
+                <p>{error}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void reload()}
+                  className="h-7 text-xs font-semibold bg-white"
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
+
             {filteredCurrencies.map((c) => {
-              const isSelected = c.currencyId === selectedCurrencyId;
+              const isSelected = c.id === activeCurrency?.id;
               return (
                 <div
-                  key={c.currencyId}
-                  onClick={() => setSelectedCurrencyId(c.currencyId)}
+                  key={c.id}
+                  onClick={() => handleSelectCurrency(c.id)}
                   className={cn(
                     "p-3 rounded-xl border transition-all cursor-pointer select-none space-y-2",
                     isSelected
@@ -393,15 +501,18 @@ export function CurrencyMasterView() {
 
                   {/* Exchange Rate Summary Bar */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500 font-medium font-mono text-[10px]">
-                      {c.currencyId}
+                    <span className="text-slate-500 font-medium text-[10px]">
+                      Rate as of {formatDate(c.rateEffectiveDate)}
                     </span>
 
                     <span className="font-bold text-slate-800">
                       {c.isBaseCurrency ? (
                         <span className="text-emerald-800">1.00 (Base Unit)</span>
                       ) : (
-                        <span>1 {c.code} = ₹{c.exchangeRateToBase.toFixed(2)}</span>
+                        <span>
+                          1 {c.code} = {baseCurrency?.symbol ?? ""}
+                          {Number(c.exchangeRateToBase).toFixed(4)}
+                        </span>
                       )}
                     </span>
                   </div>
@@ -409,15 +520,22 @@ export function CurrencyMasterView() {
               );
             })}
 
-            {filteredCurrencies.length === 0 && (
+            {data && filteredCurrencies.length === 0 && (
               <div className="text-center py-8 text-xs text-slate-400">
-                No currencies match your search query.
+                {currencies.length === 0
+                  ? "No currencies configured yet. Use Add Currency to create one."
+                  : "No currencies match your search query."}
               </div>
             )}
           </div>
         </div>
 
         {/* RIGHT COLUMN: Selected Currency Configuration (7 Cols) */}
+        {!formData ? (
+          <div className="md:col-span-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex items-center justify-center text-xs text-slate-400">
+            {loading ? "Loading…" : "Select or add a currency to view its configuration."}
+          </div>
+        ) : (
         <div className="md:col-span-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
           {/* Header Bar */}
           <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
@@ -434,27 +552,56 @@ export function CurrencyMasterView() {
                 )}
               </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Currency ID: <strong className="font-mono text-slate-700">{formData.currencyId}</strong> • Symbol:{" "}
-                <strong className="font-bold text-slate-800">{formData.symbol}</strong>
+                Symbol: <strong className="font-bold text-slate-800">{formData.symbol}</strong>
+                {formData.updatedAt && (
+                  <span>
+                    {" "}• Last updated: <strong className="text-slate-700">{formatDate(formData.updatedAt)}</strong>
+                  </span>
+                )}
               </p>
             </div>
 
-            {/* Toggle Status Action */}
+            {/* Status / Base / Delete Actions */}
             {!formData.isBaseCurrency && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => handleToggleStatus(formData.currencyId)}
-                className={cn(
-                  "rounded-xl text-xs font-bold border cursor-pointer",
-                  formData.status === "Active"
-                    ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
-                    : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
-                )}
-              >
-                {formData.status === "Active" ? "Deactivate Currency" : "Activate Currency"}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={saving || formData.status !== "Active"}
+                  onClick={() => void handleSetBase()}
+                  className="rounded-xl text-xs font-bold border cursor-pointer bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
+                >
+                  <Star className="h-3.5 w-3.5 mr-1 text-amber-600" />
+                  Set as Base
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => void handleToggleStatus(formData.id)}
+                  className={cn(
+                    "rounded-xl text-xs font-bold border cursor-pointer",
+                    formData.status === "Active"
+                      ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
+                      : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                  )}
+                >
+                  {formData.status === "Active" ? "Deactivate Currency" : "Activate Currency"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => void handleDeleteCurrency()}
+                  className="rounded-xl text-xs font-bold border cursor-pointer bg-white text-rose-700 border-rose-200 hover:bg-rose-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
+                  Delete
+                </Button>
+              </div>
             )}
           </div>
 
@@ -513,7 +660,7 @@ export function CurrencyMasterView() {
                 <FormField label="Decimal Precision" required>
                   <SelectInput
                     value={formData.decimalPlaces}
-                    onChange={(e) => handleFormChange("decimalPlaces", parseInt(e.target.value) || 2)}
+                    onChange={(e) => handleFormChange("decimalPlaces", parseInt(e.target.value, 10))}
                     className="bg-white font-semibold h-9"
                   >
                     <option value={2}>2 Decimals (0.00)</option>
@@ -526,7 +673,7 @@ export function CurrencyMasterView() {
                 <FormField label="System Status" required>
                   <SelectInput
                     value={formData.status}
-                    onChange={(e) => handleFormChange("status", e.target.value)}
+                    onChange={(e) => handleFormChange("status", e.target.value as Currency["status"])}
                     disabled={formData.isBaseCurrency}
                     className={cn(
                       "font-bold h-9",
@@ -560,13 +707,14 @@ export function CurrencyMasterView() {
               ) : (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <FormField label={`Exchange Rate (1 ${formData.code} in INR)`} required>
+                    <FormField label={`Exchange Rate (1 ${formData.code} in ${baseCode})`} required>
                       <TextInput
                         type="number"
-                        step="0.01"
+                        step="0.0001"
+                        min={0}
                         value={formData.exchangeRateToBase}
                         onChange={(e) =>
-                          handleFormChange("exchangeRateToBase", parseFloat(e.target.value) || 1.0)
+                          handleFormChange("exchangeRateToBase", parseFloat(e.target.value) || 0)
                         }
                         className="bg-white font-mono font-bold text-slate-900 h-9"
                       />
@@ -612,7 +760,8 @@ export function CurrencyMasterView() {
                 <Button
                   type="button"
                   size="sm"
-                  onClick={handleSaveCurrency}
+                  onClick={() => void handleSaveCurrency()}
+                  disabled={saving}
                   className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs"
                 >
                   <Save className="h-3.5 w-3.5 mr-1" />
@@ -622,6 +771,7 @@ export function CurrencyMasterView() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* CREATE CURRENCY MODAL */}
@@ -695,7 +845,7 @@ export function CurrencyMasterView() {
                   <SelectInput
                     value={createForm.decimalPlaces}
                     onChange={(e) =>
-                      setCreateForm((prev) => ({ ...prev, decimalPlaces: parseInt(e.target.value) || 2 }))
+                      setCreateForm((prev) => ({ ...prev, decimalPlaces: parseInt(e.target.value, 10) }))
                     }
                     className="bg-white font-semibold h-9"
                   >
@@ -708,15 +858,16 @@ export function CurrencyMasterView() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <FormField label="Exchange Rate to INR" required>
+                <FormField label={`Exchange Rate to ${baseCode}`} required>
                   <TextInput
                     type="number"
-                    step="0.01"
+                    step="0.0001"
+                    min={0}
                     value={createForm.exchangeRateToBase}
                     onChange={(e) =>
                       setCreateForm((prev) => ({
                         ...prev,
-                        exchangeRateToBase: parseFloat(e.target.value) || 1.0,
+                        exchangeRateToBase: parseFloat(e.target.value) || 0,
                       }))
                     }
                     className="bg-white font-mono font-bold h-9"
@@ -761,9 +912,11 @@ export function CurrencyMasterView() {
               <Button
                 type="button"
                 size="sm"
-                onClick={handleCreateCurrency}
+                onClick={() => void handleCreateCurrency()}
+                disabled={saving}
                 className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs"
               >
+                {saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
                 Create Currency
               </Button>
             </div>
