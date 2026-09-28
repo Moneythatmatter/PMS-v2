@@ -130,7 +130,6 @@ export function GLTransactionView() {
   const [referenceNumber, setReferenceNumber] = useState("");
   const [voucherPartyId, setVoucherPartyId] = useState("");
   const [commonNarration, setCommonNarration] = useState("");
-  const [lineNarrationDetails, setLineNarrationDetails] = useState("");
   const [rows, setRows] = useState<JournalRow[]>(blankRows);
 
   const [preview, setPreview] = useState<{ key: string; voucherNo: string; error: string | null } | null>(null);
@@ -253,7 +252,6 @@ export function GLTransactionView() {
     setReferenceNumber(v.referenceNo ?? "");
     setVoucherPartyId(v.partyId ?? v.lines.find((l) => l.partyId)?.partyId ?? "");
     setCommonNarration(v.narration ?? "");
-    setLineNarrationDetails("");
     setRows(rowsFromVoucher(v));
   };
 
@@ -263,7 +261,6 @@ export function GLTransactionView() {
     setReferenceNumber("");
     setVoucherPartyId("");
     setCommonNarration("");
-    setLineNarrationDetails("");
     setRows(blankRows());
     setPreviewNonce((n) => n + 1);
   };
@@ -356,7 +353,6 @@ export function GLTransactionView() {
       notify(`${voucherType.voucherTypeName} requires a party — select one in Section 1.`, "error");
       return null;
     }
-    const defaultLineNarration = lineNarrationDetails.trim();
     return {
       partyId: voucherPartyId || null,
       voucherTypeId: typeId,
@@ -370,7 +366,7 @@ export function GLTransactionView() {
         divisionId: r.divisionId || null,
         debit: r.debit || 0,
         credit: r.credit || 0,
-        narration: r.narration.trim() || defaultLineNarration,
+        narration: r.narration.trim(),
         chequeNo: r.chequeNo.trim(),
         chequeDate: r.chequeDate || null,
         gstRate: r.gstRate === "" ? null : Number(r.gstRate),
@@ -980,20 +976,7 @@ export function GLTransactionView() {
         </div>
       </section>
 
-      {/* Section 4 — Line Narration */}
-      <FormSection title="Section 4 — Line Narration" columns={1} className="mb-4">
-        <FormField label="Line Narration Details" helperText="Applied to every line that has no narration of its own.">
-          <TextAreaInput
-            rows={3}
-            value={lineNarrationDetails}
-            disabled={!editable}
-            onChange={(e) => setLineNarrationDetails(e.target.value)}
-            placeholder="Enter detailed line narration or explanatory notes for auditor reference..."
-          />
-        </FormField>
-      </FormSection>
-
-      {/* Section 5 — Voucher History */}
+      {/* Section 4 — Voucher History */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex items-center gap-2">
