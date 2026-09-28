@@ -729,12 +729,12 @@ export function GuestFolioView() {
                     ].map((h) => (
                       <th key={h} className="px-4 py-3 text-left first:pl-4">
                         {h}
-                      </th>
-                    ))}
+                        </th>
+                      ))}
                     <th className="w-[7.5rem] shrink-0 px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+                    </tr>
+                  </thead>
+                  <tbody>
                   {folioListRows.flatMap((row) => {
                     if (row.kind === "solo") {
                       const folio = row.folio;
@@ -892,7 +892,7 @@ export function GuestFolioView() {
                               Open group
                             </Link>
                           </div>
-                        </td>
+                          </td>
                       </tr>,
                     ];
 
@@ -919,11 +919,11 @@ export function GuestFolioView() {
 
                     return nodes;
                   })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState
               title="No folios found"
               description="Run transactions.sql in Supabase to create folios for existing bookings."
             />
