@@ -28,12 +28,10 @@ import {
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
 import { LedgerPickerModal, type LedgerPickerOption } from "./LedgerPickerModal";
-import { ExcelGrid, type ExcelGridColumn } from "@/components/ui/ExcelGrid";
 import { cn } from "@/lib/utils";
 import {
   accCompanyService,
   accVoucherService,
-  type Voucher,
   type VoucherDetail,
   type VoucherInput,
 } from "@/services/accounts";
@@ -41,7 +39,6 @@ import {
   accErrorMessage,
   formatDate,
   formatINR,
-  fyStartIso,
   todayIso,
   useAccLookups,
   useAccQuery,
@@ -80,18 +77,15 @@ const blankRows = () => [newRow("Dr"), newRow("Cr")];
 const rowsFromVoucher = (v: VoucherDetail): JournalRow[] =>
   v.lines.map((l) => ({
     key: `row-${++rowSeq}`,
-    type: l.entryType,
+    type: l.entryType ?? (l.credit > 0 ? "Cr" : "Dr"),
     accountId: l.accountId,
     divisionId: l.divisionId ?? "",
-    debit: l.entryType === "Dr" ? l.amount : 0,
-    credit: l.entryType === "Cr" ? l.amount : 0,
+    debit: Number(l.debit) || 0,
+    credit: Number(l.credit) || 0,
     chequeNo: l.chequeNo ?? "",
     chequeDate: l.chequeDate ?? "",
     gstRate: l.gstRate === null || l.gstRate === undefined ? "" : String(l.gstRate),
   }));
-
-const filterControlClass =
-  "h-8 shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-200";
 
 const statusBadgeClass = (status: string) =>
   status === "Posted"
@@ -121,32 +115,13 @@ export function GLTransactionView() {
 
   // UI state
   const [saving, setSaving] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [lastVoucher, setLastVoucher] = useState<VoucherDetail | null>(null);
+  const [lastLoading, setLastLoading] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showAuditHistoryModal, setShowAuditHistoryModal] = useState(false);
   const [reverseReason, setReverseReason] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast>(null);
   const notify = (message: string, variant: "success" | "error" = "success") => setToast({ message, variant });
-
-  // History filters
-  const [histFrom, setHistFrom] = useState(fyStartIso());
-  const [histTo, setHistTo] = useState(todayIso());
-  const [histStatus, setHistStatus] = useState("all");
-  const [histTypeId, setHistTypeId] = useState("");
-  const [histSearch, setHistSearch] = useState("");
-
-  const history = useAccQuery(
-    () =>
-      accVoucherService.list({
-        provisional: false,
-        from: histFrom || undefined,
-        to: histTo || undefined,
-        status: histStatus === "all" ? undefined : histStatus,
-        voucherTypeId: histTypeId || undefined,
-        limit: 500,
-      }),
-    [histFrom, histTo, histStatus, histTypeId],
-  );
 
   const voucherTypes = useMemo(
     () => (lookups?.voucherTypes ?? []).filter((vt) => vt.shortCode !== "PRV"),
@@ -247,29 +222,28 @@ export function GLTransactionView() {
     setPreviewNonce((n) => n + 1);
   };
 
-  const openVoucher = async (id: string) => {
+  const handleShowLastTransaction = async () => {
+    setLastLoading(true);
     try {
-      const v = await accVoucherService.get(id);
-      loadIntoForm(v);
-      setSheetOpen(true);
+      const [latest] = await accVoucherService.list({ provisional: false, sort: "recent", limit: 1 });
+      if (!latest) {
+        notify("No transactions have been entered yet.", "error");
+        return;
+      }
+      setLastVoucher(await accVoucherService.get(latest.id));
     } catch (e) {
       notify(accErrorMessage(e), "error");
+    } finally {
+      setLastLoading(false);
     }
   };
 
-  const openNewVoucher = () => {
-    resetForm();
-    setSheetOpen(true);
+  const openLastInForm = () => {
+    if (!lastVoucher) return;
+    loadIntoForm(lastVoucher);
+    setLastVoucher(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  useEffect(() => {
-    if (!sheetOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [sheetOpen]);
 
   // Row manipulation
   const handleAddRow = () => {
@@ -389,7 +363,6 @@ export function GLTransactionView() {
           ? `✓ Voucher ${saved.voucherNo} posted to the General Ledger.`
           : `✓ Voucher ${saved.voucherNo} saved as Draft.`,
       );
-      void history.reload();
       if (thenNew) resetForm();
       else loadIntoForm(saved);
     } catch (e) {
@@ -406,8 +379,6 @@ export function GLTransactionView() {
       await accVoucherService.remove(current.id);
       notify(`Draft voucher ${current.voucherNo} deleted.`);
       resetForm();
-      setSheetOpen(false);
-      void history.reload();
     } catch (e) {
       notify(accErrorMessage(e), "error");
     }
@@ -425,7 +396,6 @@ export function GLTransactionView() {
       loadIntoForm(v);
       setReverseReason(null);
       notify(`Voucher ${v.voucherNo} reversed.`);
-      void history.reload();
     } catch (e) {
       notify(accErrorMessage(e), "error");
     } finally {
@@ -452,88 +422,6 @@ export function GLTransactionView() {
     }
   };
 
-  const filteredHistory = useMemo(() => {
-    const q = histSearch.trim().toLowerCase();
-    const list = history.data ?? [];
-    if (!q) return list;
-    return list.filter((v) =>
-      [v.voucherNo, v.narration, v.referenceNo, v.partyName, v.debitAccounts, v.creditAccounts]
-        .some((s) => (s ?? "").toLowerCase().includes(q)),
-    );
-  }, [history.data, histSearch]);
-
-  const historyColumns = useMemo<ExcelGridColumn<Voucher>[]>(
-    () => [
-      {
-        id: "voucherNo",
-        header: "Voucher #",
-        width: 150,
-        minWidth: 110,
-        value: (v) => v.voucherNo,
-        render: (v) => <span className="font-mono font-bold text-slate-900">{v.voucherNo}</span>,
-      },
-      {
-        id: "date",
-        header: "Date",
-        width: 115,
-        minWidth: 90,
-        value: (v) => v.voucherDate,
-        render: (v) => formatDate(v.voucherDate),
-      },
-      {
-        id: "type",
-        header: "Type",
-        width: 150,
-        value: (v) => v.voucherTypeName ?? v.voucherCategory,
-        render: (v) => v.voucherTypeName ?? v.voucherCategory,
-      },
-      {
-        id: "debit",
-        header: "Debit Accounts",
-        width: 260,
-        value: (v) => v.debitAccounts,
-        render: (v) => v.debitAccounts || "—",
-      },
-      {
-        id: "credit",
-        header: "Credit Accounts",
-        width: 260,
-        value: (v) => v.creditAccounts,
-        render: (v) => v.creditAccounts || "—",
-      },
-      {
-        id: "narration",
-        header: "Narration",
-        width: 280,
-        value: (v) => v.narration,
-        render: (v) => <span className="text-slate-600">{v.narration || "—"}</span>,
-      },
-      {
-        id: "amount",
-        header: "Amount",
-        width: 140,
-        minWidth: 100,
-        align: "right",
-        value: (v) => v.totalAmount,
-        render: (v) => <span className="font-mono font-bold text-slate-900">{formatINR(v.totalAmount)}</span>,
-      },
-      {
-        id: "status",
-        header: "Status",
-        width: 105,
-        minWidth: 90,
-        align: "center",
-        value: (v) => v.status,
-        render: (v) => (
-          <span className={cn("inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border", statusBadgeClass(v.status))}>
-            {v.status}
-          </span>
-        ),
-      },
-    ],
-    [],
-  );
-
   const company = companies.data?.[0];
   const voucherTypeName = voucherType?.voucherTypeName ?? current?.voucherTypeName ?? "Journal Voucher";
 
@@ -547,7 +435,23 @@ export function GLTransactionView() {
         { label: "Transaction", href: "/accounts/transaction" },
         { label: "GL Transaction" },
       ]}
-      primaryAction={{ label: "New Voucher", onClick: openNewVoucher }}
+      secondaryActions={
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={lastLoading}
+          onClick={() => void handleShowLastTransaction()}
+          className="w-full rounded-xl bg-white text-xs font-semibold text-slate-700 sm:w-auto"
+        >
+          {lastLoading ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+          ) : (
+            <History className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
+          )}
+          Last Transaction
+        </Button>
+      }
       wrapChildren={false}
       toast={toast?.message ?? null}
       toastVariant={toast?.variant}
@@ -569,59 +473,7 @@ export function GLTransactionView() {
         </div>
       ) : null}
 
-      <div
-        aria-hidden
-        className={cn(
-          "fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-300 print:hidden",
-          sheetOpen ? "opacity-100" : "pointer-events-none opacity-0",
-        )}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Voucher entry"
-        inert={!sheetOpen}
-        className={cn(
-          "fixed bottom-0 left-0 right-0 z-40 flex max-h-[94vh] flex-col rounded-t-3xl border-t border-slate-200 bg-slate-50 transition-transform duration-300 ease-out lg:left-16 print:hidden",
-          sheetOpen ? "translate-y-0 shadow-2xl" : "translate-y-full shadow-none",
-        )}
-      >
-        <div className="flex justify-center pt-2">
-          <span className="h-1.5 w-12 rounded-full bg-slate-300" />
-        </div>
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 pb-3 pt-1 sm:px-5">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <FileText className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <h2 className="truncate text-sm font-bold text-slate-900">
-                {current ? "Voucher" : "New Voucher"} ({currentVoucherNo || "—"})
-              </h2>
-              <p className="text-[11px] text-slate-500 font-medium">
-                General Ledger {voucherTypeName.replace(" Voucher", "")} Entry
-              </p>
-            </div>
-            <span
-              className={cn(
-                "ml-1 px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-extrabold border",
-                statusBadgeClass(status),
-              )}
-            >
-              {status}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSheetOpen(false)}
-            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-            title="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+      <div className="space-y-4 print:hidden">
       {/* Section 1 — Transaction Information */}
       <FormSection title="Section 1 — Transaction Information" columns={3} className="mb-4">
         <FormField label="Transaction Type" required>
@@ -871,9 +723,8 @@ export function GLTransactionView() {
           </table>
         </div>
       </section>
-        </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
+        <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur sm:px-5">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-[11px] font-bold">
               <span className="text-slate-700">
@@ -932,10 +783,10 @@ export function GLTransactionView() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setSheetOpen(false)}
+              onClick={resetForm}
               className="rounded-xl border-slate-300 text-xs font-semibold bg-white text-slate-700"
             >
-              {editable ? "Cancel" : "Close"}
+              {current ? "Close" : "Clear"}
             </Button>
             {current && (
               <Button
@@ -999,96 +850,119 @@ export function GLTransactionView() {
         />
       )}
 
-      {/* Section 4 — Voucher History */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex shrink-0 items-center gap-2">
-            <History className="h-4 w-4 text-emerald-600" />
-            <h2 className="whitespace-nowrap text-sm font-bold text-slate-900 uppercase tracking-wider">
-              Recent GL Vouchers ({filteredHistory.length})
-            </h2>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs xl:flex-nowrap xl:justify-end">
-            <label className="flex shrink-0 items-center gap-1.5">
-              <span className="text-[10px] font-bold uppercase text-slate-500">From</span>
-              <input
-                type="date"
-                value={histFrom}
-                onChange={(e) => setHistFrom(e.target.value)}
-                className={cn(filterControlClass, "w-[8.5rem]")}
-              />
-            </label>
-            <label className="flex shrink-0 items-center gap-1.5">
-              <span className="text-[10px] font-bold uppercase text-slate-500">To</span>
-              <input
-                type="date"
-                value={histTo}
-                onChange={(e) => setHistTo(e.target.value)}
-                className={cn(filterControlClass, "w-[8.5rem]")}
-              />
-            </label>
-            <select
-              aria-label="Voucher type"
-              value={histTypeId}
-              onChange={(e) => setHistTypeId(e.target.value)}
-              className={cn(filterControlClass, "w-28 cursor-pointer")}
-            >
-              <option value="">All Types</option>
-              {voucherTypes.map((vt) => (
-                <option key={vt.id} value={vt.id}>
-                  {vt.voucherTypeName}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Status"
-              value={histStatus}
-              onChange={(e) => setHistStatus(e.target.value)}
-              className={cn(filterControlClass, "w-28 cursor-pointer")}
-            >
-              <option value="all">All Status</option>
-              <option value="Draft">Draft</option>
-              <option value="Posted">Posted</option>
-              <option value="Reversed">Reversed</option>
-            </select>
-            <div className="relative w-full sm:w-80">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={histSearch}
-                onChange={(e) => setHistSearch(e.target.value)}
-                placeholder="Search voucher #, narration, account..."
-                className={cn(filterControlClass, "w-full pl-8")}
-              />
+      {lastVoucher && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs print:hidden">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <History className="h-4 w-4 shrink-0 text-emerald-600" />
+                <h3 className="truncate text-sm font-bold text-slate-900">
+                  Last Transaction — <span className="font-mono">{lastVoucher.voucherNo}</span>
+                </h3>
+                <span
+                  className={cn(
+                    "px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-extrabold border",
+                    statusBadgeClass(lastVoucher.status),
+                  )}
+                >
+                  {lastVoucher.status}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLastVoucher(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4 text-xs">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
+                {[
+                  ["Voucher Type", lastVoucher.voucherTypeName ?? lastVoucher.voucherCategory],
+                  ["Voucher Date", formatDate(lastVoucher.voucherDate)],
+                  ["Reference No", lastVoucher.referenceNo || "—"],
+                  ["Party", lastVoucher.partyName || "—"],
+                  ["Prepared By", lastVoucher.preparedBy || "—"],
+                  ["Entered On", new Date(lastVoucher.createdAt).toLocaleString("en-IN")],
+                ].map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+                    <p className="truncate font-semibold text-slate-900">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 w-14">Dr/Cr</th>
+                      <th className="px-3 py-2">Ledger</th>
+                      <th className="px-3 py-2">Division</th>
+                      <th className="px-3 py-2 text-right">Debit (₹)</th>
+                      <th className="px-3 py-2 text-right">Credit (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {lastVoucher.lines.map((l) => {
+                      const type = l.entryType ?? (l.credit > 0 ? "Cr" : "Dr");
+                      return (
+                        <tr key={l.id}>
+                          <td className={cn("px-3 py-2 font-bold", type === "Dr" ? "text-emerald-700" : "text-rose-700")}>
+                            {type}
+                          </td>
+                          <td className="px-3 py-2 font-semibold text-slate-900">
+                            <span className="mr-1.5 font-mono font-normal text-slate-500">{l.accountCode}</span>
+                            {l.accountName}
+                            {l.partyName && <span className="block text-[10px] font-normal text-slate-500">{l.partyName}</span>}
+                          </td>
+                          <td className="px-3 py-2 text-slate-600">{l.divisionName || "General"}</td>
+                          <td className="px-3 py-2 text-right font-mono font-semibold">{l.debit > 0 ? formatINR(l.debit) : "—"}</td>
+                          <td className="px-3 py-2 text-right font-mono font-semibold">{l.credit > 0 ? formatINR(l.credit) : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="border-t border-slate-200 bg-slate-50 font-bold">
+                    <tr>
+                      <td colSpan={3} className="px-3 py-2 text-right uppercase text-slate-700">Total</td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {formatINR(lastVoucher.lines.reduce((s, l) => s + l.debit, 0))}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {formatINR(lastVoucher.lines.reduce((s, l) => s + l.credit, 0))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Narration</p>
+                <p className="mt-0.5 text-slate-800">{lastVoucher.narration || "No narration provided."}</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+              <Button type="button" variant="outline" size="sm" onClick={() => setLastVoucher(null)} className="rounded-xl text-xs">
+                Close
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={openLastInForm}
+                className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold"
+              >
+                <FileText className="h-3.5 w-3.5 mr-1" />
+                Open in Form
+              </Button>
             </div>
           </div>
         </div>
-
-        <ExcelGrid
-          columns={historyColumns}
-          rows={history.loading && !history.data ? [] : filteredHistory}
-          rowKey={(v) => v.id}
-          storageKey="acc.gl-transaction.history-grid"
-          onRowClick={(v) => void openVoucher(v.id)}
-          isRowActive={(v) => sheetOpen && current?.id === v.id}
-          emptyState={
-            history.loading && !history.data ? (
-              <span className="font-medium">
-                <Loader2 className="inline h-4 w-4 mr-1 animate-spin text-emerald-600" /> Loading vouchers…
-              </span>
-            ) : history.error ? (
-              <span className="font-medium text-rose-700">
-                {history.error}{" "}
-                <button type="button" onClick={() => void history.reload()} className="ml-2 underline font-bold">
-                  Retry
-                </button>
-              </span>
-            ) : (
-              <span className="font-medium text-slate-400">No vouchers found for the selected filters.</span>
-            )
-          }
-        />
-      </section>
+      )}
 
       {/* Reverse Voucher Modal */}
       {reverseReason !== null && current && (
@@ -1206,7 +1080,7 @@ export function GLTransactionView() {
                   <tbody className="divide-y divide-slate-200">
                     {current.lines.map((l) => (
                       <tr key={l.id} className="h-8">
-                        <td className="px-3 py-1.5 border-r border-slate-200 font-bold">{l.entryType}</td>
+                        <td className="px-3 py-1.5 border-r border-slate-200 font-bold">{l.entryType ?? (l.credit > 0 ? "Cr" : "Dr")}</td>
                         <td className="px-3 py-1.5 border-r border-slate-200">
                           {l.accountCode} - {l.accountName}
                         </td>

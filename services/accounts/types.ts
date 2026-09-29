@@ -599,6 +599,8 @@ export type VoucherQuery = {
   fiscalYearId?: string;
   search?: string;
   limit?: number;
+  /** "recent" orders by entry time (newest first) instead of voucher date. */
+  sort?: "recent";
 };
 
 export type BankReconEntry = {
