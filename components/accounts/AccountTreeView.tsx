@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import {
+  BookOpen,
   Folder,
   FolderOpen,
   FileText,
@@ -26,6 +27,8 @@ export interface AccountTreeViewProps {
   onExpandAll: () => void;
   onCollapseAll: () => void;
   onCreateAccountClick?: () => void;
+  /** Shows an "open ledger" icon on each row. */
+  onOpenLedger?: (node: AccountTreeNode) => void;
   className?: string;
 }
 
@@ -38,6 +41,7 @@ export function AccountTreeView({
   onExpandAll,
   onCollapseAll,
   onCreateAccountClick,
+  onOpenLedger,
   className,
 }: AccountTreeViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -196,6 +200,25 @@ export function AccountTreeView({
             >
               OFF
             </span>
+          )}
+
+          {onOpenLedger && (
+            <button
+              type="button"
+              title={`Open ${node.accountType === "Group" ? "group" : "ledger"} transactions`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenLedger(node);
+              }}
+              className={cn(
+                "shrink-0 rounded-md p-0.5 transition-opacity",
+                isSelected
+                  ? "text-emerald-100 hover:bg-emerald-800"
+                  : "text-slate-400 opacity-0 hover:bg-slate-200 hover:text-emerald-700 group-hover:opacity-100 focus:opacity-100",
+              )}
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+            </button>
           )}
         </div>
 

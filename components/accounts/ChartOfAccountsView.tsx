@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
+  BookOpen,
   Building2,
   Plus,
   Save,
@@ -50,6 +53,9 @@ import {
 import { cn } from "@/lib/utils";
 
 type AccountType = Account["accountType"];
+
+const ledgerHref = (accountId: string) =>
+  `/accounts/reports/general-ledger?accountId=${encodeURIComponent(accountId)}`;
 
 type AccountForm = {
   parentId: string | null;
@@ -136,6 +142,7 @@ function suggestCode(accounts: Account[], parentId: string | null, excludeId?: s
 }
 
 export function ChartOfAccountsView() {
+  const router = useRouter();
   const treeQ = useAccQuery(() => accAccountService.tree(), []);
   const listQ = useAccQuery(() => accAccountService.list(), []);
   const treeData = useMemo(() => treeQ.data ?? [], [treeQ.data]);
@@ -546,6 +553,7 @@ export function ChartOfAccountsView() {
             onExpandAll={handleExpandAll}
             onCollapseAll={handleCollapseAll}
             onCreateAccountClick={handleOpenCreateModal}
+            onOpenLedger={(node) => router.push(ledgerHref(node.id))}
           />
         </div>
 
@@ -580,6 +588,14 @@ export function ChartOfAccountsView() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href={ledgerHref(activeNode.id)}
+                  className="inline-flex items-center gap-1 rounded-xl bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white shadow-xs hover:bg-emerald-800"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  {formData.accountType === "Group" ? "Open Group Ledger" : "Open Ledger"}
+                </Link>
+
                 <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-mono font-bold text-slate-700 border border-slate-200">
                   <Layers className="h-3.5 w-3.5 text-slate-500" />
                   Level {displayLevel}

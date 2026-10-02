@@ -80,8 +80,10 @@ function findNavLabel(slugPath: string): { title: string; category?: string } {
 
 export default async function AccountsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug?: string[] }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const resolvedParams = await params;
   const slugArray = resolvedParams.slug || [];
@@ -400,7 +402,9 @@ export default async function AccountsPage({
   }
 
   if (slugPath === "reports/general-ledger" || slugPath === "general-ledger") {
-    return <GeneralLedgerView />;
+    const query = await searchParams;
+    const accountId = typeof query.accountId === "string" ? query.accountId : undefined;
+    return <GeneralLedgerView key={accountId ?? "none"} initialAccountId={accountId} />;
   }
 
   if (

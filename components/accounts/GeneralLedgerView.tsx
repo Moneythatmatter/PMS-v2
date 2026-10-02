@@ -16,7 +16,6 @@ import {
   Loader2,
   BookOpen,
   ChevronDown,
-  Eye,
   AlertCircle,
 } from "lucide-react";
 import { Button, Card } from "@/components/ui";
@@ -31,11 +30,11 @@ import { ModulePageShell } from "@/components/pms";
 import {
   accCompanyService,
   accReportService,
-  accVoucherService,
   type GeneralLedgerEntry,
 } from "@/services/accounts";
 import { useAccLookups, useAccQuery, fyStartIso, todayIso, formatDate } from "@/components/accounts/accountsApi";
 import { cn } from "@/lib/utils";
+import { VoucherEditModal } from "./VoucherEditModal";
 
 const ALL = "<ALL>";
 
@@ -46,7 +45,7 @@ function addMonths(iso: string, months: number): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
-export function GeneralLedgerView() {
+export function GeneralLedgerView({ initialAccountId }: { initialAccountId?: string } = {}) {
   // Filters Panel / Mobile Drawer Toggle
   const [showFilters, setShowFilters] = useState(true);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
@@ -55,12 +54,12 @@ export function GeneralLedgerView() {
   const [ledgerModalOpen, setLedgerModalOpen] = useState(false);
   const [ledgerSearchQuery, setLedgerSearchQuery] = useState("");
 
-  // Voucher Detail Drill-Down Modal State (Read-Only)
+  // Voucher opened in the edit modal
   const [selectedEntry, setSelectedEntry] = useState<GeneralLedgerEntry | null>(null);
 
   // Primary Selection Controls (ID-based / Group-based)
   const [selectedGroup, setSelectedGroup] = useState(ALL);
-  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(initialAccountId ?? "");
   const [selectedPartyId, setSelectedPartyId] = useState(ALL);
   const [selectedDivisionId, setSelectedDivisionId] = useState(ALL);
   const [selectedVoucherType, setSelectedVoucherType] = useState(ALL);
@@ -117,11 +116,6 @@ export function GeneralLedgerView() {
           })
         : Promise.resolve(null),
     [effectiveAccountId, effectivePartyId, selectedDivisionId, selectedVoucherType, appliedFromDate, appliedToDate]
-  );
-
-  const voucherDetail = useAccQuery(
-    () => (selectedEntry ? accVoucherService.get(selectedEntry.voucherId) : Promise.resolve(null)),
-    [selectedEntry?.voucherId]
   );
 
   const companyQuery = useAccQuery(
@@ -651,8 +645,6 @@ export function GeneralLedgerView() {
     </div>
   );
 
-  const detail = voucherDetail.data;
-
   return (
     <ModulePageShell
       eyebrow="Accounts &amp; General Ledger"
@@ -931,135 +923,13 @@ export function GeneralLedgerView() {
         </div>
       </Modal>
 
-      {/* Read-Only Voucher Detail Modal (Drill-Down) */}
-      <Modal
-        open={Boolean(selectedEntry)}
-        onClose={() => setSelectedEntry(null)}
-        title={`Voucher Inquiry: ${selectedEntry?.voucherNo || ""}`}
-      >
-        {selectedEntry && (
-          <div className="space-y-4 p-1">
-            {/* Read-Only Notice */}
-            <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 border border-slate-200">
-              <Eye className="h-4 w-4 text-emerald-700" />
-              <span>General Ledger Inquiry (Strictly Read-Only Transaction Breakdown)</span>
-            </div>
-
-            {voucherDetail.loading && !detail ? (
-              <div className="py-8 flex items-center justify-center gap-2 text-xs text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading voucher…
-              </div>
-            ) : voucherDetail.error || !detail ? (
-              <div className="py-6 text-center text-xs">
-                <p className="font-semibold text-rose-700">{voucherDetail.error ?? "Voucher not found."}</p>
-                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void voucherDetail.reload()}>
-                  Retry
-                </Button>
-              </div>
-            ) : (
-              <>
-                {/* Voucher Meta Details */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-200 text-xs">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Voucher Number</span>
-                    <span className="font-bold text-slate-900 font-mono">{detail.voucherNo}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Voucher Date</span>
-                    <span className="font-semibold text-slate-800 font-mono">{formatDate(detail.voucherDate)}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Voucher Type</span>
-                    <span
-                      className={cn(
-                        "inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wider mt-0.5",
-                        getTrnTypeBadgeClass(detail.voucherTypeName ?? detail.voucherCategory)
-                      )}
-                    >
-                      {detail.voucherTypeName ?? detail.voucherCategory}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Source Module</span>
-                    <span className="font-semibold text-emerald-800">{detail.sourceModule || "—"}</span>
-                  </div>
-                </div>
-
-                {/* PMS Dimensions (Party & Division) */}
-                <div className="grid grid-cols-2 gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-200 text-xs">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Party</span>
-                    <span className="font-bold text-slate-900">{detail.partyName ?? "—"}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Division / Cost Center</span>
-                    <span className="font-bold text-slate-900">{detail.divisionName ?? "—"}</span>
-                  </div>
-                </div>
-
-                {/* Narration */}
-                <div className="rounded-xl border border-slate-200 p-3 bg-white space-y-1 text-xs shadow-2xs">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Particulars / Narration</span>
-                  <p className="font-medium text-slate-800">{detail.narration || selectedEntry.particulars || "—"}</p>
-                </div>
-
-                {/* Accounting Distribution Breakdown Table */}
-                <div className="overflow-hidden rounded-xl border border-slate-200 shadow-2xs">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
-                        <th className="px-3 py-2">Side</th>
-                        <th className="px-3 py-2">Account</th>
-                        <th className="px-3 py-2 text-right">Debit (₹)</th>
-                        <th className="px-3 py-2 text-right">Credit (₹)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {detail.lines.map((line) => (
-                        <tr key={line.id}>
-                          <td className={cn("px-3 py-2 font-bold", line.debit > 0 ? "text-sky-700" : "text-rose-700")}>
-                            {line.debit > 0 ? "Dr" : "Cr"}
-                          </td>
-                          <td className="px-3 py-2 font-medium text-slate-900">
-                            <span className="font-mono text-slate-500 mr-1.5">{line.accountCode}</span>
-                            {line.accountName}
-                            {line.partyName && <span className="text-[10px] text-slate-400"> · {line.partyName}</span>}
-                          </td>
-                          <td className="px-3 py-2 text-right font-semibold font-mono text-slate-900">
-                            {line.debit > 0 ? formatINR(line.debit) : "-"}
-                          </td>
-                          <td className="px-3 py-2 text-right font-semibold font-mono text-slate-900">
-                            {line.credit > 0 ? formatINR(line.credit) : "-"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Audit Stamp */}
-                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-                  <span>Prepared By: <strong>{detail.preparedBy ?? "—"}</strong></span>
-                  <span>Status: <strong>{detail.status}</strong></span>
-                  <span>Created: <strong>{formatDate(detail.createdAt)}</strong></span>
-                </div>
-              </>
-            )}
-
-            <div className="flex justify-end pt-2 border-t border-slate-100">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedEntry(null)}
-                className="text-xs font-semibold"
-              >
-                Close Inquiry
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      {selectedEntry?.voucherId && (
+        <VoucherEditModal
+          voucherId={selectedEntry.voucherId}
+          onClose={() => setSelectedEntry(null)}
+          onChanged={() => void report.reload()}
+        />
+      )}
 
       {/* Main General Ledger Table Card */}
       <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs">

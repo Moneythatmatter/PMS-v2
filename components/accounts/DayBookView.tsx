@@ -9,7 +9,7 @@ import {
   Download,
   Search,
   X,
-  Eye,
+  Pencil,
   DollarSign,
   Landmark,
   Loader2,
@@ -25,6 +25,7 @@ import { ModulePageShell } from "@/components/pms";
 import { accReportService, type Voucher, type VoucherCategory } from "@/services/accounts";
 import { useAccLookups, useAccQuery, todayIso, formatDate } from "@/components/accounts/accountsApi";
 import { cn } from "@/lib/utils";
+import { VoucherEditModal } from "./VoucherEditModal";
 
 function voucherTime(v: Voucher): string {
   const ts = v.postedAt ?? v.createdAt;
@@ -48,8 +49,7 @@ export function DayBookView() {
   const [divisionFilter, setDivisionFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Inspect Voucher Modal State
-  const [inspectVoucher, setInspectVoucher] = useState<Voucher | null>(null);
+  const [editVoucherId, setEditVoucherId] = useState<string | null>(null);
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -470,7 +470,11 @@ export function DayBookView() {
                     className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-2xs space-y-0"
                   >
                     {/* Voucher Header Bar */}
-                    <div className="bg-slate-50 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 text-xs font-bold">
+                    <div
+                      onClick={() => setEditVoucherId(voucher.id)}
+                      title="Open to edit or delete"
+                      className="bg-slate-50 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 text-xs font-bold cursor-pointer hover:bg-emerald-50/60 transition-colors"
+                    >
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-slate-500 text-[11px]">
                           {voucherTime(voucher)}
@@ -509,11 +513,11 @@ export function DayBookView() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => setInspectVoucher(voucher)}
+                          onClick={() => setEditVoucherId(voucher.id)}
                           className="h-6 px-2 text-[10px] font-semibold rounded-md border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-slate-700"
                         >
-                          <Eye className="h-3 w-3 mr-1 text-slate-500" />
-                          Inspect
+                          <Pencil className="h-3 w-3 mr-1 text-slate-500" />
+                          Open / Edit
                         </Button>
                       </div>
                     </div>
@@ -652,107 +656,12 @@ export function DayBookView() {
         </>
       )}
 
-      {/* Inspect Voucher Modal */}
-      {inspectVoucher && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xl w-full max-w-xl p-5 space-y-4 font-sans text-xs">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-              <div>
-                <span className="font-mono text-[10px] uppercase text-slate-500 font-bold">
-                  Day Book Register Inspection
-                </span>
-                <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                  <span className="font-mono">{inspectVoucher.voucherNo}</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    {inspectVoucher.status}
-                  </span>
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInspectVoucher(null)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 font-mono text-xs">
-              <div>
-                <span className="text-[10px] font-bold text-slate-500 block uppercase">Voucher Date</span>
-                <span className="font-bold text-slate-900">
-                  {formatDate(inspectVoucher.voucherDate)}
-                  {voucherTime(inspectVoucher) ? ` (${voucherTime(inspectVoucher)})` : ""}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-500 block uppercase">Division</span>
-                <span className="font-bold text-slate-900">{inspectVoucher.divisionName ?? "—"}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-500 block uppercase">Created By</span>
-                <span className="font-bold text-slate-900">{inspectVoucher.preparedBy ?? "—"}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-500 block uppercase">Reference No</span>
-                <span className="font-bold text-slate-900">{inspectVoucher.referenceNo || "N/A"}</span>
-              </div>
-              <div className="col-span-2">
-                <span className="text-[10px] font-bold text-slate-500 block uppercase">Narration</span>
-                <span className="font-semibold text-slate-800 font-sans">{inspectVoucher.narration || "—"}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <span className="font-bold text-slate-900 block text-xs">Line Entries:</span>
-              <div className="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px] tracking-wider">
-                      <th className="py-2 px-3">#</th>
-                      <th className="py-2 px-3">GL Account Description</th>
-                      <th className="py-2 px-3 text-right">Debit (INR)</th>
-                      <th className="py-2 px-3 text-right">Credit (INR)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono">
-                    {inspectVoucher.lines.map((l) => (
-                      <tr key={l.id}>
-                        <td className="py-2 px-3 text-slate-400">{l.lineNo}</td>
-                        <td className="py-2 px-3 font-semibold text-slate-900">{l.accountName}</td>
-                        <td className="py-2 px-3 text-right font-bold">
-                          {l.debit > 0 ? formatINR(l.debit) : "-"}
-                        </td>
-                        <td className="py-2 px-3 text-right font-bold">
-                          {l.credit > 0 ? formatINR(l.credit) : "-"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.print()}
-                className="rounded-lg text-xs font-semibold cursor-pointer"
-              >
-                <Printer className="h-3.5 w-3.5 mr-1" />
-                Print Voucher
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => setInspectVoucher(null)}
-                className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs cursor-pointer px-3.5"
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
+      {editVoucherId && (
+        <VoucherEditModal
+          voucherId={editVoucherId}
+          onClose={() => setEditVoucherId(null)}
+          onChanged={() => void report.reload()}
+        />
       )}
     </ModulePageShell>
   );

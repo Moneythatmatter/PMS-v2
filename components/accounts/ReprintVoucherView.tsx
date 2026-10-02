@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Download,
   Eye,
+  Pencil,
   FileText,
   Filter,
   ChevronDown,
@@ -33,6 +34,7 @@ import {
   useAccLookups,
   useAccQuery,
 } from "@/components/accounts/accountsApi";
+import { VoucherEditModal } from "./VoucherEditModal";
 
 type Toast = { message: string; variant: "success" | "error" } | null;
 
@@ -132,6 +134,7 @@ export function ReprintVoucherView() {
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
+  const [editVoucherId, setEditVoucherId] = useState<string | null>(null);
   const notify = (message: string, variant: "success" | "error" = "success") => setToast({ message, variant });
 
   const list = useAccQuery(
@@ -609,7 +612,14 @@ export function ReprintVoucherView() {
                     >
                       <td className="px-3 py-2.5 text-slate-700 font-medium">{formatDate(row.voucherDate)}</td>
                       <td className="px-3.5 py-2.5 font-bold text-slate-900">
-                        {row.voucherNo}
+                        <button
+                          type="button"
+                          onClick={() => setEditVoucherId(row.id)}
+                          className="font-bold text-slate-900 hover:text-emerald-700 hover:underline cursor-pointer"
+                          title="Open to edit or delete"
+                        >
+                          {row.voucherNo}
+                        </button>
                         {row.status !== "Posted" && (
                           <span className="block text-[9px] font-bold uppercase text-rose-600">{row.status}</span>
                         )}
@@ -633,6 +643,14 @@ export function ReprintVoucherView() {
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditVoucherId(row.id)}
+                            className="p-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 cursor-pointer"
+                            title="Edit / Delete Voucher"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => void openPreview([row.id])}
@@ -894,6 +912,23 @@ export function ReprintVoucherView() {
             ))}
           </div>
         </div>
+      )}
+
+      {editVoucherId && (
+        <VoucherEditModal
+          voucherId={editVoucherId}
+          onClose={() => setEditVoucherId(null)}
+          onChanged={(v) => {
+            if (!v) {
+              setSelectedIds((prev) => {
+                const next = new Set(prev);
+                next.delete(editVoucherId);
+                return next;
+              });
+            }
+            void list.reload();
+          }}
+        />
       )}
     </ModulePageShell>
   );

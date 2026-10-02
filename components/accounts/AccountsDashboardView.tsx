@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   TrendingUp,
@@ -23,6 +23,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { DepartmentRevenueChart } from "@/components/charts/DepartmentRevenueChart";
 import { BookingPlatformRevenueChart } from "@/components/charts/BookingPlatformRevenueChart";
 import { UpcomingVendorPayments } from "@/components/accounts/UpcomingVendorPayments";
+import { VoucherEditModal } from "@/components/accounts/VoucherEditModal";
 import { formatDate, formatINR, useAccQuery } from "@/components/accounts/accountsApi";
 import {
   accAccountService,
@@ -152,6 +153,7 @@ async function loadDashboard() {
 
 export function AccountsDashboardView() {
   const { data, loading, error, reload } = useAccQuery(loadDashboard, []);
+  const [editVoucherId, setEditVoucherId] = useState<string | null>(null);
 
   const view = useMemo(() => {
     if (!data) return null;
@@ -442,7 +444,9 @@ export function AccountsDashboardView() {
                 return (
                   <li
                     key={trx.id}
-                    className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                    onClick={() => setEditVoucherId(trx.id)}
+                    title="Open to edit or delete"
+                    className="-mx-2 flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2 py-3 transition-colors first:pt-0 last:pb-0 hover:bg-slate-50"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-slate-900">
@@ -606,6 +610,14 @@ export function AccountsDashboardView() {
           </Card>
         </div>
       </div>
+      )}
+
+      {editVoucherId && (
+        <VoucherEditModal
+          voucherId={editVoucherId}
+          onClose={() => setEditVoucherId(null)}
+          onChanged={() => void reload()}
+        />
       )}
     </ModulePageShell>
   );

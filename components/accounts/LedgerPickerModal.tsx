@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, Check, Search, X } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, Loader2, Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface LedgerPickerOption {
@@ -14,6 +14,24 @@ export interface LedgerPickerOption {
   isCashAccount?: boolean;
 }
 
+export interface LedgerPickerAccount {
+  id: string;
+  code: string;
+  name: string;
+  parentId: string | null;
+  accountType: "Group" | "Ledger";
+  nature: string;
+  category?: string | null;
+}
+
+export interface NewLedgerInput {
+  name: string;
+  code: string;
+  parentId: string;
+  nature: string;
+  category: string;
+}
+
 const NATURE_ORDER = ["Asset", "Liability", "Income", "Expense"];
 
 interface LedgerPickerModalProps {
@@ -22,6 +40,21 @@ interface LedgerPickerModalProps {
   title?: string;
   onSelect: (ledger: LedgerPickerOption) => void;
   onClose: () => void;
+  /** Full chart of accounts; needed for quick-create (parent groups + code suggestion). */
+  accounts?: LedgerPickerAccount[];
+  /** Enables the "New Ledger" quick-create form. Should throw an Error with a readable message on failure. */
+  onCreate?: (input: NewLedgerInput) => Promise<LedgerPickerOption>;
+}
+
+function suggestCode(accounts: LedgerPickerAccount[], group: LedgerPickerAccount | undefined): string {
+  if (!group || !/^\d+$/.test(group.code)) return "";
+  const used = new Set(accounts.map((a) => a.code));
+  const siblingCodes = accounts
+    .filter((a) => a.parentId === group.id && /^\d+$/.test(a.code))
+    .map((a) => Number(a.code));
+  let next = siblingCodes.length ? Math.max(...siblingCodes) + 1 : Number(group.code) + 1;
+  while (used.has(String(next))) next += 1;
+  return String(next);
 }
 
 /** Searchable ledger chooser. Mount only while open so search state resets each time. */
@@ -31,11 +64,70 @@ export function LedgerPickerModal({
   title = "Select Ledger",
   onSelect,
   onClose,
+  accounts = [],
+  onCreate,
 }: LedgerPickerModalProps) {
   const [query, setQuery] = useState("");
   const [natureFilter, setNatureFilter] = useState("all");
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+
+  const [mode, setMode] = useState<"pick" | "create">("pick");
+  const [newName, setNewName] = useState("");
+  const [newParentId, setNewParentId] = useState("");
+  const [newCode, setNewCode] = useState("");
+  const [codeTouched, setCodeTouched] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const accountGroups = useMemo(
+    () =>
+      accounts
+        .filter((a) => a.accountType === "Group")
+        .sort((a, b) => {
+          const na = NATURE_ORDER.indexOf(a.nature);
+          const nb = NATURE_ORDER.indexOf(b.nature);
+          if (na !== nb) return (na < 0 ? 99 : na) - (nb < 0 ? 99 : nb);
+          return a.code.localeCompare(b.code, undefined, { numeric: true });
+        }),
+    [accounts],
+  );
+  const newParent = accountGroups.find((g) => g.id === newParentId);
+  const effectiveCode = codeTouched ? newCode : suggestCode(accounts, newParent);
+
+  const openCreate = () => {
+    const selectedParent = accounts.find((a) => a.id === selectedId)?.parentId ?? "";
+    setNewName(query.trim());
+    setNewParentId(accountGroups.some((g) => g.id === selectedParent) ? selectedParent : "");
+    setNewCode("");
+    setCodeTouched(false);
+    setCreateError(null);
+    setMode("create");
+  };
+
+  const submitCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onCreate) return;
+    if (!newName.trim()) return setCreateError("Enter a ledger name.");
+    if (!newParent) return setCreateError("Select the group this ledger belongs to.");
+    if (!effectiveCode.trim()) return setCreateError("Enter a ledger code.");
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const created = await onCreate({
+        name: newName.trim(),
+        code: effectiveCode.trim(),
+        parentId: newParent.id,
+        nature: newParent.nature,
+        category: newParent.category ?? "",
+      });
+      onSelect(created);
+      onClose();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : String(err));
+      setCreating(false);
+    }
+  };
 
   const natures = useMemo(() => {
     const set = new Set(ledgers.map((l) => l.nature).filter((n): n is string => Boolean(n)));
@@ -93,6 +185,13 @@ export function LedgerPickerModal({
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (mode === "create") {
+      if (e.key === "Escape" && !creating) {
+        e.preventDefault();
+        setMode("pick");
+      }
+      return;
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       onClose();
@@ -123,20 +222,145 @@ export function LedgerPickerModal({
         className="relative flex max-h-[75vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
-          <div className="flex items-center gap-2">
-            <BookOpen className="h-4 w-4 text-emerald-600" />
-            <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+          <div className="flex min-w-0 items-center gap-2">
+            {mode === "create" ? (
+              <button
+                type="button"
+                onClick={() => setMode("pick")}
+                disabled={creating}
+                className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                aria-label="Back to ledger list"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            ) : (
+              <BookOpen className="h-4 w-4 shrink-0 text-emerald-600" />
+            )}
+            <h3 className="truncate text-sm font-bold text-slate-900">
+              {mode === "create" ? "Quick Create Ledger" : title}
+            </h3>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {mode === "pick" && onCreate && (
+              <button
+                type="button"
+                onClick={openCreate}
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New Ledger
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
+        {mode === "create" ? (
+          <form onSubmit={submitCreate} className="flex min-h-0 flex-1 flex-col">
+            <div className="space-y-4 overflow-y-auto px-5 py-4">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-slate-600">
+                  Ledger Name <span className="text-rose-500">*</span>
+                </span>
+                <input
+                  autoFocus
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="e.g. HDFC Bank Current A/c"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-slate-600">
+                  Under Group <span className="text-rose-500">*</span>
+                </span>
+                <select
+                  value={newParentId}
+                  onChange={(e) => setNewParentId(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                >
+                  <option value="">Select group…</option>
+                  {NATURE_ORDER.concat(
+                    Array.from(new Set(accountGroups.map((g) => g.nature))).filter((n) => !NATURE_ORDER.includes(n)),
+                  ).map((nature) => {
+                    const items = accountGroups.filter((g) => g.nature === nature);
+                    if (!items.length) return null;
+                    return (
+                      <optgroup key={nature} label={nature}>
+                        {items.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.code} — {g.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
+                </select>
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-slate-600">
+                    Code <span className="text-rose-500">*</span>
+                  </span>
+                  <input
+                    value={effectiveCode}
+                    onChange={(e) => {
+                      setCodeTouched(true);
+                      setNewCode(e.target.value);
+                    }}
+                    placeholder="Ledger code"
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                </label>
+                <div>
+                  <span className="mb-1 block text-xs font-semibold text-slate-600">Nature</span>
+                  <div className="flex h-10 items-center rounded-xl border border-slate-100 bg-slate-50 px-3 text-sm text-slate-600">
+                    {newParent ? newParent.nature : "—"}
+                    {newParent?.category && <span className="ml-1.5 truncate text-xs text-slate-400">· {newParent.category}</span>}
+                  </div>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Nature and category are inherited from the group. Edit other details later in Accounts → Masters.
+              </p>
+
+              {createError && (
+                <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                  {createError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setMode("pick")}
+                disabled={creating}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={creating}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                Create &amp; Select
+              </button>
+            </div>
+          </form>
+        ) : (
+        <>
         <div className="space-y-2.5 border-b border-slate-100 px-5 py-3">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -177,9 +401,21 @@ export function LedgerPickerModal({
 
         <div ref={listRef} className="min-h-[120px] flex-1 overflow-y-auto py-1">
           {filtered.length === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-slate-500">
-              {query.trim() ? `No ledger matches “${query.trim()}”.` : "No ledgers available."}
-            </p>
+            <div className="px-5 py-8 text-center">
+              <p className="text-sm text-slate-500">
+                {query.trim() ? `No ledger matches “${query.trim()}”.` : "No ledgers available."}
+              </p>
+              {onCreate && (
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {query.trim() ? `Create “${query.trim()}” as new ledger` : "Create new ledger"}
+                </button>
+              )}
+            </div>
           ) : (
             groups.map((group) => (
               <div key={group.nature}>
@@ -232,6 +468,8 @@ export function LedgerPickerModal({
           </span>
           <span className="hidden sm:inline">↑ ↓ to navigate · Enter to select · Esc to close</span>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
