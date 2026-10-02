@@ -190,11 +190,6 @@ export default function RoomStatusOperations() {
     return map;
   }, [tasks, rooms]);
 
-  const selectedRoom = useMemo(
-    () => (selectedRoomId ? findRoomByKey(rooms, selectedRoomId) ?? null : null),
-    [rooms, selectedRoomId],
-  );
-
   const getRoomTask = (room: (typeof rooms)[0]) => {
     if (room.activeTaskId) {
       const byId = tasks.find((t) => t.id === room.activeTaskId && isActiveTask(t));
@@ -207,6 +202,40 @@ export default function RoomStatusOperations() {
     }
     return null;
   };
+
+  const displayRooms = useMemo(() => {
+    return rooms.map((room) => {
+      const task = getRoomTask(room);
+      if (task?.status === "IN_PROGRESS") {
+        return {
+          ...room,
+          status: "Cleaning" as const,
+          hkStatus: "Cleaning" as const,
+          assignedStaff: task.assignedToName ?? task.assignedTo ?? room.assignedStaff,
+          activeTaskId: task.id,
+          activeTaskNumber: task.taskNumber,
+          activeTaskType: task.taskType,
+        };
+      }
+      if (task?.status === "PENDING_INSPECTION" || task?.status === "COMPLETED") {
+        return {
+          ...room,
+          status: "Clean" as const,
+          hkStatus: "Clean" as const,
+          assignedStaff: task.assignedToName ?? task.assignedTo ?? room.assignedStaff,
+          activeTaskId: task.id,
+          activeTaskNumber: task.taskNumber,
+          activeTaskType: task.taskType,
+        };
+      }
+      return room;
+    });
+  }, [rooms, tasks, activeTaskByRoom]);
+
+  const selectedRoom = useMemo(
+    () => (selectedRoomId ? findRoomByKey(displayRooms, selectedRoomId) ?? null : null),
+    [displayRooms, selectedRoomId],
+  );
 
   const selectedRoomFoId = useMemo(() => {
     if (!selectedRoom) return "";
@@ -240,7 +269,7 @@ export default function RoomStatusOperations() {
 
   const filteredRooms = useMemo(() => {
     const q = search.toLowerCase();
-    return rooms.filter((r) => {
+    return displayRooms.filter((r) => {
       const matchSearch =
         !q ||
         r.roomNo.includes(q) ||
@@ -254,11 +283,11 @@ export default function RoomStatusOperations() {
 
       return matchSearch && matchFloor && matchRoomType && matchStatus;
     });
-  }, [rooms, search, floorFilter, roomTypeFilter, statusFilter]);
+  }, [displayRooms, search, floorFilter, roomTypeFilter, statusFilter]);
 
   const pillScopeRooms = useMemo(() => {
     const q = search.toLowerCase();
-    return rooms.filter((r) => {
+    return displayRooms.filter((r) => {
       const matchSearch =
         !q ||
         r.roomNo.includes(q) ||
@@ -269,7 +298,7 @@ export default function RoomStatusOperations() {
         roomTypeFilter === "all" || roomTypeLabel(r) === roomTypeFilter;
       return matchSearch && matchFloor && matchRoomType;
     });
-  }, [rooms, search, floorFilter, roomTypeFilter]);
+  }, [displayRooms, search, floorFilter, roomTypeFilter]);
 
   const statusCounts = useMemo(
     () => ({
@@ -286,19 +315,19 @@ export default function RoomStatusOperations() {
   );
 
   const floorOptions = useMemo(() => {
-    const known = floors.filter((f) => rooms.some((r) => r.floor === f));
-    const other = [...new Set(rooms.map((r) => r.floor).filter(Boolean))]
+    const known = floors.filter((f) => displayRooms.some((r) => r.floor === f));
+    const other = [...new Set(displayRooms.map((r) => r.floor).filter(Boolean))]
       .filter((f) => !floors.includes(f as (typeof floors)[number]))
       .sort(compareFloorLabel);
     return [...known, ...other];
-  }, [rooms]);
+  }, [displayRooms]);
 
   const roomTypeOptions = useMemo(
     () =>
-      [...new Set(rooms.map(roomTypeLabel).filter(Boolean))].sort((a, b) =>
+      [...new Set(displayRooms.map(roomTypeLabel).filter(Boolean))].sort((a, b) =>
         a.localeCompare(b, undefined, { sensitivity: "base" }),
       ),
-    [rooms],
+    [displayRooms],
   );
 
   const roomsByFloor = useMemo(() => {
@@ -333,7 +362,7 @@ export default function RoomStatusOperations() {
   }, [activeChecklist, checkedItems]);
 
   const handleRoomClick = (id: string) => {
-    const rm = findRoomByKey(rooms, id);
+    const rm = findRoomByKey(displayRooms, id);
     if (!rm) return;
     setSelectedRoomId(id);
     const preferredChecklist = checklists.find((c) =>

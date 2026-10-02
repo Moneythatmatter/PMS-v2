@@ -122,18 +122,28 @@ export function hkEnumToUiFields(row: {
     return { status: "Blocked", hkStatus: "OOS", foStatus: "Blocked" };
   }
 
+  if (enumStatus === "INSPECTING") {
+    return {
+      status: "Cleaning",
+      hkStatus: "Cleaning",
+      foStatus: isOccupied ? "Occupied" : "Vacant",
+    };
+  }
+
+  if (enumStatus === "CLEAN") {
+    return {
+      status: "Clean",
+      hkStatus: "Clean",
+      foStatus: isOccupied ? "Occupied" : "Vacant",
+    };
+  }
+
   if (isOccupied) {
     return { status: "Occupied", hkStatus, foStatus: "Occupied" };
   }
 
   if (enumStatus === "DIRTY") {
     return { status: "Dirty", hkStatus: "Dirty", foStatus: "Vacant" };
-  }
-  if (enumStatus === "INSPECTING") {
-    return { status: "Cleaning", hkStatus: "Cleaning", foStatus: "Vacant" };
-  }
-  if (enumStatus === "CLEAN") {
-    return { status: "Clean", hkStatus: "Clean", foStatus: "Vacant" };
   }
   if (enumStatus === "INSPECTED") {
     if (hasReservation) {
