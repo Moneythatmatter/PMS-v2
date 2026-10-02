@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Play, CheckCircle2 } from "lucide-react";
 import { hkTaskService } from "@/services/housekeeping";
@@ -30,18 +30,41 @@ export function CleaningTaskDetailPanel({
   onUpdated,
   roomStatusLink = "/housekeeping/operations/rooms",
 }: CleaningTaskDetailPanelProps) {
-  const housekeepers = staff.filter((s) => s.role === "Housekeeper");
+  const housekeepers = useMemo(
+    () => staff.filter((s) => s.role === "Housekeeper"),
+    [staff],
+  );
+
+  const currentAssigneeName = useMemo(() => {
+    return (
+      task.assignedToName ??
+      housekeepers.find(
+        (h) => h.id === task.assignedTo || h.name === task.assignedTo,
+      )?.name ??
+      task.assignedTo ??
+      ""
+    );
+  }, [task.assignedToName, task.assignedTo, housekeepers]);
+
   const [assignee, setAssignee] = useState(
-    task.assignedToName ?? task.assignedTo ?? housekeepers[0]?.name ?? "",
+    () => currentAssigneeName || housekeepers[0]?.name || "",
   );
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    setAssignee(
-      task.assignedToName ?? task.assignedTo ?? housekeepers[0]?.name ?? "",
-    );
-  }, [task.id, task.assignedTo, task.assignedToName, housekeepers]);
+    setAssignee(currentAssigneeName || housekeepers[0]?.name || "");
+  }, [task.id, currentAssigneeName]);
+
+  useEffect(() => {
+    if (!assignee && housekeepers.length > 0) {
+      setAssignee(currentAssigneeName || housekeepers[0]?.name || "");
+    }
+  }, [assignee, housekeepers, currentAssigneeName]);
+
+  const isAlreadyAssigned = Boolean(
+    currentAssigneeName && assignee === currentAssigneeName,
+  );
 
   const runTaskAction = async (fn: () => Promise<unknown>) => {
     setActionBusy(true);
@@ -164,7 +187,7 @@ export function CleaningTaskDetailPanel({
           </FormField>
           <Button
             className="w-full bg-emerald-700 hover:bg-emerald-800 text-white"
-            disabled={actionBusy || !assignee}
+            disabled={actionBusy || !assignee || isAlreadyAssigned}
             onClick={() =>
               void runTaskAction(() => hkTaskService.assign(task.id, assignee))
             }
