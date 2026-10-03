@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Wrench } from "lucide-react";
 import type { RoomStatusCard } from "@/app/data/frontoffice/modules";
 import { floors, roomStatuses } from "@/app/data/frontoffice/constants";
@@ -27,29 +28,46 @@ function compareRoomNo(a: string, b: string): number {
 
 function RoomStatusCardTile({ room }: { room: RoomStatusCard }) {
   const config = getFoRoomStatusConfig(room.status);
-  const isOccupied = room.status === "Occupied";
+  const hasBooking =
+    (room.status === "Occupied" || room.status === "Reserved") &&
+    Boolean(room.reservationId);
   const hasMaintenance = room.maintenance !== "OK";
-  const footerText = hasMaintenance
-    ? room.maintenance
-    : isOccupied
-      ? room.guestName ?? (room.checkoutDate ? `Out ${room.checkoutDate}` : null)
-      : null;
+  const bookingText = hasBooking
+    ? [room.bookingNo, room.guestName].filter(Boolean).join(" · ") ||
+      (room.checkoutDate ? `Out ${room.checkoutDate}` : null)
+    : null;
+  const footerText = hasMaintenance ? room.maintenance : bookingText;
 
-  return (
-    <div
-      title={
-        hasMaintenance
-          ? `Maintenance: ${room.maintenance}`
-          : isOccupied && room.guestName
-            ? `${room.guestName}${room.checkoutDate ? ` · Out ${room.checkoutDate}` : ""}`
-            : room.type
-      }
-      className={cn(
-        "group flex h-[88px] flex-col rounded-xl border p-2.5 transition-all",
-        "hover:-translate-y-0.5 hover:shadow-lg",
-        config.card,
-      )}
-    >
+  const isGroup = Boolean(room.groupId);
+  const bookingTypeLabel = isGroup
+    ? `Group${room.groupName ? `: ${room.groupName}` : ""}${room.groupNo ? ` (${room.groupNo})` : ""}`
+    : "Individual";
+
+  const title = hasMaintenance
+    ? `Maintenance: ${room.maintenance}`
+    : hasBooking
+      ? [
+          room.bookingNo,
+          bookingTypeLabel,
+          room.guestName,
+          room.checkinDate && room.checkoutDate
+            ? `${room.checkinDate} → ${room.checkoutDate}`
+            : room.checkoutDate
+              ? `Out ${room.checkoutDate}`
+              : undefined,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : room.type;
+
+  const className = cn(
+    "group flex h-[88px] flex-col rounded-xl border p-2.5 transition-all",
+    "hover:-translate-y-0.5 hover:shadow-lg",
+    config.card,
+  );
+
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-1">
         <p className={cn("text-lg font-bold leading-none tracking-tight", config.roomNoText)}>
           {room.roomNo}
@@ -61,14 +79,28 @@ function RoomStatusCardTile({ room }: { room: RoomStatusCard }) {
         {room.type}
       </p>
 
-      <span
-        className={cn(
-          "mt-1 inline-flex w-fit max-w-full truncate rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide",
-          config.badge,
+      <div className="mt-1 flex min-w-0 items-center gap-1">
+        <span
+          className={cn(
+            "inline-flex w-fit max-w-full truncate rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide",
+            config.badge,
+          )}
+        >
+          {room.status}
+        </span>
+        {hasBooking && (
+          <span
+            className={cn(
+              "inline-flex shrink-0 rounded-md px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide ring-1",
+              isGroup
+                ? "bg-indigo-50 text-indigo-700 ring-indigo-200"
+                : "bg-white/80 text-slate-600 ring-slate-200",
+            )}
+          >
+            {isGroup ? "Group" : "Indiv."}
+          </span>
         )}
-      >
-        {room.status}
-      </span>
+      </div>
 
       <div className={cn("mt-auto flex h-3.5 items-center gap-0.5 truncate text-[9px] font-medium", config.metaText)}>
         {footerText ? (
@@ -82,6 +114,24 @@ function RoomStatusCardTile({ room }: { room: RoomStatusCard }) {
           </span>
         )}
       </div>
+    </>
+  );
+
+  if (hasBooking && room.reservationId) {
+    return (
+      <Link
+        href={`/frontoffice/reservation/all-bookings?bookingId=${encodeURIComponent(room.reservationId)}`}
+        title={title}
+        className={className}
+      >
+        {body}
+      </Link>
+    );
+  }
+
+  return (
+    <div title={title} className={className}>
+      {body}
     </div>
   );
 }
@@ -125,7 +175,8 @@ export function RoomStatusView() {
         !q ||
         r.roomNo.includes(q) ||
         r.type.toLowerCase().includes(q) ||
-        (r.guestName?.toLowerCase().includes(q) ?? false);
+        (r.guestName?.toLowerCase().includes(q) ?? false) ||
+        (r.bookingNo?.toLowerCase().includes(q) ?? false);
       return statusMatch && floorMatch && searchMatch;
     });
   }, [rooms, filter, floorFilter, search]);
@@ -138,7 +189,8 @@ export function RoomStatusView() {
         !q ||
         r.roomNo.includes(q) ||
         r.type.toLowerCase().includes(q) ||
-        (r.guestName?.toLowerCase().includes(q) ?? false);
+        (r.guestName?.toLowerCase().includes(q) ?? false) ||
+        (r.bookingNo?.toLowerCase().includes(q) ?? false);
       return floorMatch && searchMatch;
     });
   }, [rooms, floorFilter, search]);
@@ -205,7 +257,7 @@ export function RoomStatusView() {
         <FOSearchToolbar
             search={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search room number, type, or guest…"
+            searchPlaceholder="Search room number, type, guest, or booking no…"
             filterPills={{
               active: filter,
               onChange: setFilter,

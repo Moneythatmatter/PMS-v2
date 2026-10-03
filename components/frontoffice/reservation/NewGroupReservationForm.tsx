@@ -38,7 +38,7 @@ import type { ReservationBooking } from "@/app/data/types/frontoffice";
 import type { RoomAvailabilityBlock } from "@/services/front-office/rooms";
 import {
   filterRoomsForStay,
-  isRoomSellableStatus,
+  isRoomVacantStatus,
 } from "@/lib/room-availability";
 import {
   paymentModes,
@@ -331,7 +331,7 @@ export function NewGroupReservationForm() {
 
     const byType: Record<string, string[]> = {};
     for (const r of roomCards) {
-      if (!isRoomSellableStatus(r.status)) continue;
+      if (!isRoomVacantStatus(r.status)) continue;
       const key = String(r.type ?? "").trim() || "Other";
       if (!byType[key]) byType[key] = [];
       byType[key].push(r.roomNo);
@@ -353,8 +353,9 @@ export function NewGroupReservationForm() {
       if (!name || rt.status === "Inactive") continue;
       typeOptions.push({ name, baseRate: Number(rt.baseRate ?? 0) });
     }
-    for (const name of Object.keys(byType)) {
-      if (!typeOptions.some((t) => t.name === name)) {
+    for (const r of roomCards) {
+      const name = String(r.type ?? "").trim();
+      if (name && !typeOptions.some((t) => t.name === name)) {
         typeOptions.push({ name, baseRate: 0 });
       }
     }

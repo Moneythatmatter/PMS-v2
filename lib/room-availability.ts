@@ -18,6 +18,11 @@ export function isRoomSellableStatus(status?: string): boolean {
   return value !== "blocked" && value !== "maintenance";
 }
 
+/** Room is inspected and has no reservation / in-house guest right now. */
+export function isRoomVacantStatus(status?: string): boolean {
+  return String(status ?? "").trim().toLowerCase() === "vacant";
+}
+
 function blockOverlapsStay(
   block: RoomAvailabilityBlock,
   checkIn: string,

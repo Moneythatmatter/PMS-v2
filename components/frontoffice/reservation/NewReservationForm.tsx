@@ -58,7 +58,7 @@ import type { ReservationBooking, ReservationStatus } from "@/app/data/types/fro
 import { normalizeToIso } from "@/lib/reservation-dates";
 import {
   filterRoomsForStay,
-  isRoomSellableStatus,
+  isRoomVacantStatus,
 } from "@/lib/room-availability";
 import type { RoomAvailabilityBlock } from "@/services/front-office/rooms";
 
@@ -352,13 +352,13 @@ export function NewReservationForm() {
 
         setReservations(reservationList);
 
-        // Include all sellable rooms; availability for the stay is checked against reservations.
+        // Only vacant rooms are offered; availability for the stay is then checked against reservations.
         const byType: Record<string, string[]> = {};
         const nos: string[] = [];
         const idByNo: Record<string, string> = {};
         const typeByNo: Record<string, string> = {};
         for (const r of roomCards) {
-          if (!isRoomSellableStatus(r.status)) continue;
+          if (!isRoomVacantStatus(r.status)) continue;
           nos.push(r.roomNo);
           if (r.id) idByNo[r.roomNo] = r.id;
           const key = r.type || "Other";
@@ -381,6 +381,11 @@ export function NewReservationForm() {
           roomRates[rt.name] = rt.baseRate || 0;
           if (rt.status !== "Inactive") typeNames.push(rt.name);
         }
+        for (const r of roomCards) {
+          const name = String(r.type ?? "").trim();
+          if (name && !typeNames.includes(name)) typeNames.push(name);
+        }
+        typeNames.sort((a, b) => a.localeCompare(b));
         setBaseRateByRoomMap(roomRates);
         if (typeNames.length > 0) setRoomTypeOptions(typeNames);
 

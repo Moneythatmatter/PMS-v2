@@ -36,6 +36,21 @@ export interface RoomAvailabilityRow {
   bedType?: string;
   maxOccupancy?: number;
   days: Record<string, RoomDayStatus>;
+  /** Keyed by day ISO; present only for occupied / reserved days */
+  bookings?: Record<string, RoomDayBooking>;
+}
+
+export interface RoomDayBooking {
+  id: string;
+  bookingNo?: string;
+  guestName?: string;
+  guestId?: string;
+  groupId?: string;
+  groupName?: string;
+  groupNo?: string;
+  status: string;
+  checkIn: string;
+  checkOut: string;
 }
 
 export interface RoomStatusCard {
@@ -45,6 +60,12 @@ export interface RoomStatusCard {
   floor: string;
   status: string;
   guestName?: string;
+  reservationId?: string;
+  bookingNo?: string;
+  checkinDate?: string;
+  groupId?: string;
+  groupName?: string;
+  groupNo?: string;
   housekeeping: string;
   maintenance: string;
   checkoutDate?: string;

@@ -51,7 +51,7 @@ import {
 } from "@/lib/check-in-navigation";
 import {
   filterRoomsForStay,
-  isRoomSellableStatus,
+  isRoomVacantStatus,
 } from "@/lib/room-availability";
 import { normalizeToIso } from "@/lib/reservation-dates";
 import { cn } from "@/lib/utils";
@@ -297,7 +297,7 @@ export default function GroupBookingDetailPage() {
 
         const roomType = String(reservation.roomType ?? "").trim();
         const pool = roomCards
-          .filter((r) => isRoomSellableStatus(r.status))
+          .filter((r) => isRoomVacantStatus(r.status))
           .filter((r) => !roomType || r.type === roomType)
           .map((r) => ({
             roomNo: r.roomNo,

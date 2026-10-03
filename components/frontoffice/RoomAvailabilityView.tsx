@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   BedDouble,
@@ -15,7 +16,11 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
-import type { RoomAvailabilityRow, RoomDayStatus } from "@/app/data/frontoffice/modules";
+import type {
+  RoomAvailabilityRow,
+  RoomDayBooking,
+  RoomDayStatus,
+} from "@/app/data/frontoffice/modules";
 import { roomService, type RoomAvailabilityBlock } from "@/services/front-office/rooms";
 import { Button } from "@/components/ui/Button";
 import {
@@ -311,6 +316,7 @@ interface DetailCell {
   status: DayStatus;
   type: string;
   floor: string;
+  booking?: RoomDayBooking;
 }
 
 interface BookingDraft {
@@ -451,6 +457,7 @@ export function RoomAvailabilityView() {
       status,
       type: row.type,
       floor: row.floor,
+      booking: row.bookings?.[day],
     });
   };
 
@@ -471,6 +478,7 @@ export function RoomAvailabilityView() {
         status: (row.days[gridDays[0] ?? ""] ?? "blocked") as DayStatus,
         type: row.type,
         floor: row.floor,
+        booking: row.bookings?.[gridDays[0] ?? ""],
       });
       return;
     }
@@ -499,7 +507,9 @@ export function RoomAvailabilityView() {
 
   const handleViewReservation = () => {
     if (!detailCell) return;
-    const params = new URLSearchParams({ room: detailCell.room });
+    const params = detailCell.booking
+      ? new URLSearchParams({ bookingId: detailCell.booking.id })
+      : new URLSearchParams({ room: detailCell.room });
     setDetailCell(null);
     router.push(`/frontoffice/reservation/all-bookings?${params.toString()}`);
   };
@@ -925,7 +935,21 @@ export function RoomAvailabilityView() {
                             status === "dirty" && isToday
                               ? "Dirty today — still available to book"
                               : undefined;
-                          const cellTitle = blockHint ?? dirtyHint ?? cfg.description;
+                          const cellBooking = row.bookings?.[d];
+                          const bookingHint = cellBooking
+                            ? [
+                                cfg.label,
+                                cellBooking.bookingNo ?? "Booking",
+                                cellBooking.groupId
+                                  ? `Group${cellBooking.groupName ? `: ${cellBooking.groupName}` : ""}`
+                                  : "Individual",
+                                cellBooking.guestName,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")
+                            : undefined;
+                          const cellTitle =
+                            blockHint ?? dirtyHint ?? bookingHint ?? cfg.description;
                           const inDragPreview =
                             dragState?.room === row.room &&
                             isDayInRange(d, dragState.startDay, dragState.endDay);
@@ -1133,11 +1157,91 @@ export function RoomAvailabilityView() {
                 statusConfig[detailCell.status].description}
             </p>
             {(detailCell.status === "reserved" ||
-              detailCell.status === "occupied") && (
-              <p className="text-sm text-slate-600">
-                View the linked reservation for guest details and folio.
-              </p>
-            )}
+              detailCell.status === "occupied") &&
+              (detailCell.booking ? (
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
+                  <div className="col-span-2 flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div className="min-w-0">
+                      <dt className="text-xs text-slate-500">Booking Type</dt>
+                      <dd className="mt-1 flex flex-wrap items-center gap-2">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ring-1",
+                            detailCell.booking.groupId
+                              ? "bg-indigo-50 text-indigo-700 ring-indigo-200"
+                              : "bg-slate-50 text-slate-700 ring-slate-200",
+                          )}
+                        >
+                          {detailCell.booking.groupId ? "Group" : "Individual"}
+                        </span>
+                        {detailCell.booking.groupId && (
+                          <span className="truncate font-medium text-slate-900">
+                            {detailCell.booking.groupName ?? "Group booking"}
+                            {detailCell.booking.groupNo && (
+                              <span className="ml-1 font-mono text-xs text-slate-500">
+                                ({detailCell.booking.groupNo})
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                    {detailCell.booking.groupId && (
+                      <Link
+                        href={`/frontoffice/group-booking/${detailCell.booking.groupId}`}
+                        className="shrink-0 text-xs font-semibold text-indigo-700 hover:underline"
+                      >
+                        Open Group
+                      </Link>
+                    )}
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-500">Booking No</dt>
+                    <dd className="font-mono font-semibold">
+                      <Link
+                        href={`/frontoffice/reservation/all-bookings?bookingId=${encodeURIComponent(detailCell.booking.id)}`}
+                        className="text-emerald-700 hover:underline"
+                        title="Open booking details"
+                      >
+                        {detailCell.booking.bookingNo ?? "View booking"}
+                      </Link>
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-xs text-slate-500">Guest</dt>
+                    <dd className="truncate font-medium text-slate-900">
+                      {detailCell.booking.guestId ? (
+                        <Link
+                          href={`/frontoffice/guest-profiles?guestId=${encodeURIComponent(detailCell.booking.guestId)}`}
+                          className="text-emerald-700 hover:underline"
+                          title="Open guest profile"
+                        >
+                          {detailCell.booking.guestName ?? "View guest"}
+                        </Link>
+                      ) : (
+                        (detailCell.booking.guestName ?? "—")
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-500">Stay</dt>
+                    <dd className="font-medium text-slate-900">
+                      {formatDayLabel(detailCell.booking.checkIn)} →{" "}
+                      {formatDayLabel(detailCell.booking.checkOut)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-500">Booking Status</dt>
+                    <dd className="font-medium text-slate-900">
+                      {detailCell.booking.status}
+                    </dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="text-sm text-slate-600">
+                  View the linked reservation for guest details and folio.
+                </p>
+              ))}
           </div>
         )}
       </Modal>

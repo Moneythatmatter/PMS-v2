@@ -38,7 +38,7 @@ import type { ReservationBooking } from "@/app/data/types/frontoffice";
 import type { RoomAvailabilityBlock } from "@/services/front-office/rooms";
 import {
   filterRoomsForStay,
-  isRoomSellableStatus,
+  isRoomVacantStatus,
 } from "@/lib/room-availability";
 import { ApiError } from "@/services/api";
 import { cn } from "@/lib/utils";
@@ -341,7 +341,7 @@ export function GroupBookingView() {
 
       const byType: Record<string, string[]> = {};
       for (const r of roomCards) {
-        if (!isRoomSellableStatus(r.status)) continue;
+        if (!isRoomVacantStatus(r.status)) continue;
         const key = String(r.type ?? "").trim() || "Other";
         if (!byType[key]) byType[key] = [];
         byType[key].push(r.roomNo);
@@ -366,8 +366,9 @@ export function GroupBookingView() {
           baseRate: Number(rt.baseRate ?? 0),
         });
       }
-      for (const name of Object.keys(byType)) {
-        if (!typeOptions.some((t) => t.name === name)) {
+      for (const r of roomCards) {
+        const name = String(r.type ?? "").trim();
+        if (name && !typeOptions.some((t) => t.name === name)) {
           typeOptions.push({ name, baseRate: 0 });
         }
       }
