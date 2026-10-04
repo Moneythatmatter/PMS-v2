@@ -46,21 +46,13 @@ export function CleaningTaskDetailPanel({
     );
   }, [task.assignedToName, task.assignedTo, housekeepers]);
 
-  const [assignee, setAssignee] = useState(
-    () => currentAssigneeName || housekeepers[0]?.name || "",
-  );
+  const [assignee, setAssignee] = useState(() => currentAssigneeName);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    setAssignee(currentAssigneeName || housekeepers[0]?.name || "");
+    setAssignee(currentAssigneeName);
   }, [task.id, currentAssigneeName]);
-
-  useEffect(() => {
-    if (!assignee && housekeepers.length > 0) {
-      setAssignee(currentAssigneeName || housekeepers[0]?.name || "");
-    }
-  }, [assignee, housekeepers, currentAssigneeName]);
 
   const isAlreadyAssigned = Boolean(
     currentAssigneeName && assignee === currentAssigneeName,
@@ -177,11 +169,16 @@ export function CleaningTaskDetailPanel({
               {housekeepers.length === 0 ? (
                 <option value="">No housekeepers configured</option>
               ) : (
-                housekeepers.map((h) => (
-                  <option key={h.id} value={h.name}>
-                    {h.name}
+                <>
+                  <option value="" disabled>
+                    Select housekeeper…
                   </option>
-                ))
+                  {housekeepers.map((h) => (
+                    <option key={h.id} value={h.name}>
+                      {h.name}
+                    </option>
+                  ))}
+                </>
               )}
             </SelectInput>
           </FormField>

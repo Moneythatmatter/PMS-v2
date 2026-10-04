@@ -114,6 +114,7 @@ export default function RoomInspection() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Validation States
   const [remarksError, setRemarksError] = useState<string | null>(null);
@@ -596,8 +597,9 @@ export default function RoomInspection() {
     hasSignature &&
     signatureName.trim().length > 0;
 
-  const handlePass = () => {
-    if (!selectedRoomNo) return;
+  const handlePass = async () => {
+    if (!selectedRoomNo || submitting) return;
+    const roomNo = selectedRoomNo;
 
     let hasErrors = false;
 
@@ -615,22 +617,36 @@ export default function RoomInspection() {
       return;
     }
 
-    inspectRoom(selectedRoomNo, true, signatureName, remarks || "", qualityScore);
-
-    if (drafts[selectedRoomNo]) {
-      const copy = { ...drafts };
-      delete copy[selectedRoomNo];
-      setDrafts(copy);
+    setSubmitting(true);
+    try {
+      await inspectRoom(roomNo, true, signatureName, remarks || "", qualityScore);
+    } catch (e) {
+      setSubmitting(false);
+      await reloadInspectionData();
+      setToast({
+        message: `Could not pass Room ${roomNo}: ${e instanceof Error ? e.message : "request failed"}`,
+        variant: "error",
+      });
+      return;
     }
 
-    void reloadInspectionData();
+    setDrafts((prev) => {
+      if (!prev[roomNo]) return prev;
+      const copy = { ...prev };
+      delete copy[roomNo];
+      return copy;
+    });
 
-    setToast({ message: `Room ${selectedRoomNo} inspection passed — room is now available for sale.`, variant: "success" });
+    await reloadInspectionData();
+    setSubmitting(false);
+
+    setToast({ message: `Room ${roomNo} inspection passed — room is now available for sale.`, variant: "success" });
     setSelectedRoomNo(null);
   };
 
-  const handleReject = () => {
-    if (!selectedRoomNo) return;
+  const handleReject = async () => {
+    if (!selectedRoomNo || submitting) return;
+    const roomNo = selectedRoomNo;
 
     if (!remarks.trim()) {
       setRemarksError("Supervisor remarks explaining the rejection defects are required.");
@@ -639,17 +655,30 @@ export default function RoomInspection() {
     }
     setRemarksError(null);
 
-    inspectRoom(selectedRoomNo, false, signatureName, remarks, qualityScore);
-
-    if (drafts[selectedRoomNo]) {
-      const copy = { ...drafts };
-      delete copy[selectedRoomNo];
-      setDrafts(copy);
+    setSubmitting(true);
+    try {
+      await inspectRoom(roomNo, false, signatureName, remarks, qualityScore);
+    } catch (e) {
+      setSubmitting(false);
+      await reloadInspectionData();
+      setToast({
+        message: `Could not reject Room ${roomNo}: ${e instanceof Error ? e.message : "request failed"}`,
+        variant: "error",
+      });
+      return;
     }
 
-    void reloadInspectionData();
+    setDrafts((prev) => {
+      if (!prev[roomNo]) return prev;
+      const copy = { ...prev };
+      delete copy[roomNo];
+      return copy;
+    });
 
-    setToast({ message: `Room ${selectedRoomNo} inspection rejected and returned to housekeeper cleaning queue.`, variant: "success" });
+    await reloadInspectionData();
+    setSubmitting(false);
+
+    setToast({ message: `Room ${roomNo} inspection rejected and returned to housekeeper cleaning queue.`, variant: "success" });
     setSelectedRoomNo(null);
   };
 
@@ -1085,6 +1114,7 @@ export default function RoomInspection() {
               <div className="grid w-full grid-cols-3 gap-3">
                 <Button
                   onClick={handleReject}
+                  disabled={submitting}
                   className="bg-[#DC3545] hover:bg-[#c82333] border-[#DC3545] text-white h-10 w-full rounded-lg text-sm font-medium"
                 >
                   Reject
@@ -1092,6 +1122,7 @@ export default function RoomInspection() {
                 <Button
                   variant="outline"
                   onClick={handleSaveDraft}
+                  disabled={submitting}
                   className="h-10 w-full rounded-lg text-sm font-medium"
                 >
                   Save Draft
@@ -1100,10 +1131,10 @@ export default function RoomInspection() {
                   <Button
                     variant="primary"
                     onClick={handlePass}
-                    disabled={!canPassInspection}
+                    disabled={!canPassInspection || submitting}
                     className="h-10 w-full rounded-lg text-sm font-medium"
                   >
-                    Pass Inspection
+                    {submitting ? "Saving…" : "Pass Inspection"}
                   </Button>
                   {passBlockReason && !canPassInspection ? (
                     <p className="text-[10px] text-amber-700 font-medium text-center leading-tight">

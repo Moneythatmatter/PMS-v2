@@ -10,7 +10,6 @@ export const resetState = (dispatchers: HousekeepingDispatchers) => {
   dispatchers.setRequisitions([]);
   dispatchers.setHistory([]);
   dispatchers.setRequests([]);
-  dispatchers.setMaintenance([]);
   dispatchers.setLostFound([]);
 
   logAudit(

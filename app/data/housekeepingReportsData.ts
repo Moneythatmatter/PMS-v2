@@ -9,7 +9,6 @@ export interface HousekeepingReportTemplate {
     | "Laundry Reports"
     | "Lost & Found Reports"
     | "Damage Reports"
-    | "Deep Cleaning Reports"
     | "Maintenance Reports"
     | "Inventory Reports"
     | "Audit Reports"
@@ -49,7 +48,6 @@ export const REPORT_CATEGORIES_LIST = [
   "Laundry Reports",
   "Lost & Found Reports",
   "Damage Reports",
-  "Deep Cleaning Reports",
   "Maintenance Reports",
   "Inventory Reports",
   "Audit Reports",
@@ -128,18 +126,6 @@ export const INITIAL_REPORT_TEMPLATES: HousekeepingReportTemplate[] = [
     isPinned: true,
     defaultFormat: "Excel",
     frequency: "Monthly",
-  },
-  {
-    id: "RPT-107",
-    code: "DPC-SCH-07",
-    name: "Deep Cleaning Cycle & Preventive SLA Compliance",
-    category: "Deep Cleaning Reports",
-    description: "Periodic deep clean schedules, room blocking compliance, chemical consumption, and before/after photos.",
-    lastGenerated: "2026-07-15 at 11:00 AM",
-    generatedBy: "Meena Kumari",
-    isPinned: false,
-    defaultFormat: "PDF",
-    frequency: "Bi-Weekly",
   },
   {
     id: "RPT-108",

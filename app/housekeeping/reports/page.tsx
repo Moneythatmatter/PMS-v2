@@ -11,7 +11,6 @@ import {
   TrendingUp,
   ShieldCheck,
   Clock,
-  Sparkles,
   Bell,
   ArrowRightLeft,
   DollarSign,
@@ -213,11 +212,10 @@ export default function HousekeepingReportsCenterPage() {
       />
 
       {/* 8 Top KPI Metric Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         <StatMiniCard label="Rooms Cleaned" value="124 Today" icon={CheckCircle2} accent="#10b981" />
         <StatMiniCard label="Inspection Pass %" value="94.2% Rate" icon={ShieldCheck} accent="#0284c7" />
         <StatMiniCard label="Avg Clean Time" value="24 Mins" icon={Clock} accent="#2563eb" />
-        <StatMiniCard label="Pending Deep Clean" value="6 Rooms" icon={Sparkles} accent="#d97706" />
         <StatMiniCard label="Pending Guest Reqs" value="3 Active" icon={Bell} accent="#9333ea" />
         <StatMiniCard label="Laundry Turnaround" value="98.5% SLA" icon={ArrowRightLeft} accent="#0D9488" />
         <StatMiniCard label="Damage Recovery" value="₹45.0k INR" icon={DollarSign} accent="#dc2626" />

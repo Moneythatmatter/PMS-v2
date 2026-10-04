@@ -47,15 +47,6 @@ export interface HousekeepingSettingsState {
   disposalApprovalRequired: boolean;
   defaultStorageLocation: string;
 
-  // Deep Cleaning
-  recurringScheduleEnabled: boolean;
-  defaultFrequency: string;
-  reminderDaysBeforeDue: number;
-  defaultBlockType: "Out of Order (OOO)" | "Out of Service (OOS)";
-  maintenanceHoldRequired: boolean;
-  requireBeforePhoto: boolean;
-  requireAfterPhoto: boolean;
-
   // Damage Reports
   requireDamagePhotoEvidence: boolean;
   damageGuestSignatureRequired: boolean;
@@ -156,15 +147,6 @@ export const INITIAL_HOUSEKEEPING_SETTINGS: HousekeepingSettingsState = {
   disposalApprovalRequired: true,
   defaultStorageLocation: "Vault Locker A - Main Security Room",
 
-  // Deep Cleaning
-  recurringScheduleEnabled: true,
-  defaultFrequency: "Quarterly (Every 90 Days)",
-  reminderDaysBeforeDue: 7,
-  defaultBlockType: "Out of Order (OOO)",
-  maintenanceHoldRequired: true,
-  requireBeforePhoto: true,
-  requireAfterPhoto: true,
-
   // Damage Reports
   requireDamagePhotoEvidence: true,
   damageGuestSignatureRequired: true,
@@ -223,7 +205,6 @@ export const SETTING_CATEGORIES_METADATA = [
   { id: "requests", label: "Guest Requests", icon: "Bell" },
   { id: "laundry", label: "Laundry", icon: "ArrowRightLeft" },
   { id: "lostfound", label: "Lost & Found", icon: "Package" },
-  { id: "deepcleaning", label: "Deep Cleaning", icon: "Clock" },
   { id: "damagereports", label: "Damage Reports", icon: "AlertTriangle" },
   { id: "requisitions", label: "Requisitions", icon: "Box" },
   { id: "notifications", label: "Notifications", icon: "Mail" },

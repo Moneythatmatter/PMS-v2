@@ -35,13 +35,11 @@ function statusToFields(status: HKRoom["status"]): Pick<HKRoom, "hkStatus" | "fo
 export const changeRoomStatus = (roomKey: string, status: HKRoom["status"], dispatchers: HousekeepingDispatchers) => {
   const { hkStatus, foStatus } = statusToFields(status);
 
-  let apiId = roomKey;
-  let label = roomKey;
+  const match = dispatchers.rooms.find((r) => matchesRoomKey(r, roomKey));
+  const apiId = match ? roomApiId(match) : roomKey;
+  const label = match ? roomDisplayNo(match) : roomKey;
 
   dispatchers.setRooms((prev) => {
-    const match = prev.find((r) => matchesRoomKey(r, roomKey));
-    apiId = match ? roomApiId(match) : roomKey;
-    label = match ? roomDisplayNo(match) : roomKey;
     return prev.map((r) => {
       if (!matchesRoomKey(r, roomKey)) return r;
       return {

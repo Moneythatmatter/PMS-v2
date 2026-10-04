@@ -8,13 +8,14 @@ import type {
   HKRequisition,
   HKHistoryLog,
   HousekeepingRequest,
-  MaintenanceRequest,
   LostFoundItem,
   HKStaff,
   HKChecklistTemplate,
 } from "./HousekeepingTypes";
 
 export interface HousekeepingDispatchers {
+  /** Rooms as of the current render — setState updaters may run lazily, so resolve IDs from this. */
+  rooms: HKRoom[];
   setRooms: React.Dispatch<React.SetStateAction<HKRoom[]>>;
   setPublicAreas: React.Dispatch<React.SetStateAction<HKPublicArea[]>>;
   setInventory: React.Dispatch<React.SetStateAction<HKInventoryItem[]>>;
@@ -23,7 +24,6 @@ export interface HousekeepingDispatchers {
   setRequisitions: React.Dispatch<React.SetStateAction<HKRequisition[]>>;
   setHistory: React.Dispatch<React.SetStateAction<HKHistoryLog[]>>;
   setRequests: React.Dispatch<React.SetStateAction<HousekeepingRequest[]>>;
-  setMaintenance: React.Dispatch<React.SetStateAction<MaintenanceRequest[]>>;
   setLostFound: React.Dispatch<React.SetStateAction<LostFoundItem[]>>;
   setStaff: React.Dispatch<React.SetStateAction<HKStaff[]>>;
   setChecklists: React.Dispatch<React.SetStateAction<HKChecklistTemplate[]>>;

@@ -14,7 +14,6 @@ import {
   Sparkles,
   Trees,
   Users,
-  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -41,12 +40,6 @@ const quickLinks = [
     href: "/housekeeping/housekeeping-requests",
     icon: Bell,
     hint: "Service queue",
-  },
-  {
-    label: "Maintenance",
-    href: "/housekeeping/maintenance-requests",
-    icon: Wrench,
-    hint: "Work orders",
   },
   {
     label: "Public Area",
@@ -99,7 +92,6 @@ export default function HousekeepingDashboard() {
   const {
     rooms,
     requests,
-    maintenance,
     inventory,
     laundryJobs,
     publicAreas,
@@ -116,7 +108,6 @@ export default function HousekeepingDashboard() {
     const occupied = rooms.filter((r) => r.status === "Occupied").length;
     const blocked = rooms.filter((r) => r.status === "Blocked").length;
     const openRequests = requests.filter((r) => r.status !== "Completed").length;
-    const openMaint = maintenance.filter((m) => m.status !== "Closed").length;
     const pendingLaundry = laundryJobs.filter((l) => l.status !== "Delivered").length;
     const dirtyPublicAreas = publicAreas.filter((p) => p.status === "Dirty").length;
     const lowStock = inventory.filter((item) => item.available < item.parStock * 0.6);
@@ -130,13 +121,12 @@ export default function HousekeepingDashboard() {
       occupied,
       blocked,
       openRequests,
-      openMaint,
       pendingLaundry,
       dirtyPublicAreas,
       lowStock,
       total: rooms.length,
     };
-  }, [rooms, requests, maintenance, laundryJobs, publicAreas, inventory]);
+  }, [rooms, requests, laundryJobs, publicAreas, inventory]);
 
   const inspectionPendingRooms = useMemo(
     () => rooms.filter((r) => r.status === "Clean").slice(0, 6),
@@ -149,10 +139,6 @@ export default function HousekeepingDashboard() {
   const activeRequests = useMemo(
     () => requests.filter((r) => r.status !== "Completed").slice(0, 5),
     [requests],
-  );
-  const activeMaint = useMemo(
-    () => maintenance.filter((m) => m.status !== "Closed").slice(0, 5),
-    [maintenance],
   );
   const laundryPreview = useMemo(() => laundryJobs.slice(0, 4), [laundryJobs]);
 
@@ -511,11 +497,11 @@ export default function HousekeepingDashboard() {
 
             <Card className="flex h-full min-w-0 flex-col">
               <CardHeader
-                title="Maintenance & laundry"
-                subtitle={`${stats.openMaint} work orders · ${stats.pendingLaundry} laundry`}
+                title="Laundry"
+                subtitle={`${stats.pendingLaundry} pending`}
                 action={
                   <Link
-                    href="/housekeeping/maintenance-requests"
+                    href="/housekeeping/operations/laundry"
                     className="text-xs font-medium text-emerald-700 hover:underline"
                   >
                     View all
@@ -523,24 +509,10 @@ export default function HousekeepingDashboard() {
                 }
               />
               <ul className="flex flex-1 flex-col divide-y divide-slate-100">
-                {activeMaint.slice(0, 2).map((ticket) => (
-                  <li
-                    key={ticket.id}
-                    className="flex items-center justify-between gap-3 py-3 first:pt-0"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900">
-                        Room {ticket.room}
-                      </p>
-                      <p className="mt-0.5 truncate text-xs text-slate-500">{ticket.problem}</p>
-                    </div>
-                    <Pill status={ticket.priority} />
-                  </li>
-                ))}
                 {laundryPreview.map((job) => (
                   <li
                     key={job.id}
-                    className="flex items-center justify-between gap-3 py-3 last:pb-0"
+                    className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-slate-900">{job.item}</p>
@@ -551,7 +523,7 @@ export default function HousekeepingDashboard() {
                     <Pill status={job.status} />
                   </li>
                 ))}
-                {activeMaint.length === 0 && laundryPreview.length === 0 && (
+                {laundryPreview.length === 0 && (
                   <li className="py-6 text-center text-sm text-slate-500">Nothing pending</li>
                 )}
               </ul>

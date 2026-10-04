@@ -13,7 +13,6 @@ import type {
   HKRequisition,
   HKHistoryLog,
   HousekeepingRequest,
-  MaintenanceRequest,
   LostFoundItem
 } from "./HousekeepingTypes";
 
@@ -22,7 +21,6 @@ import {
 } from "./roomUtils";
 import * as actions from "./HousekeepingActions";
 import { normalizeGuestRequest } from "./guestRequestUtils";
-import { normalizeMaintenanceRequest } from "./maintenanceRequestUtils";
 import {
   normalizeDamageReport,
   type DamageReportCreateInput,
@@ -40,7 +38,6 @@ import {
   hkRequisitionService,
   hkHistoryService,
   hkGuestRequestService,
-  hkMaintenanceService,
   hkLostFoundService,
   hkStaffService,
   hkChecklistService,
@@ -57,7 +54,6 @@ interface HousekeepingContextType {
   requisitions: HKRequisition[];
   history: HKHistoryLog[];
   requests: HousekeepingRequest[];
-  maintenance: MaintenanceRequest[];
   lostFound: LostFoundItem[];
   staff: HKStaff[];
   checklists: HKChecklistTemplate[];
@@ -76,7 +72,7 @@ interface HousekeepingContextType {
   pauseCleaning: (roomNo: string) => void;
   resumeCleaning: (roomNo: string) => void;
   completeCleaning: (roomNo: string, progressItems: string[], photos?: string[]) => void;
-  inspectRoom: (roomNo: string, passed: boolean, signature: string, remarks: string, qualityScore: number) => void;
+  inspectRoom: (roomNo: string, passed: boolean, signature: string, remarks: string, qualityScore: number) => Promise<void>;
   changeRoomStatus: (roomNo: string, status: HKRoom["status"]) => void;
   addLostFoundItem: (item: LostFoundCreateInput) => void;
   returnLostFound: (id: string, claimBy?: string) => void;
@@ -101,19 +97,6 @@ interface HousekeepingContextType {
       remarks?: string;
     },
   ) => void;
-  addMaintenanceRequest: (req: {
-    room: string;
-    problem: string;
-    priority: "Low" | "Medium" | "High" | "Critical";
-    engineer: string;
-    assignmentType: "Auto" | "Manual";
-    estimatedCompletion?: string;
-    attachments?: { name: string; type: "image" | "pdf" | "video"; url: string }[];
-  }) => void;
-  assignMaintenanceRequest: (id: string, engineerName: string, assignmentType: "Auto" | "Manual", reason: string) => void;
-  startMaintenanceRepair: (id: string) => void;
-  completeMaintenanceRequest: (id: string) => void;
-  verifyMaintenanceRequest: (id: string) => void;
   addLaundryJob: (job: Omit<HKLaundryJob, "id" | "status" | "timeline">) => void;
   updateLaundryStatus: (id: string, newStatus: HKLaundryJob["status"]) => void;
   cancelLaundryJob: (id: string) => void;
@@ -152,7 +135,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
   const [requisitions, setRequisitions] = useState<HKRequisition[]>([]);
   const [history, setHistory] = useState<HKHistoryLog[]>([]);
   const [requests, setRequests] = useState<HousekeepingRequest[]>([]);
-  const [maintenance, setMaintenance] = useState<MaintenanceRequest[]>([]);
   const [lostFound, setLostFound] = useState<LostFoundItem[]>([]);
   const [staff, setStaff] = useState<HKStaff[]>([]);
   const [checklists, setChecklists] = useState<HKChecklistTemplate[]>([]);
@@ -183,7 +165,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
     setRequisitions([]);
     setHistory([]);
     setRequests([]);
-    setMaintenance([]);
     setLostFound([]);
     setStaff([]);
     setChecklists([]);
@@ -203,7 +184,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         hkRequisitionService.list(),
         hkHistoryService.list(),
         hkGuestRequestService.list(),
-        hkMaintenanceService.list(),
         hkLostFoundService.list(),
         hkStaffService.list(),
         hkChecklistService.list(),
@@ -237,20 +217,14 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
           normalizeGuestRequest,
         ),
       );
-      setMaintenance(
-        value<import("./maintenanceRequestUtils").MaintenanceRequestDto[]>(
-          9,
-          [],
-        ).map(normalizeMaintenanceRequest),
-      );
       setLostFound(
-        value<import("./lostFoundItemUtils").LostFoundItemDto[]>(10, []).map(
+        value<import("./lostFoundItemUtils").LostFoundItemDto[]>(9, []).map(
           normalizeLostFoundItem,
         ),
       );
-      setStaff(value(11, []));
-      setChecklists(value(12, []));
-      setShifts(value(13, []));
+      setStaff(value(10, []));
+      setChecklists(value(11, []));
+      setShifts(value(12, []));
       setApiConnected(true);
     } catch (e) {
       console.warn("[HK] API unavailable", e);
@@ -271,6 +245,7 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
 
   // Group dispatchers for the moved actions
   const dispatchers: actions.HousekeepingDispatchers = {
+    rooms,
     setRooms,
     setPublicAreas,
     setInventory,
@@ -279,7 +254,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
     setRequisitions,
     setHistory,
     setRequests,
-    setMaintenance,
     setLostFound,
     setStaff,
     setChecklists,
@@ -308,9 +282,8 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
     actions.completeCleaning(roomNo, progressItems, dispatchers, photos);
   };
 
-  const inspectRoom = (roomNo: string, passed: boolean, signature: string, remarks: string, qualityScore: number) => {
+  const inspectRoom = (roomNo: string, passed: boolean, signature: string, remarks: string, qualityScore: number) =>
     actions.inspectRoom(roomNo, passed, signature, remarks, qualityScore, dispatchers);
-  };
 
   const changeRoomStatus = (roomNo: string, status: HKRoom["status"]) => {
     actions.changeRoomStatus(roomNo, status, dispatchers);
@@ -355,34 +328,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
     },
   ) => {
     actions.updateHKRequest(id, patch, dispatchers);
-  };
-
-  const addMaintenanceRequest = (req: {
-    room: string;
-    problem: string;
-    priority: "Low" | "Medium" | "High" | "Critical";
-    engineer: string;
-    assignmentType: "Auto" | "Manual";
-    estimatedCompletion?: string;
-    attachments?: { name: string; type: "image" | "pdf" | "video"; url: string }[];
-  }) => {
-    actions.addMaintenanceRequest(req, maintenance.length, dispatchers);
-  };
-
-  const assignMaintenanceRequest = (id: string, engineerName: string, assignmentType: "Auto" | "Manual", reason: string) => {
-    actions.assignMaintenanceRequest(id, engineerName, assignmentType, reason, maintenance, dispatchers);
-  };
-
-  const startMaintenanceRepair = (id: string) => {
-    actions.startMaintenanceRepair(id, maintenance, dispatchers);
-  };
-
-  const completeMaintenanceRequest = (id: string) => {
-    actions.completeMaintenanceRequest(id, maintenance, dispatchers);
-  };
-
-  const verifyMaintenanceRequest = (id: string) => {
-    actions.verifyMaintenanceRequest(id, maintenance, rooms, dispatchers);
   };
 
   const addLaundryJob = (job: Omit<HKLaundryJob, "id" | "status" | "timeline">) => {
@@ -525,7 +470,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         requisitions,
         history,
         requests,
-        maintenance,
         lostFound,
         staff,
         checklists,
@@ -551,11 +495,6 @@ export function HousekeepingProvider({ children }: { children: React.ReactNode }
         assignHKRequest,
         completeHKRequest,
         updateHKRequest,
-        addMaintenanceRequest,
-        assignMaintenanceRequest,
-        startMaintenanceRepair,
-        completeMaintenanceRequest,
-        verifyMaintenanceRequest,
         addLaundryJob,
         updateLaundryStatus,
         cancelLaundryJob,

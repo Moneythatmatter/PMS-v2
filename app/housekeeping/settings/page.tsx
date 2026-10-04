@@ -166,7 +166,6 @@ export default function HousekeepingSettingsPage() {
     requests: ["guest requests", "requests", "sla", "target", "escalation", "overdue", "supervisor alert", "notifications"],
     laundry: ["laundry", "linen", "express", "surcharge", "delivery", "pickup", "window", "vendor", "outsourcing"],
     lostfound: ["lost and found", "lost & found", "vault", "retention", "standard", "high value", "high-value", "perishable", "guest notification", "notification", "storage"],
-    deepcleaning: ["deep cleaning", "preventive maintenance", "recurring", "schedule", "block type", "ooo", "oos", "out of order", "out of service", "reminder", "before and after", "evidence photo", "photos"],
     damagereports: ["damage reports", "damage", "billing", "recovery", "engineering", "repair ticket", "approval threshold", "amount", "photo evidence", "evidence"],
     requisitions: ["store requisitions", "requisitions", "inventory", "issuance", "approval workflow", "budget validation", "digital receiving", "signature"],
     notifications: ["notifications", "channels", "escalation", "email", "sms", "push", "mobile", "alerts", "emergency"],
@@ -497,52 +496,6 @@ export default function HousekeepingSettingsPage() {
               description="Send automated email/SMS to registered guest upon logging found item."
               checked={currentSettings.automaticGuestNotification}
               onChange={(val) => handleUpdateSetting("automaticGuestNotification", val)}
-            />
-          </div>
-        );
-
-      case "deepcleaning":
-        return (
-          <div className="space-y-4">
-            <div className="border-b border-slate-100 pb-2.5">
-              <h3 className="text-sm font-extrabold text-slate-900">Deep Cleaning & Preventive Maintenance</h3>
-              <p className="text-xs text-slate-500 font-medium">Recurring cycle frequency, room block hold types, and evidence photos.</p>
-            </div>
-
-            <ToggleSwitch
-              label="Recurring Cycle Schedule Enabled"
-              description="Automatically flag rooms for deep cleaning based on frequency setting."
-              checked={currentSettings.recurringScheduleEnabled}
-              onChange={(val) => handleUpdateSetting("recurringScheduleEnabled", val)}
-            />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <FormField label="Default Block Type">
-                <SelectInput
-                  value={currentSettings.defaultBlockType}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateSetting("defaultBlockType", e.target.value as any)}
-                  className="h-9 text-xs"
-                >
-                  <option value="Out of Order (OOO)">Out of Order (OOO)</option>
-                  <option value="Out of Service (OOS)">Out of Service (OOS)</option>
-                </SelectInput>
-              </FormField>
-
-              <FormField label="Reminder Days Before Due">
-                <TextInput
-                  type="number"
-                  value={currentSettings.reminderDaysBeforeDue}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateSetting("reminderDaysBeforeDue", parseInt(e.target.value, 10) || 0)}
-                  className="h-9 text-xs"
-                />
-              </FormField>
-            </div>
-
-            <ToggleSwitch
-              label="Require Before & After Evidence Photos"
-              description="Require photo uploads before starting and after completing deep clean."
-              checked={currentSettings.requireBeforePhoto}
-              onChange={(val) => handleUpdateSetting("requireBeforePhoto", val)}
             />
           </div>
         );

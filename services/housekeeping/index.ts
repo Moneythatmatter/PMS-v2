@@ -211,57 +211,6 @@ export const hkGuestRequestService = {
       import("@/components/housekeeping/guestRequestUtils").GuestRequestDto
     >(hkPath(`/guest-requests/${id}/cancel`), body ?? {}),
 };
-export const hkMaintenanceService = {
-  list: (query = "") =>
-    api.get<
-      import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto[]
-    >(hkPath(`/maintenance${query}`)),
-  get: (id: string) =>
-    api.get<
-      import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto
-    >(hkPath(`/maintenance/${id}`)),
-  create: (
-    body: Partial<
-      import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto
-    > & { title: string; description: string },
-  ) =>
-    api.post<
-      import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto
-    >(hkPath("/maintenance"), body),
-  update: (
-    id: string,
-    body: Partial<
-      import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto
-    >,
-  ) =>
-    api.put<
-      import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto
-    >(hkPath(`/maintenance/${id}`), body),
-  assign: (
-    id: string,
-    assignedTo: string,
-    estimatedCompletion?: string,
-  ) =>
-    api.post<
-      import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto
-    >(hkPath(`/maintenance/${id}/assign`), { assignedTo, estimatedCompletion }),
-  start: (id: string) =>
-    api.post<
-      import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto
-    >(hkPath(`/maintenance/${id}/start`), {}),
-  complete: (id: string, body?: { resolution?: string; notes?: string }) =>
-    api.post<
-      import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto
-    >(hkPath(`/maintenance/${id}/complete`), body ?? {}),
-  verify: (id: string, verifiedBy: string, resolution?: string) =>
-    api.post<
-      import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto
-    >(hkPath(`/maintenance/${id}/verify`), { verifiedBy, resolution }),
-  cancel: (id: string, body?: { notes?: string }) =>
-    api.post<
-      import("@/components/housekeeping/maintenanceRequestUtils").MaintenanceRequestDto
-    >(hkPath(`/maintenance/${id}/cancel`), body ?? {}),
-};
 export const hkLostFoundService = {
   list: (query = "") =>
     api.get<

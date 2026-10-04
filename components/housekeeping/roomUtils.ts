@@ -236,8 +236,6 @@ export function normalizeHkRoom(row: ApiHkRoom): HKRoom {
     wing: row.wing ?? "",
     maxOccupancy: row.maxOccupancy ?? 2,
     cleaningFrequency: row.cleaningFrequency ?? "Daily",
-    deepCleaningFrequency: row.deepCleaningFrequency ?? "Every 30 Days",
-    lastDeepCleaned: row.lastDeepCleaned ?? "",
     status: ui.status,
     hkStatus: ui.hkStatus,
     foStatus: ui.foStatus,

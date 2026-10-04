@@ -75,7 +75,7 @@ export const MASTER_CATEGORIES_DATA: MasterCategory[] = [
       { id: "building", code: "MST-BLD", name: "Building Master", recordCount: 4, description: "Hotel towers and auxiliary structures", dependentModules: ["Room Cleaning", "Public Area", "Inspection", "Maintenance"] },
       { id: "wing", code: "MST-WNG", name: "Wing Master", recordCount: 8, description: "East, West, Executive & Presidential Wings", dependentModules: ["Room Cleaning", "Public Area", "Inspection"] },
       { id: "floor", code: "MST-FLR", name: "Floor Master", recordCount: 12, description: "Floor levels and elevator zone assignments", dependentModules: ["Room Cleaning", "Public Area", "Inspection"] },
-      { id: "area", code: "MST-ARA", name: "Area Master", recordCount: 18, description: "Public lobbies, restaurants, spa & pool zones", dependentModules: ["Public Area", "Deep Cleaning", "Maintenance"] },
+      { id: "area", code: "MST-ARA", name: "Area Master", recordCount: 18, description: "Public lobbies, restaurants, spa & pool zones", dependentModules: ["Public Area", "Maintenance"] },
       { id: "room", code: "MST-RM", name: "Room Master", recordCount: 120, description: "Guest room numbers, floor maps and layouts", dependentModules: ["Room Cleaning", "Inspection", "Lost & Found", "Maintenance", "Damage Reports"] },
       { id: "room-type", code: "MST-RMT", name: "Room Type Master", recordCount: 8, description: "Standard, Deluxe, Executive Suite, Villa", dependentModules: ["Room Cleaning", "Inspection", "Requisitions"] },
     ],
@@ -88,7 +88,7 @@ export const MASTER_CATEGORIES_DATA: MasterCategory[] = [
     masters: [
       { id: "staff", code: "MST-STF", name: "Staff Master", recordCount: 45, description: "Housekeepers, Supervisors, Inspectors & Attendants", dependentModules: ["Room Cleaning", "Public Area", "Inspection", "Laundry"] },
       { id: "shift", code: "MST-SFT", name: "Shift Master", recordCount: 4, description: "Morning, Evening, Night & General Shifts", dependentModules: ["Room Cleaning", "Public Area", "Inspection"] },
-      { id: "team", code: "MST-TM", name: "Team Master", recordCount: 6, description: "Floor Teams, Deep Clean Crew & Public Area Squad", dependentModules: ["Room Cleaning", "Deep Cleaning"] },
+      { id: "team", code: "MST-TM", name: "Team Master", recordCount: 6, description: "Floor Teams & Public Area Squad", dependentModules: ["Room Cleaning"] },
       { id: "role", code: "MST-ROL", name: "Role Master", recordCount: 8, description: "Housekeeper, Supervisor, Executive Housekeeper", dependentModules: ["All Housekeeping Modules"] },
       { id: "assign-rules", code: "MST-ARL", name: "Assignment Rules Master", recordCount: 5, description: "Auto-assignment algorithms and credit limits", dependentModules: ["Room Cleaning", "Maintenance"] },
     ],
@@ -99,10 +99,10 @@ export const MASTER_CATEGORIES_DATA: MasterCategory[] = [
     iconName: "Sparkles",
     description: "Task types, frequencies, SLA targets, checklists and version controls",
     masters: [
-      { id: "clean-type", code: "MST-CLT", name: "Cleaning Type Master", recordCount: 7, description: "Checkout Clean, Stayover, Touch-up, Deep Clean", dependentModules: ["Room Cleaning", "Deep Cleaning"] },
-      { id: "frequency", code: "MST-FRQ", name: "Frequency Master", recordCount: 6, description: "Daily, Twice Daily, Weekly, Monthly, Quarterly", dependentModules: ["Public Area", "Deep Cleaning"] },
+      { id: "clean-type", code: "MST-CLT", name: "Cleaning Type Master", recordCount: 7, description: "Checkout Clean, Stayover, Touch-up, Deep Clean", dependentModules: ["Room Cleaning"] },
+      { id: "frequency", code: "MST-FRQ", name: "Frequency Master", recordCount: 6, description: "Daily, Twice Daily, Weekly, Monthly, Quarterly", dependentModules: ["Public Area"] },
       { id: "priority", code: "MST-PRY", name: "Priority Master", recordCount: 4, description: "Critical, High, Medium, Low urgency tiers", dependentModules: ["All Operational Sections"] },
-      { id: "checklist", code: "MST-CHK", name: "Checklist Master", recordCount: 14, description: "Standard operating procedure inspection items", dependentModules: ["Room Cleaning", "Inspection", "Public Area", "Deep Cleaning"] },
+      { id: "checklist", code: "MST-CHK", name: "Checklist Master", recordCount: 14, description: "Standard operating procedure inspection items", dependentModules: ["Room Cleaning", "Inspection", "Public Area"] },
       { id: "chk-versions", code: "MST-CHV", name: "Checklist Version Master", recordCount: 22, description: "Historical and active SOP checklist revisions", dependentModules: ["Inspection", "Audit Logs"] },
       { id: "sla", code: "MST-SLA", name: "SLA Master", recordCount: 10, description: "Target completion times per cleaning task", dependentModules: ["Room Cleaning", "Maintenance", "Guest Requests"] },
     ],
@@ -116,9 +116,9 @@ export const MASTER_CATEGORIES_DATA: MasterCategory[] = [
       { id: "item", code: "MST-ITM", name: "Item Master", recordCount: 85, description: "Amenities, towels, bedsheets, guest supplies", dependentModules: ["Laundry", "Requisitions", "Lost & Found"] },
       { id: "item-cat", code: "MST-ICA", name: "Category Master", recordCount: 12, description: "Linen, Guest Amenity, Cleaning Chemical, Paper", dependentModules: ["Inventory", "Requisitions"] },
       { id: "unit", code: "MST-UNT", name: "Unit Master", recordCount: 8, description: "Pcs, Pairs, Liters, Kg, Boxes, Canisters", dependentModules: ["Inventory", "Requisitions", "Chemicals"] },
-      { id: "equipment", code: "MST-EQP", name: "Equipment Master", recordCount: 24, description: "Vacuum cleaners, polishers, steam jets, carts", dependentModules: ["Deep Cleaning", "Public Area", "Maintenance"] },
-      { id: "chemical", code: "MST-CHM", name: "Chemical Master", recordCount: 16, description: "Diversey R1-R9, disinfectants & degreasers", dependentModules: ["Room Cleaning", "Deep Cleaning", "Public Area"] },
-      { id: "msds", code: "MST-MSD", name: "Chemical MSDS Safety Master", recordCount: 16, description: "OSHA safety hazard documents & dilution ratios", dependentModules: ["Deep Cleaning", "Public Area"] },
+      { id: "equipment", code: "MST-EQP", name: "Equipment Master", recordCount: 24, description: "Vacuum cleaners, polishers, steam jets, carts", dependentModules: ["Public Area", "Maintenance"] },
+      { id: "chemical", code: "MST-CHM", name: "Chemical Master", recordCount: 16, description: "Diversey R1-R9, disinfectants & degreasers", dependentModules: ["Room Cleaning", "Public Area"] },
+      { id: "msds", code: "MST-MSD", name: "Chemical MSDS Safety Master", recordCount: 16, description: "OSHA safety hazard documents & dilution ratios", dependentModules: ["Public Area"] },
       { id: "linen-life", code: "MST-LNL", name: "Linen Lifecycle Master", recordCount: 10, description: "Wash-cycle thresholds and ragging rules", dependentModules: ["Laundry", "Inventory", "Requisitions"] },
     ],
   },
@@ -153,7 +153,7 @@ export const MASTER_CATEGORIES_DATA: MasterCategory[] = [
     description: "Quality thresholds, OOO reason codes, escalation matrix and templates",
     masters: [
       { id: "inspect-thresh", code: "MST-ITH", name: "Inspection Thresholds Master", recordCount: 5, description: "Quality pass cutoffs (≥90%) & auto-reject rules", dependentModules: ["Room Inspection"] },
-      { id: "ooo-reason", code: "MST-OOO", name: "OOO/OOS Reason Codes Master", recordCount: 14, description: "Standard system hold codes & SLA resolution hours", dependentModules: ["Room Cleaning", "Maintenance", "Deep Cleaning"] },
+      { id: "ooo-reason", code: "MST-OOO", name: "OOO/OOS Reason Codes Master", recordCount: 14, description: "Standard system hold codes & SLA resolution hours", dependentModules: ["Room Cleaning", "Maintenance"] },
       { id: "notify-tpl", code: "MST-NTF", name: "Notification Templates Master", recordCount: 12, description: "SMS, Email & Push notification message templates", dependentModules: ["Guest Requests", "Damage Reports"] },
       { id: "escalation", code: "MST-ESC", name: "Escalation Matrix Master", recordCount: 6, description: "SLA breach notification escalation hierarchies", dependentModules: ["Maintenance", "Guest Requests"] },
     ],
@@ -164,10 +164,10 @@ export const MASTER_CATEGORIES_DATA: MasterCategory[] = [
     iconName: "Sliders",
     description: "External contractors, system status codes, document attachments",
     masters: [
-      { id: "vendors", code: "MST-VND", name: "Vendors & Partners Master", recordCount: 15, description: "Laundry hubs, pest control & repair contractors", dependentModules: ["Laundry", "Deep Cleaning", "Damage Reports"] },
+      { id: "vendors", code: "MST-VND", name: "Vendors & Partners Master", recordCount: 15, description: "Laundry hubs, pest control & repair contractors", dependentModules: ["Laundry", "Damage Reports"] },
       { id: "status-codes", code: "MST-STS", name: "Status Codes Master", recordCount: 24, description: "Universal housekeeping status code registry", dependentModules: ["All Housekeeping Modules"] },
       { id: "doc-templates", code: "MST-DOC", name: "Document Templates Master", recordCount: 8, description: "Gate pass, requisition slips, damage notices", dependentModules: ["Requisitions", "Damage Reports"] },
-      { id: "attachment-type", code: "MST-ATT", name: "Attachment Types Master", recordCount: 6, description: "Evidence photos, invoices, inspection PDFs", dependentModules: ["Damage Reports", "Deep Cleaning"] },
+      { id: "attachment-type", code: "MST-ATT", name: "Attachment Types Master", recordCount: 6, description: "Evidence photos, invoices, inspection PDFs", dependentModules: ["Damage Reports"] },
     ],
   },
 ];
@@ -264,7 +264,6 @@ export const INITIAL_MASTER_RECORDS: MasterRecord[] = [
     dependencies: [
       { moduleName: "Room Cleaning", usageType: "Validation Rule", activeUsageCount: 520 },
       { moduleName: "Room Inspection", usageType: "Primary Lookup", activeUsageCount: 310 },
-      { moduleName: "Deep Cleaning", usageType: "Reference Only", activeUsageCount: 45 },
     ],
     syncInfo: {
       sourceSystem: "Housekeeping Master Engine",
@@ -297,7 +296,6 @@ export const INITIAL_MASTER_RECORDS: MasterRecord[] = [
     },
     dependencies: [
       { moduleName: "Room Cleaning", usageType: "Calculation Engine", activeUsageCount: 890 },
-      { moduleName: "Deep Cleaning", usageType: "Primary Lookup", activeUsageCount: 120 },
       { moduleName: "Public Area", usageType: "Primary Lookup", activeUsageCount: 340 },
       { moduleName: "Requisitions", usageType: "Validation Rule", activeUsageCount: 28 },
     ],
@@ -364,7 +362,6 @@ export const INITIAL_MASTER_RECORDS: MasterRecord[] = [
     dependencies: [
       { moduleName: "Room Cleaning", usageType: "Validation Rule", activeUsageCount: 65 },
       { moduleName: "Maintenance", usageType: "Primary Lookup", activeUsageCount: 45 },
-      { moduleName: "Deep Cleaning", usageType: "Reference Only", activeUsageCount: 8 },
     ],
     syncInfo: {
       sourceSystem: "PMS Core Engine",
@@ -461,7 +458,7 @@ export const MASTER_SYNC_STATUSES: MasterSyncStatus[] = [
     status: "Healthy",
     syncedRecords: 142,
     failedRecords: 0,
-    affectedModules: ["Requisitions", "Deep Cleaning", "Laundry", "Public Area"],
+    affectedModules: ["Requisitions", "Laundry", "Public Area"],
   },
   {
     id: "SYNC-03",

@@ -80,8 +80,6 @@ export function mergeTasksIntoRooms(rooms: HKRoom[], tasks: HKTask[]): HKRoom[] 
       wing: "",
       maxOccupancy: 2,
       cleaningFrequency: "Daily",
-      deepCleaningFrequency: "Every 30 Days",
-      lastDeepCleaned: "",
       status: taskToRoomStatus(task),
       hkStatus: task.status === "IN_PROGRESS" ? "Cleaning" : "Dirty",
       foStatus: "Vacant",

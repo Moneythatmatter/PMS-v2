@@ -8,7 +8,6 @@ import {
   Layers,
   UserCheck,
   Bell,
-  Wrench,
   AlertTriangle,
   ArrowRightLeft,
 } from "lucide-react";
@@ -21,7 +20,6 @@ const housekeepingSubNavItems = [
   { label: "Cleaning Inspection", href: "/housekeeping/operations/inspection", icon: UserCheck },
   { label: "Guest Requests", href: "/housekeeping/housekeeping-requests", icon: Bell },
   { label: "Guest Laundry", href: "/housekeeping/operations/laundry", icon: ArrowRightLeft },
-  { label: "Maintenance", href: "/housekeeping/maintenance-requests", icon: Wrench },
   { label: "Damage Reports", href: "/housekeeping/operations/damage-reports", icon: AlertTriangle },
 ] as const;
 

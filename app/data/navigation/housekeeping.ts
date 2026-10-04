@@ -12,10 +12,8 @@ export const housekeepingNavItems: ModuleNavItem[] = [
       { label: "Public Area", href: "/housekeeping/operations/public-cleaning", icon: "trees" },
       { label: "Cleaning Inspection", href: "/housekeeping/operations/inspection", icon: "user-check" },
       { label: "Guest Requests", href: "/housekeeping/housekeeping-requests", icon: "bell" },
-      { label: "Maintenance", href: "/housekeeping/maintenance-requests", icon: "wrench" },
       { label: "Laundry Flow", href: "/housekeeping/operations/laundry", icon: "arrow-right-left" },
       { label: "Lost & Found", href: "/housekeeping/lost-and-found", icon: "package-search" },
-      { label: "Deep Cleaning", href: "/housekeeping/operations/deep-cleaning", icon: "calendar-clock" },
       { label: "Damage Reports", href: "/housekeeping/operations/damage-reports", icon: "alert-triangle" },
       { label: "Requisitions", href: "/housekeeping/operations/requisition", icon: "plus-circle" },
     ],
@@ -27,7 +25,6 @@ export const housekeepingNavItems: ModuleNavItem[] = [
     children: [
       { label: "Room Master", href: "/housekeeping/masters/rooms", icon: "bed" },
       { label: "Public Areas", href: "/housekeeping/masters/public-areas", icon: "trees" },
-      { label: "Cleaning Checklists", href: "/housekeeping/masters/checklists", icon: "clipboard-list" },
       { label: "Laundry Items", href: "/housekeeping/masters/laundry-items", icon: "shirt" },
       { label: "Laundry Pricing", href: "/housekeeping/masters/laundry-pricing", icon: "tag" },
       { label: "Staff & Shifts", href: "/housekeeping/masters/staff", icon: "users" },

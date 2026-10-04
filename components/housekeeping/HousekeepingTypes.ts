@@ -27,8 +27,6 @@ export interface HKRoom {
   wing: string;
   maxOccupancy: number;
   cleaningFrequency: "Daily" | "Stay-over" | "Weekly" | "On-Demand";
-  deepCleaningFrequency: "Every 30 Days" | "Every 60 Days" | "Every 90 Days";
-  lastDeepCleaned: string;
   status:
     | "Vacant"
     | "Reserved"

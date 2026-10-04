@@ -3,16 +3,16 @@ import type { HousekeepingDispatchers } from "../../HousekeepingActions";
 import { hkRoomService } from "@/services/housekeeping";
 import { matchesRoomKey, roomApiId, roomDisplayNo } from "../../roomUtils";
 import { syncTaskForRoom } from "./taskSync";
-import type { HKRoom } from "../../HousekeepingTypes";
 
-export const inspectRoom = (
+export const inspectRoom = async (
   roomKey: string,
   passed: boolean,
   signature: string,
   remarks: string,
   qualityScore: number,
   dispatchers: HousekeepingDispatchers,
-) => {
+): Promise<void> => {
+  const currentRooms = dispatchers.rooms;
   const dateStr = new Date().toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
@@ -36,16 +36,11 @@ export const inspectRoom = (
     signature,
   };
 
-  let apiId = roomKey;
-  let label = roomKey;
-  let roomsSnapshot: HKRoom[] = [];
+  const match = currentRooms.find((r) => matchesRoomKey(r, roomKey));
+  const apiId = match ? roomApiId(match) : roomKey;
+  const label = match ? roomDisplayNo(match) : roomKey;
 
   dispatchers.setRooms((prev) => {
-    roomsSnapshot = prev;
-    const match = prev.find((r) => matchesRoomKey(r, roomKey));
-    apiId = match ? roomApiId(match) : roomKey;
-    label = match ? roomDisplayNo(match) : roomKey;
-
     return prev.map((r) => {
       if (!matchesRoomKey(r, roomKey)) return r;
       const historyList = r.inspectionHistory || [];
@@ -74,10 +69,13 @@ export const inspectRoom = (
     });
   });
 
+  const taskSync = passed
+    ? syncTaskForRoom(currentRooms, roomKey, "approve", {
+        approvedBy: dispatchers.currentUsername,
+      })
+    : syncTaskForRoom(currentRooms, roomKey, "reject", { notes: remarks });
+
   if (passed) {
-    void syncTaskForRoom(roomsSnapshot, roomKey, "approve", {
-      approvedBy: dispatchers.currentUsername,
-    });
     logAudit(
       "Inspection",
       "Inspection Passed",
@@ -87,7 +85,6 @@ export const inspectRoom = (
       dispatchers.setHistory,
     );
   } else {
-    void syncTaskForRoom(roomsSnapshot, roomKey, "reject", { notes: remarks });
     logAudit(
       "Inspection",
       "Inspection Rejected",
@@ -98,15 +95,17 @@ export const inspectRoom = (
     );
   }
 
-  void hkRoomService
-    .inspect(apiId, {
-      result: passed ? "Passed" : "Rejected",
-      qualityScore,
-      remarks: remarks || (passed ? "Passed inspection" : "Failed inspection"),
-      inspector: dispatchers.currentUsername,
-      signature,
-    })
-    .catch((err) => {
-      console.error(`[HK] Failed to sync inspectRoom for room ${roomKey} to API`, err);
-    });
+  const inspectCall = hkRoomService.inspect(apiId, {
+    result: passed ? "Passed" : "Rejected",
+    qualityScore,
+    remarks: remarks || (passed ? "Passed inspection" : "Failed inspection"),
+    inspector: dispatchers.currentUsername,
+    signature,
+  });
+
+  const [, inspectResult] = await Promise.allSettled([taskSync, inspectCall]);
+  if (inspectResult.status === "rejected") {
+    console.error(`[HK] Failed to sync inspectRoom for room ${roomKey} to API`, inspectResult.reason);
+    throw inspectResult.reason;
+  }
 };
