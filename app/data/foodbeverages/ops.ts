@@ -1,7 +1,8 @@
 import type { FbOutlet } from "./modules";
 import { restaurantOutlets, kitchenOutlets } from "./modules";
 
-export type LiveTableStatus = "Available" | "Reserved" | "Occupied" | "Billing" | "Dirty";
+/** "Reserved" is a running table (legacy key); "Booked" is a free table with a confirmed reservation. */
+export type LiveTableStatus = "Available" | "Booked" | "Reserved" | "Occupied" | "Billing" | "Dirty";
 
 export interface LiveTable {
   id: string;
@@ -398,11 +399,19 @@ export const tableStatusStyles: Record<
     legendLabel: "Blank Table",
     legendSwatch: "bg-white border border-slate-300",
   },
+  Booked: {
+    bg: "bg-violet-100",
+    border: "border-violet-500",
+    badge: "bg-violet-100 text-violet-900",
+    label: "Reserved",
+    legendLabel: "Reserved Table",
+    legendSwatch: "bg-violet-200 border border-violet-500",
+  },
   Reserved: {
     bg: "bg-sky-200",
     border: "border-sky-500",
     badge: "bg-sky-100 text-sky-900",
-    label: "Reserved",
+    label: "Occupied",
     legendLabel: "Running Table",
     legendSwatch: "bg-sky-300 border border-sky-500",
   },
@@ -434,6 +443,7 @@ export const tableStatusStyles: Record<
 
 export const tableStatusLegend: LiveTableStatus[] = [
   "Available",
+  "Booked",
   "Reserved",
   "Occupied",
   "Billing",

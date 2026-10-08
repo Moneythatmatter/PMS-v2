@@ -105,12 +105,15 @@ export function WorkspaceShell({
   title,
   description,
   actions,
+  wide = false,
 }: {
   children: React.ReactNode;
   title?: string;
   description?: string;
   actions?: React.ReactNode;
+  wide?: boolean;
 }) {
+  const containerWidth = wide ? "max-w-7xl" : "max-w-5xl";
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
@@ -135,7 +138,7 @@ export function WorkspaceShell({
   };
 
   return (
-    <div className="flex min-h-screen min-w-0 bg-[#f7f8f7]">
+    <div className="group/shell flex min-h-screen min-w-0 bg-[#f7f8f7]" data-workspace-sidebar="">
       {/* Desktop sidebar */}
       <WorkspaceSidebar
         pathname={pathname}
@@ -195,7 +198,12 @@ export function WorkspaceShell({
         <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
           {(title || actions) && (
             <div className="border-b border-slate-200/80 bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-              <div className="mx-auto flex max-w-5xl flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+              <div
+                className={cn(
+                  "mx-auto flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between",
+                  containerWidth,
+                )}
+              >
                 <div className="min-w-0">
                   {title && (
                     <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">
@@ -217,7 +225,7 @@ export function WorkspaceShell({
             </div>
           )}
           <div className="px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-            <div className="mx-auto max-w-5xl min-w-0">{children}</div>
+            <div className={cn("mx-auto min-w-0", containerWidth)}>{children}</div>
           </div>
         </main>
       </div>

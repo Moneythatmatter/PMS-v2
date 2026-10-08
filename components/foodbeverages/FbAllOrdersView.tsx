@@ -60,14 +60,20 @@ type OrderItemView = {
   status: string;
   lineTotal: number;
   note?: string;
+  modifiers?: string;
 };
 
 type OrderKotView = {
   id: string;
   kotNo: string;
   status: string;
-  lines: { id: string; name: string; qty: number; status: string; note?: string }[];
+  lines: { id: string; name: string; qty: number; status: string; note?: string; modifiers?: string }[];
 };
+
+function modifierText(item: Record<string, unknown> | undefined) {
+  const list = Array.isArray(item?.modifiers) ? (item.modifiers as Record<string, unknown>[]) : [];
+  return list.map((m) => String(m.name ?? "")).filter(Boolean).join(", ");
+}
 
 function parseOrderItems(items: unknown[]): OrderItemView[] {
   return (items as Record<string, unknown>[]).map((item) => ({
@@ -77,6 +83,7 @@ function parseOrderItems(items: unknown[]): OrderItemView[] {
     status: String(item.status ?? "ACTIVE").toUpperCase(),
     lineTotal: Number(item.lineTotal ?? item.line_total ?? 0),
     ...(item.note ? { note: String(item.note) } : {}),
+    ...(modifierText(item) ? { modifiers: modifierText(item) } : {}),
   }));
 }
 
@@ -94,6 +101,7 @@ function parseOrderKots(details: { kots: unknown[]; items: unknown[] }) {
         qty: Number(ki.quantity ?? orderItem?.quantity ?? 1),
         status: String(ki.status ?? "PENDING").toUpperCase(),
         ...(orderItem?.note ? { note: String(orderItem.note) } : {}),
+        ...(modifierText(orderItem) ? { modifiers: modifierText(orderItem) } : {}),
       };
     });
     return {
@@ -579,6 +587,9 @@ export function FbAllOrdersView() {
                               {line.status}
                             </span>
                           </div>
+                          {line.modifiers && (
+                            <p className="mt-0.5 text-xs text-slate-500">+ {line.modifiers}</p>
+                          )}
                           {line.note && (
                             <p className="mt-0.5 text-[11px] text-slate-400">{line.note}</p>
                           )}
@@ -647,7 +658,12 @@ export function FbAllOrdersView() {
                             )}
                           >
                             <div className="flex min-w-0 items-center gap-2">
-                              <span>{line.name}</span>
+                              <span className="min-w-0">
+                                {line.name}
+                                {line.modifiers && (
+                                  <span className="block text-xs text-slate-500">+ {line.modifiers}</span>
+                                )}
+                              </span>
                               {lineCancelled && (
                                 <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-red-700 no-underline">
                                   Cancelled

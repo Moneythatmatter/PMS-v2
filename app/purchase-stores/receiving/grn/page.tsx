@@ -37,6 +37,9 @@ import {
   Boxes,
   Lock,
   Loader2,
+  CalendarDays,
+  Phone,
+  Warehouse,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -69,6 +72,37 @@ import {
   updateLineBatch,
   syncLineTotals,
 } from "./grnFormHelpers";
+
+function PoSummaryItem({
+  icon,
+  label,
+  value,
+  mono,
+  badge,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  value?: string | null;
+  mono?: boolean;
+  badge?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+        {icon}
+        {label}
+      </dt>
+      <dd className="mt-1 flex items-center gap-1.5 text-xs font-medium text-slate-800">
+        <span className={cn("truncate", mono && "font-mono")} title={value || undefined}>
+          {value?.trim() || "—"}
+        </span>
+        {badge && (
+          <span className="shrink-0 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">{badge}</span>
+        )}
+      </dd>
+    </div>
+  );
+}
 
 export default function GoodsReceiptNotePage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -153,13 +187,12 @@ export default function GoodsReceiptNotePage() {
 
   // STORE EXECUTIVE DELIVERIES FORM INPUTS (Physical Receipt Only — no vendor invoice)
   const [formReceiptDate, setFormReceiptDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [formDeliveryTime, setFormDeliveryTime] = useState("10:30 AM");
+  const [formDeliveryTime, setFormDeliveryTime] = useState("");
   const [formVehicleNo, setFormVehicleNo] = useState("");
   const [formDeliveryPerson, setFormDeliveryPerson] = useState("");
   const [formChallanNo, setFormChallanNo] = useState("");
-  const [formReceiver, setFormReceiver] = useState("Store In-charge");
-  const [formReceivingDock, setFormReceivingDock] = useState("Receiving Bay 01");
-  const [formRemarks, setFormRemarks] = useState("Physical delivery verified at dock.");
+  const [formReceiver, setFormReceiver] = useState("");
+  const [formRemarks, setFormRemarks] = useState("");
 
   const [formItems, setFormItems] = useState<GrnFormLine[]>([]);
 
@@ -171,13 +204,21 @@ export default function GoodsReceiptNotePage() {
     }
   }, [currentPO?.poNumber, products]);
 
-  useEffect(() => {
-    if (!selectedPoNumber && approvedPOs[0]) {
-      setSelectedPoNumber(approvedPOs[0].poNumber);
-    }
-  }, [approvedPOs, selectedPoNumber]);
-
   const [formAttachments, setFormAttachments] = useState<AttachmentItem[]>([]);
+
+  const openCreateDrawer = () => {
+    setSelectedPoNumber("");
+    setFormItems([]);
+    setFormReceiptDate(new Date().toISOString().slice(0, 10));
+    setFormDeliveryTime("");
+    setFormVehicleNo("");
+    setFormDeliveryPerson("");
+    setFormChallanNo("");
+    setFormReceiver("");
+    setFormRemarks("");
+    setFormAttachments([]);
+    setCreateDrawerOpen(true);
+  };
 
   // Filtered GRNs
   const filteredGRNs = useMemo(() => {
@@ -211,6 +252,16 @@ export default function GoodsReceiptNotePage() {
       alert("Select an approved Purchase Order.");
       return;
     }
+    const missing = [
+      !formReceiptDate && "Receipt Date",
+      !formDeliveryTime.trim() && "Actual Delivery Time",
+      !formChallanNo.trim() && "Delivery Challan Number",
+      !formReceiver.trim() && "Receiver Name / Store In-charge",
+    ].filter(Boolean);
+    if (missing.length > 0) {
+      alert(`Please fill in: ${missing.join(", ")}`);
+      return;
+    }
 
     for (const line of formItems) {
       const batchTotal = line.batchAllocations.reduce((s, b) => s + b.receivedQty, 0);
@@ -235,7 +286,6 @@ export default function GoodsReceiptNotePage() {
       supplierName: currentPO.vendorName,
       receiptDate: formReceiptDate,
       deliveryTime: formDeliveryTime,
-      receivingDock: formReceivingDock,
       deliveryPerson: formDeliveryPerson,
       warehouse: currentPO.shipToWarehouse,
       itemCount: items.length,
@@ -425,7 +475,7 @@ export default function GoodsReceiptNotePage() {
         action={
           <Button
             type="button"
-            onClick={() => setCreateDrawerOpen(true)}
+            onClick={openCreateDrawer}
             className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
           >
             <Plus className="h-4 w-4" /> Create GRN
@@ -586,7 +636,7 @@ export default function GoodsReceiptNotePage() {
         open={createDrawerOpen}
         onClose={() => setCreateDrawerOpen(false)}
         title="Create Goods Receipt Note (GRN)"
-        width="responsive"
+        side="bottom"
         footer={
           <div className="flex flex-wrap items-center justify-between gap-2 w-full">
             <Button
@@ -603,419 +653,370 @@ export default function GoodsReceiptNotePage() {
                 type="button"
                 variant="outline"
                 disabled={saving}
-                onClick={() => alert("Draft saved successfully!")}
-                className="h-9 px-3 text-xs font-semibold border-slate-300 text-slate-700 rounded-xl cursor-pointer disabled:opacity-50"
-              >
-                Save Draft
-              </Button>
-              <Button
-                type="button"
-                disabled={saving}
-                onClick={() => void handleSaveGRN("Submit")}
-                className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                Submit GRN
-              </Button>
-              <Button
-                type="button"
-                disabled={saving}
                 onClick={() => void handleSaveGRN("Print")}
-                className="h-9 px-4 text-xs font-bold !bg-emerald-800 text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                className="h-9 px-4 text-xs font-semibold border-slate-300 text-slate-700 rounded-xl cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-                Submit & Print GRN
+                <Printer className="h-4 w-4" />
+                Submit & Print
               </Button>
               <Button
                 type="button"
                 disabled={saving}
                 onClick={() => void handleSaveGRN("Inspection")}
-                className="h-9 px-4 text-xs font-bold !bg-blue-800 text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                className="h-9 px-5 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                Send to Quality Inspection
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                Submit GRN
               </Button>
             </div>
           </div>
         }
       >
-        <form className="space-y-6 py-2 select-none">
-          {/* SECTION 1: PURCHASE ORDER SELECTION & AUTO-FETCHED PO INFORMATION */}
-          <PurchaseFormCard title="Step 1: Select Approved Purchase Order (Auto-Fetched Data)" sectionNumber="Section 1 of 4">
-            <div className="space-y-4">
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-950 font-semibold">
-                <span className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-emerald-600 animate-pulse" />
-                  Selecting an Approved PO automatically populates supplier details, ordered quantities, rates, and storage rules.
-                </span>
-                <span className="px-2 py-0.5 rounded bg-emerald-600 text-white font-bold text-[10px] uppercase">Auto-Fetch Active</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                {/* SELECT APPROVED PO */}
-                <FormField label="Approved Purchase Order" required>
+        <form className="space-y-5 py-2">
+          {/* SECTION 1: PURCHASE ORDER */}
+          <PurchaseFormCard title="Purchase Order" sectionNumber="Step 1 of 4">
+            <div className="space-y-4 text-xs">
+              <div className="grid gap-x-6 gap-y-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] md:items-center">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    Approved Purchase Order <span className="text-red-500">*</span>
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    {loadingPOs
+                      ? "Loading approved purchase orders…"
+                      : `${approvedPOs.length} approved PO${approvedPOs.length === 1 ? "" : "s"} available for receiving`}
+                  </p>
+                </div>
+                <div className="relative">
+                  <FileText className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <SelectInput
                     value={selectedPoNumber}
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedPoNumber(e.target.value)}
-                    className="h-9 text-xs font-mono font-bold border-emerald-500 ring-2 ring-emerald-500/20"
-                    disabled={loadingPOs}
+                    className={cn(
+                      "block h-11 pl-9 text-sm",
+                      selectedPoNumber ? "font-semibold text-slate-900" : "text-slate-500",
+                    )}
+                    disabled={loadingPOs || approvedPOs.length === 0}
                   >
                     <option value="">
-                      {loadingPOs ? "Loading POs…" : approvedPOs.length === 0 ? "No approved POs" : "Select PO…"}
+                      {loadingPOs ? "Loading POs…" : approvedPOs.length === 0 ? "No approved POs" : "Select a purchase order…"}
                     </option>
                     {approvedPOs.map((po) => (
                       <option key={po.id} value={po.poNumber}>
-                        {po.poNumber} ({po.vendorName} — ₹{po.totalAmount.toLocaleString("en-IN")})
+                        {po.poNumber} · {po.vendorName} · ₹{po.totalAmount.toLocaleString("en-IN")}
                       </option>
                     ))}
                   </SelectInput>
-                </FormField>
-
-                <FormField label="Supplier Name (PO)">
-                  <div className="relative">
-                    <TextInput value={currentPO?.vendorName ?? "—"} readOnly className="h-9 text-xs font-bold bg-slate-50 pr-7" />
-                    <Lock className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  </div>
-                </FormField>
-
-                <FormField label="Vendor GSTIN (PO)">
-                  <div className="relative">
-                    <TextInput value={currentPO?.gstin ?? "—"} readOnly className="h-9 text-xs font-mono font-bold bg-slate-50 pr-7" />
-                    <Lock className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  </div>
-                </FormField>
-
-                <FormField label="Supplier Contact">
-                  <div className="relative">
-                    <TextInput value={currentPO?.vendorPhone ?? "—"} readOnly className="h-9 text-xs bg-slate-50 pr-7" />
-                    <Lock className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  </div>
-                </FormField>
-
-                <FormField label="Target Warehouse (PO)">
-                  <div className="relative">
-                    <TextInput value={currentPO?.shipToWarehouse ?? "—"} readOnly className="h-9 text-xs font-semibold bg-slate-50 pr-7" />
-                    <Lock className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  </div>
-                </FormField>
-
-                <FormField label="PO Approval Date">
-                  <div className="relative">
-                    <TextInput value={currentPO?.orderDate ?? "—"} readOnly className="h-9 text-xs bg-slate-50 pr-7" />
-                    <Lock className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  </div>
-                </FormField>
-
-                <FormField label="Expected Delivery Date">
-                  <div className="relative">
-                    <TextInput value={currentPO?.expectedDeliveryDate ?? "—"} readOnly className="h-9 text-xs bg-slate-50 pr-7" />
-                    <Lock className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  </div>
-                </FormField>
-
-                <FormField label="PO Currency">
-                  <div className="relative">
-                    <TextInput value={currentPO?.currency ?? "—"} readOnly className="h-9 text-xs bg-slate-50 pr-7" />
-                    <Lock className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  </div>
-                </FormField>
+                </div>
               </div>
+
+              {currentPO ? (
+                <div className="overflow-hidden rounded-xl border border-emerald-200">
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-emerald-50/70 px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-emerald-700 ring-1 ring-emerald-200">
+                        <Building2 className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">{currentPO.vendorName || "—"}</p>
+                        <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                          <span className="font-mono font-semibold text-emerald-800">{currentPO.poNumber}</span>
+                          <span>·</span>
+                          <span>{currentPO.status}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Order Value</p>
+                      <p className="text-base font-bold text-slate-900">
+                        ₹{currentPO.totalAmount.toLocaleString("en-IN")}
+                      </p>
+                    </div>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-x-6 gap-y-4 bg-white px-4 py-4 md:grid-cols-4">
+                    <PoSummaryItem icon={<FileCheck className="h-3.5 w-3.5" />} label="GSTIN" value={currentPO.gstin} mono />
+                    <PoSummaryItem icon={<Phone className="h-3.5 w-3.5" />} label="Contact" value={currentPO.vendorPhone} />
+                    <PoSummaryItem icon={<Warehouse className="h-3.5 w-3.5" />} label="Deliver To" value={currentPO.shipToWarehouse} />
+                    <PoSummaryItem icon={<Boxes className="h-3.5 w-3.5" />} label="Line Items" value={`${currentPO.items.length} item${currentPO.items.length === 1 ? "" : "s"}`} />
+                    <PoSummaryItem icon={<CalendarDays className="h-3.5 w-3.5" />} label="PO Date" value={currentPO.orderDate} />
+                    <PoSummaryItem
+                      icon={<Truck className="h-3.5 w-3.5" />}
+                      label="Expected Delivery"
+                      value={currentPO.expectedDeliveryDate}
+                      badge={
+                        currentPO.expectedDeliveryDate && currentPO.expectedDeliveryDate < new Date().toISOString().slice(0, 10)
+                          ? "Overdue"
+                          : undefined
+                      }
+                    />
+                    <PoSummaryItem icon={<IndianRupee className="h-3.5 w-3.5" />} label="Currency" value={currentPO.currency} />
+                    <PoSummaryItem icon={<Clock className="h-3.5 w-3.5" />} label="Payment Terms" value={currentPO.paymentTerms} />
+                  </dl>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 px-4 py-8 text-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-400 ring-1 ring-slate-200">
+                    <ClipboardCheck className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700">No purchase order selected</p>
+                  <p className="max-w-sm text-[11px] text-slate-500">
+                    Choose an approved PO above. Supplier details and ordered items will load automatically.
+                  </p>
+                </div>
+              )}
             </div>
           </PurchaseFormCard>
 
-          {/* SECTION 2: STORE EXECUTIVE PHYSICAL DELIVERY INPUTS */}
-          <PurchaseFormCard title="Step 2: Store Executive Physical Delivery Entries" sectionNumber="Section 2 of 4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+          {/* SECTION 2: DELIVERY DETAILS */}
+          <PurchaseFormCard title="Delivery Details" sectionNumber="Step 2 of 4">
+            <div className="grid grid-cols-1 gap-x-5 gap-y-4 text-xs sm:grid-cols-2 md:grid-cols-3">
               <FormField label="Receipt Date" required>
                 <TextInput
                   type="date"
                   value={formReceiptDate}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormReceiptDate(e.target.value)}
-                  className="h-9 text-xs font-bold"
+                  className="h-10 text-sm"
                 />
               </FormField>
-
-              <FormField label="Actual Delivery Time" required>
+              <FormField label="Delivery Time" required>
                 <TextInput
+                  type="time"
                   value={formDeliveryTime}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDeliveryTime(e.target.value)}
-                  placeholder="e.g. 10:30 AM"
-                  className="h-9 text-xs font-semibold"
+                  className="h-10 text-sm"
                 />
               </FormField>
-
-              <FormField label="Receiving Dock / Bay" required>
-                <SelectInput
-                  value={formReceivingDock}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormReceivingDock(e.target.value)}
-                  className="h-9 text-xs font-medium"
-                >
-                  <option value="Receiving Bay 01">Receiving Bay 01 (Main Complex)</option>
-                  <option value="Cold Receiving Dock 02">Cold Receiving Dock 02 (Kitchen)</option>
-                  <option value="Loading Dock 03">Loading Dock 03 (Stores)</option>
-                </SelectInput>
-              </FormField>
-
-              <FormField label="Delivery Challan Number" required>
+              <FormField label="Delivery Challan No." required>
                 <TextInput
                   value={formChallanNo}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormChallanNo(e.target.value)}
                   placeholder="e.g. CHAL-8841"
-                  className="h-9 text-xs font-mono"
+                  className="h-10 text-sm"
                 />
               </FormField>
-
+              <FormField label="Received By" required>
+                <TextInput
+                  value={formReceiver}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormReceiver(e.target.value)}
+                  placeholder="Store in-charge name"
+                  className="h-10 text-sm"
+                />
+              </FormField>
               <FormField label="Vehicle Number">
                 <TextInput
                   value={formVehicleNo}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormVehicleNo(e.target.value)}
                   placeholder="e.g. MH-04-AB-1234"
-                  className="h-9 text-xs font-mono"
+                  className="h-10 text-sm"
                 />
               </FormField>
-
-              <FormField label="Supplier Delivery Person">
+              <FormField label="Delivered By (Supplier)">
                 <TextInput
                   value={formDeliveryPerson}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDeliveryPerson(e.target.value)}
-                  placeholder="Driver / Person Name"
-                  className="h-9 text-xs"
+                  placeholder="Driver / delivery person"
+                  className="h-10 text-sm"
                 />
               </FormField>
-
-              <FormField label="Receiver Name / Store In-charge" required>
-                <TextInput
-                  value={formReceiver}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormReceiver(e.target.value)}
-                  placeholder="Store Manager Name"
-                  className="h-9 text-xs font-bold"
-                />
-              </FormField>
-            </div>
-          </PurchaseFormCard>
-
-          {/* SECTION 3: PRODUCTS RECEIVED & BATCH CONTROL GRID */}
-          <PurchaseFormCard title="Step 3: Products Received, Quantity & Batch Allocation" sectionNumber="Section 3 of 4">
-            <div className="space-y-4 overflow-x-auto text-xs">
-              {formItems.length === 0 && (
-                <p className="text-center text-slate-500 py-6">Select an approved PO to load line items.</p>
-              )}
-              {formItems.map((item, idx) => (
-                <div key={item.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                    <span className="font-bold text-slate-900 flex items-center gap-2">
-                      <Package className="h-4 w-4 text-emerald-600" />
-                      {item.productName} ({item.productCode})
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded">
-                      Ordered: {item.orderedQty} {item.unit} · Rate: ₹{item.unitRate}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                    <div>
-                      <span className="text-[10px] text-slate-500 block mb-1">Category</span>
-                      <TextInput value={item.category} readOnly className="h-9 text-xs bg-slate-100" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500 block mb-1">Total Received</span>
-                      <TextInput value={String(item.receivedQty)} readOnly className="h-9 text-xs font-bold bg-slate-100 text-center" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500 block mb-1">Received Value</span>
-                      <TextInput value={`₹${item.receivedValue.toLocaleString("en-IN")}`} readOnly className="h-9 text-xs font-bold bg-slate-100" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500 block mb-1">QC Status</span>
-                      <TextInput value={item.qcStatus} readOnly className="h-9 text-xs bg-amber-50 font-semibold" />
-                    </div>
-                    <div className="flex items-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          setFormItems(
-                            formItems.map((l) =>
-                              l.id === item.id
-                                ? addBatchToLine(l, currentPO?.shipToWarehouse ?? l.batchAllocations[0]?.storageWarehouse ?? "")
-                                : l,
-                            ),
-                          )
-                        }
-                        className="h-9 w-full text-[10px] font-bold"
-                      >
-                        + Add Batch
-                      </Button>
-                    </div>
-                  </div>
-
-                  {item.batchAllocations.map((batch, bIdx) => (
-                    <div key={batch.id} className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2 p-3 rounded-lg border border-emerald-200 bg-white">
-                      <div className="md:col-span-8 text-[10px] font-bold text-emerald-800">
-                        Batch #{bIdx + 1}
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block mb-1">Batch No.</span>
-                        <TextInput
-                          value={batch.batchNumber}
-                          onChange={(e) =>
-                            setFormItems(
-                              formItems.map((l) =>
-                                l.id === item.id ? updateLineBatch(l, batch.id, { batchNumber: e.target.value }) : l,
-                              ),
-                            )
-                          }
-                          className="h-8 text-xs font-mono"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block mb-1">Received Qty</span>
-                        <TextInput
-                          type="number"
-                          value={batch.receivedQty}
-                          onChange={(e) => {
-                            const q = Number(e.target.value);
-                            setFormItems(
-                              formItems.map((l) =>
-                                l.id === item.id
-                                  ? updateLineBatch(l, batch.id, { receivedQty: q, acceptedQty: q })
-                                  : l,
-                              ),
-                            );
-                          }}
-                          className="h-8 text-xs text-center font-bold"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block mb-1">Expiry</span>
-                        <TextInput
-                          type="date"
-                          value={batch.expiryDate}
-                          onChange={(e) =>
-                            setFormItems(
-                              formItems.map((l) =>
-                                l.id === item.id ? updateLineBatch(l, batch.id, { expiryDate: e.target.value }) : l,
-                              ),
-                            )
-                          }
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block mb-1">MFG Date</span>
-                        <TextInput
-                          type="date"
-                          value={batch.mfgDate ?? ""}
-                          onChange={(e) =>
-                            setFormItems(
-                              formItems.map((l) =>
-                                l.id === item.id ? updateLineBatch(l, batch.id, { mfgDate: e.target.value }) : l,
-                              ),
-                            )
-                          }
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block mb-1">Warehouse</span>
-                        <TextInput
-                          value={batch.storageWarehouse}
-                          onChange={(e) =>
-                            setFormItems(
-                              formItems.map((l) =>
-                                l.id === item.id ? updateLineBatch(l, batch.id, { storageWarehouse: e.target.value }) : l,
-                              ),
-                            )
-                          }
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block mb-1">Location (Bin)</span>
-                        <TextInput
-                          value={batch.storageLocation ?? ""}
-                          onChange={(e) =>
-                            setFormItems(
-                              formItems.map((l) =>
-                                l.id === item.id ? updateLineBatch(l, batch.id, { storageLocation: e.target.value }) : l,
-                              ),
-                            )
-                          }
-                          className="h-8 text-xs"
-                          placeholder="Optional"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 block mb-1">Lot Value</span>
-                        <TextInput
-                          value={`₹${(batch.receivedQty * item.unitRate).toLocaleString("en-IN")}`}
-                          readOnly
-                          className="h-8 text-xs font-bold bg-slate-50"
-                        />
-                      </div>
-                      <div className="flex items-end">
-                        {item.batchAllocations.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() =>
-                              setFormItems(
-                                formItems.map((l) =>
-                                  l.id === item.id
-                                    ? syncLineTotals({
-                                      ...l,
-                                      batchAllocations: l.batchAllocations.filter((b) => b.id !== batch.id),
-                                    })
-                                    : l,
-                                ),
-                              )
-                            }
-                            className="h-8 w-full text-[10px] text-red-600"
-                          >
-                            Remove
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </PurchaseFormCard>
-
-          {/* SECTION 4: READ-ONLY QUALITY INSPECTION WORKFLOW & DOCUMENTS */}
-          <PurchaseFormCard title="Step 4: Quality Inspection & Document Attachments" sectionNumber="Section 4 of 4">
-            <div className="space-y-4 text-xs">
-              {/* READ-ONLY QUALITY INSPECTION WORKFLOW CARD */}
-              <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/70 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-extrabold text-amber-950 text-xs flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-amber-600" />
-                    Quality Inspection Workflow (Segregation of Duties)
-                  </span>
-                  <span className="px-2.5 py-0.5 text-[10px] font-extrabold rounded-full bg-amber-200 text-amber-900 flex items-center gap-1">
-                    <Clock className="h-3 w-3" /> Pending
-                  </span>
-                </div>
-                <p className="text-xs text-amber-900 font-medium">
-                  This GRN will automatically be sent to the <strong>Quality Inspection module</strong> after submission. Store Executives confirm physical receipt only; Quality Auditors perform the official inspection, sampling, and Pass/Reject sign-off.
-                </p>
-              </div>
-
-              <div>
-                <FormField label="Receiver Remarks & Receiving Observations">
+              <div className="sm:col-span-2 md:col-span-3">
+                <FormField label="Remarks">
                   <TextInput
                     value={formRemarks}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormRemarks(e.target.value)}
-                    className="h-9 text-xs"
+                    placeholder="Condition of goods, packaging, shortages…"
+                    className="h-10 text-sm"
                   />
                 </FormField>
               </div>
+            </div>
+          </PurchaseFormCard>
 
-              <div className="pt-2">
-                <span className="font-extrabold text-slate-900 block mb-2">Upload Delivery Challans & Certificates</span>
-                <p className="text-[11px] text-slate-500 mb-2">
-                  Vendor tax invoices are uploaded later under PO → Vendor Invoices for 3-way match.
+          {/* SECTION 3: ITEMS RECEIVED & BATCHES */}
+          <PurchaseFormCard title="Items Received" sectionNumber="Step 3 of 4">
+            <div className="space-y-4 text-xs">
+              {formItems.length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-slate-500">
+                  Items from the selected PO will appear here.
+                </div>
+              )}
+              {formItems.map((item) => {
+                const overReceived = item.receivedQty > item.orderedQty;
+                return (
+                  <div key={item.id} className="rounded-xl border border-slate-200">
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                      <div className="flex items-start gap-2.5">
+                        <Package className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{item.productName}</p>
+                          <p className="text-[11px] text-slate-500">
+                            {item.productCode} · {item.category} · ₹{item.unitRate.toLocaleString("en-IN")} / {item.unit}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">
+                          Ordered <strong className="text-slate-900">{item.orderedQty}</strong>
+                        </span>
+                        <span
+                          className={cn(
+                            "rounded-md px-2 py-1",
+                            overReceived ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700",
+                          )}
+                        >
+                          Received <strong>{item.receivedQty}</strong>
+                        </span>
+                        <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">
+                          ₹{item.receivedValue.toLocaleString("en-IN")}
+                        </span>
+                        <span className="rounded-md bg-amber-50 px-2 py-1 font-medium text-amber-800">QC {item.qcStatus}</span>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto px-4 py-3">
+                      <table className="w-full min-w-[720px] text-left">
+                        <thead>
+                          <tr className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            <th className="pb-1.5 pr-2 font-semibold">Batch No.</th>
+                            <th className="w-24 pb-1.5 pr-2 font-semibold">Qty</th>
+                            <th className="pb-1.5 pr-2 font-semibold">MFG Date</th>
+                            <th className="pb-1.5 pr-2 font-semibold">Expiry</th>
+                            <th className="pb-1.5 pr-2 font-semibold">Warehouse</th>
+                            <th className="pb-1.5 pr-2 font-semibold">Bin</th>
+                            <th className="pb-1.5 pr-2 text-right font-semibold">Value</th>
+                            <th className="w-8 pb-1.5" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {item.batchAllocations.map((batch) => {
+                            const patch = (changes: Parameters<typeof updateLineBatch>[2]) =>
+                              setFormItems(
+                                formItems.map((l) => (l.id === item.id ? updateLineBatch(l, batch.id, changes) : l)),
+                              );
+                            return (
+                              <tr key={batch.id} className="align-middle">
+                                <td className="py-1 pr-2">
+                                  <TextInput
+                                    value={batch.batchNumber}
+                                    onChange={(e) => patch({ batchNumber: e.target.value })}
+                                    className="h-8 text-xs font-mono"
+                                  />
+                                </td>
+                                <td className="py-1 pr-2">
+                                  <TextInput
+                                    type="number"
+                                    min={0}
+                                    value={batch.receivedQty}
+                                    onChange={(e) => {
+                                      const q = Number(e.target.value);
+                                      patch({ receivedQty: q, acceptedQty: q });
+                                    }}
+                                    className="h-8 text-center text-xs font-semibold"
+                                  />
+                                </td>
+                                <td className="py-1 pr-2">
+                                  <TextInput
+                                    type="date"
+                                    value={batch.mfgDate ?? ""}
+                                    onChange={(e) => patch({ mfgDate: e.target.value })}
+                                    className="h-8 text-xs"
+                                  />
+                                </td>
+                                <td className="py-1 pr-2">
+                                  <TextInput
+                                    type="date"
+                                    value={batch.expiryDate}
+                                    onChange={(e) => patch({ expiryDate: e.target.value })}
+                                    className="h-8 text-xs"
+                                  />
+                                </td>
+                                <td className="py-1 pr-2">
+                                  <TextInput
+                                    value={batch.storageWarehouse}
+                                    onChange={(e) => patch({ storageWarehouse: e.target.value })}
+                                    className="h-8 text-xs"
+                                  />
+                                </td>
+                                <td className="py-1 pr-2">
+                                  <TextInput
+                                    value={batch.storageLocation ?? ""}
+                                    onChange={(e) => patch({ storageLocation: e.target.value })}
+                                    placeholder="Optional"
+                                    className="h-8 text-xs"
+                                  />
+                                </td>
+                                <td className="whitespace-nowrap py-1 pr-2 text-right font-semibold text-slate-700">
+                                  ₹{(batch.receivedQty * item.unitRate).toLocaleString("en-IN")}
+                                </td>
+                                <td className="py-1 text-right">
+                                  {item.batchAllocations.length > 1 && (
+                                    <button
+                                      type="button"
+                                      aria-label="Remove batch"
+                                      onClick={() =>
+                                        setFormItems(
+                                          formItems.map((l) =>
+                                            l.id === item.id
+                                              ? syncLineTotals({
+                                                  ...l,
+                                                  batchAllocations: l.batchAllocations.filter((b) => b.id !== batch.id),
+                                                })
+                                              : l,
+                                          ),
+                                        )
+                                      }
+                                      className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <div className="mt-2 flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormItems(
+                              formItems.map((l) =>
+                                l.id === item.id
+                                  ? addBatchToLine(l, currentPO?.shipToWarehouse ?? l.batchAllocations[0]?.storageWarehouse ?? "")
+                                  : l,
+                              ),
+                            )
+                          }
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add batch
+                        </button>
+                        {overReceived && (
+                          <span className="text-[11px] font-medium text-red-600">
+                            Received quantity exceeds the ordered {item.orderedQty} {item.unit}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </PurchaseFormCard>
+
+          {/* SECTION 4: INSPECTION & DOCUMENTS */}
+          <PurchaseFormCard title="Documents" sectionNumber="Step 4 of 4">
+            <div className="space-y-4 text-xs">
+              <div className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2.5 text-amber-900">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <p>
+                  After submission this GRN goes to <strong>Quality Inspection</strong>. Stock is posted only after QC passes.
+                </p>
+              </div>
+              <div>
+                <p className="mb-1 font-semibold text-slate-800">Delivery challans & certificates</p>
+                <p className="mb-2 text-[11px] text-slate-500">
+                  Vendor tax invoices are uploaded later under PO → Vendor Invoices for the 3-way match.
                 </p>
                 <PurchaseAttachmentList
                   attachments={formAttachments}
@@ -1101,7 +1102,7 @@ export default function GoodsReceiptNotePage() {
           open={!!selectedGRN}
           onClose={() => setSelectedGRN(null)}
           title={`Goods Receipt Note: ${selectedGRN.grnNumber}`}
-          width="lg"
+          side="bottom"
         >
           <div className="space-y-6 pb-6 select-none">
             {/* WORKFLOW STEPPER BANNER */}
@@ -1139,7 +1140,7 @@ export default function GoodsReceiptNotePage() {
                 <Building2 className="h-4 w-4 text-amber-600" /> General Information
               </h4>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
                 <div>
                   <span className="text-[10px] text-slate-400 block font-medium">GRN Number</span>
                   <span className="font-mono font-bold text-slate-900">{selectedGRN.grnNumber}</span>
@@ -1163,10 +1164,6 @@ export default function GoodsReceiptNotePage() {
                 <div>
                   <span className="text-[10px] text-slate-400 block font-medium">Received By</span>
                   <span className="font-semibold text-slate-800">{selectedGRN.receivedBy}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Receiving Dock</span>
-                  <span className="font-semibold text-slate-800">{selectedGRN.receivingDock ?? "—"}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 block font-medium">Delivery Person</span>
@@ -1236,7 +1233,7 @@ export default function GoodsReceiptNotePage() {
                 {renderInspectionBadge(selectedGRN.inspectionDetails?.status ?? "")}
               </h4>
 
-              <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                 <div>
                   <span className="text-[10px] text-slate-400 block font-medium">Inspector / Auditor</span>
                   <span className="font-bold text-slate-900">{selectedGRN.inspectionDetails?.inspector}</span>

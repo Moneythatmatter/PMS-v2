@@ -1,4 +1,18 @@
 import { api } from "../api";
+import type {
+  Recipe,
+  RecipeConsumeInput,
+  RecipeConsumption,
+  RecipeInput,
+} from "@/app/data/foodbeverages/recipes";
+import type { ModifierGroup, ModifierGroupInput } from "@/app/data/foodbeverages/modifiers";
+import type {
+  Reservation,
+  ReservationInput,
+  ReservationSettings,
+  ReservationSettingsBundle,
+  TableReservationOverlay,
+} from "@/app/data/foodbeverages/reservations";
 
 /** F&B base path helper. */
 export const fbPath = (segment: string) =>
@@ -45,6 +59,8 @@ export type LiveTable = {
   housekeeping?: string;
   reservationId?: string | null;
   kotCount?: number;
+  /** Booking relevant to this table right now; separate from the physical status. */
+  reservation?: TableReservationOverlay | null;
 };
 
 export type PosEntryMode = "new" | "manage" | "settle";
@@ -159,8 +175,10 @@ export type PosKotLine = {
   menuItemId?: string;
   name: string;
   qty: number;
+  /** Item base price; the server adds the chosen modifiers' prices. */
   unitPrice: number;
   note?: string;
+  modifierIds?: string[];
 };
 
 export const posService = {
@@ -178,6 +196,7 @@ export const posService = {
     server?: string;
     lines: PosKotLine[];
     print?: boolean;
+    overrideReservation?: { reservationId: string; reason?: string };
   }) =>
     api.post<{
       order: FbOrder;
@@ -237,7 +256,7 @@ export type FbPosKot = {
   printedAt: string | null;
   prepMinutes: number | null;
   rejectReason: string | null;
-  lines: { id: string; name: string; qty: number; status: string; note?: string }[];
+  lines: { id: string; name: string; qty: number; status: string; note?: string; modifiers?: string[] }[];
   amount: number;
 };
 
@@ -323,20 +342,69 @@ export const fbCashierService = {
 
 export const menuCategoryService = crud("/menu/categories");
 export const menuItemService = crud("/menu/items");
-export const modifierService = crud("/menu/modifiers");
+export const modifierGroupService = {
+  list: () => api.get<ModifierGroup[]>(fbPath("/menu/modifier-groups")),
+  get: (id: string) => api.get<ModifierGroup>(fbPath(`/menu/modifier-groups/${id}`)),
+  create: (body: ModifierGroupInput) => api.post<ModifierGroup>(fbPath("/menu/modifier-groups"), body),
+  update: (id: string, body: ModifierGroupInput) =>
+    api.put<ModifierGroup>(fbPath(`/menu/modifier-groups/${id}`), body),
+  remove: (id: string) => api.delete<{ id: string }>(fbPath(`/menu/modifier-groups/${id}`)),
+};
 
 export const ingredientService = crud("/inventory/ingredients");
 export const fbUnitService = crud("/masters/units");
 export const fbTaxGroupService = crud("/masters/tax-groups");
-export const fbModifierGroupService = crud("/masters/modifier-groups");
 export const fbOutletTypeService = crud("/masters/outlet-types");
 export const wastageService = crud("/inventory/wastage");
 export const stockAdjustmentService = crud("/inventory/adjustments");
 
 export const dayCloseService = crud("/day-close");
-export const fbReservationService = crud("/reservations");
+export const fbReservationService = {
+  list: (params?: { date?: string; outletId?: string; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.date) q.set("date", params.date);
+    if (params?.outletId) q.set("outletId", params.outletId);
+    if (params?.status) q.set("status", params.status);
+    const qs = q.toString();
+    return api.get<Reservation[]>(fbPath(`/reservations${qs ? `?${qs}` : ""}`));
+  },
+  get: (id: string) => api.get<Reservation>(fbPath(`/reservations/${id}`)),
+  create: (body: ReservationInput) => api.post<Reservation>(fbPath("/reservations"), body),
+  update: (id: string, body: Partial<ReservationInput>) =>
+    api.put<Reservation>(fbPath(`/reservations/${id}`), body),
+  remove: (id: string) => api.delete<{ id: string }>(fbPath(`/reservations/${id}`)),
+  seat: (id: string, body?: { tableNo?: string; override?: boolean; server?: string }) =>
+    api.post<{ reservation: Reservation; session: Record<string, unknown>; liveTableId: string; tableNo: string }>(
+      fbPath(`/reservations/${id}/seat`),
+      body ?? {},
+    ),
+  markNoShow: (id: string) => api.post<Reservation>(fbPath(`/reservations/${id}/no-show`), {}),
+  cancel: (id: string, reason?: string) =>
+    api.post<Reservation>(fbPath(`/reservations/${id}/cancel`), { reason }),
+  complete: (id: string) => api.post<Reservation>(fbPath(`/reservations/${id}/complete`), {}),
+};
 
-export const recipeService = crud("/menu/recipes");
+export const reservationSettingsService = {
+  get: () => api.get<ReservationSettingsBundle>(fbPath("/reservation-settings")),
+  save: (scopeKey: string, body: Omit<ReservationSettings, "scopeKey" | "updatedAt">) =>
+    api.put<ReservationSettingsBundle>(fbPath(`/reservation-settings/${encodeURIComponent(scopeKey)}`), body),
+  remove: (scopeKey: string) =>
+    api.delete<ReservationSettingsBundle>(fbPath(`/reservation-settings/${encodeURIComponent(scopeKey)}`)),
+};
+
+export const recipeService = {
+  list: () => api.get<Recipe[]>(fbPath("/menu/recipes")),
+  get: (id: string) => api.get<Recipe>(fbPath(`/menu/recipes/${id}`)),
+  create: (body: RecipeInput) => api.post<Recipe>(fbPath("/menu/recipes"), body),
+  update: (id: string, body: RecipeInput) => api.put<Recipe>(fbPath(`/menu/recipes/${id}`), body),
+  remove: (id: string) => api.delete<{ id: string }>(fbPath(`/menu/recipes/${id}`)),
+  consume: (id: string, body: RecipeConsumeInput) =>
+    api.post<RecipeConsumption>(fbPath(`/menu/recipes/${id}/consume`), body),
+  consumptions: (id?: string) =>
+    api.get<RecipeConsumption[]>(
+      fbPath(id ? `/menu/recipes/${id}/consumptions` : "/menu/recipes/consumptions"),
+    ),
+};
 
 export const fbReportService = {
   get: (

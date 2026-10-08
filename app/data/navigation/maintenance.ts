@@ -7,6 +7,7 @@ export const maintenanceNavItems: ModuleNavItem[] = [
   { label: "Work Orders", href: "/maintenance/work-orders", icon: "wrench" },
   { label: "Preventive Maintenance", href: "/maintenance/preventive", icon: "calendar-clock" },
   { label: "Assets & Equipment", href: "/maintenance/assets", icon: "boxes" },
+  { label: "Requisitions", href: "/maintenance/requisitions", icon: "clipboard-list" },
   { label: "Reports", href: "/maintenance/reports", icon: "bar-chart" },
   {
     label: "Masters",

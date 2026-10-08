@@ -9,6 +9,7 @@ import {
   Plus,
   Receipt,
   Search,
+  SlidersHorizontal,
   SplitSquareHorizontal,
   Trash2,
   Truck,
@@ -17,7 +18,19 @@ import {
 } from "lucide-react";
 import { formatINR } from "@/app/data/foodbeverages/ops";
 import { currentUser } from "@/app/data";
-import { posService, type LiveTable, type PosEntryMode } from "@/services/food-beverages";
+import {
+  modifierGroupService,
+  posService,
+  type LiveTable,
+  type PosEntryMode,
+} from "@/services/food-beverages";
+import { usePsList } from "@/hooks/usePsResource";
+import {
+  groupsForItem,
+  modifierSummary,
+  type SelectedModifier,
+} from "@/app/data/foodbeverages/modifiers";
+import { ModifierSelectModal } from "@/components/foodbeverages/modifiers/ModifierSelectModal";
 import { guestService } from "@/services/front-office";
 import {
   reservationService,
@@ -71,11 +84,39 @@ export type FbPosMenuItem = {
 };
 
 type CartLine = {
+  /** Menu item + chosen modifiers; identical picks merge into one line. */
+  key: string;
   id: string;
   name: string;
   qty: number;
+  /** Unit price including modifiers. */
   price: number;
+  basePrice: number;
+  modifiers: SelectedModifier[];
 };
+
+const cartKey = (itemId: string, modifiers: Array<Pick<SelectedModifier, "modifierId">>) =>
+  [itemId, ...modifiers.map((m) => m.modifierId).sort()].join("|");
+
+function parseSavedModifiers(raw: unknown): SelectedModifier[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as Record<string, unknown>[]).map((m) => ({
+    groupId: String(m.groupId ?? m.group_id ?? ""),
+    groupName: String(m.groupName ?? m.group_name ?? ""),
+    modifierId: String(m.modifierId ?? m.modifier_id ?? ""),
+    name: String(m.name ?? ""),
+    price: Number(m.price ?? 0),
+  }));
+}
+
+function CartModifiers({ modifiers }: { modifiers: SelectedModifier[] }) {
+  if (modifiers.length === 0) return null;
+  return (
+    <span className="mt-0.5 block truncate text-xs font-medium text-slate-500" title={modifierSummary(modifiers)}>
+      + {modifierSummary(modifiers)}
+    </span>
+  );
+}
 
 type FbOutletOption = { id: string; name: string };
 
@@ -154,6 +195,8 @@ type Props = {
   initialOrderType?: OrderTab | "Online";
   lockTable?: boolean;
   liveTableId?: string;
+  /** Staff chose to seat a walk-in on a table that's held for this booking. */
+  reservationOverride?: { reservationId: string; reason?: string } | null;
   openOrderId?: string;
   openBillId?: string;
   entryMode?: PosEntryMode;
@@ -177,6 +220,7 @@ export function FbOrderEntryPanel({
   initialOrderType = "Dine In",
   lockTable = false,
   liveTableId,
+  reservationOverride = null,
   openOrderId,
   openBillId,
   entryMode = "new",
@@ -225,6 +269,8 @@ export function FbOrderEntryPanel({
   const [isBillLoading, setIsBillLoading] = useState(false);
   const [isSettleLoading, setIsSettleLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const modifierGroups = usePsList(() => modifierGroupService.list(), []);
+  const [modifierTarget, setModifierTarget] = useState<FbPosMenuItem | null>(null);
 
   const isAnyActionRunning =
     isKotLoading ||
@@ -279,12 +325,21 @@ export function FbOrderEntryPanel({
           const name = String(row.name ?? "Item");
           const qty = Number(row.quantity ?? 1);
           const price = Number(row.unitPrice ?? 0);
-          const groupKey = `${id}__${price}__${name}`;
+          const modifiers = parseSavedModifiers(row.modifiers);
+          const groupKey = `${cartKey(id, modifiers)}__${price}__${name}`;
           const existing = itemsMap.get(groupKey);
           if (existing) {
             existing.qty += qty;
           } else {
-            itemsMap.set(groupKey, { id, name, qty, price });
+            itemsMap.set(groupKey, {
+              key: groupKey,
+              id,
+              name,
+              qty,
+              price,
+              basePrice: Number(row.basePrice ?? price),
+              modifiers,
+            });
           }
         });
       const items = Array.from(itemsMap.values());
@@ -363,6 +418,11 @@ export function FbOrderEntryPanel({
     });
   }, [menuItems, selectedCategoryId, itemSearch, shortCode]);
 
+  const customisableIds = useMemo(
+    () => new Set(menuItems.filter((m) => groupsForItem(modifierGroups.data, m.id).length > 0).map((m) => m.id)),
+    [menuItems, modifierGroups.data],
+  );
+
   const formTotal = formLines.reduce((s, l) => s + l.qty * l.price, 0);
   const savedTotal = savedLines.reduce((s, l) => s + l.qty * l.price, 0);
   const orderTotal = savedTotal + formTotal;
@@ -409,35 +469,46 @@ export function FbOrderEntryPanel({
     if (covers > 0) setPax(String(covers));
   };
 
-  const addItem = (item: FbPosMenuItem) => {
-    if (isSettle) return;
+  const addLine = (
+    item: FbPosMenuItem,
+    modifiers: SelectedModifier[] = [],
+    qty = 1,
+  ) => {
+    const key = cartKey(item.id, modifiers);
+    const price = item.price + modifiers.reduce((s, m) => s + m.price, 0);
     setFormLines((prev) => {
-      const existing = prev.find((l) => l.id === item.id);
-      if (existing) {
-        return prev.map((l) =>
-          l.id === item.id ? { ...l, qty: l.qty + 1 } : l,
-        );
+      if (prev.some((l) => l.key === key)) {
+        return prev.map((l) => (l.key === key ? { ...l, qty: l.qty + qty } : l));
       }
       return [
         ...prev,
-        { id: item.id, name: item.name, qty: 1, price: item.price },
+        { key, id: item.id, name: item.name, qty, price, basePrice: item.price, modifiers },
       ];
     });
     setFormError(null);
   };
 
-  const updateQty = (id: string, delta: number) => {
+  const addItem = (item: FbPosMenuItem) => {
+    if (isSettle) return;
+    if (groupsForItem(modifierGroups.data, item.id).length > 0) {
+      setModifierTarget(item);
+      return;
+    }
+    addLine(item);
+  };
+
+  const updateQty = (key: string, delta: number) => {
     setFormLines((prev) =>
       prev
         .map((l) =>
-          l.id === id ? { ...l, qty: Math.max(0, l.qty + delta) } : l,
+          l.key === key ? { ...l, qty: Math.max(0, l.qty + delta) } : l,
         )
         .filter((l) => l.qty > 0),
     );
   };
 
-  const removeLine = (id: string) => {
-    setFormLines((prev) => prev.filter((l) => l.id !== id));
+  const removeLine = (key: string) => {
+    setFormLines((prev) => prev.filter((l) => l.key !== key));
   };
 
   const clearCart = () => {
@@ -493,10 +564,16 @@ export function FbOrderEntryPanel({
       const kotInstruction = orderInstruction.trim();
       const kotPrintLines: KotPrintLine[] = kotLines.map((l, index) => {
         const holdPrefix = isHeld ? "[HOLD] " : "";
-        const note =
+        const instruction =
           index === 0 && (kotInstruction || isHeld)
             ? `${holdPrefix}${kotInstruction}`.trim()
-            : undefined;
+            : "";
+        const note = [
+          l.modifiers.length ? `+ ${modifierSummary(l.modifiers)}` : "",
+          instruction,
+        ]
+          .filter(Boolean)
+          .join("\n");
         return {
           name: l.name,
           qty: l.qty,
@@ -531,6 +608,7 @@ export function FbOrderEntryPanel({
         type: formType,
         ref: tableRef,
         ...(liveTableId ? { liveTableId } : {}),
+        ...(reservationOverride ? { overrideReservation: reservationOverride } : {}),
         ...(activeOrderId ? { orderId: activeOrderId } : {}),
         guest: guestName,
         ...(guestId ? { guestId } : {}),
@@ -548,7 +626,8 @@ export function FbOrderEntryPanel({
             menuItemId: l.id,
             name: l.name,
             qty: l.qty,
-            unitPrice: l.price,
+            unitPrice: l.basePrice,
+            ...(l.modifiers.length ? { modifierIds: l.modifiers.map((m) => m.modifierId) } : {}),
             ...(note ? { note } : {}),
           };
         }),
@@ -625,6 +704,7 @@ export function FbOrderEntryPanel({
       type: formType,
       ref: tableRef,
       ...(liveTableId ? { liveTableId } : {}),
+      ...(reservationOverride ? { overrideReservation: reservationOverride } : {}),
       ...(activeOrderId ? { orderId: activeOrderId } : {}),
       guest: guestName,
       server: currentUser.name,
@@ -638,7 +718,8 @@ export function FbOrderEntryPanel({
           menuItemId: l.id,
           name: l.name,
           qty: l.qty,
-          unitPrice: l.price,
+          unitPrice: l.basePrice,
+          ...(l.modifiers.length ? { modifierIds: l.modifiers.map((m) => m.modifierId) } : {}),
           ...(note ? { note } : {}),
         };
       }),
@@ -714,7 +795,9 @@ export function FbOrderEntryPanel({
         guest: guestDetails.name.trim() || "Walk-in",
         server: currentUser.name,
         lines: linesForPrint.map((line) => ({
-          name: line.name,
+          name: line.modifiers.length
+            ? `${line.name} (${modifierSummary(line.modifiers)})`
+            : line.name,
           qty: line.qty,
           price: line.price,
         })),
@@ -858,8 +941,9 @@ export function FbOrderEntryPanel({
                           key={`settle-line-${line.id}-${idx}`}
                           className="flex justify-between py-2 text-sm"
                         >
-                          <span>
+                          <span className="min-w-0">
                             {line.qty}× {line.name}
+                            <CartModifiers modifiers={line.modifiers} />
                           </span>
                           <span className="font-mono font-semibold">
                             {formatINR(line.qty * line.price)}
@@ -971,6 +1055,11 @@ export function FbOrderEntryPanel({
                     <p className="mt-1 pl-2 text-sm font-black font-mono text-emerald-700">
                       {formatINR(item.price)}
                     </p>
+                  )}
+                  {customisableIds.has(item.id) && (
+                    <span className="absolute right-2 top-2 inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 ring-1 ring-amber-200">
+                      <SlidersHorizontal className="h-3 w-3" /> Customisable
+                    </span>
                   )}
                 </button>
               ))}
@@ -1222,10 +1311,13 @@ export function FbOrderEntryPanel({
               <ul className="divide-y divide-slate-100 border-b border-slate-200">
                 {savedLines.map((line, idx) => (
                   <li
-                    key={`saved-${line.id}-${line.name}-${idx}`}
+                    key={`saved-${line.key}-${idx}`}
                     className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-2 px-3.5 py-3 text-sm text-slate-700"
                   >
-                    <span className="truncate text-[15px] font-bold text-slate-800">{line.name}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[15px] font-bold text-slate-800">{line.name}</span>
+                      <CartModifiers modifiers={line.modifiers} />
+                    </span>
                     <span className="w-16 text-center text-sm font-extrabold text-slate-900 font-mono">{line.qty}</span>
                     <span className="w-20 text-right text-[15px] font-black font-mono text-slate-900">
                       {formatINR(line.qty * line.price)}
@@ -1249,16 +1341,19 @@ export function FbOrderEntryPanel({
             <ul className="divide-y divide-slate-100">
               {formLines.map((line, idx) => (
                 <li
-                  key={`cart-${line.id}-${idx}`}
+                  key={`cart-${line.key}-${idx}`}
                   className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-2 px-3.5 py-3 text-sm transition-colors hover:bg-slate-50/50"
                 >
-                  <span className="truncate text-[15px] font-bold text-slate-900">
-                    {line.name}
+                  <span className="min-w-0">
+                    <span className="block truncate text-[15px] font-bold text-slate-900">
+                      {line.name}
+                    </span>
+                    <CartModifiers modifiers={line.modifiers} />
                   </span>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => updateQty(line.id, -1)}
+                      onClick={() => updateQty(line.key, -1)}
                       className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer"
                       aria-label="Decrease quantity"
                     >
@@ -1269,7 +1364,7 @@ export function FbOrderEntryPanel({
                     </span>
                     <button
                       type="button"
-                      onClick={() => updateQty(line.id, 1)}
+                      onClick={() => updateQty(line.key, 1)}
                       className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer"
                       aria-label="Increase quantity"
                     >
@@ -1281,7 +1376,7 @@ export function FbOrderEntryPanel({
                   </span>
                   <button
                     type="button"
-                    onClick={() => removeLine(line.id)}
+                    onClick={() => removeLine(line.key)}
                     className="flex h-7 w-7 items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
                     aria-label={`Remove ${line.name}`}
                   >
@@ -1389,6 +1484,19 @@ export function FbOrderEntryPanel({
         </div>
         )}
       </aside>
+
+      {modifierTarget && (
+        <ModifierSelectModal
+          itemName={modifierTarget.name}
+          basePrice={modifierTarget.price}
+          groups={groupsForItem(modifierGroups.data, modifierTarget.id)}
+          onClose={() => setModifierTarget(null)}
+          onConfirm={(modifiers, qty) => {
+            addLine(modifierTarget, modifiers, qty);
+            setModifierTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }

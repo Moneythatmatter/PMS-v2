@@ -25,7 +25,6 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
     children: [
       { label: "Units", href: "/food-beverages/masters/units", icon: "ruler" },
       { label: "Tax Groups", href: "/food-beverages/masters/tax-groups", icon: "percent" },
-      { label: "Modifier Groups", href: "/food-beverages/masters/modifier-groups", icon: "plus-circle" },
       { label: "Outlet Types", href: "/food-beverages/masters/outlet-types", icon: "building-2" },
     ],
   },
@@ -51,6 +50,7 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
     ],
   },
   { label: "POS Billing", href: "/food-beverages/pos-billing", icon: "receipt" },
+  { label: "Requisitions", href: "/food-beverages/requisitions", icon: "clipboard-list" },
   {
     label: "Reports",
     href: "/food-beverages/reports",

@@ -37,6 +37,7 @@ export const humanResourcesNavItems: ModuleNavItem[] = [
       { label: "Complaint Status", href: "/human-resources/grievances/complaint-status", icon: "activity" },
     ],
   },
+  { label: "Requisitions", href: "/human-resources/requisitions", icon: "clipboard-list" },
   { label: "Reports", href: "/human-resources/reports", icon: "bar-chart" },
   {
     label: "Masters",

@@ -89,6 +89,7 @@ export function PODetailDrawer({
 
   return (
     <Drawer
+      side="bottom"
       open={Boolean(po)}
       onClose={onClose}
       title={po.poNumber}

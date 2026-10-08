@@ -29,6 +29,7 @@ import {
 } from "@/components/frontoffice/ui";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { cn } from "@/lib/utils";
+import { downloadXlsx } from "@/lib/xlsx";
 import {
   createInitialNightAuditState,
   fetchLiveNightAuditItems,
@@ -252,31 +253,35 @@ export function NightAuditView() {
   };
 
   const exportPack = () => {
-    const lines = [
-      "NIGHT AUDIT PACK",
-      `Auditor,${audit.completedBy ?? currentUser.name}`,
-      `Completed at,${audit.completedAt ?? "—"}`,
-      `Audit date,${auditDate ? formatBusinessDate(auditDate) : "—"}`,
-      `Next business date,${nextBusinessDate ? formatBusinessDate(nextBusinessDate) : "—"}`,
-      `Posted total,${postedTotal}`,
-      "",
-      "Room,Guest,Rate,Extras,Posted,Status,Note",
-      ...audit.items.map(
-        (i) =>
-          `${i.roomNo},${i.guestName},${i.roomRate},${i.extras},${i.posted},${i.status},"${i.note ?? ""}"`,
-      ),
-      "",
-      "Audit log",
-      ...audit.auditLog,
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `night-audit-${auditDate ?? "pack"}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setToast("Night audit pack exported.");
+    downloadXlsx(`night-audit-${auditDate ?? "pack"}`, [
+      {
+        name: "Night Audit",
+        title: "Night Audit Pack",
+        meta: [
+          ["Auditor", audit.completedBy ?? currentUser.name],
+          ["Completed at", audit.completedAt ?? "—"],
+          ["Audit date", auditDate ? formatBusinessDate(auditDate) : "—"],
+          ["Next business date", nextBusinessDate ? formatBusinessDate(nextBusinessDate) : "—"],
+          ["Posted total", postedTotal],
+        ],
+        header: ["Room", "Guest", "Rate", "Extras", "Posted", "Status", "Note"],
+        rows: audit.items.map((i) => [
+          i.roomNo,
+          i.guestName,
+          i.roomRate,
+          i.extras,
+          i.posted,
+          i.status,
+          i.note ?? "",
+        ]),
+      },
+      {
+        name: "Audit Log",
+        header: ["Audit log"],
+        rows: audit.auditLog.map((entry) => [entry]),
+      },
+    ]);
+    setToast("Night audit pack exported to Excel.");
   };
 
   const resetDemo = () => {
@@ -331,7 +336,7 @@ export function NightAuditView() {
                 onClick={exportPack}
               >
                 <Download className="h-3.5 w-3.5" />
-                Export pack
+                Export Excel
               </Button>
             ) : (
               <Button
@@ -465,7 +470,7 @@ export function NightAuditView() {
                     onClick={exportPack}
                   >
                     <Download className="h-3.5 w-3.5" />
-                    Export audit pack
+                    Export audit pack (Excel)
                   </Button>
                   <Link href="/frontoffice/day-closing">
                     <Button size="sm" variant="outline" className="gap-1.5 bg-white">

@@ -47,6 +47,7 @@ export const salesMarketingNavItems: ModuleNavItem[] = [
       { label: "Contact Types", href: "/sales-marketing/masters/contact-types", icon: "users" },
     ],
   },
+  { label: "Requisitions", href: "/sales-marketing/requisitions", icon: "clipboard-list" },
   { label: "Reports & Insights", href: "/sales-marketing/reports-analytics", icon: "bar-chart-3" },
   {
     label: "Settings",

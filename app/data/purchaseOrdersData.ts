@@ -1,5 +1,7 @@
 export interface POLineItem {
   id: string;
+  /** PRRequestedItem.id this line fulfils — drives PR ordered / remaining quantity */
+  prItemId?: string;
   /** ps_products.id — canonical material identity for stock posting */
   materialId: string;
   /** Human-readable code from Product Master (e.g. PRD-LIN-001) */

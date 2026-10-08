@@ -90,6 +90,7 @@ export const platformService = {
       employeeId: string | null;
       propertyIds: string[];
       permissions: UserPermissionDto[];
+      password: string;
     }>,
   ) => api.put<ManagedUserDto>(`/api/platform/users/${id}`, body),
 };

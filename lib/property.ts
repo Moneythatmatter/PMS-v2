@@ -37,20 +37,28 @@ export function clearActiveProperty() {
 
 export const PERMISSIONS_CACHE_KEY = "pms_property_permissions";
 
-export function getCachedPermissions(): Record<string, PermissionLevel> | null {
+export type CachedPermissions = {
+  propertyId: string;
+  perms: Record<string, PermissionLevel>;
+};
+
+export function getCachedPermissions(): CachedPermissions | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(PERMISSIONS_CACHE_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, PermissionLevel>) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<CachedPermissions>;
+    if (!parsed.propertyId || !parsed.perms) return null;
+    return { propertyId: parsed.propertyId, perms: parsed.perms };
   } catch {
     return null;
   }
 }
 
-export function setCachedPermissions(perms: Record<string, PermissionLevel> | null) {
+export function setCachedPermissions(cache: CachedPermissions | null) {
   if (typeof window === "undefined") return;
-  if (perms) {
-    localStorage.setItem(PERMISSIONS_CACHE_KEY, JSON.stringify(perms));
+  if (cache) {
+    localStorage.setItem(PERMISSIONS_CACHE_KEY, JSON.stringify(cache));
   } else {
     localStorage.removeItem(PERMISSIONS_CACHE_KEY);
   }

@@ -3,7 +3,10 @@
 import React, { useMemo } from "react";
 import { BedDouble, CheckCircle2 } from "lucide-react";
 import { FormField, TextAreaInput } from "@/components/frontoffice/ui";
-import { SearchSelect } from "@/components/frontoffice/SearchSelect";
+import {
+  SearchSelect,
+  RoomTypeAvailabilityOption,
+} from "@/components/frontoffice/SearchSelect";
 import { cn } from "@/lib/utils";
 
 const inputClass = "rounded-xl";
@@ -13,6 +16,11 @@ export type RoomOption = {
   roomType?: string;
 };
 
+export type RoomTypeChoice = {
+  name: string;
+  available: number;
+};
+
 interface RoomAssignmentSectionProps {
   assignedRoom: string;
   onAssignedRoomChange: (val: string) => void;
@@ -20,6 +28,11 @@ interface RoomAssignmentSectionProps {
   onRemarksChange: (val: string) => void;
   availableRooms: RoomOption[] | string[];
   preferredRoomType?: string;
+  /** When set, a required Room Type picker is shown and rooms are listed only after a type is chosen. */
+  roomTypes?: RoomTypeChoice[];
+  selectedRoomType?: string;
+  onRoomTypeChange?: (val: string) => void;
+  roomTypeError?: string;
 }
 
 function normalizeRooms(rooms: RoomOption[] | string[]): RoomOption[] {
@@ -35,8 +48,24 @@ export function RoomAssignmentSection({
   onRemarksChange,
   availableRooms,
   preferredRoomType,
+  roomTypes,
+  selectedRoomType,
+  onRoomTypeChange,
+  roomTypeError,
 }: RoomAssignmentSectionProps) {
   const rooms = useMemo(() => normalizeRooms(availableRooms), [availableRooms]);
+  const hasTypePicker = Boolean(roomTypes && onRoomTypeChange);
+  const awaitingType = hasTypePicker && !selectedRoomType;
+
+  const roomTypeOptions = useMemo(
+    () =>
+      (roomTypes ?? []).map((t) => ({
+        id: t.name,
+        label: t.name,
+        hint: String(t.available),
+      })),
+    [roomTypes],
+  );
 
   const roomOptions = useMemo(
     () =>
@@ -53,8 +82,12 @@ export function RoomAssignmentSection({
     [rooms, assignedRoom],
   );
 
-  const vacantCount = rooms.length;
-  const typeLabel = preferredRoomType?.trim() || selected?.roomType || "";
+  const vacantCount = awaitingType
+    ? (roomTypes ?? []).reduce((sum, t) => sum + t.available, 0)
+    : rooms.length;
+  const typeLabel = hasTypePicker
+    ? ""
+    : preferredRoomType?.trim() || selected?.roomType || "";
 
   return (
     <div className="sm:col-span-2 lg:col-span-3 space-y-4">
@@ -81,14 +114,35 @@ export function RoomAssignmentSection({
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="space-y-3 lg:col-span-2">
+          {hasTypePicker ? (
+            <FormField label="Room Type" required error={roomTypeError}>
+              <SearchSelect
+                options={roomTypeOptions}
+                selectedId={selectedRoomType || null}
+                placeholder="Search room type…"
+                inputClassName={inputClass}
+                onSelect={(opt) => onRoomTypeChange?.(opt.id)}
+                onClear={() => onRoomTypeChange?.("")}
+                renderOption={(opt) => (
+                  <RoomTypeAvailabilityOption
+                    label={opt.label}
+                    count={Number(opt.hint ?? 0)}
+                  />
+                )}
+              />
+            </FormField>
+          ) : null}
           <FormField label="Assigned Room Number" required>
             <SearchSelect
-              options={roomOptions}
+              options={awaitingType ? [] : roomOptions}
               selectedId={assignedRoom || null}
+              disabled={awaitingType}
               placeholder={
-                vacantCount === 0
-                  ? "No vacant rooms available"
-                  : "Search vacant room…"
+                awaitingType
+                  ? "Select room type first"
+                  : rooms.length === 0
+                    ? "No room available"
+                    : "Search vacant room…"
               }
               inputClassName={inputClass}
               onSelect={(opt) => onAssignedRoomChange(opt.id)}
@@ -115,7 +169,9 @@ export function RoomAssignmentSection({
           ) : (
             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-3.5 py-3">
               <p className="text-xs text-slate-500">
-                Select a vacant room to continue check-in.
+                {awaitingType
+                  ? "Choose a room type to see its available rooms."
+                  : "Select a vacant room to continue check-in."}
               </p>
             </div>
           )}

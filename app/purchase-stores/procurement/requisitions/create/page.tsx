@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,10 +8,8 @@ import {
   Clock,
   Plus,
   Search,
-  Paperclip,
   Trash2,
   X,
-  FileSpreadsheet,
   ArrowLeft,
   Building2,
   User,
@@ -38,13 +36,10 @@ import { PRRequestedItem, DEPARTMENT_STAFF_DATA } from "@/app/data/purchaseRequi
 import {
   MOCK_INVENTORY_CATALOG,
   InventoryCatalogItem,
-  PRFormAttachment,
-  DEFAULT_FORM_ATTACHMENTS,
 } from "../page";
 
 export default function CreatePurchaseRequisitionPage() {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto redirect to requisitions list with Large Right Drawer active
   useEffect(() => {
@@ -55,14 +50,12 @@ export default function CreatePurchaseRequisitionPage() {
   const [toast, setToast] = useState<{ message: string; variant: "success" | "info" } | null>(null);
 
   // Form Fields State (Preserving all original business logic & field names)
-  const [newDept, setNewDept] = useState("Housekeeping");
-  const [newRequester, setNewRequester] = useState("Amit Sharma");
-  const [newReqDate, setNewReqDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [newPriority, setNewPriority] = useState<"Low" | "Medium" | "High" | "Emergency">("High");
+  const [newDept, setNewDept] = useState("");
+  const [newRequester, setNewRequester] = useState("");
+  const [newReqDate, setNewReqDate] = useState("");
+  const [newPriority, setNewPriority] = useState<"Low" | "Medium" | "High" | "Emergency" | "">("");
   const [newCostCenter, setNewCostCenter] = useState("");
-  const [newJustification, setNewJustification] = useState(
-    "Current linen inventory has fallen below the minimum stock level before the upcoming holiday season. Additional stock is required to maintain operational readiness."
-  );
+  const [newJustification, setNewJustification] = useState("");
 
   // Current selected department staff and cost centers data
   const currentDeptStaff = useMemo(() => {
@@ -110,11 +103,6 @@ export default function CreatePurchaseRequisitionPage() {
       remarks: "Satin finish white covers",
     },
   ]);
-
-  // Form Attachments State
-  const [formAttachments, setFormAttachments] = useState<PRFormAttachment[]>(
-    DEFAULT_FORM_ATTACHMENTS
-  );
 
   // Master Inventory Modal States
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
@@ -243,78 +231,6 @@ export default function CreatePurchaseRequisitionPage() {
     });
   };
 
-  // Native File Picker Select Handler
-  const handleNativeFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const newAtts: PRFormAttachment[] = Array.from(files).map((file, idx) => {
-      let type: PRFormAttachment["fileType"] = "File";
-      const nameLower = file.name.toLowerCase();
-      if (nameLower.endsWith(".pdf")) type = "PDF";
-      else if (nameLower.endsWith(".xlsx") || nameLower.endsWith(".xls") || nameLower.endsWith(".csv")) type = "Excel";
-      else if (nameLower.endsWith(".doc") || nameLower.endsWith(".docx")) type = "Word";
-      else if (nameLower.match(/\.(jpg|jpeg|png|gif|webp)$/)) type = "Image";
-
-      const sizeInKb = Math.round(file.size / 1024);
-      const fileSize = sizeInKb > 1024 ? `${(sizeInKb / 1024).toFixed(1)} MB` : `${sizeInKb} KB`;
-
-      return {
-        id: `att-file-${Date.now()}-${idx}`,
-        fileName: file.name,
-        fileType: type,
-        fileSize: fileSize,
-        uploadedBy: newRequester || "Amit Sharma",
-        uploadedOn: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-      };
-    });
-
-    setFormAttachments((prev) => [...prev, ...newAtts]);
-    setToast({ message: `Attached ${files.length} file(s).`, variant: "success" });
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleRemoveAttachment = (id: string) => {
-    setFormAttachments((prev) => prev.filter((a) => a.id !== id));
-    setToast({ message: "Attachment removed.", variant: "info" });
-  };
-
-  // Render File Type Icon Helper
-  const renderFileIcon = (fileType: PRFormAttachment["fileType"]) => {
-    switch (fileType) {
-      case "PDF":
-        return (
-          <div className="p-2 rounded-lg bg-red-50 text-red-600 border border-red-100 shrink-0">
-            <FileText className="h-4 w-4" />
-          </div>
-        );
-      case "Excel":
-        return (
-          <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100 shrink-0">
-            <FileSpreadsheet className="h-4 w-4" />
-          </div>
-        );
-      case "Word":
-        return (
-          <div className="p-2 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
-            <FileText className="h-4 w-4" />
-          </div>
-        );
-      case "Image":
-        return (
-          <div className="p-2 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 shrink-0">
-            <Paperclip className="h-4 w-4" />
-          </div>
-        );
-      default:
-        return (
-          <div className="p-2 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
-            <Paperclip className="h-4 w-4" />
-          </div>
-        );
-    }
-  };
-
   // Submit / Save Draft Handlers
   const handleSaveRequisition = (isDraft: boolean) => {
     const today = new Date().toISOString().slice(0, 10);
@@ -345,15 +261,6 @@ export default function CreatePurchaseRequisitionPage() {
         />
       )}
 
-      {/* Hidden Native File Input */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleNativeFileSelect}
-        multiple
-        className="hidden"
-      />
-
       {/* STICKY TOP HEADER */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-8 py-3.5 shadow-2xs">
         <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-4">
@@ -378,12 +285,12 @@ export default function CreatePurchaseRequisitionPage() {
               <div className="flex items-center gap-4 text-xs text-slate-500 font-medium mt-0.5">
                 <span className="flex items-center gap-1">
                   <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                  <strong className="text-slate-700">Dept:</strong> {newDept || "Housekeeping"}
+                  <strong className="text-slate-700">Dept:</strong> {newDept || "—"}
                 </span>
                 <span className="hidden sm:inline text-slate-300">•</span>
                 <span className="hidden sm:flex items-center gap-1">
                   <User className="h-3.5 w-3.5 text-slate-400" />
-                  <strong className="text-slate-700">Requester:</strong> {newRequester || "Amit Sharma"}
+                  <strong className="text-slate-700">Requester:</strong> {newRequester || "—"}
                 </span>
               </div>
             </div>
@@ -774,89 +681,6 @@ export default function CreatePurchaseRequisitionPage() {
           </p>
         </section>
 
-        {/* SECTION 4: ATTACHMENTS */}
-        <section className="bg-white rounded-[12px] border border-slate-200/80 p-6 shadow-xs transition-all space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100">
-                <Paperclip className="h-4 w-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-                  Attachments ({formAttachments.length})
-                </h2>
-                <p className="text-xs text-slate-500 font-medium">
-                  Supporting quotations, specifications, or audit documents
-                </p>
-              </div>
-            </div>
-
-            <Button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="h-9 px-3.5 text-xs font-bold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Attachment
-            </Button>
-          </div>
-
-          {formAttachments.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {formAttachments.map((att) => (
-                <div
-                  key={att.id}
-                  className="p-4 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-all flex items-start justify-between gap-3 shadow-2xs"
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    {renderFileIcon(att.fileType)}
-                    <div className="min-w-0">
-                      <h4
-                        className="text-xs font-bold text-slate-900 truncate"
-                        title={att.fileName}
-                      >
-                        {att.fileName}
-                      </h4>
-                      <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                        {att.fileSize} • {att.uploadedOn}
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">
-                        By {att.uploadedBy}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setToast({ message: `Previewing ${att.fileName}`, variant: "info" })}
-                      className="px-2 py-1 text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
-                    >
-                      Preview
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveAttachment(att.id)}
-                      className="px-2 py-1 text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors cursor-pointer"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-xs space-y-2 cursor-pointer hover:bg-slate-50 transition-colors"
-            >
-              <Paperclip className="h-6 w-6 mx-auto text-slate-400" />
-              <p className="font-bold text-slate-800">No attachments added</p>
-              <p className="text-[11px] text-slate-500 font-medium">
-                Click "+ Add Attachment" to upload supporting documents or quotations.
-              </p>
-            </div>
-          )}
-        </section>
       </main>
 
       {/* BOTTOM STICKY ACTION BAR */}

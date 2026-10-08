@@ -9,12 +9,15 @@ import {
   useState,
 } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { isPlatformAdmin } from "@/lib/auth";
+import { MODULE_ROUTES } from "@/lib/module-access";
 import {
   clearActiveProperty,
   getActiveProperty,
   getCachedPermissions,
   setActiveProperty,
   setCachedPermissions,
+  type CachedPermissions,
   type PermissionLevel,
   type PropertySession,
 } from "@/lib/property";
@@ -23,11 +26,16 @@ import { platformService } from "@/services/platform";
 type PropertyContextValue = {
   property: PropertySession | null;
   permissions: Record<string, PermissionLevel>;
+  /** True once permissions for the active property are known. */
+  permissionsReady: boolean;
+  isAdmin: boolean;
   loading: boolean;
   setProperty: (p: PropertySession | null) => void;
   refreshPermissions: () => Promise<void>;
   canRead: (moduleKey: string) => boolean;
   canWrite: (moduleKey: string) => boolean;
+  /** Home route of the first module the user can open, or null if none. */
+  firstAllowedRoute: string | null;
 };
 
 const PropertyContext = createContext<PropertyContextValue | null>(null);
@@ -37,94 +45,125 @@ export function PropertyProvider({ children }: { children: React.ReactNode }) {
   const [property, setPropertyState] = useState<PropertySession | null>(() =>
     typeof window !== "undefined" ? getActiveProperty() : null,
   );
-  const [permissions, setPermissions] = useState<Record<string, PermissionLevel>>(
-    () =>
-      typeof window !== "undefined" ? getCachedPermissions() ?? {} : {},
+  const [loaded, setLoaded] = useState<CachedPermissions | null>(() =>
+    typeof window !== "undefined" ? getCachedPermissions() : null,
   );
-  const [loading, setLoading] = useState(false);
+  const isAdmin = isPlatformAdmin(user);
+  const propertyId = property?.id ?? null;
+
+  const loadPermissions = useCallback(async (id: string) => {
+    try {
+      const perms = await platformService.myPermissions(id);
+      const next = { propertyId: id, perms };
+      setLoaded(next);
+      setCachedPermissions(next);
+    } catch {
+      setLoaded((prev) => (prev?.propertyId === id ? prev : { propertyId: id, perms: {} }));
+    }
+  }, []);
 
   const refreshPermissions = useCallback(async () => {
-    if (!property?.id) {
-      setPermissions({});
-      setCachedPermissions(null);
-      return;
-    }
-    try {
-      const perms = await platformService.myPermissions(property.id);
-      setPermissions(perms);
-      setCachedPermissions(perms);
-    } catch {
-      if (user?.isSuperAdmin) {
-        const all = Object.fromEntries(
-          [
-            "dashboard",
-            "front_office",
-            "food_beverages",
-            "housekeeping",
-            "purchase_stores",
-            "human_resources",
-            "accounts",
-            "sales_marketing",
-          ].map((k) => [k, "admin" as const]),
-        );
-        setPermissions(all);
-        setCachedPermissions(all);
-      }
-    }
-  }, [property?.id, user?.isSuperAdmin]);
+    if (propertyId) await loadPermissions(propertyId);
+  }, [propertyId, loadPermissions]);
 
   useEffect(() => {
-    if (!user || !property?.id) return;
-    void refreshPermissions();
-  }, [user, property?.id, refreshPermissions]);
+    if (!user || !propertyId) return;
+    let cancelled = false;
+    platformService
+      .myPermissions(propertyId)
+      .then((perms) => {
+        if (cancelled) return;
+        const next = { propertyId, perms };
+        setLoaded(next);
+        setCachedPermissions(next);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoaded((prev) =>
+          prev?.propertyId === propertyId ? prev : { propertyId, perms: {} },
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, propertyId]);
 
   const setProperty = useCallback((p: PropertySession | null) => {
     setPropertyState(p);
     setActiveProperty(p);
-    if (!p) {
-      setPermissions({});
-      setCachedPermissions(null);
-    }
+    setLoaded((prev) => (p && prev?.propertyId === p.id ? prev : null));
+    if (!p) setCachedPermissions(null);
   }, []);
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      clearActiveProperty();
+  const signedOut = !authLoading && !user;
+  const [wasSignedOut, setWasSignedOut] = useState(false);
+  if (signedOut !== wasSignedOut) {
+    setWasSignedOut(signedOut);
+    if (signedOut) {
       setPropertyState(null);
-      setPermissions({});
+      setLoaded(null);
     }
-  }, [user, authLoading]);
+  }
+
+  useEffect(() => {
+    if (!signedOut) return;
+    clearActiveProperty();
+    setCachedPermissions(null);
+  }, [signedOut]);
+
+  const permissions = useMemo(
+    () => (loaded && loaded.propertyId === property?.id ? loaded.perms : {}),
+    [loaded, property?.id],
+  );
+  const permissionsReady = isAdmin || (!!property?.id && loaded?.propertyId === property.id);
 
   const canRead = useCallback(
     (moduleKey: string) => {
-      if (user?.isSuperAdmin) return true;
+      if (isAdmin) return true;
       const level = permissions[moduleKey];
       return level === "read" || level === "write" || level === "admin";
     },
-    [permissions, user?.isSuperAdmin],
+    [permissions, isAdmin],
   );
 
   const canWrite = useCallback(
     (moduleKey: string) => {
-      if (user?.isSuperAdmin) return true;
+      if (isAdmin) return true;
       const level = permissions[moduleKey];
       return level === "write" || level === "admin";
     },
-    [permissions, user?.isSuperAdmin],
+    [permissions, isAdmin],
+  );
+
+  const firstAllowedRoute = useMemo(
+    () => MODULE_ROUTES.find((m) => canRead(m.key))?.home ?? null,
+    [canRead],
   );
 
   const value = useMemo(
     () => ({
       property,
       permissions,
-      loading,
+      permissionsReady,
+      isAdmin,
+      loading: false,
       setProperty,
       refreshPermissions,
       canRead,
       canWrite,
+      firstAllowedRoute,
     }),
-    [property, permissions, loading, setProperty, refreshPermissions, canRead, canWrite],
+    [
+      property,
+      permissions,
+      permissionsReady,
+      isAdmin,
+      setProperty,
+      refreshPermissions,
+      canRead,
+      canWrite,
+      firstAllowedRoute,
+    ],
   );
 
   return (

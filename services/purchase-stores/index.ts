@@ -2,7 +2,7 @@ import { api, psPath } from "../api";
 import type { UnitItem, CategoryItem, SupplierItem } from "@/app/data/purchaseStoresMastersData";
 import type { ProductItem } from "@/app/data/productMasterData";
 import type { WarehouseMasterItem } from "@/app/data/warehouseMasterData";
-import type { PurchaseRequisition } from "@/app/data/purchaseRequisitionsData";
+import type { PurchaseRequisition, PRFulfillment } from "@/app/data/purchaseRequisitionsData";
 import type { RFQRecord } from "@/app/data/rfqData";
 import type { PORecord } from "@/app/data/purchaseOrdersData";
 import type { DSPRecord } from "@/app/data/dspData";
@@ -47,7 +47,21 @@ export const psSupplierService = crud<SupplierItem>("/masters/suppliers");
 export const psProductService = crud<ProductItem>("/masters/products");
 export const psWarehouseService = crud<WarehouseMasterItem>("/warehouses");
 
-export const psRequisitionService = crud<PurchaseRequisition>("/requisitions");
+export const psRequisitionService = {
+  ...crud<PurchaseRequisition>("/requisitions"),
+  listBySource: (sourceModules: readonly string[]) =>
+    api.get<PurchaseRequisition[]>(
+      psPath(`/requisitions?sourceModule=${encodeURIComponent(sourceModules.join(","))}`),
+    ),
+  fulfillment: () => api.get<PRFulfillment[]>(psPath("/requisitions/fulfillment")),
+  fulfillmentFor: (id: string) =>
+    api.get<PRFulfillment>(psPath(`/requisitions/${encodeURIComponent(id)}/fulfillment`)),
+  reconcile: () =>
+    api.post<{ updated: { prNumber: string; from: string; to: string }[] }>(
+      psPath("/requisitions/reconcile"),
+      {},
+    ),
+};
 export const psRfqService = crud<RFQRecord>("/rfqs");
 export const psPurchaseOrderService = crud<PORecord>("/purchase-orders");
 export const psDspService = crud<DSPRecord>("/direct-purchases");
@@ -63,7 +77,26 @@ export const psGrnService = {
 export const psQualityInspectionService = crud<QualityInspectionRecord>("/quality-inspections");
 export const psVendorReturnService = crud<VendorReturnRecord>("/vendor-returns");
 
-export const psStockBalanceService = crud<StockBalanceRecord>("/stock-balances");
+export type OpeningStockInput = {
+  warehouseId: string;
+  date: string;
+  reference?: string;
+  items: { materialId: string; quantity: number; unitCost: number; remarks?: string }[];
+};
+
+export type OpeningStockResult = {
+  transactionNo: string;
+  warehouseId: string;
+  date: string;
+  lines: { materialId: string; quantity: number; unitCost: number; balanceQty: number }[];
+  totalValue: number;
+};
+
+export const psStockBalanceService = {
+  ...crud<StockBalanceRecord>("/stock-balances"),
+  addOpening: (body: OpeningStockInput) =>
+    api.post<OpeningStockResult>(psPath("/stock-balances/opening"), body),
+};
 export const psStockLedgerService = {
   ...crud<StockLedgerRecord>("/stock-ledger"),
   listFiltered: (materialId?: string, warehouseId?: string) => {

@@ -40,6 +40,7 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { downloadXlsx } from "@/lib/xlsx";
 import {
   addDaysIso,
   createInitialDayClosingState,
@@ -342,32 +343,33 @@ export function DayClosingView() {
   const exportReport = () => {
     if (!state.report) return;
     const r = state.report;
-    const lines = [
-      "DAY CLOSING REPORT",
-      `Closed at,${r.closedAt}`,
-      `Closed by,${r.closedBy}`,
-      `Previous business date,${formatBusinessDate(r.previousBusinessDate)}`,
-      `Next business date,${formatBusinessDate(r.nextBusinessDate)}`,
-      `Room revenue,${r.roomRevenue}`,
-      `F&B revenue,${r.fbRevenue}`,
-      `Other revenue,${r.otherRevenue}`,
-      `Total revenue,${r.totalRevenue}`,
-      `Occupancy,${r.occupancy}%`,
-      `Arrivals,${r.arrivals}`,
-      `Departures,${r.departures}`,
-      `In-house,${r.inHouse}`,
-      `Shifts closed,${r.shiftsClosed}`,
-      `Charges posted,${r.chargesPosted}`,
-      `POS transferred,${r.posTransferred}`,
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `day-closing-${r.previousBusinessDate}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setToastMsg("Day closing report exported.");
+    downloadXlsx(`day-closing-${r.previousBusinessDate}`, [
+      {
+        name: "Day Closing",
+        title: "Day Closing Report",
+        meta: [
+          ["Closed at", r.closedAt],
+          ["Closed by", r.closedBy],
+          ["Previous business date", formatBusinessDate(r.previousBusinessDate)],
+          ["Next business date", formatBusinessDate(r.nextBusinessDate)],
+        ],
+        header: ["Metric", "Value"],
+        rows: [
+          ["Room revenue", r.roomRevenue],
+          ["F&B revenue", r.fbRevenue],
+          ["Other revenue", r.otherRevenue],
+          ["Total revenue", r.totalRevenue],
+          ["Occupancy %", r.occupancy],
+          ["Arrivals", r.arrivals],
+          ["Departures", r.departures],
+          ["In-house", r.inHouse],
+          ["Shifts closed", r.shiftsClosed],
+          ["Charges posted", r.chargesPosted],
+          ["POS transferred", r.posTransferred],
+        ],
+      },
+    ]);
+    setToastMsg("Day closing report exported to Excel.");
   };
 
   const summary = state.summary;
@@ -513,7 +515,7 @@ export function DayClosingView() {
                 onClick={exportReport}
               >
                 <Download className="h-3 w-3" />
-                Export CSV
+                Export Excel
               </Button>
               <Link href="/frontoffice/reports/night-audit">
                 <Button size="sm" className="gap-1 bg-emerald-700 hover:bg-emerald-800 font-semibold text-xs h-8 px-3">

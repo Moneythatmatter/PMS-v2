@@ -780,6 +780,7 @@ export default function QualityInspectionPage() {
 
       {/* PENDING INSPECTION QUEUE SIDE PANEL */}
       <Drawer
+        side="bottom"
         open={pendingQueueDrawerOpen}
         onClose={() => setPendingQueueDrawerOpen(false)}
         title={`Pending Inspection Queue (${pendingCount} Items Awaiting Sign-off)`}
@@ -854,6 +855,7 @@ export default function QualityInspectionPage() {
 
       {/* PERFORM QUALITY INSPECTION WORKFLOW DRAWER */}
       <Drawer
+        side="bottom"
         open={performInspectionDrawerOpen}
         onClose={() => setPerformInspectionDrawerOpen(false)}
         title={activeInspectionRecord ? `Perform Quality Inspection: ${activeInspectionRecord.inspectionNumber}` : "Quality Inspection Workstation"}
@@ -1264,6 +1266,7 @@ export default function QualityInspectionPage() {
       {/* VIEW COMPLETED QUALITY INSPECTION DETAILS DRAWER */}
       {selectedQI && (
         <Drawer
+          side="bottom"
           open={!!selectedQI}
           onClose={() => setSelectedQI(null)}
           title={`Quality Inspection Details: ${selectedQI.inspectionNumber}`}

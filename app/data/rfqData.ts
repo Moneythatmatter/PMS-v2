@@ -36,10 +36,13 @@ export interface VendorQuotationComparison {
   /** Display-only / legacy; prefer resolving from supplier master. */
   vendorName?: string;
   unitPrice: number;
+  /** ISO date (YYYY-MM-DD) the vendor commits to deliver by. */
+  deliveryDate?: string;
+  /** Legacy bids recorded lead time in days instead of a date. */
   deliveryDays: number;
   paymentTerms: string;
   warranty: string;
-  rating: string;
+  rating?: string;
   totalAmount: number;
   isRecommended: boolean;
 }
@@ -62,7 +65,7 @@ export interface RFQRecord {
   rfqDate: string;
   selectedVendor?: string;
   poNumber?: string;
-  status: "Draft" | "Sent" | "Pending Response" | "Vendor Selected" | "Converted to PO" | "Closed" | "Cancelled";
+  status: "Draft" | "Sent" | "Quotes Received" | "Vendor Selected" | "Converted to PO" | "Closed" | "Cancelled";
   priority: "Low" | "Medium" | "High" | "Emergency";
   requestedItems: RFQRequestedItem[];
   commercialTerms: {
@@ -169,10 +172,11 @@ export function normalizeComparisonBid(
     vendorId,
     vendorName: legacyName || undefined,
     unitPrice: Number(r.unitPrice ?? 0),
+    deliveryDate: r.deliveryDate ? String(r.deliveryDate) : undefined,
     deliveryDays: Number(r.deliveryDays ?? 0),
     paymentTerms: String(r.paymentTerms ?? ""),
     warranty: String(r.warranty ?? ""),
-    rating: String(r.rating ?? ""),
+    rating: r.rating ? String(r.rating) : undefined,
     totalAmount: Number(r.totalAmount ?? 0),
     isRecommended: Boolean(r.isRecommended),
   };
@@ -195,8 +199,15 @@ export function normalizeRfqRecord(rfq: RFQRecord): RFQRecord {
     return normalizeComparisonBid(b, i, invitedVendors, offset);
   });
 
+  const legacyStatus = rfq.status as string;
+  const status: RFQRecord["status"] =
+    legacyStatus === "Pending Response"
+      ? comparisonData.length > 0 ? "Quotes Received" : "Sent"
+      : rfq.status;
+
   return {
     ...rfq,
+    status,
     linkedPR: linked || undefined,
     requestedItems: (rfq.requestedItems ?? []).map(normalizeRfqRequestedItem),
     invitedVendors,

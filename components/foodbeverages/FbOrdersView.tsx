@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  fbReservationService,
   floorPlanService,
   liveTableService,
   menuCategoryService,
@@ -18,6 +19,9 @@ import {
 } from "@/components/foodbeverages/FbOrderEntryPanel";
 import { FbTableSelectPanel } from "@/components/foodbeverages/FbTableSelectPanel";
 import { AlertBanner } from "@/components/frontoffice/ui";
+import { ConfirmModal } from "@/components/frontoffice/ui/Modal";
+import { ReservationArrivalModal } from "@/components/foodbeverages/reservations/ReservationArrivalModal";
+import { isHoldingTable } from "@/app/data/foodbeverages/reservations";
 
 type RawMenuItem = {
   id: string;
@@ -74,6 +78,10 @@ export function FbOrdersView() {
   const [selectedRoomOrder, setSelectedRoomOrder] = useState<LiveTable | null>(
     null,
   );
+  const [noShowTable, setNoShowTable] = useState<LiveTable | null>(null);
+  const [noShowBusy, setNoShowBusy] = useState(false);
+  const [arrivalTable, setArrivalTable] = useState<LiveTable | null>(null);
+  const [reservationOverride, setReservationOverride] = useState<{ reservationId: string; reason: string } | null>(null);
   const reloadTables = async () => {
     try {
       const tableData = await floorPlanService.list();
@@ -137,6 +145,17 @@ export function FbOrdersView() {
   }, [outletsLoading]);
 
   useEffect(() => {
+    if (entryStep !== "tables" || entryOrderType !== "Dine In") return;
+    const timer = window.setInterval(() => {
+      floorPlanService
+        .list()
+        .then(setTables)
+        .catch(() => undefined);
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [entryStep, entryOrderType]);
+
+  useEffect(() => {
     if (entryStep !== "tables" || entryOrderType !== "Room Service") return;
     void reloadRoomServiceOrders(filterOutletId || undefined);
   }, [entryStep, entryOrderType, filterOutletId]);
@@ -167,10 +186,16 @@ export function FbOrdersView() {
     setEntryStep("tables");
     setEntryOrderType(activeTab);
     setOrderOutletId("");
+    setReservationOverride(null);
     setToast("Done");
   };
 
-  const openTableEntry = (table: LiveTable, mode: PosEntryMode) => {
+  const openTableEntry = (
+    table: LiveTable,
+    mode: PosEntryMode,
+    override: { reservationId: string; reason: string } | null = null,
+  ) => {
+    setReservationOverride(override);
     setSelectedTable(table);
     setSelectedRoomOrder(null);
     setOpenOrderId(table.openOrderId ?? "");
@@ -194,6 +219,10 @@ export function FbOrdersView() {
 
   const handleSelectTable = (table: LiveTable) => {
     if (table.status === "Dirty") return;
+    if (table.status === "Available" && table.reservation && isHoldingTable(table.reservation.phase)) {
+      setArrivalTable(table);
+      return;
+    }
     if (table.status === "Billing") {
       openTableEntry(table, "settle");
       return;
@@ -239,6 +268,32 @@ export function FbOrdersView() {
   const handleBillRoomOrder = (room: LiveTable) => {
     if (room.status !== "Billing") return;
     openRoomServiceEntry(room, "settle");
+  };
+
+  const handleNoShow = async () => {
+    const reservation = noShowTable?.reservation;
+    if (!noShowTable || !reservation) return;
+    setNoShowBusy(true);
+    try {
+      await fbReservationService.markNoShow(reservation.id);
+      await reloadTables();
+      setToast(`${reservation.resNo} marked as no-show · table ${noShowTable.tableNo} is free`);
+      setNoShowTable(null);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to mark no-show");
+    } finally {
+      setNoShowBusy(false);
+    }
+  };
+
+  const handleArrivalSeated = async (message: string) => {
+    const table = arrivalTable;
+    setArrivalTable(null);
+    setToast(message);
+    if (!table) return;
+    const fresh = await floorPlanService.get(table.id).catch(() => null);
+    await reloadTables();
+    openTableEntry(fresh ?? table, "new");
   };
 
   const handleCleanTable = async (table: LiveTable) => {
@@ -292,6 +347,7 @@ export function FbOrdersView() {
           onBillTable={handleBillTable}
           onBillRoomOrder={handleBillRoomOrder}
           onCleanTable={(table) => void handleCleanTable(table)}
+          onNoShow={setNoShowTable}
           onContinue={handleContinueWithoutTable}
           className="min-h-0 flex-1"
         />
@@ -317,6 +373,8 @@ export function FbOrdersView() {
           initialGuest={
             selectedTable?.guest && selectedTable.guest !== "—"
               ? selectedTable.guest
+              : selectedTable?.reservation?.phase === "seated"
+                ? selectedTable.reservation.guest
               : selectedRoomOrder?.guest && selectedRoomOrder.guest !== "—"
                 ? selectedRoomOrder.guest
                 : ""
@@ -325,6 +383,7 @@ export function FbOrdersView() {
           initialOrderType={entryOrderType}
           lockTable={!!selectedTable && entryOrderType === "Dine In"}
           liveTableId={selectedTable?.id}
+          reservationOverride={reservationOverride}
           openOrderId={
             openOrderId ||
             selectedTable?.openOrderId ||
@@ -346,9 +405,43 @@ export function FbOrdersView() {
             setOpenBillId("");
             setEntryMode("new");
             setOrderOutletId("");
+            setReservationOverride(null);
           }}
         />
       )}
+
+      {arrivalTable && (
+        <ReservationArrivalModal
+          table={arrivalTable}
+          onClose={() => setArrivalTable(null)}
+          onSeated={(message) => void handleArrivalSeated(message)}
+          onWalkIn={(override) => {
+            const table = arrivalTable;
+            setArrivalTable(null);
+            openTableEntry(table, "new", override);
+          }}
+          onNoShow={(message) => {
+            setArrivalTable(null);
+            setToast(message);
+            void reloadTables();
+          }}
+        />
+      )}
+
+      <ConfirmModal
+        open={noShowTable !== null}
+        onClose={() => setNoShowTable(null)}
+        onConfirm={() => void handleNoShow()}
+        loading={noShowBusy}
+        variant="danger"
+        title="Mark reservation as no-show?"
+        message={
+          noShowTable?.reservation
+            ? `${noShowTable.reservation.resNo} · ${noShowTable.reservation.guest} (${noShowTable.reservation.covers} pax) did not arrive. The reservation will be marked No Show and table ${noShowTable.tableNo} will be free for walk-ins.`
+            : ""
+        }
+        confirmLabel="Mark No Show"
+      />
     </div>
   );
 }

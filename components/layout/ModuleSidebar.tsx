@@ -619,7 +619,7 @@ export function ModuleSidebar({ title, subtitle = "Module menu", items }: Module
 
       {/* Desktop — always collapsed; hover expands as overlapping panel */}
       <aside
-        className="relative z-50 hidden h-screen w-16 shrink-0 overflow-visible lg:block"
+        className="relative z-[55] hidden h-screen w-16 shrink-0 overflow-visible lg:block"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >

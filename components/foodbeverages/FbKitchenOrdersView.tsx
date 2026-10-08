@@ -124,7 +124,13 @@ function KotCard({
                 cancelled ? "text-slate-400 line-through" : "text-slate-800",
               )}
             >
-              <span>{line.name}</span>
+              <span className="min-w-0">
+                {line.name}
+                {line.modifiers && line.modifiers.length > 0 && (
+                  <span className="block text-xs font-semibold text-amber-700">+ {line.modifiers.join(", ")}</span>
+                )}
+                {line.note && <span className="block text-xs font-normal italic text-slate-500">{line.note}</span>}
+              </span>
               <span className="text-right">{line.qty}</span>
               {showActions && !cancelled && (
                 <button

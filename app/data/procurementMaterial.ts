@@ -85,6 +85,7 @@ export function normalizePoLineItem(
 
   return {
     id: String(raw.id ?? `pli-${index}`),
+    ...(raw.prItemId ? { prItemId: String(raw.prItemId) } : {}),
     materialId: product?.id ?? materialId,
     productCode: product?.productCode ?? productCode,
     productName: product?.productName ?? productName,
@@ -177,16 +178,24 @@ export function rfqItemFromPrItem(item: PRRequestedItem): RFQRequestedItem {
   };
 }
 
+/** Build PO lines from PR items; with `remaining`, quantities are capped and fully ordered items dropped. */
 export function poLinesFromPr(
   items: PRRequestedItem[],
   products: ProductItem[],
+  remaining?: Record<string, number>,
 ): POLineItem[] {
-  return items.map((item, idx) => {
+  const source = remaining
+    ? items
+        .map((item) => ({ ...item, quantity: remaining[item.id] ?? item.quantity }))
+        .filter((item) => item.quantity > 0)
+    : items;
+  return source.map((item, idx) => {
     const product = resolveProductForLine(products, item);
     const unitRate = item.estimatedPrice || 0;
     const qty = item.quantity;
     return {
       id: `pli-pr-${idx}-${Date.now()}`,
+      prItemId: item.id,
       materialId: product?.id ?? item.materialId ?? "",
       productCode: product?.productCode ?? item.productCode ?? "",
       productName: product?.productName ?? item.item,
@@ -213,6 +222,7 @@ export function poLinesFromRfq(
     const qty = item.quantity;
     return {
       id: `pli-rfq-${idx}`,
+      prItemId: item.id,
       materialId: product?.id ?? item.materialId ?? "",
       productCode: product?.productCode ?? item.productCode ?? "",
       productName: product?.productName ?? item.item,

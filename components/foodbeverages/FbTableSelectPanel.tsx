@@ -10,6 +10,7 @@ import {
   type LiveTableStatus,
 } from "@/app/data/foodbeverages/ops";
 import type { FbOutlet, LiveTable } from "@/services/food-beverages";
+import { formatClock, formatTime24, isHoldingTable, minutesUntil } from "@/app/data/foodbeverages/reservations";
 import { Button } from "@/components/ui/Button";
 import { FbOutletSelect } from "@/components/foodbeverages/FbOutletSelect";
 import type { OrderTab } from "@/components/foodbeverages/FbOrderEntryPanel";
@@ -20,10 +21,15 @@ const ORDER_TABS: OrderTab[] = ["Dine In", "Takeaway", "Room Service"];
 const STATUS_FILTERS = [
   { id: "all", label: "All" },
   { id: "Available", label: "Blank" },
+  { id: "Booked", label: "Reserved" },
   { id: "Occupied", label: "Running KOT" },
   { id: "Reserved", label: "Running" },
   { id: "Billing", label: "Printed" },
 ] as const;
+
+/** A free table only reads as Reserved while its booking window is active. */
+const tableStatus = (t: LiveTable): string =>
+  t.status === "Available" && t.reservation && isHoldingTable(t.reservation.phase) ? "Booked" : t.status;
 
 type Props = {
   outlets: FbOutlet[];
@@ -38,6 +44,7 @@ type Props = {
   onBillTable?: (table: LiveTable) => void;
   onBillRoomOrder?: (room: LiveTable) => void;
   onCleanTable?: (table: LiveTable) => void;
+  onNoShow?: (table: LiveTable) => void;
   onContinue: () => void;
   className?: string;
 };
@@ -55,6 +62,7 @@ export function FbTableSelectPanel({
   onBillTable,
   onBillRoomOrder,
   onCleanTable,
+  onNoShow,
   onContinue,
   className,
 }: Props) {
@@ -72,12 +80,13 @@ export function FbTableSelectPanel({
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return outletTables.filter((t) => {
-      if (filter !== "all" && t.status !== filter) return false;
+      if (filter !== "all" && tableStatus(t) !== filter) return false;
       if (!q) return true;
       const outletLabel = outletName(t.outletId).toLowerCase();
       return (
         t.tableNo.toLowerCase().includes(q) ||
         t.guest.toLowerCase().includes(q) ||
+        String(t.reservation?.guest ?? "").toLowerCase().includes(q) ||
         String(t.section ?? "").toLowerCase().includes(q) ||
         outletLabel.includes(q)
       );
@@ -92,6 +101,7 @@ export function FbTableSelectPanel({
       return (
         t.tableNo.toLowerCase().includes(q) ||
         t.guest.toLowerCase().includes(q) ||
+        String(t.reservation?.guest ?? "").toLowerCase().includes(q) ||
         String(t.section ?? "").toLowerCase().includes(q) ||
         outletLabel.includes(q)
       );
@@ -102,12 +112,14 @@ export function FbTableSelectPanel({
     const counts: Record<string, number> = {
       all: searchFiltered.length,
       Available: 0,
+      Booked: 0,
       Occupied: 0,
       Reserved: 0,
       Billing: 0,
     };
     for (const t of searchFiltered) {
-      counts[t.status] = (counts[t.status] ?? 0) + 1;
+      const s = tableStatus(t);
+      counts[s] = (counts[s] ?? 0) + 1;
     }
     return counts;
   }, [searchFiltered]);
@@ -338,6 +350,9 @@ export function FbTableSelectPanel({
                           onClean={
                             onCleanTable ? () => onCleanTable(table) : undefined
                           }
+                          onNoShow={
+                            onNoShow ? () => onNoShow(table) : undefined
+                          }
                         />
                       ))}
                     </div>
@@ -521,19 +536,85 @@ function TableTile({
   onSelect,
   onBill,
   onClean,
+  onNoShow,
 }: {
   table: LiveTable;
   outletLabel?: string;
   onSelect: () => void;
   onBill?: () => void;
   onClean?: () => void;
+  onNoShow?: () => void;
 }) {
-  const status = (table.status as LiveTableStatus) ?? "Available";
+  const status = (tableStatus(table) as LiveTableStatus) ?? "Available";
   const style = tableStatusStyles[status] ?? tableStatusStyles.Available;
   const isPaid = status === "Dirty";
   const isPrinted = status === "Billing";
   const isBlank = status === "Available";
   const isActive = !isBlank;
+  const reservation = status === "Booked" ? table.reservation : null;
+  const overlay = table.reservation ?? null;
+  const upcoming = isBlank && overlay?.phase === "upcoming" ? overlay : null;
+  const seatedBooking = overlay?.phase === "seated" ? overlay : null;
+  const conflict = overlay?.conflict ? overlay : null;
+
+  if (reservation) {
+    const lateBy = reservation.phase === "late" ? -(minutesUntil(reservation.startsAt) ?? 0) : 0;
+    return (
+      <div
+        className={cn(
+          "relative flex h-[7.25rem] w-[6.25rem] shrink-0 flex-col rounded-sm border-2 border-dashed p-2 transition hover:-translate-y-0.5 hover:shadow-md",
+          style.bg,
+          reservation.phase === "late" ? "border-amber-500" : style.border,
+        )}
+        title={[
+          `${reservation.resNo} · ${reservation.guest}`,
+          reservation.phone,
+          `${reservation.covers} guests at ${formatTime24(reservation.time)}`,
+          `Held from ${formatClock(reservation.blockFrom)} · auto no-show at ${formatClock(reservation.graceEndsAt)}`,
+        ]
+          .filter(Boolean)
+          .join("\n")}
+      >
+        <p
+          className={cn(
+            "absolute right-1.5 top-1 text-[10px] font-bold",
+            reservation.phase === "late" ? "text-amber-700" : "text-violet-900",
+          )}
+        >
+          {reservation.phase === "late" ? `Late ${Math.max(lateBy, 0)}m` : formatTime24(reservation.time)}
+        </p>
+        <button
+          type="button"
+          onClick={onSelect}
+          className="flex flex-1 cursor-pointer flex-col items-center justify-center text-center"
+          aria-label={`Seat reservation ${reservation.resNo} at table ${table.tableNo}`}
+        >
+          <p className="text-2xl font-bold leading-none text-slate-900">
+            {table.tableNo.replace(/^T-?/i, "")}
+          </p>
+          <p className="mt-1.5 w-full truncate text-[10px] font-semibold text-violet-900">
+            {reservation.guest || "Reserved"}
+          </p>
+          <p className="text-[10px] font-medium text-violet-700">
+            {reservation.covers > 0 ? `${reservation.covers} pax` : "Reserved"}
+          </p>
+        </button>
+        {onNoShow && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNoShow();
+            }}
+            className="mx-auto rounded-sm border border-violet-700 bg-white px-2 py-0.5 text-[10px] font-semibold text-violet-900 shadow-sm transition hover:bg-violet-50"
+            aria-label={`Mark reservation ${reservation.resNo} as no-show`}
+          >
+            No show
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -542,8 +623,28 @@ function TableTile({
         style.bg,
         style.border,
         isPaid ? "opacity-90" : "hover:-translate-y-0.5 hover:shadow-md",
+        conflict && "ring-2 ring-amber-400 ring-offset-1",
       )}
+      title={
+        conflict
+          ? `Reserved for ${conflict.guest} at ${formatTime24(conflict.time)} (${conflict.resNo}) — table is still occupied`
+          : seatedBooking
+            ? `${seatedBooking.resNo} · ${seatedBooking.guest}`
+            : upcoming
+              ? `Booked for ${upcoming.guest} at ${formatTime24(upcoming.time)} — free for walk-ins until ${formatClock(upcoming.blockFrom)}`
+              : undefined
+      }
     >
+      {(conflict || seatedBooking) && (
+        <p
+          className={cn(
+            "absolute left-1.5 top-1 rounded-sm px-1 text-[9px] font-bold",
+            conflict ? "bg-amber-500 text-white" : "bg-violet-600 text-white",
+          )}
+        >
+          {conflict ? `Res ${formatTime24(conflict.time)}` : "Res"}
+        </p>
+      )}
       {isActive && !isPaid && (
         <p className="absolute right-1.5 top-1 text-[10px] font-semibold text-slate-800">
           {formatTableDuration(table.durationMin)}
@@ -575,6 +676,9 @@ function TableTile({
                 ? table.guest
                 : style.label}
           </p>
+        )}
+        {upcoming && (
+          <p className="mt-2 text-[10px] font-semibold text-violet-700">Res {formatTime24(upcoming.time)}</p>
         )}
       </button>
 

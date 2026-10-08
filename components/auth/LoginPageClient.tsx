@@ -12,8 +12,8 @@ export function LoginPageClient() {
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") || "/properties";
 
-  const [email, setEmail] = useState("admin@gmail.com");
-  const [password, setPassword] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -128,11 +128,6 @@ export function LoginPageClient() {
               {busy ? "Please wait…" : "Sign in"}
             </Button>
           </form>
-
-          <p className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-xs text-emerald-100/90">
-            Demo admin: <span className="font-semibold">admin@gmail.com</span> /{" "}
-            <span className="font-semibold">123456</span>
-          </p>
         </div>
       </div>
     </div>

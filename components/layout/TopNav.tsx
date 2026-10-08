@@ -14,6 +14,8 @@ import {
   Wrench,
 } from "lucide-react";
 import type { NavItem } from "@/app/data/types";
+import { usePropertyOptional } from "@/components/platform/PropertyProvider";
+import { moduleRouteForPath } from "@/lib/module-access";
 import { cn } from "@/lib/utils";
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -34,10 +36,15 @@ interface TopNavProps {
 
 export function TopNav({ items }: TopNavProps) {
   const pathname = usePathname();
+  const propertyCtx = usePropertyOptional();
+  const visibleItems = items.filter((item) => {
+    const route = moduleRouteForPath(item.href);
+    return !route || !propertyCtx || propertyCtx.canRead(route.key);
+  });
 
   return (
     <nav className="-mx-3 flex gap-1 overflow-x-auto px-3 pb-0.5 scrollbar-none sm:-mx-4 sm:px-4 lg:mx-0 lg:px-0">
-      {items.map((item) => {
+      {visibleItems.map((item) => {
         const Icon = iconMap[item.icon] ?? LayoutDashboard;
         const isActive =
           pathname === item.href ||

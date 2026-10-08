@@ -24,7 +24,10 @@ export function AppShell({
 }: AppShellProps) {
   return (
     <MobileNavProvider enabled={!!moduleSidebar}>
-      <div className="flex h-screen min-w-0 overflow-hidden bg-[#f7f8f7]">
+      <div
+        className="group/shell flex h-screen min-w-0 overflow-hidden bg-[#f7f8f7]"
+        data-module-sidebar={moduleSidebar ? "" : undefined}
+      >
         {moduleSidebar}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <Header user={user} />

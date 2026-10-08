@@ -69,7 +69,6 @@ export interface GRNRecord {
   grnNumber: string;
   receiptDate: string;
   deliveryTime?: string;
-  receivingDock?: string;
   deliveryPerson?: string;
   poNumber: string;
   supplierName: string;
@@ -141,7 +140,6 @@ export function normalizeGrnRecord(grn: GRNRecord): GRNRecord {
   return {
     ...grn,
     deliveryTime: grn.deliveryTime ?? (grn as GRNRecord & { delivery_time?: string }).delivery_time,
-    receivingDock: grn.receivingDock ?? (grn as GRNRecord & { receiving_dock?: string }).receiving_dock,
     deliveryPerson: grn.deliveryPerson ?? (grn as GRNRecord & { delivery_person?: string }).delivery_person,
     items,
     itemCount: items.length,

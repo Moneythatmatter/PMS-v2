@@ -458,6 +458,7 @@ export default function DirectStorePurchasesPage() {
 
       {/* CREATE / EDIT DSP DRAWER */}
       <Drawer
+        side="bottom"
         open={createDrawerOpen || !!editDSP}
         onClose={() => {
           setCreateDrawerOpen(false);
@@ -674,6 +675,7 @@ export default function DirectStorePurchasesPage() {
       {/* VIEW DETAILS DRAWER */}
       {selectedDSP && (
         <Drawer
+          side="bottom"
           open={!!selectedDSP}
           onClose={() => setSelectedDSP(null)}
           title="DSP Details"

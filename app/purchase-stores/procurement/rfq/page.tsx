@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   FileText,
   Clock,
   CheckCircle2,
-  AlertTriangle,
   Zap,
   Download,
   Plus,
@@ -35,7 +34,9 @@ import {
   User,
   Layers,
   Package,
+  CalendarDays,
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -59,20 +60,27 @@ import type {
   RFQVendorItem,
   RFQRequestedItem,
   RFQAttachment,
+  VendorQuotationComparison,
 } from "@/app/data/rfqData";
 import {
   normalizeRfqRecord,
   normalizeRfqRequestedItem,
   toStoredRfqVendor,
 } from "@/app/data/rfqData";
-import type { PurchaseRequisition } from "@/app/data/purchaseRequisitionsData";
-import { PurchaseAttachmentPreviewModal } from "@/components/purchase-stores/ui/PurchaseAttachmentPreviewModal";
 import {
-  createAttachmentFromFile,
-  revokeAttachmentUrls,
-  MAX_ATTACHMENT_BYTES,
-  type PurchaseAttachmentRecord,
-} from "@/app/data/purchaseAttachmentUtils";
+  remainingByPrItemId,
+  type PRFulfillment,
+  type PurchaseRequisition,
+} from "@/app/data/purchaseRequisitionsData";
+import {
+  PROCUREMENT_PRIORITY_OPTIONS,
+  PrioritySelector,
+  ProcurementFormSection,
+  ProcurementSummaryRow,
+  priorityTextClass,
+} from "@/components/purchase-stores/ui/ProcurementFormParts";
+import { PurchaseAttachmentPreviewModal } from "@/components/purchase-stores/ui/PurchaseAttachmentPreviewModal";
+import { type PurchaseAttachmentRecord } from "@/app/data/purchaseAttachmentUtils";
 import { usePsList } from "@/hooks/usePsResource";
 import { psRfqService, psRequisitionService, psSupplierService, psPurchaseOrderService, psProductService } from "@/services/purchase-stores/index";
 import {
@@ -95,6 +103,40 @@ function prOptionLabel(pr: PurchaseRequisition): string {
   return `${pr.prNumber} (${pr.department} • ${categoryHint})`;
 }
 
+function formatBidDelivery(bid: VendorQuotationComparison): string {
+  if (bid.deliveryDate) {
+    return new Date(`${bid.deliveryDate}T00:00:00`).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+  return bid.deliveryDays ? `${bid.deliveryDays} days` : "—";
+}
+
+function RfqDetailSection({
+  title,
+  meta,
+  flush,
+  children,
+}: {
+  title: string;
+  meta?: string;
+  /** Children draw their own edge-to-edge content (tables, lists). */
+  flush?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="flex items-center justify-between gap-3 px-5 py-3.5">
+        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        {meta && <span className="text-xs text-slate-500">{meta}</span>}
+      </div>
+      <div className={flush ? undefined : "border-t border-slate-100 px-5 py-4"}>{children}</div>
+    </section>
+  );
+}
+
 export default function RequestForQuotationsPage() {
   const { user } = useAuth();
   const [isMounted, setIsMounted] = useState(false);
@@ -102,12 +144,22 @@ export default function RequestForQuotationsPage() {
     setIsMounted(true);
   }, []);
 
-  // Native File Input Reference for Attachments
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const { data: rfqListRaw, loading: isLoading, reload } = usePsList(() => psRfqService.list(), []);
+  const { data: rfqListRaw, loading: isLoading, reload: reloadRfqs } = usePsList(() => psRfqService.list(), []);
   const rfqList = useMemo(() => rfqListRaw.map(normalizeRfqRecord), [rfqListRaw]);
   const { data: requisitions, loading: loadingPRs } = usePsList(() => psRequisitionService.list(), []);
+  const { data: fulfillmentList, reload: reloadFulfillment } = usePsList(
+    () => psRequisitionService.fulfillment(),
+    [],
+  );
+  const fulfillmentByPr = useMemo(
+    () => new Map<string, PRFulfillment>(fulfillmentList.map((f) => [f.prNumber, f])),
+    [fulfillmentList],
+  );
+  const { data: purchaseOrders, reload: reloadPurchaseOrders } = usePsList(
+    () => psPurchaseOrderService.list(),
+    [],
+  );
+  const reload = () => Promise.all([reloadRfqs(), reloadFulfillment(), reloadPurchaseOrders()]);
   const { data: products } = usePsList(() => psProductService.list(), []);
   const { data: suppliers } = usePsList(() => psSupplierService.list(), []);
 
@@ -130,10 +182,6 @@ export default function RequestForQuotationsPage() {
     };
   }, [platformUsers, user]);
 
-  const eligiblePRs = useMemo(
-    () => requisitions.filter((pr) => pr.status === "Approved"),
-    [requisitions],
-  );
   const vendorOptions = useMemo(
     () =>
       suppliers.map((s) => ({
@@ -210,11 +258,19 @@ export default function RequestForQuotationsPage() {
   // Form Vendors & Requested Items State
   const [formVendors, setFormVendors] = useState<RFQVendorItem[]>([]);
   const [formRequestedItems, setFormRequestedItems] = useState<RFQRequestedItem[]>([]);
+  const formEstimatedValue = formRequestedItems.reduce((sum, i) => sum + i.quantity * i.estimatedRate, 0);
 
   const selectedPR = useMemo(
     () => requisitions.find((pr) => pr.prNumber === formPR),
     [requisitions, formPR],
   );
+
+  const eligiblePRs = useMemo(() => {
+    const ownPR = editRFQ?.linkedPR?.trim();
+    return requisitions.filter(
+      (pr) => pr.prNumber === ownPR || fulfillmentByPr.get(pr.prNumber)?.canCreateRfq,
+    );
+  }, [requisitions, fulfillmentByPr, editRFQ]);
 
   // Form Commercial Terms State
   const [formDeliveryLoc, setFormDeliveryLoc] = useState("");
@@ -224,33 +280,19 @@ export default function RequestForQuotationsPage() {
   const [formExpDelivery, setFormExpDelivery] = useState("");
   const [formTax, setFormTax] = useState("");
 
-  // Form Attachments State
-  const [formAttachments, setFormAttachments] = useState<RFQAttachment[]>([]);
   const [previewAttachment, setPreviewAttachment] = useState<PurchaseAttachmentRecord | null>(null);
-  const [uploadingAttachments, setUploadingAttachments] = useState(false);
-
-  const formAttachmentsRef = useRef(formAttachments);
-  formAttachmentsRef.current = formAttachments;
-  useEffect(() => {
-    return () => {
-      revokeAttachmentUrls(formAttachmentsRef.current as PurchaseAttachmentRecord[]);
-    };
-  }, []);
 
   // Vendor Selection Reason State
-  const [vendorSelectReason, setVendorSelectReason] = useState(
-    "Lowest evaluated cost with acceptable delivery lead time and 12M warranty."
-  );
+  const [vendorSelectReason, setVendorSelectReason] = useState("");
   const [pickedVendorId, setPickedVendorId] = useState("");
 
   // Record vendor quotation modal
   const [recordQuoteRFQ, setRecordQuoteRFQ] = useState<RFQRecord | null>(null);
   const [recordQuoteVendor, setRecordQuoteVendor] = useState<RFQVendorItem | null>(null);
   const [quoteUnitPrice, setQuoteUnitPrice] = useState("");
-  const [quoteDeliveryDays, setQuoteDeliveryDays] = useState("7");
+  const [quoteDeliveryDate, setQuoteDeliveryDate] = useState("");
   const [quotePaymentTerms, setQuotePaymentTerms] = useState("");
   const [quoteWarranty, setQuoteWarranty] = useState("12 Months");
-  const [quoteRating, setQuoteRating] = useState("4");
   const [quoteTotalAmount, setQuoteTotalAmount] = useState("");
   const [savingQuote, setSavingQuote] = useState(false);
 
@@ -265,11 +307,21 @@ export default function RequestForQuotationsPage() {
   }, [rfqList, selectedRFQ?.id]);
 
   // Sync form when PR selection changes
-  const handlePRSelectionChange = (prNum: string, prOverride?: PurchaseRequisition) => {
+  const handlePRSelectionChange = (
+    prNum: string,
+    prOverride?: PurchaseRequisition,
+    fulfillmentOverride?: PRFulfillment,
+  ) => {
     setFormPR(prNum);
     const pr = prOverride ?? requisitions.find((p) => p.prNumber === prNum);
     if (pr) {
-      setFormRequestedItems(prItemsToRfqItems(pr.requestedItems, products));
+      const remaining = remainingByPrItemId(fulfillmentOverride ?? fulfillmentByPr.get(pr.prNumber));
+      const items = remaining
+        ? pr.requestedItems
+            .map((item) => ({ ...item, quantity: remaining[item.id] ?? item.quantity }))
+            .filter((item) => item.quantity > 0)
+        : pr.requestedItems;
+      setFormRequestedItems(prItemsToRfqItems(items, products));
       setFormPriority(pr.priority);
     } else if (!prNum) {
       setFormRequestedItems([]);
@@ -285,7 +337,6 @@ export default function RequestForQuotationsPage() {
     setFormPriority("Medium");
     setFormRequestedItems([]);
     setFormVendors([]);
-    setFormAttachments([]);
     setFormRemarks("");
     setFormDeliveryLoc("");
     setFormDeliveryAddr("");
@@ -295,6 +346,25 @@ export default function RequestForQuotationsPage() {
     setFormTax("");
     setCreateDrawerOpen(true);
   };
+
+  // "Create RFQ" from the requisition page: /rfq?fromPR=PR-…
+  useEffect(() => {
+    const fromPR = new URLSearchParams(window.location.search).get("fromPR");
+    if (!fromPR) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    void Promise.all([psRequisitionService.list(), psRequisitionService.fulfillment()])
+      .then(([prs, fulfillments]) => {
+        const pr = prs.find((p) => p.prNumber === fromPR);
+        const fulfillment = fulfillments.find((f) => f.prNumber === fromPR);
+        if (!pr || !fulfillment?.canCreateRfq) {
+          setToast({ message: `${fromPR} is not open for a new RFQ.`, variant: "info" });
+          return;
+        }
+        openCreateDrawer();
+        handlePRSelectionChange(fromPR, pr, fulfillment);
+      })
+      .catch(() => setToast({ message: `Could not load ${fromPR}.`, variant: "info" }));
+  }, []);
 
   // Sync Form State when Edit RFQ opens
   useEffect(() => {
@@ -307,13 +377,12 @@ export default function RequestForQuotationsPage() {
       setFormVendors(editRFQ.invitedVendors);
       setFormRequestedItems(editRFQ.requestedItems);
       setFormDeliveryLoc(editRFQ.commercialTerms.deliveryLocation);
-      setFormDeliveryAddr(editRFQ.commercialTerms.deliveryAddress || "Dock 2, Hotel Grand Plaza");
+      setFormDeliveryAddr(editRFQ.commercialTerms.deliveryAddress ?? "");
       setFormPayTerms(editRFQ.commercialTerms.paymentTerms);
       setFormCurrency(editRFQ.commercialTerms.currency);
       setFormExpDelivery(editRFQ.commercialTerms.expectedDelivery);
       setFormTax(editRFQ.commercialTerms.tax);
       setFormRemarks(editRFQ.commercialTerms.remarks);
-      setFormAttachments(editRFQ.attachments);
     }
   }, [editRFQ]);
 
@@ -329,11 +398,13 @@ export default function RequestForQuotationsPage() {
     const total = rfqList.length;
     const draft = rfqList.filter((r) => r.status === "Draft").length;
     const sent = rfqList.filter((r) => r.status === "Sent").length;
-    const pendingResponse = rfqList.filter((r) => r.status === "Pending Response" || r.status === "Sent").length;
+    const quotesReceived = rfqList.filter((r) => r.status === "Quotes Received").length;
     const vendorSelected = rfqList.filter((r) => r.status === "Vendor Selected").length;
     const closed = rfqList.filter((r) => r.status === "Closed").length;
+    const convertedToPo = rfqList.filter((r) => r.status === "Converted to PO").length;
+    const cancelled = rfqList.filter((r) => r.status === "Cancelled").length;
 
-    return { total, draft, sent, pendingResponse, vendorSelected, closed };
+    return { total, draft, sent, quotesReceived, vendorSelected, closed, convertedToPo, cancelled };
   }, [rfqList]);
 
   const displaySelectedVendor = (rfq: RFQRecord) => {
@@ -344,6 +415,26 @@ export default function RequestForQuotationsPage() {
     const invited = rfq.invitedVendors.find((v) => v.id === rfq.selectedVendor);
     if (invited) return resolveVendorName(invited.id, invited.vendorName);
     return rfq.selectedVendor;
+  };
+
+  const selectedBidFor = (rfq: RFQRecord) =>
+    rfq.selectedVendor ? rfq.comparisonData.find((c) => c.vendorId === rfq.selectedVendor) : undefined;
+
+  /** A PO can be raised once per RFQ, after a quoted vendor is selected. */
+  const canCreatePoFromRfq = (rfq: RFQRecord) =>
+    rfq.status === "Vendor Selected" && !rfq.poNumber?.trim() && Boolean(selectedBidFor(rfq));
+
+  /** Per-unit rate that reproduces the vendor's quoted total (quotes are one rate across all lines). */
+  const quotedRateFor = (rfq: RFQRecord, bid: VendorQuotationComparison) => {
+    const totalQty = rfq.requestedItems.reduce((sum, item) => sum + item.quantity, 0);
+    if (!totalQty || !bid.totalAmount) return bid.unitPrice;
+    if (Math.abs(bid.unitPrice * totalQty - bid.totalAmount) <= 1) return bid.unitPrice;
+    return Math.round((bid.totalAmount / totalQty) * 100) / 100;
+  };
+
+  const linkedPoFor = (rfq: RFQRecord) => {
+    const poNumber = rfq.poNumber?.trim();
+    return poNumber ? purchaseOrders.find((po) => po.poNumber === poNumber) ?? null : null;
   };
 
   // Filter Active Count
@@ -399,50 +490,47 @@ export default function RequestForQuotationsPage() {
 
   // Status Badge Helper
   const renderStatusBadge = (status: RFQRecord["status"]) => {
-    switch (status) {
-      case "Converted to PO":
-        return (
-          <span className="inline-flex items-center justify-center px-2.5 py-0.5 min-w-[115px] text-center text-[9px] font-extrabold uppercase rounded-full bg-teal-50 text-teal-800 border border-teal-200">
-            Converted to PO
-          </span>
-        );
-      case "Vendor Selected":
-        return (
-          <span className="inline-flex items-center justify-center px-2.5 py-0.5 min-w-[115px] text-center text-[9px] font-extrabold uppercase rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-            Vendor Selected
-          </span>
-        );
-      case "Sent":
-        return (
-          <span className="inline-flex items-center justify-center px-2.5 py-0.5 min-w-[115px] text-center text-[9px] font-extrabold uppercase rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-            Sent
-          </span>
-        );
-      case "Pending Response":
-        return (
-          <span className="inline-flex items-center justify-center px-2.5 py-0.5 min-w-[115px] text-center text-[9px] font-extrabold uppercase rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-            Pending Response
-          </span>
-        );
-      case "Closed":
-        return (
-          <span className="inline-flex items-center justify-center px-2.5 py-0.5 min-w-[115px] text-center text-[9px] font-extrabold uppercase rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-            Closed
-          </span>
-        );
-      case "Cancelled":
-        return (
-          <span className="inline-flex items-center justify-center px-2.5 py-0.5 min-w-[115px] text-center text-[9px] font-extrabold uppercase rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-            Cancelled
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center justify-center px-2.5 py-0.5 min-w-[115px] text-center text-[9px] font-extrabold uppercase rounded-full bg-slate-50 text-slate-700 border border-slate-200">
-            Draft
-          </span>
-        );
-    }
+    const tone =
+      {
+        "Converted to PO": { pill: "bg-teal-50 text-teal-800 ring-teal-200", dot: "bg-teal-500" },
+        "Vendor Selected": { pill: "bg-emerald-50 text-emerald-800 ring-emerald-200", dot: "bg-emerald-500" },
+        Sent: { pill: "bg-amber-50 text-amber-800 ring-amber-200", dot: "bg-amber-500" },
+        "Quotes Received": { pill: "bg-blue-50 text-blue-700 ring-blue-200", dot: "bg-blue-500" },
+        Closed: { pill: "bg-slate-100 text-slate-600 ring-slate-200", dot: "bg-slate-400" },
+        Cancelled: { pill: "bg-rose-50 text-rose-700 ring-rose-200", dot: "bg-rose-500" },
+      }[status as string] ?? { pill: "bg-slate-50 text-slate-600 ring-slate-200", dot: "bg-slate-300" };
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset",
+          tone.pill,
+        )}
+      >
+        <span className={cn("h-1.5 w-1.5 rounded-full", tone.dot)} />
+        {status || "Draft"}
+      </span>
+    );
+  };
+
+  const formatShortDate = (iso?: string) => {
+    if (!iso) return "—";
+    const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
+    return Number.isNaN(d.getTime())
+      ? iso
+      : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  };
+
+  /** Countdown to the quote deadline, only while vendors can still respond. */
+  const closingHint = (rfq: RFQRecord) => {
+    if (!rfq.closingDate || !["Draft", "Sent", "Quotes Received"].includes(rfq.status)) return null;
+    const days = Math.round(
+      (new Date(`${rfq.closingDate.slice(0, 10)}T00:00:00`).getTime() - new Date(`${todayStr}T00:00:00`).getTime()) /
+        86_400_000,
+    );
+    if (Number.isNaN(days)) return null;
+    if (days < 0) return { label: `Overdue by ${-days}d`, className: "text-red-600" };
+    if (days === 0) return { label: "Due today", className: "text-amber-600" };
+    return { label: `${days}d left`, className: days <= 2 ? "text-amber-600" : "text-slate-400" };
   };
 
   // Vendor Confirmation Handler
@@ -452,8 +540,13 @@ export default function RequestForQuotationsPage() {
       pickedVendorId ||
       selectVendorModalRFQ.comparisonData.find((c) => c.isRecommended)?.vendorId ||
       selectVendorModalRFQ.comparisonData[0]?.vendorId;
-    if (!vendorId) {
-      setToast({ message: "Select a vendor from the comparison table first.", variant: "info" });
+    if (!vendorId || !selectVendorModalRFQ.comparisonData.some((c) => c.vendorId === vendorId)) {
+      setToast({ message: "Select a vendor with a recorded quote first.", variant: "info" });
+      return;
+    }
+    const reason = vendorSelectReason.trim();
+    if (!reason) {
+      setToast({ message: "Enter a reason for selecting this vendor.", variant: "info" });
       return;
     }
     const vendorLabel = resolveVendorName(
@@ -469,7 +562,7 @@ export default function RequestForQuotationsPage() {
           {
             stage: "Vendor Selected",
             timestamp: new Date().toISOString().slice(0, 10),
-            note: vendorSelectReason || `Selected ${vendorLabel}`,
+            note: reason,
             author: resolveBuyerName(selectVendorModalRFQ.buyer),
           },
         ],
@@ -489,10 +582,11 @@ export default function RequestForQuotationsPage() {
     setRecordQuoteRFQ(rfq);
     setRecordQuoteVendor(enriched);
     setQuoteUnitPrice(existing?.unitPrice ? String(existing.unitPrice) : "");
-    setQuoteDeliveryDays(existing?.deliveryDays ? String(existing.deliveryDays) : "7");
+    setQuoteDeliveryDate(
+      existing?.deliveryDate && existing.deliveryDate >= todayStr ? existing.deliveryDate : "",
+    );
     setQuotePaymentTerms(existing?.paymentTerms || rfq.commercialTerms.paymentTerms || "Net 30");
     setQuoteWarranty(existing?.warranty || "12 Months");
-    setQuoteRating(existing?.rating?.replace(/[^\d.]/g, "") || "4");
     setQuoteTotalAmount(existing?.totalAmount ? String(existing.totalAmount) : "");
   };
 
@@ -515,15 +609,27 @@ export default function RequestForQuotationsPage() {
       setToast({ message: "Enter quoted rate and total amount.", variant: "info" });
       return;
     }
+    if (!quoteDeliveryDate) {
+      setToast({ message: "Select a delivery date.", variant: "info" });
+      return;
+    }
+    if (quoteDeliveryDate < todayStr) {
+      setToast({ message: "Delivery date cannot be in the past.", variant: "info" });
+      return;
+    }
 
     const vendorLabel = resolveVendorName(recordQuoteVendor.id, recordQuoteVendor.vendorName);
+    const deliveryDays = Math.max(
+      0,
+      Math.round((Date.parse(quoteDeliveryDate) - Date.parse(todayStr)) / 86_400_000),
+    );
     const newBid = {
       vendorId: recordQuoteVendor.id,
       unitPrice,
-      deliveryDays: Number(quoteDeliveryDays) || 7,
+      deliveryDate: quoteDeliveryDate,
+      deliveryDays,
       paymentTerms: quotePaymentTerms,
       warranty: quoteWarranty,
-      rating: `${quoteRating} ★`,
       totalAmount,
       isRecommended: false,
     };
@@ -548,7 +654,7 @@ export default function RequestForQuotationsPage() {
       await psRfqService.update(recordQuoteRFQ.id, {
         invitedVendors: invitedVendors as unknown as RFQVendorItem[],
         comparisonData,
-        status: recordQuoteRFQ.status === "Sent" ? "Pending Response" : recordQuoteRFQ.status,
+        status: recordQuoteRFQ.status === "Sent" ? "Quotes Received" : recordQuoteRFQ.status,
         activityTimeline: [
           ...recordQuoteRFQ.activityTimeline,
           {
@@ -571,6 +677,10 @@ export default function RequestForQuotationsPage() {
   };
 
   const openCompareForRfq = (rfq: RFQRecord) => {
+    if ((rfq.comparisonData?.length ?? 0) === 0) {
+      setToast({ message: "Record at least one vendor quote before comparing.", variant: "info" });
+      return;
+    }
     const recommended = rfq.comparisonData.find((c) => c.isRecommended);
     setPickedVendorId(recommended?.vendorId ?? rfq.comparisonData[0]?.vendorId ?? "");
     setCompareModalRFQ(rfq);
@@ -579,24 +689,24 @@ export default function RequestForQuotationsPage() {
   const handleExecuteCreatePO = async () => {
     if (!convertPOModalRFQ) return;
     const rfq = convertPOModalRFQ;
-    const vendorId =
-      rfq.selectedVendor ||
-      pickedVendorId ||
-      rfq.comparisonData.find((c) => c.isRecommended)?.vendorId ||
-      rfq.comparisonData[0]?.vendorId;
-    if (!vendorId) {
-      setToast({ message: "Select a vendor before converting to PO.", variant: "info" });
+    const vendorId = rfq.selectedVendor;
+    const bid = selectedBidFor(rfq);
+    if (rfq.poNumber?.trim()) {
+      setToast({ message: `${rfq.rfqNumber} is already converted to ${rfq.poNumber}.`, variant: "info" });
+      return;
+    }
+    if (rfq.status !== "Vendor Selected" || !vendorId) {
+      setToast({ message: "Record quotes and select a vendor before creating a PO.", variant: "info" });
+      return;
+    }
+    if (!bid) {
+      setToast({ message: "The selected vendor has no recorded quote. Record Quote first.", variant: "info" });
       return;
     }
 
     const supplier = resolveVendor(vendorId);
-    const vendorName = resolveVendorName(
-      vendorId,
-      rfq.comparisonData.find((c) => c.vendorId === vendorId)?.vendorName,
-    );
-    const bid = rfq.comparisonData.find((c) => c.vendorId === vendorId);
-    const unitRateOverride = bid?.unitPrice;
-    const items = poLinesFromRfq(rfq.requestedItems, products, unitRateOverride);
+    const vendorName = resolveVendorName(vendorId, bid.vendorName);
+    const items = poLinesFromRfq(rfq.requestedItems, products, quotedRateFor(rfq, bid));
     const missingMaterial = items.filter((line) => !line.materialId);
     if (missingMaterial.length > 0) {
       setToast({
@@ -624,9 +734,9 @@ export default function RequestForQuotationsPage() {
         vendorPhone: supplier?.phone || "—",
         shipToWarehouse: ct.deliveryLocation || "Central Stores",
         dockGate: "Receiving Dock",
-        expectedDeliveryDate: rfq.closingDate || new Date().toISOString().slice(0, 10),
+        expectedDeliveryDate: bid.deliveryDate || rfq.closingDate || new Date().toISOString().slice(0, 10),
         freightTerms: "FOB Destination",
-        paymentTerms: ct.paymentTerms || "Net 30 Days post GRN",
+        paymentTerms: bid.paymentTerms || ct.paymentTerms || "Net 30 Days post GRN",
         paymentDueDays: 30,
         discountPercent: 0,
         currency: ct.currency || "INR",
@@ -658,11 +768,6 @@ export default function RequestForQuotationsPage() {
         ],
       });
 
-      await psRfqService.update(rfq.id, {
-              status: "Converted to PO",
-        poNumber: created.poNumber,
-        selectedVendor: vendorId,
-      });
       await reload();
       setConvertPOModalRFQ(null);
       setToast({
@@ -702,49 +807,6 @@ export default function RequestForQuotationsPage() {
     }
   };
 
-  // Native File Picker Select Handler
-  const handleNativeFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const oversized = Array.from(files).filter((f) => f.size > MAX_ATTACHMENT_BYTES);
-    if (oversized.length > 0) {
-      setToast({
-        message: `${oversized.map((f) => f.name).join(", ")} exceeds 5 MB limit.`,
-        variant: "info",
-      });
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
-
-    setUploadingAttachments(true);
-    try {
-      const newAtts = await Promise.all(
-        Array.from(files).map((file) =>
-          createAttachmentFromFile(file, resolveBuyerName(formBuyer || user?.id) || "Buyer"),
-        ),
-      );
-      setFormAttachments((prev) => [...prev, ...(newAtts as RFQAttachment[])]);
-      setToast({ message: `Attached ${files.length} document(s).`, variant: "success" });
-    } catch {
-      setToast({ message: "Failed to read file. Try again.", variant: "info" });
-    } finally {
-      setUploadingAttachments(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const handleRemoveAttachment = (id: string) => {
-    setFormAttachments((prev) => {
-      const removed = prev.find((a) => a.id === id);
-      if (removed?.previewUrl?.startsWith("blob:")) {
-        URL.revokeObjectURL(removed.previewUrl);
-      }
-      return prev.filter((a) => a.id !== id);
-    });
-    setToast({ message: "Attachment removed.", variant: "info" });
-  };
-
   const handlePreviewAttachment = (att: RFQAttachment | PurchaseAttachmentRecord) => {
     setPreviewAttachment({
       id: att.id,
@@ -780,6 +842,30 @@ export default function RequestForQuotationsPage() {
 
   // Save RFQ Form Handler
   const handleSaveRFQ = async (isSend: boolean) => {
+    if (!formPR) {
+      setToast({ message: "Select a Linked Purchase Requisition.", variant: "info" });
+      return;
+    }
+    if (formPR !== editRFQ?.linkedPR?.trim() && !fulfillmentByPr.get(formPR)?.canCreateRfq) {
+      setToast({
+        message: `${formPR} is not open for a new RFQ (it already has an open RFQ or nothing left to source).`,
+        variant: "info",
+      });
+      return;
+    }
+    if (isSend) {
+      const missing = [
+        !(formBuyer || user?.id) && "Buyer",
+        !formRFQDate && "RFQ Date",
+        !formClosingDate && "Closing Date",
+        !formPriority && "Priority",
+        formRequestedItems.length === 0 && "Requested Items",
+      ].filter(Boolean);
+      if (missing.length > 0) {
+        setToast({ message: `Fill required fields before sending: ${missing.join(", ")}.`, variant: "info" });
+        return;
+      }
+    }
     if (formRFQDate && formRFQDate < todayStr) {
       setToast({ message: "RFQ Date cannot be in the past. Select today or a future date.", variant: "info" });
       return;
@@ -798,7 +884,7 @@ export default function RequestForQuotationsPage() {
     const effectiveClosingDate = formClosingDate || effectiveRfqDate;
 
     const newRecord: Partial<RFQRecord> = {
-      linkedPR: formPR || undefined,
+      linkedPR: formPR,
       department: selectedPR?.department ?? "General",
       buyer: effectiveBuyer,
       invitedVendors: formVendors.map((v) => toStoredRfqVendor(v)) as unknown as RFQVendorItem[],
@@ -808,24 +894,14 @@ export default function RequestForQuotationsPage() {
       status: isSend ? "Sent" : "Draft",
       requestedItems: formRequestedItems.map((item, i) => normalizeRfqRequestedItem(item, i)),
       commercialTerms: {
-        deliveryLocation: formDeliveryLoc || "Central Warehouse",
-        deliveryAddress: formDeliveryAddr || "Main Receiving Dock",
-        paymentTerms: formPayTerms || "Net 30 Days post GRN",
-        currency: formCurrency || "INR (₹)",
-        expectedDelivery: formExpDelivery || "7 Days from PO",
-        tax: formTax || "18% GST Extra",
+        deliveryLocation: formDeliveryLoc.trim(),
+        deliveryAddress: formDeliveryAddr.trim(),
+        paymentTerms: formPayTerms.trim(),
+        currency: formCurrency.trim(),
+        expectedDelivery: formExpDelivery.trim(),
+        tax: formTax.trim(),
         remarks: formRemarks || "",
       },
-      attachments: formAttachments.map((att) => ({
-        id: att.id,
-        fileName: att.fileName,
-        fileSize: att.fileSize,
-        fileType: att.fileType,
-        dataUrl: att.dataUrl,
-        mimeType: att.mimeType,
-        uploadedBy: att.uploadedBy,
-        uploadedOn: att.uploadedOn,
-      })),
       comparisonData: editRFQ?.comparisonData ?? [],
       activityTimeline: [
         ...(editRFQ?.activityTimeline ?? []),
@@ -890,7 +966,7 @@ export default function RequestForQuotationsPage() {
           },
           { label: "Edit", icon: <Edit className="h-3.5 w-3.5" />, onClick: () => setEditRFQ(rfq) },
         ];
-      case "Pending Response":
+      case "Quotes Received":
         return [
           view,
           {
@@ -907,26 +983,68 @@ export default function RequestForQuotationsPage() {
       case "Vendor Selected":
         return [
           view,
-          {
-            label: "Convert to PO",
-            icon: <ShoppingCart className="h-3.5 w-3.5" />,
-            onClick: () => setConvertPOModalRFQ(rfq),
-          },
+          ...(canCreatePoFromRfq(rfq)
+            ? [
+                {
+                  label: "Create PO",
+                  icon: <ShoppingCart className="h-3.5 w-3.5" />,
+                  onClick: () => setConvertPOModalRFQ(rfq),
+                },
+              ]
+            : []),
         ];
       case "Converted to PO":
+      case "Closed":
         return [
           view,
-          {
-            label: "View Purchase Order",
-            icon: <FileCheck className="h-3.5 w-3.5" />,
-            onClick: () => setViewPODrawerRFQ(rfq),
-          },
+          ...(rfq.poNumber?.trim()
+            ? [
+                {
+                  label: "View PO",
+                  icon: <FileCheck className="h-3.5 w-3.5" />,
+                  onClick: () => setViewPODrawerRFQ(rfq),
+                },
+              ]
+            : []),
         ];
-      case "Closed":
       case "Cancelled":
       default:
         return [view];
     }
+  };
+
+  const renderPoAction = (rfq: RFQRecord) => {
+    if (rfq.poNumber?.trim()) {
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setViewPODrawerRFQ(rfq);
+          }}
+          title="View purchase order"
+          className="group inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[11px] font-semibold text-teal-700 hover:bg-teal-50"
+        >
+          <FileCheck className="h-3.5 w-3.5" />
+          <span className="group-hover:underline">{rfq.poNumber}</span>
+        </button>
+      );
+    }
+    if (canCreatePoFromRfq(rfq)) {
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setConvertPOModalRFQ(rfq);
+          }}
+          className="inline-flex items-center gap-1 rounded-md border border-emerald-600 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-600 hover:text-white"
+        >
+          <ShoppingCart className="h-3 w-3" /> Create PO
+        </button>
+      );
+    }
+    return <span className="text-slate-300">—</span>;
   };
 
   const firstSelectedRFQ = filteredRFQs.find((r) => selectedIds.has(r.id));
@@ -950,16 +1068,6 @@ export default function RequestForQuotationsPage() {
 
   return (
     <div className="space-y-5 select-none pb-12">
-      {/* Hidden Native File Input */}
-      <input
-        type="file"
-        multiple
-        ref={fileInputRef}
-        onChange={handleNativeFileSelect}
-        className="hidden"
-        accept=".pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg"
-      />
-
       {toast && (
         <AlertBanner
           variant={toast.variant}
@@ -995,18 +1103,19 @@ export default function RequestForQuotationsPage() {
 
       {/* 6 Summary KPI Cards */}
       {isLoading ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
+          {[1, 2, 3, 4, 5, 6, 7].map((i) => (
             <div key={i} className="h-20 rounded-2xl border border-slate-200 bg-white p-4 animate-pulse" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
           <StatMiniCard label="Total RFQs" value={`${metrics.total}`} icon={FileText} accent="#10b981" />
           <StatMiniCard label="Draft" value={`${metrics.draft}`} icon={Clock} accent="#64748b" />
           <StatMiniCard label="Sent" value={`${metrics.sent}`} icon={Send} accent="#d97706" />
-          <StatMiniCard label="Pending Response" value={`${metrics.pendingResponse}`} icon={AlertTriangle} accent="#0284c7" />
+          <StatMiniCard label="Quotes Received" value={`${metrics.quotesReceived}`} icon={FileCheck} accent="#0284c7" />
           <StatMiniCard label="Vendor Selected" value={`${metrics.vendorSelected}`} icon={CheckCircle2} accent="#059669" />
+          <StatMiniCard label="Converted to PO" value={`${metrics.convertedToPo}`} icon={ShoppingCart} accent="#0d9488" />
           <StatMiniCard label="Closed" value={`${metrics.closed}`} icon={XCircle} accent="#475569" />
         </div>
       )}
@@ -1019,12 +1128,14 @@ export default function RequestForQuotationsPage() {
         activeFilterCount={activeFilterCount}
         onOpenFilters={() => setFilterDrawerOpen(true)}
         statusTabs={[
-          { id: "all", label: "All RFQs" },
-          { id: "draft", label: "Draft" },
-          { id: "sent", label: "Sent" },
-          { id: "pending response", label: "Pending Response" },
-          { id: "vendor selected", label: "Vendor Selected" },
-          { id: "closed", label: "Closed" },
+          { id: "all", label: "All", count: metrics.total },
+          { id: "draft", label: "Draft", count: metrics.draft },
+          { id: "sent", label: "Sent", count: metrics.sent },
+          { id: "quotes received", label: "Quotes Received", count: metrics.quotesReceived },
+          { id: "vendor selected", label: "Vendor Selected", count: metrics.vendorSelected },
+          { id: "converted to po", label: "Converted to PO", count: metrics.convertedToPo },
+          { id: "closed", label: "Closed", count: metrics.closed },
+          ...(metrics.cancelled > 0 ? [{ id: "cancelled", label: "Cancelled", count: metrics.cancelled }] : []),
         ]}
         activeStatusTab={statusFilter}
         onStatusTabChange={setStatusFilter}
@@ -1103,9 +1214,11 @@ export default function RequestForQuotationsPage() {
               <option value="all">All Statuses</option>
               <option value="draft">Draft</option>
               <option value="sent">Sent</option>
-              <option value="pending response">Pending Response</option>
+              <option value="quotes received">Quotes Received</option>
               <option value="vendor selected">Vendor Selected</option>
+              <option value="converted to po">Converted to PO</option>
               <option value="closed">Closed</option>
+              <option value="cancelled">Cancelled</option>
             </SelectInput>
           </FormField>
 
@@ -1154,13 +1267,13 @@ export default function RequestForQuotationsPage() {
         </div>
       </OperationsFilterDrawer>
 
-      {/* RFQ Main Table (Sticky Header & Hover Effects) */}
+      {/* RFQ Main Table */}
       <div className="space-y-2">
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs scrollbar-thin max-h-[550px] overflow-y-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="max-h-[600px] overflow-auto rounded-xl border border-slate-200 bg-white scrollbar-thin">
+          <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold sticky top-0 z-20 shadow-2xs">
-                <th className="w-10 px-3.5 py-3 bg-slate-50">
+              <tr className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50/95 text-[11px] font-medium text-slate-500 backdrop-blur">
+                <th className="w-10 px-4 py-3">
                   <input
                     type="checkbox"
                     checked={allVisibleSelected}
@@ -1169,69 +1282,115 @@ export default function RequestForQuotationsPage() {
                     aria-label="Select all RFQs"
                   />
                 </th>
-                <th className="px-3.5 py-3 bg-slate-50">RFQ Number</th>
-                <th className="px-3.5 py-3 bg-slate-50">Linked PR</th>
-                <th className="px-3.5 py-3 bg-slate-50">Department</th>
-                <th className="px-3.5 py-3 bg-slate-50">Buyer</th>
-                <th className="px-3.5 py-3 bg-slate-50">Vendors Invited</th>
-                <th className="px-3.5 py-3 bg-slate-50">Closing Date</th>
-                <th className="px-3.5 py-3 bg-slate-50">Selected Vendor</th>
-                <th className="px-3.5 py-3 bg-slate-50">Status</th>
+                <th className="px-4 py-3 font-medium">RFQ</th>
+                <th className="px-4 py-3 font-medium">Department</th>
+                <th className="px-4 py-3 font-medium">Vendors</th>
+                <th className="px-4 py-3 font-medium">Quotes Due</th>
+                <th className="px-4 py-3 font-medium">Selected Vendor</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Purchase Order</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+            <tbody className="divide-y divide-slate-100 text-slate-700">
               {isLoading ? (
                 [1, 2, 3].map((i) => (
                   <tr key={i} className="animate-pulse">
-                    <td colSpan={9} className="px-3.5 py-4">
-                      <div className="h-4 bg-slate-200 rounded-md w-full" />
+                    <td colSpan={8} className="px-4 py-4">
+                      <div className="h-4 w-full rounded-md bg-slate-200" />
                     </td>
                   </tr>
                 ))
               ) : filteredRFQs.length > 0 ? (
-                filteredRFQs.map((rfq) => (
-                  <tr
-                    key={rfq.id}
-                    className="hover:bg-slate-50/70 transition-colors cursor-pointer"
-                    onClick={() => setSelectedRFQ(rfq)}
-                  >
-                    <td className="px-3.5 py-3" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(rfq.id)}
-                        onChange={() => toggleOne(rfq.id)}
-                        className="h-4 w-4 rounded border-slate-300 text-emerald-700"
-                        aria-label={`Select ${rfq.rfqNumber}`}
-                      />
-                    </td>
-                    <td className="px-3.5 py-3 font-mono font-bold text-slate-900">{rfq.rfqNumber}</td>
-                    <td className="px-3.5 py-3 font-mono text-emerald-700 font-bold">{rfq.linkedPR?.trim() || "—"}</td>
-                    <td className="px-3.5 py-3 font-extrabold text-slate-800">{rfq.department}</td>
-                    <td className="px-3.5 py-3 text-slate-700 font-medium">{resolveBuyerName(rfq.buyer)}</td>
-                    <td className="px-3.5 py-3 text-slate-600 font-bold">
-                      {rfq.invitedVendors.length} Vendors Invited
-                    </td>
-                    <td className="px-3.5 py-3 text-slate-600 font-normal">{rfq.closingDate}</td>
-                    <td className="px-3.5 py-3">
-                      {rfq.selectedVendor ? (
-                        <span className="font-extrabold text-slate-900">{displaySelectedVendor(rfq)}</span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold text-slate-500 bg-slate-100 rounded-full">
-                          Awaiting Evaluation
-                        </span>
+                filteredRFQs.map((rfq) => {
+                  const invited = rfq.invitedVendors.length;
+                  const quoted = rfq.comparisonData.length;
+                  const hint = closingHint(rfq);
+                  const priorityDot = PROCUREMENT_PRIORITY_OPTIONS.find((o) => o.value === rfq.priority)?.dot;
+                  const isSelected = selectedIds.has(rfq.id);
+                  return (
+                    <tr
+                      key={rfq.id}
+                      className={cn(
+                        "cursor-pointer transition-colors",
+                        isSelected ? "bg-emerald-50/50" : "hover:bg-slate-50/70",
                       )}
-                    </td>
-                    <td className="px-3.5 py-3">{renderStatusBadge(rfq.status)}</td>
-                  </tr>
-                ))
+                      onClick={() => setSelectedRFQ(rfq)}
+                    >
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleOne(rfq.id)}
+                          className="h-4 w-4 rounded border-slate-300 text-emerald-700"
+                          aria-label={`Select ${rfq.rfqNumber}`}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={cn("h-2 w-2 shrink-0 rounded-full", priorityDot ?? "bg-slate-300")}
+                            title={`${rfq.priority} priority`}
+                          />
+                          <span className="font-mono text-[12px] font-semibold text-slate-900">{rfq.rfqNumber}</span>
+                        </div>
+                        <p className="mt-0.5 pl-3.5 font-mono text-[11px] text-slate-400">
+                          {rfq.linkedPR?.trim() ? (
+                            <span className="text-emerald-700">{rfq.linkedPR}</span>
+                          ) : (
+                            "No linked PR"
+                          )}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-slate-800">{rfq.department || "—"}</p>
+                        <p className="mt-0.5 text-[11px] text-slate-400">{resolveBuyerName(rfq.buyer) || "—"}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        {invited === 0 ? (
+                          <span className="text-slate-300">None invited</span>
+                        ) : (
+                          <div className="w-24">
+                            <p className="text-[11px] text-slate-600">
+                              <span className="font-semibold text-slate-900">{quoted}</span>/{invited} quoted
+                            </p>
+                            <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full bg-emerald-500"
+                                style={{ width: `${Math.min(100, (quoted / invited) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <p className="text-slate-700">{formatShortDate(rfq.closingDate)}</p>
+                        {hint && <p className={cn("mt-0.5 text-[11px] font-medium", hint.className)}>{hint.label}</p>}
+                      </td>
+                      <td className="max-w-[200px] px-4 py-3">
+                        {rfq.selectedVendor ? (
+                          <span className="block truncate font-medium text-slate-900" title={displaySelectedVendor(rfq) ?? ""}>
+                            {displaySelectedVendor(rfq)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">Not selected</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">{renderStatusBadge(rfq.status)}</td>
+                      <td className="px-4 py-3">{renderPoAction(rfq)}</td>
+                    </tr>
+                  );
+                })
               ) : (
-                /* Empty State */
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-slate-400 font-medium">
-                    <FileText className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                    <p className="text-sm font-extrabold text-slate-700">No RFQs Found</p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Create your first RFQ to invite vendor quotations.
+                  <td colSpan={8} className="px-4 py-14 text-center">
+                    <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-slate-50 text-slate-300 ring-1 ring-slate-200">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-700">No RFQs found</p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {search || statusFilter !== "all" || activeFilterCount > 0
+                        ? "Try a different search or clear the filters."
+                        : "Create your first RFQ to invite vendor quotations."}
                     </p>
                   </td>
                 </tr>
@@ -1288,318 +1447,454 @@ export default function RequestForQuotationsPage() {
         </div>
       </div>
 
-      {/* VIEW RFQ DRAWER (READ-ONLY WITH ACTIVITY TIMELINE) */}
-      {selectedRFQ && (
-        <Drawer
-          open={!!selectedRFQ}
-          onClose={() => setSelectedRFQ(null)}
-          title={`RFQ Record: ${selectedRFQ.rfqNumber}`}
-          width="xl"
-        >
-          <div className="space-y-6 select-none pb-6">
-            {/* Header Status Card */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-xs font-extrabold text-emerald-700">{selectedRFQ.rfqNumber}</span>
-                {renderStatusBadge(selectedRFQ.status)}
-              </div>
-              <h3 className="text-base font-extrabold text-slate-900">{selectedRFQ.department} Department RFQ</h3>
-              <p className="text-xs text-slate-500 font-medium">Linked PR: {selectedRFQ.linkedPR?.trim() || "Direct Procurement"} · Buyer: {resolveBuyerName(selectedRFQ.buyer)}</p>
-            </div>
+      {/* VIEW RFQ DRAWER */}
+      {selectedRFQ && (() => {
+        const rfq = selectedRFQ;
+        const vendors = rfq.invitedVendors.map(enrichInvitedVendor);
+        const bids = rfq.comparisonData ?? [];
+        const quotedCount = vendors.filter((v) => v.status === "Responded").length;
+        const itemsTotal = rfq.requestedItems.reduce((sum, item) => sum + item.quantity * item.estimatedRate, 0);
+        const selectedBid = selectedBidFor(rfq);
+        const selectedVendorName = displaySelectedVendor(rfq);
+        const priority = PROCUREMENT_PRIORITY_OPTIONS.find((o) => o.value === rfq.priority);
+        const hint = closingHint(rfq);
+        const collectingQuotes = rfq.status === "Sent" || rfq.status === "Quotes Received";
+        const poNumber = rfq.poNumber?.trim();
+        const terms = rfq.commercialTerms;
+        const termRows: { label: string; value?: string; wide?: boolean }[] = [
+          { label: "Delivery Location", value: terms.deliveryLocation },
+          { label: "Expected Delivery", value: terms.expectedDelivery ? formatShortDate(terms.expectedDelivery) : "" },
+          { label: "Payment Terms", value: terms.paymentTerms },
+          { label: "Tax Terms", value: terms.tax },
+          { label: "Currency", value: terms.currency },
+          { label: "Delivery Address", value: terms.deliveryAddress, wide: true },
+          ...(terms.remarks ? [{ label: "Remarks", value: terms.remarks, wide: true }] : []),
+        ];
 
-            {/* SECTION 1: BASIC INFORMATION */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
-                Basic Information
-              </h4>
-              <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2 text-xs">
-                <div className="grid grid-cols-2 gap-3 border-b border-slate-100 pb-2">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Linked PR</span>
-                    <p className="font-mono font-bold text-slate-900">{selectedRFQ.linkedPR?.trim() || "Direct Procurement"}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Buyer</span>
-                    <p className="font-bold text-slate-800">{resolveBuyerName(selectedRFQ.buyer)}</p>
-                  </div>
+        return (
+          <Drawer
+            side="bottom"
+            open={!!selectedRFQ}
+            onClose={() => setSelectedRFQ(null)}
+            title={`RFQ ${rfq.rfqNumber}`}
+            width="xl"
+            customHeader={
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                  <FileText className="h-5 w-5" />
                 </div>
-
-                <div className="grid grid-cols-2 gap-3 border-b border-slate-100 pb-2">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">RFQ Date</span>
-                    <p className="font-bold text-slate-800">{selectedRFQ.rfqDate}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Closing Date</span>
-                    <p className="font-bold text-slate-800">{selectedRFQ.closingDate}</p>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center pt-1">
-                  <span className="text-slate-500 font-medium">Selected Vendor:</span>
-                  {selectedRFQ.selectedVendor ? (
-                    <span className="font-extrabold text-slate-900">{displaySelectedVendor(selectedRFQ)}</span>
-                  ) : (
-                    <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold text-slate-500 bg-slate-100 rounded-full">
-                      Awaiting Evaluation
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* SECTION 2: REQUESTED ITEMS (WITH ESTIMATED RATE COLUMN) */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
-                Requested Items{selectedRFQ.linkedPR?.trim() ? ` (from ${selectedRFQ.linkedPR})` : ""}
-              </h4>
-              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                      <th className="px-3 py-2">Item</th>
-                      <th className="px-3 py-2">Category</th>
-                      <th className="px-3 py-2">Quantity</th>
-                      <th className="px-3 py-2">Unit</th>
-                      <th className="px-3 py-2 text-right">Estimated Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {selectedRFQ.requestedItems.map((item, idx) => (
-                      <tr key={item.id || `item-${idx}`}>
-                        <td className="px-3 py-2 font-bold text-slate-900">{item.item}</td>
-                        <td className="px-3 py-2 text-slate-600">{item.category}</td>
-                        <td className="px-3 py-2 font-extrabold text-slate-900">{item.quantity}</td>
-                        <td className="px-3 py-2 text-slate-500">{item.unit}</td>
-                        <td className="px-3 py-2 text-right font-extrabold text-emerald-800">
-                          ₹{item.estimatedRate.toLocaleString("en-IN")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* SECTION 3: INVITED VENDORS */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
-                Invited Vendors ({selectedRFQ.invitedVendors.length})
-              </h4>
-              {selectedRFQ.invitedVendors.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                        <th className="px-3 py-2">Vendor</th>
-                        <th className="px-3 py-2">Email</th>
-                        <th className="px-3 py-2">Phone</th>
-                        <th className="px-3 py-2">Invitation Sent On</th>
-                        <th className="px-3 py-2 text-right">Status</th>
-                        {(selectedRFQ.status === "Sent" || selectedRFQ.status === "Pending Response") && (
-                          <th className="px-3 py-2 text-right">Action</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs">
-                      {selectedRFQ.invitedVendors.map((raw, idx) => {
-                        const v = enrichInvitedVendor(raw);
-                        return (
-                        <tr key={v.id || `vendor-${idx}`}>
-                          <td className="px-3 py-2 font-bold text-slate-900">{v.vendorName}</td>
-                          <td className="px-3 py-2 text-slate-500">{v.email}</td>
-                          <td className="px-3 py-2 text-slate-500">{v.phone}</td>
-                          <td className="px-3 py-2 text-slate-600 font-medium">{v.invitationSentOn || "—"}</td>
-                          <td className="px-3 py-2 text-right">
-                            <span className={cn(
-                              "px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-full border",
-                              v.status === "Responded" ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-amber-50 text-amber-800 border-amber-200"
-                            )}>
-                              {v.status}
-                            </span>
-                          </td>
-                          {(selectedRFQ.status === "Sent" || selectedRFQ.status === "Pending Response") && (
-                            <td className="px-3 py-2 text-right">
-                              {v.status !== "Responded" ? (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => openRecordQuoteModal(selectedRFQ, v)}
-                                  className="h-7 px-2.5 text-[10px] font-bold rounded-lg cursor-pointer"
-                                >
-                                  Record Quote
-                                </Button>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => openRecordQuoteModal(selectedRFQ, v)}
-                                  className="h-7 px-2.5 text-[10px] font-bold rounded-lg cursor-pointer"
-                                >
-                                  Edit Quote
-                                </Button>
-                              )}
-                            </td>
-                          )}
-                        </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center text-xs text-slate-400 font-medium">
-                  No vendors invited.
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 4: COMMERCIAL TERMS */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
-                Commercial Terms
-              </h4>
-              <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2 text-xs">
-                <div className="grid grid-cols-2 gap-3 border-b border-slate-100 pb-2">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Delivery Location</span>
-                    <p className="font-semibold text-slate-800">{selectedRFQ.commercialTerms.deliveryLocation}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Delivery Address</span>
-                    <p className="font-semibold text-slate-800">{selectedRFQ.commercialTerms.deliveryAddress}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3 border-b border-slate-100 pb-2">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Payment Terms</span>
-                    <p className="font-semibold text-slate-800">{selectedRFQ.commercialTerms.paymentTerms}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Expected Delivery</span>
-                    <p className="font-semibold text-slate-800">{selectedRFQ.commercialTerms.expectedDelivery}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Tax Terms</span>
-                    <p className="font-semibold text-slate-800">{selectedRFQ.commercialTerms.tax}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* SECTION 5: ATTACHMENTS */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
-                Attachments
-              </h4>
-              {selectedRFQ.attachments.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {selectedRFQ.attachments.map((att) => (
-                    <div key={att.id} className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Paperclip className="h-4 w-4 text-slate-500 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-extrabold text-slate-800 truncate">{att.fileName}</p>
-                          <p className="text-[10px] text-slate-400 font-medium">{att.fileSize}</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewAttachment(att)}
-                        className="px-2 py-1 text-[10px] font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-md transition-colors cursor-pointer shrink-0"
-                      >
-                        Preview
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center text-xs text-slate-400 font-medium">
-                  No supporting documents attached.
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 6: ACTIVITY TIMELINE */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
-                Activity Timeline
-              </h4>
-              <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-                {selectedRFQ.activityTimeline.map((item, idx) => {
-                  const isDone = item.timestamp !== "Pending";
-
-                  return (
-                    <div key={idx} className="flex items-start gap-3 relative">
-                      {idx !== selectedRFQ.activityTimeline.length - 1 && (
-                        <div className="absolute left-2.5 top-6 bottom-0 w-0.5 bg-slate-200 -mb-4" />
-                      )}
-                      <div
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 id="drawer-title" className="font-mono text-base font-bold text-slate-900 sm:text-lg">
+                      {rfq.rfqNumber}
+                    </h2>
+                    {renderStatusBadge(rfq.status)}
+                    {priority && (
+                      <span
                         className={cn(
-                          "h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold z-10 shrink-0",
-                          isDone ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-400 border border-slate-300"
+                          "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+                          priority.active,
                         )}
                       >
-                        {isDone ? "●" : "○"}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className={cn("text-xs font-extrabold", isDone ? "text-slate-900" : "text-slate-400")}>
-                            {item.stage}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium">{item.timestamp}</span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 font-medium">{item.note}</p>
-                      </div>
-                    </div>
-                  );
-                })}
+                        <span className={cn("h-1.5 w-1.5 rounded-full", priority.dot)} />
+                        {priority.value} priority
+                      </span>
+                    )}
+                  </div>
+                  <p className="truncate text-xs text-slate-500">
+                    {rfq.department} · {rfq.linkedPR?.trim() ? `Sourcing ${rfq.linkedPR}` : "Direct procurement"} · Buyer{" "}
+                    {resolveBuyerName(rfq.buyer)}
+                  </p>
+                </div>
               </div>
-            </div>
-
-            <div className="flex flex-col gap-2 pt-2">
-              {(selectedRFQ.status === "Sent" || selectedRFQ.status === "Pending Response") &&
-                (selectedRFQ.comparisonData?.length ?? 0) > 0 && (
-                  <div className="flex gap-2">
+            }
+            footer={
+              <div className="flex w-full flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-slate-500">
+                  <strong className="text-slate-800">{rfq.requestedItems.length}</strong> item
+                  {rfq.requestedItems.length === 1 ? "" : "s"} · Estimated{" "}
+                  <strong className="text-slate-800">₹{itemsTotal.toLocaleString("en-IN")}</strong> ·{" "}
+                  <strong className="text-slate-800">
+                    {quotedCount}/{vendors.length}
+                  </strong>{" "}
+                  quoted
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setSelectedRFQ(null)}
+                    className="h-9 px-4 text-xs font-semibold !bg-white hover:!bg-slate-100 text-slate-700 border-slate-300 rounded-xl cursor-pointer"
+                  >
+                    Close
+                  </Button>
+                  {collectingQuotes && bids.length > 0 && (
                     <Button
                       type="button"
-                      onClick={() => openCompareForRfq(selectedRFQ)}
-                      className="flex-1 h-9 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl shadow-xs cursor-pointer inline-flex items-center justify-center gap-1.5"
+                      onClick={() => openCompareForRfq(rfq)}
+                      className="h-9 px-4 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer inline-flex items-center gap-1.5"
                     >
                       <FileSpreadsheet className="h-3.5 w-3.5" /> Compare & Select Vendor
                     </Button>
+                  )}
+                  {canCreatePoFromRfq(rfq) && (
+                    <Button
+                      type="button"
+                      onClick={() => setConvertPOModalRFQ(rfq)}
+                      className="h-9 px-4 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <ShoppingCart className="h-3.5 w-3.5" /> Create PO
+                    </Button>
+                  )}
+                  {poNumber && (
+                    <Button
+                      type="button"
+                      onClick={() => setViewPODrawerRFQ(rfq)}
+                      className="h-9 px-4 text-xs font-bold !bg-teal-700 hover:!bg-teal-800 text-white rounded-xl shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <FileCheck className="h-3.5 w-3.5" /> View PO · {poNumber}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            }
+          >
+            <div className="grid gap-5 pb-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+              <div className="min-w-0 space-y-5">
+                {collectingQuotes && bids.length === 0 && (
+                  <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                    <Clock className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p>
+                      Waiting on quotations. Use <strong>Record Quote</strong> on each vendor below, then compare and select the
+                      winning vendor.
+                    </p>
                   </div>
                 )}
-              {(selectedRFQ.status === "Sent" || selectedRFQ.status === "Pending Response") &&
-                (selectedRFQ.comparisonData?.length ?? 0) === 0 && (
-                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 font-medium">
-                    Record vendor quotations using <strong>Record Quote</strong> above, then compare and select the winning vendor.
-                  </p>
-                )}
-              {selectedRFQ.status === "Vendor Selected" && (
-                <Button
-                  type="button"
-                  onClick={() => setConvertPOModalRFQ(selectedRFQ)}
-                  className="w-full h-9 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl shadow-xs cursor-pointer inline-flex items-center justify-center gap-1.5"
+
+                <RfqDetailSection
+                  title="Requested Items"
+                  meta={rfq.linkedPR?.trim() ? `From ${rfq.linkedPR}` : undefined}
+                  flush
                 >
-                  <ShoppingCart className="h-3.5 w-3.5" /> Convert to Purchase Order
-                </Button>
-              )}
-            <Button
-              type="button"
-              onClick={() => setSelectedRFQ(null)}
-              className="w-full h-9 text-xs font-bold !bg-slate-900 hover:!bg-slate-800 text-white rounded-xl shadow-xs cursor-pointer"
-            >
-              Close RFQ Details
-            </Button>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-y border-slate-100 bg-slate-50/70 text-[11px] uppercase tracking-wide text-slate-500">
+                          <th className="px-5 py-2.5 font-medium">Item</th>
+                          <th className="px-3 py-2.5 text-right font-medium">Qty</th>
+                          <th className="px-3 py-2.5 text-right font-medium">Est. Rate</th>
+                          <th className="px-5 py-2.5 text-right font-medium">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {rfq.requestedItems.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="px-5 py-6 text-center text-xs text-slate-400">
+                              No items on this RFQ.
+                            </td>
+                          </tr>
+                        ) : (
+                          rfq.requestedItems.map((item, idx) => (
+                            <tr key={item.id || `item-${idx}`}>
+                              <td className="px-5 py-3">
+                                <p className="font-medium text-slate-900">{item.item}</p>
+                                <p className="text-xs text-slate-500">
+                                  {item.category}
+                                  {item.productCode ? ` · ${item.productCode}` : ""}
+                                </p>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">
+                                {item.quantity} <span className="text-xs text-slate-400">{item.unit}</span>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">
+                                ₹{item.estimatedRate.toLocaleString("en-IN")}
+                              </td>
+                              <td className="whitespace-nowrap px-5 py-3 text-right font-medium tabular-nums text-slate-900">
+                                ₹{(item.quantity * item.estimatedRate).toLocaleString("en-IN")}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      {rfq.requestedItems.length > 0 && (
+                        <tfoot>
+                          <tr className="border-t border-slate-200 bg-slate-50/70">
+                            <td colSpan={3} className="px-5 py-2.5 text-right text-xs font-medium text-slate-500">
+                              Estimated total
+                            </td>
+                            <td className="whitespace-nowrap px-5 py-2.5 text-right font-semibold tabular-nums text-slate-900">
+                              ₹{itemsTotal.toLocaleString("en-IN")}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </RfqDetailSection>
+
+                <RfqDetailSection
+                  title="Invited Vendors"
+                  meta={vendors.length > 0 ? `${quotedCount} of ${vendors.length} quoted` : undefined}
+                  flush
+                >
+                  {vendors.length > 0 ? (
+                    <ul className="divide-y divide-slate-100 border-t border-slate-100">
+                      {vendors.map((v, idx) => {
+                        const bid = bids.find((c) => c.vendorId === v.id);
+                        const isSelected = Boolean(rfq.selectedVendor) && rfq.selectedVendor === v.id;
+                        const responded = v.status === "Responded";
+                        const initials = v.vendorName
+                          .split(/\s+/)
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((w) => w[0])
+                          .join("")
+                          .toUpperCase();
+                        return (
+                          <li
+                            key={v.id || `vendor-${idx}`}
+                            className={cn(
+                              "flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3",
+                              isSelected && "bg-emerald-50/60",
+                            )}
+                          >
+                            <div className="flex min-w-0 flex-1 items-center gap-3">
+                              <span
+                                className={cn(
+                                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                                  isSelected ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600",
+                                )}
+                              >
+                                {initials || "?"}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-slate-900">
+                                  <span className="truncate">{v.vendorName}</span>
+                                  {isSelected && (
+                                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                                      <Award className="h-3 w-3" />
+                                      Selected
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
+                                  {v.email && (
+                                    <span className="inline-flex min-w-0 items-center gap-1">
+                                      <Mail className="h-3 w-3 shrink-0" />
+                                      <span className="truncate">{v.email}</span>
+                                    </span>
+                                  )}
+                                  {v.phone && (
+                                    <span className="inline-flex items-center gap-1">
+                                      <Phone className="h-3 w-3" />
+                                      {v.phone}
+                                    </span>
+                                  )}
+                                  {v.invitationSentOn && <span>Invited {formatShortDate(v.invitationSentOn)}</span>}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-4">
+                              <div className="w-32 text-right">
+                                {bid ? (
+                                  <>
+                                    <p className="text-sm font-semibold tabular-nums text-slate-900">
+                                      ₹{bid.totalAmount.toLocaleString("en-IN")}
+                                    </p>
+                                    <p className="text-xs text-slate-500">Delivery {formatBidDelivery(bid)}</p>
+                                  </>
+                                ) : (
+                                  <p className="text-xs text-slate-400">No quote yet</p>
+                                )}
+                              </div>
+                              <span
+                                className={cn(
+                                  "inline-flex w-24 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
+                                  responded
+                                    ? "bg-emerald-50 text-emerald-800 ring-emerald-200"
+                                    : "bg-amber-50 text-amber-800 ring-amber-200",
+                                )}
+                              >
+                                <span className={cn("h-1.5 w-1.5 rounded-full", responded ? "bg-emerald-500" : "bg-amber-500")} />
+                                {v.status}
+                              </span>
+                              {collectingQuotes && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => openRecordQuoteModal(rfq, v)}
+                                  className="h-8 w-28 rounded-lg px-3 text-xs font-medium cursor-pointer"
+                                >
+                                  {responded ? "Edit Quote" : "Record Quote"}
+                                </Button>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="border-t border-slate-100 px-5 py-6 text-center text-xs text-slate-400">No vendors invited.</p>
+                  )}
+                </RfqDetailSection>
+
+                <RfqDetailSection title="Commercial Terms">
+                  <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {termRows.map((row) => (
+                      <div key={row.label} className={cn("min-w-0", row.wide && "sm:col-span-2 xl:col-span-3")}>
+                        <dt className="text-xs text-slate-500">{row.label}</dt>
+                        <dd
+                          className={cn(
+                            "mt-0.5 whitespace-pre-line break-words text-sm",
+                            row.value ? "font-medium text-slate-900" : "text-slate-300",
+                          )}
+                        >
+                          {row.value || "Not specified"}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </RfqDetailSection>
+
+                {rfq.attachments.length > 0 && (
+                  <RfqDetailSection title="Attachments" meta={`${rfq.attachments.length}`}>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {rfq.attachments.map((att) => (
+                        <div
+                          key={att.id}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Paperclip className="h-4 w-4 shrink-0 text-slate-400" />
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-medium text-slate-800">{att.fileName}</p>
+                              <p className="text-[11px] text-slate-400">{att.fileSize}</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewAttachment(att)}
+                            className="shrink-0 cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                          >
+                            Preview
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </RfqDetailSection>
+                )}
+              </div>
+
+              <aside className="space-y-5 lg:sticky lg:top-0">
+                <section className="rounded-xl border border-slate-200 bg-white p-5">
+                  <h3 className="text-sm font-semibold text-slate-900">Summary</h3>
+                  <dl className="mt-4 space-y-3 text-xs">
+                    <ProcurementSummaryRow
+                      icon={<CalendarDays className="h-3.5 w-3.5" />}
+                      label="RFQ date"
+                      value={rfq.rfqDate ? formatShortDate(rfq.rfqDate) : ""}
+                    />
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="flex shrink-0 items-center gap-1.5 text-slate-500">
+                        <Clock className="h-3.5 w-3.5" />
+                        Quotes due
+                      </dt>
+                      <dd className={cn("text-right font-medium", rfq.closingDate ? "text-slate-900" : "text-slate-300")}>
+                        {rfq.closingDate ? formatShortDate(rfq.closingDate) : "Not set"}
+                        {hint && <span className={cn("ml-1.5 font-normal", hint.className)}>· {hint.label}</span>}
+                      </dd>
+                    </div>
+                    <ProcurementSummaryRow
+                      icon={<Building2 className="h-3.5 w-3.5" />}
+                      label="Department"
+                      value={rfq.department}
+                    />
+                    <ProcurementSummaryRow
+                      icon={<User className="h-3.5 w-3.5" />}
+                      label="Buyer"
+                      value={resolveBuyerName(rfq.buyer)}
+                    />
+                    <ProcurementSummaryRow
+                      icon={<FileText className="h-3.5 w-3.5" />}
+                      label="Linked PR"
+                      value={rfq.linkedPR?.trim() || "Direct procurement"}
+                      valueClassName={rfq.linkedPR?.trim() ? "font-mono text-emerald-700" : undefined}
+                    />
+                    <ProcurementSummaryRow
+                      icon={<ShoppingCart className="h-3.5 w-3.5" />}
+                      label="Purchase order"
+                      value={poNumber}
+                      valueClassName="font-mono text-teal-700"
+                    />
+                  </dl>
+
+                  <div className="mt-4 border-t border-slate-100 pt-4">
+                    <p className="text-xs text-slate-500">Selected vendor</p>
+                    {selectedVendorName ? (
+                      <>
+                        <p className="mt-1 flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-900">
+                          <Award className="h-4 w-4 shrink-0 text-emerald-600" />
+                          <span className="truncate">{selectedVendorName}</span>
+                        </p>
+                        {selectedBid && (
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            Quoted ₹{selectedBid.totalAmount.toLocaleString("en-IN")} · Delivery {formatBidDelivery(selectedBid)}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="mt-1 text-sm text-slate-400">Not selected yet</p>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-xl border border-slate-200 bg-white p-5">
+                  <h3 className="text-sm font-semibold text-slate-900">Activity</h3>
+                  {rfq.activityTimeline.length > 0 ? (
+                    <ol className="mt-4">
+                      {rfq.activityTimeline.map((item, idx) => {
+                        const isDone = item.timestamp !== "Pending";
+                        return (
+                          <li key={idx} className="relative flex gap-3 pb-4 last:pb-0">
+                            {idx !== rfq.activityTimeline.length - 1 && (
+                              <span className="absolute bottom-0 left-[9px] top-5 w-px bg-slate-200" aria-hidden />
+                            )}
+                            <span
+                              className={cn(
+                                "relative z-10 mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full",
+                                isDone ? "bg-emerald-600 text-white" : "border border-slate-300 bg-white",
+                              )}
+                            >
+                              {isDone && <Check className="h-3 w-3" />}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className={cn("text-xs font-medium", isDone ? "text-slate-900" : "text-slate-400")}>
+                                {item.stage}
+                              </p>
+                              {item.note && <p className="mt-0.5 text-xs text-slate-500">{item.note}</p>}
+                              <p className="mt-0.5 text-[11px] text-slate-400">
+                                {item.timestamp}
+                                {item.author ? ` · ${resolveBuyerName(item.author)}` : ""}
+                              </p>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  ) : (
+                    <p className="mt-3 text-xs text-slate-400">No activity yet.</p>
+                  )}
+                </section>
+              </aside>
             </div>
-          </div>
-        </Drawer>
-      )}
+          </Drawer>
+        );
+      })()}
 
       {/* LARGE RIGHT-SIDE DRAWER: CREATE / EDIT RFQ (SAP FIORI / ENTERPRISE ERP STYLE) */}
       <Drawer
+        side="bottom"
         open={createDrawerOpen || !!editRFQ}
         onClose={() => {
           setCreateDrawerOpen(false);
@@ -1608,69 +1903,65 @@ export default function RequestForQuotationsPage() {
         title={editRFQ ? `Edit RFQ: ${editRFQ.rfqNumber}` : "Create Request for Quotation (RFQ)"}
         width="responsive"
         customHeader={
-          <div className="flex flex-col gap-1 min-w-0">
-            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight truncate">
-              {editRFQ ? `Edit RFQ: ${editRFQ.rfqNumber}` : "Create Request for Quotation (RFQ)"}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2.5 text-xs font-medium text-slate-500">
-              <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                Draft
-              </span>
-              {formPR && (
-                <>
-                  <span className="text-slate-300">•</span>
-                  <span className="truncate">
-                    <strong className="text-slate-700 font-semibold">Linked PR:</strong> {formPR}
-                  </span>
-                </>
-              )}
-              {(formBuyer || user?.id) && (
-                <>
-                  <span className="text-slate-300">•</span>
-                  <span className="truncate">
-                    <strong className="text-slate-700 font-semibold">Buyer:</strong>{" "}
-                    {resolveBuyerName(formBuyer || user?.id)}
-                  </span>
-                </>
-              )}
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="truncate text-base font-bold text-slate-900 sm:text-lg">
+                  {editRFQ ? `Edit RFQ ${editRFQ.rfqNumber}` : "New Request for Quotation"}
+                </h2>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                  {editRFQ?.status ?? "Draft"}
+                </span>
+              </div>
+              <p className="truncate text-xs text-slate-500">
+                Invite vendors to quote against an approved purchase requisition.
+              </p>
             </div>
           </div>
         }
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={saving}
-              onClick={() => {
-                setCreateDrawerOpen(false);
-                setEditRFQ(null);
-              }}
-              className="h-9 px-4 text-xs font-semibold !bg-white hover:!bg-slate-100 text-slate-700 border-slate-300 rounded-xl cursor-pointer"
-            >
-              Cancel
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              disabled={saving}
-              onClick={() => handleSaveRFQ(false)}
-              className="h-9 px-4 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer"
-            >
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-              Save Draft
-            </Button>
-
-            <Button
-              type="button"
-              disabled={saving}
-              onClick={() => handleSaveRFQ(true)}
-              className="h-9 px-5 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer focus:ring-2 focus:ring-emerald-500 flex items-center gap-1.5"
-            >
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              Send RFQ
-            </Button>
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">
+              <strong className="text-slate-800">{formRequestedItems.length}</strong> item
+              {formRequestedItems.length === 1 ? "" : "s"} · <strong className="text-slate-800">{formVendors.length}</strong>{" "}
+              vendor{formVendors.length === 1 ? "" : "s"} invited
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={() => {
+                  setCreateDrawerOpen(false);
+                  setEditRFQ(null);
+                }}
+                className="h-9 px-4 text-xs font-semibold !bg-white hover:!bg-slate-100 text-slate-700 border-slate-300 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={() => handleSaveRFQ(false)}
+                className="h-9 px-4 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                Save Draft
+              </Button>
+              <Button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSaveRFQ(true)}
+                className="h-9 px-5 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+              >
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                Send to Vendors
+              </Button>
+            </div>
           </div>
         }
       >
@@ -1679,419 +1970,357 @@ export default function RequestForQuotationsPage() {
             e.preventDefault();
             handleSaveRFQ(true);
           }}
-          className="space-y-6 select-none focus:outline-hidden py-1"
+          className="grid gap-5 pb-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start"
         >
-          {/* SECTION 1: BASIC INFORMATION CARD */}
-          <div className="bg-white rounded-[12px] border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h4 className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                Basic Information
-              </h4>
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                Section 1 of 5
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-              <FormField label="Linked Purchase Requisition (Optional)">
-                <SelectInput
-                  value={formPR}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handlePRSelectionChange(e.target.value)}
-                  className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                  disabled={loadingPRs}
-                >
-                  <option value="">No linked PR — Direct Procurement</option>
-                  {loadingPRs && <option value="" disabled>Loading requisitions…</option>}
-                  {eligiblePRs.map((pr) => (
-                    <option key={pr.id} value={pr.prNumber}>
-                      {prOptionLabel(pr)}
-                    </option>
-                  ))}
-                </SelectInput>
-              </FormField>
-
-              <FormField label="Buyer" required>
-                <TextInput
-                  value={resolveBuyerName(formBuyer || user?.id)}
-                  readOnly
-                  className="h-9 text-xs font-medium border-slate-300 rounded-lg bg-slate-50 text-slate-800"
-                />
-              </FormField>
-
-              <FormField label="RFQ Date" required>
-                <TextInput
-                  type="date"
-                  min={todayStr}
-                  value={formRFQDate}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    const val = e.target.value;
-                    setFormRFQDate(val);
-                    if (formClosingDate && val && val > formClosingDate) {
-                      setFormClosingDate(val);
-                    }
-                  }}
-                  className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                />
-              </FormField>
-
-              <FormField label="Closing Date" required>
-                <TextInput
-                  type="date"
-                  min={formRFQDate || todayStr}
-                  value={formClosingDate}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormClosingDate(e.target.value)}
-                  className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                />
-              </FormField>
-
-              <div className="md:col-span-2">
-                <FormField label="Priority" required>
-                  <SelectInput
-                    value={formPriority}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormPriority(e.target.value as any)}
-                    className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                  >
-                    <option value="Low">Low Priority</option>
-                    <option value="Medium">Medium Priority</option>
-                    <option value="High">High Priority</option>
-                    <option value="Emergency">Emergency</option>
-                  </SelectInput>
-                </FormField>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 2: REQUESTED ITEMS CARD */}
-          <div className="bg-white rounded-[12px] border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h4 className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                  Requested Items ({formRequestedItems.length})
-                </h4>
-                <p className="text-[11px] text-slate-400 font-medium">
-                  {formPR ? `Auto-populated from ${formPR} · Read-only reference items` : "Select a Linked Purchase Requisition in Section 1 to populate requested items"}
-                </p>
-              </div>
-            </div>
-
-            {formRequestedItems.length > 0 ? (
-              <>
-                {/* DESKTOP / TABLET COMPACT TABLE */}
-                <div className="hidden sm:block rounded-xl border border-slate-200 bg-white overflow-hidden">
-                  <div className="max-h-[260px] overflow-y-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500 z-10">
-                        <tr>
-                          <th className="px-3.5 py-2">Item Description</th>
-                          <th className="px-3.5 py-2">Category</th>
-                          <th className="px-3.5 py-2 w-20 text-center">Quantity</th>
-                          <th className="px-3.5 py-2">Unit</th>
-                          <th className="px-3.5 py-2 text-right">Estimated Rate</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                        {formRequestedItems.map((item) => (
-                          <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                            <td className="px-3.5 py-2 font-bold text-slate-900 min-w-[150px]">{item.item}</td>
-                            <td className="px-3.5 py-2 text-slate-600 text-[11px]">
-                              <span className="inline-flex px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-semibold">
-                                {item.category || "General"}
-                              </span>
-                            </td>
-                            <td className="px-3.5 py-2 text-center font-extrabold text-slate-900">{item.quantity}</td>
-                            <td className="px-3.5 py-2 text-slate-500 text-[11px]">{item.unit}</td>
-                            <td className="px-3.5 py-2 text-right font-extrabold text-emerald-800">
-                              ₹{item.estimatedRate.toLocaleString("en-IN")}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* MOBILE STACKED CARDS */}
-                <div className="block sm:hidden space-y-2.5">
-                  {formRequestedItems.map((item) => (
-                    <div key={item.id} className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2 text-xs shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-900">{item.item}</span>
-                        <span className="inline-flex px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold">
-                          {item.category || "General"}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-[11px] pt-1.5 border-t border-slate-100">
-                        <div>
-                          <span className="text-slate-500 block text-[10px]">Quantity</span>
-                          <span className="font-extrabold text-slate-900">{item.quantity} {item.unit}</span>
-                        </div>
-                        <div className="col-span-2 text-right">
-                          <span className="text-slate-500 block text-[10px]">Est. Rate</span>
-                          <span className="font-extrabold text-emerald-800">₹{item.estimatedRate.toLocaleString("en-IN")}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-5 text-center text-xs space-y-1">
-                <Package className="h-5 w-5 mx-auto text-slate-400" />
-                <p className="font-bold text-slate-700">No items loaded</p>
-                <p className="text-[10px] text-slate-400 font-medium">
-                  Select a Linked Purchase Requisition in Section 1 to populate requested items.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* SECTION 3: INVITED VENDORS CARD */}
-          <div className="bg-white rounded-[12px] border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h4 className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                  Invited Vendors ({formVendors.length})
-                </h4>
-                <p className="text-[11px] text-slate-400 font-medium">
-                  Select target vendors to send RFQ invitations
-                </p>
-              </div>
-
-              <Button
-                type="button"
-                onClick={() => {
-                  setSelectedVendorIds(formVendors.map((v) => v.id));
-                  setVendorModalOpen(true);
-                }}
-                className="h-8 px-3 text-xs font-bold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                <Plus className="h-3.5 w-3.5" /> Add Vendor
-              </Button>
-            </div>
-
-            {/* VENDOR CARDS GRID */}
-            {formVendors.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {formVendors.map((raw) => {
-                  const v = enrichInvitedVendor(raw);
-                  return (
-                  <div
-                    key={v.id}
-                    className="p-4 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors flex items-start justify-between gap-3 shadow-2xs"
-                  >
-                    <div className="space-y-1.5 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h5 className="text-xs font-bold text-slate-900 truncate" title={v.vendorName}>
-                          {v.vendorName}
-                        </h5>
-                        <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-full bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
-                          {v.status || "Pending"}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 truncate">
-                        <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{v.email || "—"}</span>
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span>{v.phone || "—"}</span>
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-medium pt-0.5">
-                        Invitation Date: {v.invitationSentOn || "—"}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setFormVendors(formVendors.filter((vendor) => vendor.id !== v.id))}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
-                      title="Remove Vendor"
+          <div className="min-w-0 space-y-5">
+            {/* RFQ DETAILS */}
+            <ProcurementFormSection step={1} title="RFQ Details" subtitle="Source requisition, dates and urgency">
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2.2fr)]">
+                <div className="sm:col-span-2">
+                  <FormField label="Linked Purchase Requisition" required>
+                    <SelectInput
+                      value={formPR}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handlePRSelectionChange(e.target.value)}
+                      className={cn("block h-10 text-sm", !formPR && "text-slate-400")}
+                      disabled={loadingPRs || eligiblePRs.length === 0}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                      <option value="" disabled>
+                        {loadingPRs
+                          ? "Loading requisitions…"
+                          : eligiblePRs.length === 0
+                            ? "No approved requisitions available"
+                            : "Select an approved requisition"}
+                      </option>
+                      {eligiblePRs.map((pr) => (
+                        <option key={pr.id} value={pr.prNumber}>
+                          {prOptionLabel(pr)}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </FormField>
+                  {!loadingPRs && eligiblePRs.length === 0 && (
+                    <p className="mt-1.5 text-[11px] text-amber-700">
+                      Approve a purchase requisition first — only approved PRs with remaining quantity can be sourced.
+                    </p>
+                  )}
+                </div>
+
+                <FormField label="Buyer" required>
+                  <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700">
+                    <User className="h-4 w-4 text-slate-400" />
+                    <span className="truncate">{resolveBuyerName(formBuyer || user?.id) || "—"}</span>
                   </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-5 text-center text-xs space-y-1">
-                <User className="h-5 w-5 mx-auto text-slate-400" />
-                <p className="font-bold text-slate-700">No vendors invited</p>
-                <p className="text-[10px] text-slate-400 font-medium">
-                  Click "+ Add Vendor" to select target suppliers for quotation bids.
-                </p>
-              </div>
-            )}
-          </div>
+                </FormField>
 
-          {/* SECTION 4: COMMERCIAL TERMS CARD */}
-          <div className="bg-white rounded-[12px] border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="border-b border-slate-100 pb-3">
-              <h4 className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                Commercial Terms
-              </h4>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-              <FormField label="Delivery Location" required>
-                <TextInput
-                  value={formDeliveryLoc}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDeliveryLoc(e.target.value)}
-                  placeholder="e.g. Central Warehouse / Main Kitchen"
-                  className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                />
-              </FormField>
-
-              <FormField label="Delivery Address" required>
-                <TextInput
-                  value={formDeliveryAddr}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDeliveryAddr(e.target.value)}
-                  placeholder="e.g. 123 Resort Boulevard, Sector 4"
-                  className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                />
-              </FormField>
-
-              <FormField label="Payment Terms" required>
-                <TextInput
-                  value={formPayTerms}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayTerms(e.target.value)}
-                  placeholder="e.g. Net 30 Days post GRN"
-                  className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                />
-              </FormField>
-
-              <FormField label="Expected Delivery" required>
-                <TextInput
-                  value={formExpDelivery}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormExpDelivery(e.target.value)}
-                  placeholder="e.g. 7 Days from PO"
-                  className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                />
-              </FormField>
-
-              <FormField label="Currency" required>
-                <TextInput
-                  value={formCurrency}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormCurrency(e.target.value)}
-                  placeholder="e.g. INR (₹)"
-                  className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                />
-              </FormField>
-
-              <FormField label="Tax Terms" required>
-                <TextInput
-                  value={formTax}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormTax(e.target.value)}
-                  placeholder="e.g. GST Extra as applicable (18%)"
-                  className="h-9 text-xs font-medium focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                />
-              </FormField>
-
-              <div className="md:col-span-2">
-                <FormField label="Remarks / Special Instructions">
-                  <TextAreaInput
-                    rows={2}
-                    value={formRemarks}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormRemarks(e.target.value)}
-                    placeholder="Enter any additional commercial notes..."
-                    className="w-full h-16 p-3 text-xs leading-relaxed text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 resize-none"
+                <FormField label="RFQ Date" required>
+                  <TextInput
+                    type="date"
+                    min={todayStr}
+                    value={formRFQDate}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const val = e.target.value;
+                      setFormRFQDate(val);
+                      if (formClosingDate && val && val > formClosingDate) {
+                        setFormClosingDate(val);
+                      }
+                    }}
+                    className="h-10 text-sm"
                   />
                 </FormField>
+
+                <FormField label="Quotes Due By" required>
+                  <TextInput
+                    type="date"
+                    min={formRFQDate || todayStr}
+                    value={formClosingDate}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormClosingDate(e.target.value)}
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+
+                <div className="sm:col-span-2 xl:col-span-1">
+                  <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                    Priority <span className="text-red-500">*</span>
+                  </span>
+                  <PrioritySelector value={formPriority} onChange={setFormPriority} />
+                </div>
               </div>
-            </div>
-          </div>
+            </ProcurementFormSection>
 
-          {/* SECTION 5: ATTACHMENTS CARD */}
-          <div className="bg-white rounded-[12px] border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h4 className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                  Attachments ({formAttachments.length})
-                </h4>
-                <p className="text-[11px] text-slate-400 font-medium">
-                  Attach technical specifications or bid guidelines
-                </p>
-              </div>
-
-              <Button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingAttachments}
-                className="h-8 px-3 text-xs font-bold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                {uploadingAttachments ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Plus className="h-3.5 w-3.5" />
-                )}
-                Add Attachment
-              </Button>
-            </div>
-
-            {formAttachments.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {formAttachments.map((att) => (
-                  <div
-                    key={att.id}
-                    className="p-3.5 rounded-xl border border-slate-200 bg-white flex items-center justify-between gap-2.5 shadow-2xs hover:border-slate-300 transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      {att.fileName.toLowerCase().endsWith(".xlsx") || att.fileName.toLowerCase().endsWith(".xls") ? (
-                        <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100 shrink-0">
-                          <FileSpreadsheet className="h-4 w-4" />
-                        </div>
-                      ) : (
-                        <div className="p-2 rounded-lg bg-red-50 text-red-600 border border-red-100 shrink-0">
-                          <FileText className="h-4 w-4" />
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 truncate" title={att.fileName}>
-                          {att.fileName}
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-medium">
-                          {att.fileSize}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewAttachment(att)}
-                        className="px-2 py-1 text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
-                      >
-                        Preview
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveAttachment(att.id)}
-                        className="px-2 py-1 text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors cursor-pointer"
-                      >
-                        Remove
-                      </button>
+            {/* ITEMS */}
+            <ProcurementFormSection
+              step={2}
+              title="Items to Quote"
+              subtitle={formPR ? `Loaded from ${formPR} · quantities still to be ordered` : "Loaded automatically from the selected requisition"}
+            >
+              {formRequestedItems.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-8 text-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-400 ring-1 ring-slate-200">
+                    <Package className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700">No items yet</p>
+                  <p className="max-w-xs text-xs text-slate-500">Select a linked requisition above to load its items.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="hidden overflow-hidden rounded-xl border border-slate-200 sm:block">
+                    <div className="max-h-[300px] overflow-y-auto">
+                      <table className="w-full border-collapse text-left text-xs">
+                        <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          <tr className="border-b border-slate-200">
+                            <th className="px-3 py-2.5">Item</th>
+                            <th className="w-28 px-3 py-2.5 text-right">Quantity</th>
+                            <th className="w-28 px-3 py-2.5 text-right">Est. Rate</th>
+                            <th className="w-32 px-3 py-2.5 text-right">Est. Value</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {formRequestedItems.map((item) => (
+                            <tr key={item.id} className="hover:bg-slate-50/60">
+                              <td className="px-3 py-2.5">
+                                <p className="font-semibold text-slate-900">{item.item}</p>
+                                <p className="text-[11px] text-slate-500">{item.category || "General"}</p>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2.5 text-right font-semibold text-slate-900">
+                                {item.quantity} <span className="font-normal text-slate-500">{item.unit}</span>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2.5 text-right text-slate-700">
+                                ₹{item.estimatedRate.toLocaleString("en-IN")}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2.5 text-right font-semibold text-slate-900">
+                                ₹{(item.quantity * item.estimatedRate).toLocaleString("en-IN")}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t border-slate-200 bg-slate-50/70">
+                            <td colSpan={3} className="px-3 py-2.5 text-right text-xs font-medium text-slate-500">
+                              Estimated Value
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2.5 text-right text-sm font-bold text-emerald-800">
+                              ₹{formEstimatedValue.toLocaleString("en-IN")}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
                     </div>
                   </div>
-                ))}
+
+                  <div className="space-y-2.5 sm:hidden">
+                    {formRequestedItems.map((item) => (
+                      <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 text-xs">
+                        <div>
+                          <p className="font-semibold text-slate-900">{item.item}</p>
+                          <p className="text-[11px] text-slate-500">
+                            {item.quantity} {item.unit} · ₹{item.estimatedRate.toLocaleString("en-IN")}
+                          </p>
+                        </div>
+                        <p className="font-semibold text-slate-900">
+                          ₹{(item.quantity * item.estimatedRate).toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </ProcurementFormSection>
+
+            {/* VENDORS */}
+            <ProcurementFormSection
+              step={3}
+              title="Invite Vendors"
+              subtitle="Suppliers who will receive this RFQ"
+              action={
+                formVendors.length > 0 ? (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setSelectedVendorIds(formVendors.map((v) => v.id));
+                      setVendorModalOpen(true);
+                    }}
+                    className="h-8 px-3 text-xs font-semibold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Vendor
+                  </Button>
+                ) : undefined
+              }
+            >
+              {formVendors.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-8 text-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-400 ring-1 ring-slate-200">
+                    <Building2 className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700">No vendors invited</p>
+                  <p className="max-w-xs text-xs text-slate-500">Invite at least one supplier to collect quotations.</p>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setSelectedVendorIds([]);
+                      setVendorModalOpen(true);
+                    }}
+                    className="mt-1 h-9 px-4 text-xs font-semibold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Invite Vendors
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {formVendors.map((raw) => {
+                    const v = enrichInvitedVendor(raw);
+                    const initials = v.vendorName
+                      .split(/\s+/)
+                      .slice(0, 2)
+                      .map((w) => w[0])
+                      .join("")
+                      .toUpperCase();
+                    return (
+                      <div
+                        key={v.id}
+                        className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3.5 transition-colors hover:border-slate-300"
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-xs font-bold text-emerald-700">
+                          {initials || "V"}
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-semibold text-slate-900" title={v.vendorName}>
+                              {v.vendorName}
+                            </p>
+                            <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                              {v.status || "Pending"}
+                            </span>
+                          </div>
+                          <p className="flex items-center gap-1.5 truncate text-[11px] text-slate-500">
+                            <Mail className="h-3 w-3 shrink-0 text-slate-400" />
+                            <span className="truncate">{v.email || "—"}</span>
+                          </p>
+                          <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                            <Phone className="h-3 w-3 shrink-0 text-slate-400" />
+                            {v.phone || "—"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFormVendors(formVendors.filter((vendor) => vendor.id !== v.id))}
+                          className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                          aria-label={`Remove ${v.vendorName}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </ProcurementFormSection>
+
+            {/* COMMERCIAL TERMS */}
+            <ProcurementFormSection step={4} title="Commercial Terms" subtitle="Shared with every invited vendor">
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+                <FormField label="Delivery Location">
+                  <TextInput
+                    value={formDeliveryLoc}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDeliveryLoc(e.target.value)}
+                    placeholder="Central Warehouse / Main Kitchen"
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+                <div className="sm:col-span-1 xl:col-span-2">
+                  <FormField label="Delivery Address">
+                    <TextInput
+                      value={formDeliveryAddr}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDeliveryAddr(e.target.value)}
+                      placeholder="Street, area, city"
+                      className="h-10 text-sm"
+                    />
+                  </FormField>
+                </div>
+                <FormField label="Payment Terms">
+                  <TextInput
+                    value={formPayTerms}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayTerms(e.target.value)}
+                    placeholder="Net 30 days after GRN"
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+                <FormField label="Expected Delivery">
+                  <TextInput
+                    value={formExpDelivery}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormExpDelivery(e.target.value)}
+                    placeholder="7 days from PO"
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+                <FormField label="Currency">
+                  <TextInput
+                    value={formCurrency}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormCurrency(e.target.value)}
+                    placeholder="INR (₹)"
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+                <FormField label="Tax Terms">
+                  <TextInput
+                    value={formTax}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormTax(e.target.value)}
+                    placeholder="GST extra as applicable (18%)"
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+                <div className="sm:col-span-2 xl:col-span-3">
+                  <FormField label="Remarks / Special Instructions">
+                    <TextAreaInput
+                      rows={3}
+                      value={formRemarks}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormRemarks(e.target.value)}
+                      placeholder="Packaging, brand preferences, sample requirements…"
+                      className="w-full resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm leading-relaxed text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30"
+                    />
+                  </FormField>
+                </div>
               </div>
-            ) : (
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-5 text-center text-xs space-y-1 cursor-pointer hover:bg-slate-50 transition-colors"
-              >
-                <Paperclip className="h-5 w-5 mx-auto text-slate-400" />
-                <p className="font-bold text-slate-700">No documents attached</p>
-                <p className="text-[10px] text-slate-400 font-medium">
-                  Click "+ Add Attachment" to upload supporting technical files.
-                </p>
-              </div>
-            )}
+            </ProcurementFormSection>
           </div>
+
+          {/* LIVE SUMMARY */}
+          <aside className="space-y-4 lg:sticky lg:top-0">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Summary</p>
+              <dl className="space-y-2.5 text-xs">
+                <ProcurementSummaryRow icon={<FileText className="h-3.5 w-3.5" />} label="Requisition" value={formPR} />
+                <ProcurementSummaryRow
+                  icon={<Building2 className="h-3.5 w-3.5" />}
+                  label="Department"
+                  value={eligiblePRs.find((pr) => pr.prNumber === formPR)?.department ?? ""}
+                />
+                <ProcurementSummaryRow icon={<Clock className="h-3.5 w-3.5" />} label="Quotes due" value={formClosingDate} />
+                <ProcurementSummaryRow
+                  icon={<Zap className="h-3.5 w-3.5" />}
+                  label="Priority"
+                  value={formPriority}
+                  valueClassName={priorityTextClass(formPriority)}
+                />
+                <ProcurementSummaryRow
+                  icon={<Package className="h-3.5 w-3.5" />}
+                  label="Items"
+                  value={formRequestedItems.length ? String(formRequestedItems.length) : ""}
+                />
+                <ProcurementSummaryRow
+                  icon={<User className="h-3.5 w-3.5" />}
+                  label="Vendors"
+                  value={formVendors.length ? String(formVendors.length) : ""}
+                />
+              </dl>
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <p className="text-[11px] text-slate-500">Estimated value</p>
+                <p className="text-xl font-bold text-slate-900">₹{formEstimatedValue.toLocaleString("en-IN")}</p>
+              </div>
+            </div>
+            <div className="rounded-xl bg-emerald-50/70 p-4 text-[11px] leading-relaxed text-emerald-900">
+              Record each vendor&apos;s quote once received, select the best one, then create the purchase order from this RFQ.
+            </div>
+          </aside>
         </form>
       </Drawer>
 
@@ -2224,23 +2453,12 @@ export default function RequestForQuotationsPage() {
                   placeholder="Auto-calculated"
                 />
               </FormField>
-              <FormField label="Delivery (days)" required>
+              <FormField label="Delivery Date" required>
                 <TextInput
-                  type="number"
-                  min="1"
-                  value={quoteDeliveryDays}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuoteDeliveryDays(e.target.value)}
-                  className="h-9 text-xs"
-                />
-              </FormField>
-              <FormField label="Vendor Rating (1–5)">
-                <TextInput
-                  type="number"
-                  min="1"
-                  max="5"
-                  step="0.5"
-                  value={quoteRating}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuoteRating(e.target.value)}
+                  type="date"
+                  min={todayStr}
+                  value={quoteDeliveryDate}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuoteDeliveryDate(e.target.value)}
                   className="h-9 text-xs"
                 />
               </FormField>
@@ -2285,6 +2503,7 @@ export default function RequestForQuotationsPage() {
                 type="button"
                 disabled={(compareModalRFQ.comparisonData?.length ?? 0) === 0 || !pickedVendorId}
                 onClick={() => {
+                  setVendorSelectReason("");
                   setSelectVendorModalRFQ(compareModalRFQ);
                   setCompareModalRFQ(null);
                 }}
@@ -2303,10 +2522,9 @@ export default function RequestForQuotationsPage() {
                     <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
                       <th className="px-3.5 py-3">Vendor</th>
                       <th className="px-3.5 py-3">Quoted Rate</th>
-                      <th className="px-3.5 py-3">Delivery Time</th>
+                      <th className="px-3.5 py-3">Delivery By</th>
                       <th className="px-3.5 py-3">Payment Terms</th>
                       <th className="px-3.5 py-3">Warranty</th>
-                      <th className="px-3.5 py-3">Vendor Rating</th>
                       <th className="px-3.5 py-3">Total Amount</th>
                       <th className="px-3.5 py-3 text-right">Recommendation</th>
                     </tr>
@@ -2329,10 +2547,9 @@ export default function RequestForQuotationsPage() {
                       >
                         <td className="px-3.5 py-3 font-extrabold text-slate-900">{bidName}</td>
                         <td className="px-3.5 py-3 font-bold text-slate-800">₹{bid.unitPrice}</td>
-                        <td className="px-3.5 py-3 text-slate-600">{bid.deliveryDays} Days</td>
+                        <td className="px-3.5 py-3 text-slate-600">{formatBidDelivery(bid)}</td>
                         <td className="px-3.5 py-3 text-slate-600">{bid.paymentTerms}</td>
                         <td className="px-3.5 py-3 text-slate-600">{bid.warranty}</td>
-                        <td className="px-3.5 py-3 text-amber-500 font-bold">{bid.rating}</td>
                         <td className="px-3.5 py-3 font-extrabold text-slate-900 text-sm">
                           ₹{bid.totalAmount.toLocaleString("en-IN")}
                         </td>
@@ -2403,11 +2620,10 @@ export default function RequestForQuotationsPage() {
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-[10px] text-emerald-700 font-bold uppercase">Selected Vendor</span>
-                    <span className="text-amber-500 font-bold">{bid.rating}</span>
               </div>
                   <p className="text-base font-extrabold text-slate-900">{bidName}</p>
                   <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-700 pt-1 border-t border-emerald-100">
-                    <span>Delivery: {bid.deliveryDays} days</span>
+                    <span>Delivery: {formatBidDelivery(bid)}</span>
                     <span>Rate: ₹{bid.unitPrice.toLocaleString("en-IN")}/unit</span>
                   </div>
               <div className="flex justify-between text-xs font-bold text-slate-700 pt-1 border-t border-emerald-100">
@@ -2437,8 +2653,8 @@ export default function RequestForQuotationsPage() {
           onClose={() => {
             if (!isConvertingPO) setConvertPOModalRFQ(null);
           }}
-          title="Convert RFQ to Purchase Order"
-          description="This will generate a Purchase Order using the selected vendor and approved quotation."
+          title="Create Purchase Order from RFQ"
+          description="Generates a Purchase Order from the selected vendor's quotation."
           size="md"
           footer={
             <div className="flex items-center justify-end gap-2">
@@ -2496,128 +2712,208 @@ export default function RequestForQuotationsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Estimated Order Total</span>
-                  <p className="font-extrabold text-emerald-800 text-sm">
-                    ₹{convertPOModalRFQ.requestedItems.reduce((acc, i) => acc + i.quantity * i.estimatedRate, 0).toLocaleString("en-IN")}
-                  </p>
-                </div>
-              </div>
+              {(() => {
+                const bid = selectedBidFor(convertPOModalRFQ);
+                if (!bid) return null;
+                const rate = quotedRateFor(convertPOModalRFQ, bid);
+                const subTotal = convertPOModalRFQ.requestedItems.reduce((acc, i) => acc + i.quantity * rate, 0);
+                return (
+                  <>
+                    <div className="grid grid-cols-3 gap-3 pt-1 border-t border-slate-200">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Quoted Rate</span>
+                        <p className="font-bold text-slate-800">₹{rate.toLocaleString("en-IN")} / unit</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Sub Total</span>
+                        <p className="font-bold text-slate-800">₹{Math.round(subTotal).toLocaleString("en-IN")}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Total (incl. 18% GST)</span>
+                        <p className="font-extrabold text-emerald-800 text-sm">
+                          ₹{(Math.round(subTotal) + Math.round(subTotal * 0.18)).toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                      <table className="w-full text-left text-[11px] border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase text-slate-500 font-bold">
+                            <th className="px-2.5 py-1.5">Item</th>
+                            <th className="px-2.5 py-1.5">Qty</th>
+                            <th className="px-2.5 py-1.5">Rate</th>
+                            <th className="px-2.5 py-1.5 text-right">Line Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {convertPOModalRFQ.requestedItems.map((item, idx) => (
+                            <tr key={item.id || `cpo-${idx}`}>
+                              <td className="px-2.5 py-1.5 font-semibold text-slate-900">{item.item}</td>
+                              <td className="px-2.5 py-1.5">
+                                {item.quantity} {item.unit}
+                              </td>
+                              <td className="px-2.5 py-1.5">₹{rate.toLocaleString("en-IN")}</td>
+                              <td className="px-2.5 py-1.5 text-right font-bold">
+                                ₹{(item.quantity * rate).toLocaleString("en-IN")}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      Payment terms: {bid.paymentTerms || convertPOModalRFQ.commercialTerms.paymentTerms || "—"} · Delivery by{" "}
+                      {bid.deliveryDate || "—"}
+                    </p>
+                  </>
+                );
+              })()}
             </div>
 
             <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900 font-medium">
-              ℹ️ This will generate a Purchase Order using the selected vendor and approved quotation. Status will update to <strong>Converted to PO</strong>.
+              ℹ️ The PO uses the selected vendor, its quoted prices and the RFQ items. The RFQ will move to{" "}
+              <strong>Converted to PO</strong> and keep a link to the new PO; no further PO can be created from it.
             </div>
           </div>
         </Modal>
       )}
 
-      {/* VIEW PURCHASE ORDER DRAWER (READ-ONLY DEMO) */}
-      {viewPODrawerRFQ && (
-        <Drawer
-          open={!!viewPODrawerRFQ}
-          onClose={() => setViewPODrawerRFQ(null)}
-          title={`Purchase Order: ${viewPODrawerRFQ.poNumber || "PO-2026-015"}`}
-          width="xl"
-        >
-          <div className="space-y-6 select-none pb-6">
-            <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-4 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-sm font-extrabold text-teal-900">
-                  {viewPODrawerRFQ.poNumber || "PO-2026-015"}
-                </span>
-                <span className="px-2.5 py-0.5 text-[9px] font-extrabold uppercase rounded-full bg-emerald-600 text-white shadow-2xs">
-                  Approved & Issued
-                </span>
-              </div>
-              <h3 className="text-base font-extrabold text-slate-900">
-                Vendor: {displaySelectedVendor(viewPODrawerRFQ) || "—"}
-              </h3>
-              <p className="text-xs text-slate-500 font-medium">
-                Linked RFQ: {viewPODrawerRFQ.rfqNumber} · Linked PR: {viewPODrawerRFQ.linkedPR}
-              </p>
-            </div>
-
-            {/* PO DETAILS SUMMARY */}
-            <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2 text-xs">
-              <div className="grid grid-cols-3 gap-3 border-b border-slate-100 pb-2">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">PO Number</span>
-                  <p className="font-mono font-bold text-slate-900">{viewPODrawerRFQ.poNumber || "PO-2026-015"}</p>
+      {/* VIEW PURCHASE ORDER DRAWER */}
+      {viewPODrawerRFQ && (() => {
+        const po = linkedPoFor(viewPODrawerRFQ);
+        const poNumber = viewPODrawerRFQ.poNumber?.trim() || "";
+        return (
+          <Drawer
+            side="bottom"
+            open={!!viewPODrawerRFQ}
+            onClose={() => setViewPODrawerRFQ(null)}
+            title={`Purchase Order: ${poNumber || "—"}`}
+            width="xl"
+          >
+            <div className="space-y-6 select-none pb-6">
+              <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-4 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-sm font-extrabold text-teal-900">{poNumber || "—"}</span>
+                  {po && (
+                    <span className="px-2.5 py-0.5 text-[9px] font-extrabold uppercase rounded-full bg-emerald-600 text-white shadow-2xs">
+                      {po.status}
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Order Date</span>
-                  <p className="font-bold text-slate-800">Today</p>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Buyer</span>
-                  <p className="font-bold text-slate-800">{resolveBuyerName(viewPODrawerRFQ.buyer)}</p>
-                </div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Vendor: {po?.vendorName || displaySelectedVendor(viewPODrawerRFQ) || "—"}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Linked RFQ: {viewPODrawerRFQ.rfqNumber} · Linked PR: {viewPODrawerRFQ.linkedPR?.trim() || "Direct Procurement"}
+                </p>
               </div>
 
-              <div className="flex justify-between items-center pt-1">
-                <span className="text-slate-500 font-medium">Total Purchase Order Value:</span>
-                <span className="font-extrabold text-emerald-800 text-base">
-                  ₹{viewPODrawerRFQ.requestedItems.reduce((acc, i) => acc + i.quantity * i.estimatedRate, 0).toLocaleString("en-IN")}
-                </span>
+              {!po ? (
+                <AlertBanner
+                  variant="info"
+                  message={`${poNumber || "The linked PO"} could not be loaded. It may have been deleted, or the list is still loading.`}
+                />
+              ) : (
+                <>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2 text-xs">
+                    <div className="grid grid-cols-3 gap-3 border-b border-slate-100 pb-2">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Order Date</span>
+                        <p className="font-bold text-slate-800">{po.orderDate || "—"}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Expected Delivery</span>
+                        <p className="font-bold text-slate-800">{po.expectedDeliveryDate || "—"}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Buyer</span>
+                        <p className="font-bold text-slate-800">{po.buyerName || "—"}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 border-b border-slate-100 pb-2">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Sub Total</span>
+                        <p className="font-bold text-slate-800">₹{po.subTotal.toLocaleString("en-IN")}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Tax</span>
+                        <p className="font-bold text-slate-800">₹{po.taxAmount.toLocaleString("en-IN")}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Payment Terms</span>
+                        <p className="font-bold text-slate-800">{po.paymentTerms || "—"}</p>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center pt-1">
+                      <span className="text-slate-500 font-medium">Total Purchase Order Value:</span>
+                      <span className="font-extrabold text-emerald-800 text-base">
+                        ₹{po.totalAmount.toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
+                      Purchase Order Line Items
+                    </h4>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                            <th className="px-3 py-2">Item</th>
+                            <th className="px-3 py-2">Category</th>
+                            <th className="px-3 py-2">Quantity</th>
+                            <th className="px-3 py-2">Unit</th>
+                            <th className="px-3 py-2">Unit Rate</th>
+                            <th className="px-3 py-2 text-right">Line Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs">
+                          {po.items.map((line, idx) => (
+                            <tr key={line.id || `po-item-${idx}`}>
+                              <td className="px-3 py-2.5 font-bold text-slate-900">
+                                {line.productName || line.itemDescription}
+                              </td>
+                              <td className="px-3 py-2.5 text-slate-600">{line.category}</td>
+                              <td className="px-3 py-2.5 font-extrabold text-slate-900">{line.quantity}</td>
+                              <td className="px-3 py-2.5 text-slate-500">{line.unit}</td>
+                              <td className="px-3 py-2.5 text-slate-700 font-bold">₹{line.unitRate.toLocaleString("en-IN")}</td>
+                              <td className="px-3 py-2.5 font-extrabold text-emerald-800 text-right">
+                                ₹{line.totalAmount.toLocaleString("en-IN")}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                {poNumber && (
+                  <Link
+                    href={`/purchase-stores/procurement/orders?po=${encodeURIComponent(poNumber)}`}
+                    className="h-9 text-xs font-bold bg-teal-700 hover:bg-teal-800 text-white rounded-xl shadow-xs inline-flex items-center justify-center gap-1.5"
+                  >
+                    <FileCheck className="h-3.5 w-3.5" /> Open in Purchase Orders
+                  </Link>
+                )}
+                <Button
+                  type="button"
+                  onClick={() => setViewPODrawerRFQ(null)}
+                  className={cn(
+                    "h-9 text-xs font-bold !bg-slate-900 hover:!bg-slate-800 text-white rounded-xl shadow-xs cursor-pointer",
+                    !poNumber && "col-span-2",
+                  )}
+                >
+                  Close
+                </Button>
               </div>
             </div>
-
-            {/* ORDER ITEMS TABLE */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
-                Purchase Order Line Items
-              </h4>
-              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                      <th className="px-3 py-2">Item</th>
-                      <th className="px-3 py-2">Category</th>
-                      <th className="px-3 py-2">Quantity</th>
-                      <th className="px-3 py-2">Unit</th>
-                      <th className="px-3 py-2">Unit Rate</th>
-                      <th className="px-3 py-2 text-right">Line Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {viewPODrawerRFQ.requestedItems.map((item, idx) => (
-                      <tr key={item.id || `po-item-${idx}`}>
-                        <td className="px-3 py-2.5 font-bold text-slate-900">{item.item}</td>
-                        <td className="px-3 py-2.5 text-slate-600">{item.category}</td>
-                        <td className="px-3 py-2.5 font-extrabold text-slate-900">{item.quantity}</td>
-                        <td className="px-3 py-2.5 text-slate-500">{item.unit}</td>
-                        <td className="px-3 py-2.5 text-slate-700 font-bold">₹{item.estimatedRate}</td>
-                        <td className="px-3 py-2.5 font-extrabold text-emerald-800 text-right">
-                          ₹{(item.quantity * item.estimatedRate).toLocaleString("en-IN")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <Button
-              type="button"
-              onClick={() => setViewPODrawerRFQ(null)}
-              className="w-full h-9 text-xs font-bold !bg-slate-900 hover:!bg-slate-800 text-white rounded-xl shadow-xs cursor-pointer"
-            >
-              Close Purchase Order View
-            </Button>
-          </div>
-        </Drawer>
-      )}
-
-      {/* HIDDEN FILE INPUT */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={handleNativeFileSelect}
-      />
+          </Drawer>
+        );
+      })()}
 
       {/* DOCUMENT / ATTACHMENT PREVIEW MODAL */}
       <PurchaseAttachmentPreviewModal

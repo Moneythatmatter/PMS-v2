@@ -1,13 +1,17 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   FileText,
   Clock,
   CheckCircle2,
   AlertTriangle,
   Zap,
+  Send,
+  ShoppingCart,
+  PackageSearch,
   Download,
   Plus,
   Search,
@@ -19,8 +23,10 @@ import {
   ArrowUpDown,
   UploadCloud,
   X,
-  FileSpreadsheet,
   FileCode,
+  Building2,
+  CalendarDays,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -41,7 +47,13 @@ import { DocumentApprovalFooter } from "@/components/purchase-stores/ui/Document
 import { ModuleDataTable } from "@/components/pms/ModuleDataTable";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import type { ModuleColumn } from "@/components/pms/module-types";
-import type { PurchaseRequisition, PRRequestedItem } from "@/app/data/purchaseRequisitionsData";
+import {
+  PR_SOURCE_MODULES,
+  PR_STATUSES,
+  type PRFulfillment,
+  type PurchaseRequisition,
+  type PRRequestedItem,
+} from "@/app/data/purchaseRequisitionsData";
 import { usePsList } from "@/hooks/usePsResource";
 import { psRequisitionService, psProductService } from "@/services/purchase-stores/index";
 import {
@@ -51,12 +63,14 @@ import {
 } from "@/app/data/procurementMaterial";
 import {
   type PurchaseAttachmentRecord,
-  MAX_ATTACHMENT_BYTES,
   attachmentFromApi,
-  attachmentToApiPayload,
-  createAttachmentFromFile,
-  revokeAttachmentUrls,
 } from "@/app/data/purchaseAttachmentUtils";
+import {
+  PrioritySelector,
+  ProcurementFormSection,
+  ProcurementSummaryRow,
+  priorityTextClass,
+} from "@/components/purchase-stores/ui/ProcurementFormParts";
 import { PurchaseAttachmentPreviewModal } from "@/components/purchase-stores/ui/PurchaseAttachmentPreviewModal";
 
 /** Legacy alias — catalog rows are loaded from Product Master at runtime */
@@ -77,10 +91,6 @@ export type PRFormAttachment = PurchaseAttachmentRecord;
 
 /** @deprecated Use Product Master via psProductService — kept for import compatibility */
 export const MOCK_INVENTORY_CATALOG: InventoryCatalogItem[] = [];
-
-/** @deprecated Empty — attachments come from user uploads */
-export const DEFAULT_FORM_ATTACHMENTS: PRFormAttachment[] = [];
-
 function toInventoryCatalogItem(c: MaterialCatalogItem): InventoryCatalogItem {
   return {
     ...c,
@@ -103,11 +113,27 @@ export default function PurchaseRequisitionsPage() {
     }
   }, []);
 
-  // Native File Input Reference
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const { data: prList, loading: isLoading, reload } = usePsList(() => psRequisitionService.list(), []);
+  const router = useRouter();
+  const { data: prList, loading: isLoading, reload: reloadPrs } = usePsList(() => psRequisitionService.list(), []);
+  const { data: fulfillmentList, reload: reloadFulfillment } = usePsList(
+    () => psRequisitionService.fulfillment(),
+    [],
+  );
+  const reload = () => Promise.all([reloadPrs(), reloadFulfillment()]);
+  const fulfillmentByPr = useMemo(
+    () => new Map<string, PRFulfillment>(fulfillmentList.map((f) => [f.prNumber, f])),
+    [fulfillmentList],
+  );
   const { data: products, loading: loadingProducts } = usePsList(() => psProductService.list(), []);
+
+  useEffect(() => {
+    void psRequisitionService
+      .reconcile()
+      .then((r) => {
+        if (r.updated.length > 0) void Promise.all([reloadPrs(), reloadFulfillment()]);
+      })
+      .catch(() => undefined);
+  }, [reloadPrs, reloadFulfillment]);
   const inventoryCatalog = useMemo(
     () => productsToCatalog(products).map(toInventoryCatalogItem),
     [products],
@@ -116,6 +142,7 @@ export default function PurchaseRequisitionsPage() {
 
   // Search & Filter State
   const [search, setSearch] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
@@ -143,30 +170,28 @@ export default function PurchaseRequisitionsPage() {
   const [rowsPerPage, setRowsPerPage] = useState("10");
 
   // Form State for New/Edit Requisition
-  const [newDept, setNewDept] = useState("Housekeeping");
-  const [newRequester, setNewRequester] = useState("Amit Sharma");
-  const [newReqDate, setNewReqDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [newPriority, setNewPriority] = useState<PurchaseRequisition["priority"]>("High");
+  const [newDept, setNewDept] = useState("");
+  const [newRequester, setNewRequester] = useState("");
+  const [newReqDate, setNewReqDate] = useState("");
+  const [newPriority, setNewPriority] = useState<PurchaseRequisition["priority"] | "">("");
   const [newCostCenter, setNewCostCenter] = useState("");
-  const [newJustification, setNewJustification] = useState(
-    "Current linen inventory has fallen below the minimum stock level before the upcoming holiday season. Additional stock is required to maintain operational readiness."
-  );
+  const [newJustification, setNewJustification] = useState("");
 
-  // Form Attachments State
-  const [formAttachments, setFormAttachments] = useState<PRFormAttachment[]>([]);
   const [previewAttachment, setPreviewAttachment] = useState<PRFormAttachment | null>(null);
-  const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
   // Dynamic Requested Items State
   const [newItems, setNewItems] = useState<PRRequestedItem[]>([]);
+  const newItemsTotal = newItems.reduce((acc, i) => acc + i.quantity * i.estimatedPrice, 0);
 
   const openCreateRequisition = () => {
     setEditPR(null);
     setNewItems([]);
-    setNewReqDate(new Date().toISOString().slice(0, 10));
+    setNewDept("");
+    setNewRequester("");
+    setNewReqDate("");
+    setNewPriority("");
     setNewCostCenter("");
-    revokeAttachmentUrls(formAttachments);
-    setFormAttachments([]);
+    setNewJustification("");
     setCreateModalOpen(true);
     setPendingCreateFromUrl(false);
   };
@@ -187,22 +212,6 @@ export default function PurchaseRequisitionsPage() {
       setNewCostCenter(editPR.costCenter);
       setNewJustification(editPR.justification);
       setNewItems(editPR.requestedItems);
-      setFormAttachments(
-        editPR.attachments.map((a) =>
-          attachmentFromApi(
-            {
-              id: a.id,
-              fileName: a.fileName,
-              fileSize: a.fileSize,
-              fileType: a.fileType,
-              dataUrl: a.dataUrl,
-              mimeType: a.mimeType,
-            },
-            editPR.requestedBy,
-            editPR.requestDate,
-          ),
-        ),
-      );
     }
   }, [editPR]);
 
@@ -243,15 +252,40 @@ export default function PurchaseRequisitionsPage() {
     const total = prList.length;
     const pending = prList.filter((p) => p.status === "Pending Approval").length;
     const approved = prList.filter((p) => p.status === "Approved").length;
+    const sourcing = prList.filter(
+      (p) => p.status === "In Sourcing" || p.status === "Partially Ordered",
+    ).length;
     const rejected = prList.filter((p) => p.status === "Rejected").length;
     const emergency = prList.filter((p) => p.priority === "Emergency").length;
 
-    return { total, pending, approved, rejected, emergency };
+    return { total, pending, approved, sourcing, rejected, emergency };
   }, [prList]);
+
+  const selectedFulfillment = selectedPR ? fulfillmentByPr.get(selectedPR.prNumber) ?? null : null;
+  const showQtyProgress =
+    Boolean(selectedFulfillment) &&
+    ["Approved", "In Sourcing", "Partially Ordered", "Closed"].includes(selectedPR?.status ?? "");
+
+  const canEditPR = (pr: PurchaseRequisition) =>
+    pr.status === "Draft" ||
+    pr.status === "Pending Approval" ||
+    pr.status === "Rejected" ||
+    (pr.status === "Approved" && (fulfillmentByPr.get(pr.prNumber)?.rfqs.length ?? 0) === 0);
+
+  const sourcingActionsFor = (pr: PurchaseRequisition) => {
+    const f = fulfillmentByPr.get(pr.prNumber);
+    return { canCreateRfq: Boolean(f?.canCreateRfq), canCreatePo: Boolean(f?.canCreatePo) };
+  };
+
+  const goCreateRfq = (pr: PurchaseRequisition) =>
+    router.push(`/purchase-stores/procurement/rfq?fromPR=${encodeURIComponent(pr.prNumber)}`);
+  const goCreatePo = (pr: PurchaseRequisition) =>
+    router.push(`/purchase-stores/procurement/orders?fromPR=${encodeURIComponent(pr.prNumber)}`);
 
   // Filter Active Count
   const activeFilterCount = useMemo(() => {
     let count = 0;
+    if (sourceFilter !== "all") count++;
     if (departmentFilter !== "all") count++;
     if (statusFilter !== "all") count++;
     if (priorityFilter !== "all") count++;
@@ -263,6 +297,7 @@ export default function PurchaseRequisitionsPage() {
     if (estAmountFilter !== "all") count++;
     return count;
   }, [
+    sourceFilter,
     departmentFilter,
     statusFilter,
     priorityFilter,
@@ -282,6 +317,9 @@ export default function PurchaseRequisitionsPage() {
         pr.requestedBy.toLowerCase().includes(search.toLowerCase()) ||
         pr.department.toLowerCase().includes(search.toLowerCase()) ||
         pr.requestedItems.some((i) => i.item.toLowerCase().includes(search.toLowerCase()));
+
+      const matchSource =
+        sourceFilter === "all" || (pr.sourceModule ?? "Purchase & Stores") === sourceFilter;
 
       const matchDept =
         departmentFilter === "all" || pr.department.toLowerCase() === departmentFilter.toLowerCase();
@@ -303,6 +341,7 @@ export default function PurchaseRequisitionsPage() {
 
       return (
         matchSearch &&
+        matchSource &&
         matchDept &&
         matchStatus &&
         matchPriority &&
@@ -314,6 +353,7 @@ export default function PurchaseRequisitionsPage() {
   }, [
     prList,
     search,
+    sourceFilter,
     departmentFilter,
     statusFilter,
     priorityFilter,
@@ -328,9 +368,15 @@ export default function PurchaseRequisitionsPage() {
         ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
         : status === "Pending Approval"
           ? "bg-amber-50 text-amber-700 ring-amber-200"
-          : status === "Rejected"
-            ? "bg-red-50 text-red-700 ring-red-200"
-            : "bg-slate-100 text-slate-600 ring-slate-200";
+          : status === "In Sourcing"
+            ? "bg-sky-50 text-sky-700 ring-sky-200"
+            : status === "Partially Ordered"
+              ? "bg-violet-50 text-violet-700 ring-violet-200"
+              : status === "Closed"
+                ? "bg-teal-50 text-teal-800 ring-teal-200"
+                : status === "Rejected"
+                  ? "bg-red-50 text-red-700 ring-red-200"
+                  : "bg-slate-100 text-slate-600 ring-slate-200";
     return (
       <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset", tone)}>
         {status}
@@ -354,6 +400,43 @@ export default function PurchaseRequisitionsPage() {
     );
   };
 
+  const renderSourcingButtons = (pr: PurchaseRequisition, compact = false) => {
+    const { canCreateRfq, canCreatePo } = sourcingActionsFor(pr);
+    if (!canCreateRfq && !canCreatePo) {
+      return compact ? <span className="text-slate-400">—</span> : null;
+    }
+    const size = compact ? "h-7 px-2 text-[11px]" : "h-8 px-3 text-xs";
+    return (
+      <div className="flex items-center gap-1.5">
+        {canCreateRfq && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation();
+              goCreateRfq(pr);
+            }}
+            className={cn("gap-1 rounded-lg font-bold !bg-white !text-sky-700 !border-sky-200 hover:!bg-sky-50", size)}
+          >
+            <Send className="h-3 w-3" /> Create RFQ
+          </Button>
+        )}
+        {canCreatePo && (
+          <Button
+            type="button"
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation();
+              goCreatePo(pr);
+            }}
+            className={cn("gap-1 rounded-lg font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white", size)}
+          >
+            <ShoppingCart className="h-3 w-3" /> Create PO
+          </Button>
+        )}
+      </div>
+    );
+  };
+
   const columns: ModuleColumn[] = [
     {
       key: "prNumber",
@@ -366,7 +449,10 @@ export default function PurchaseRequisitionsPage() {
       key: "department",
       header: "Department",
       render: (pr: PurchaseRequisition) => (
-        <span className="font-medium text-slate-900">{pr.department}</span>
+        <div>
+          <span className="font-medium text-slate-900">{pr.department}</span>
+          <p className="text-xs text-slate-500">via {pr.sourceModule ?? "Purchase & Stores"}</p>
+        </div>
       ),
     },
     {
@@ -386,7 +472,7 @@ export default function PurchaseRequisitionsPage() {
     },
     {
       key: "estimatedAmount",
-      header: "Amount",
+      header: "Estimated Amount",
       align: "right",
       render: (pr: PurchaseRequisition) => (
         <span className="font-semibold text-slate-900">{formatINR(pr.estimatedAmount)}</span>
@@ -402,23 +488,25 @@ export default function PurchaseRequisitionsPage() {
       header: "Status",
       render: (pr: PurchaseRequisition) => renderStatusBadge(pr.status),
     },
+    {
+      key: "ordered",
+      header: "Ordered",
+      render: (pr: PurchaseRequisition) => {
+        const f = fulfillmentByPr.get(pr.prNumber);
+        if (!f || f.totalOrdered === 0) return <span className="text-slate-400">—</span>;
+        return (
+          <span className="text-xs font-semibold text-slate-700">
+            {f.totalOrdered} / {f.totalRequested}
+          </span>
+        );
+      },
+    },
+    {
+      key: "sourcingActions",
+      header: "Actions",
+      render: (pr: PurchaseRequisition) => renderSourcingButtons(pr, true),
+    },
   ];
-
-  // Render File Type Icon Helper
-  const renderFileIcon = (fileType: PRFormAttachment["fileType"]) => {
-    switch (fileType) {
-      case "PDF":
-        return <FileText className="h-3.5 w-3.5 text-red-600 shrink-0" />;
-      case "Excel":
-        return <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 shrink-0" />;
-      case "Word":
-        return <FileText className="h-3.5 w-3.5 text-blue-600 shrink-0" />;
-      case "Image":
-        return <Paperclip className="h-3.5 w-3.5 text-amber-600 shrink-0" />;
-      default:
-        return <Paperclip className="h-3.5 w-3.5 text-slate-500 shrink-0" />;
-    }
-  };
 
   // Row Action Handlers
   const handleDuplicatePR = async (pr: PurchaseRequisition) => {
@@ -442,47 +530,6 @@ export default function PurchaseRequisitionsPage() {
     }
   };
 
-  // Native File Picker Select Handler — reads file as base64 for save + preview
-  const handleNativeFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const oversized = Array.from(files).filter((f) => f.size > MAX_ATTACHMENT_BYTES);
-    if (oversized.length > 0) {
-      setToast({
-        message: `${oversized.map((f) => f.name).join(", ")} exceeds 5 MB limit.`,
-        variant: "info",
-      });
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
-
-    setUploadingAttachments(true);
-    try {
-      const newAtts = await Promise.all(
-        Array.from(files).map((file) =>
-          createAttachmentFromFile(file, newRequester || "Store User"),
-        ),
-      );
-      setFormAttachments((prev) => [...prev, ...newAtts]);
-      setToast({ message: `Attached ${files.length} file(s).`, variant: "success" });
-    } catch {
-      setToast({ message: "Failed to read file. Try again.", variant: "info" });
-    } finally {
-      setUploadingAttachments(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const handleRemoveAttachment = (id: string) => {
-    setFormAttachments((prev) => {
-      const removed = prev.find((a) => a.id === id);
-      if (removed) revokeAttachmentUrls([removed]);
-      return prev.filter((a) => a.id !== id);
-    });
-    setToast({ message: "Attachment removed.", variant: "info" });
-  };
-
   const handlePreviewAttachment = (att: PRFormAttachment) => {
     if (!att.dataUrl && !att.previewUrl) {
       setToast({ message: "No preview data for this file. Re-upload to preview.", variant: "info" });
@@ -490,13 +537,6 @@ export default function PurchaseRequisitionsPage() {
     }
     setPreviewAttachment(att);
   };
-
-  const formAttachmentsRef = useRef(formAttachments);
-  formAttachmentsRef.current = formAttachments;
-
-  useEffect(() => {
-    return () => revokeAttachmentUrls(formAttachmentsRef.current);
-  }, []);
 
   // OPEN INVENTORY SELECTION MODAL
   const handleOpenInventoryModal = () => {
@@ -579,7 +619,18 @@ export default function PurchaseRequisitionsPage() {
   // SAVE / SUBMIT REQUISITION
   const handleSaveRequisition = async (isDraft: boolean) => {
     const today = new Date().toISOString().slice(0, 10);
-    if (!newReqDate || newReqDate < today) {
+    const missing = [
+      !newDept && "Department",
+      !newRequester.trim() && "Requester Name",
+      !newReqDate && "Required Date",
+      !newPriority && "Priority",
+      !isDraft && !newJustification.trim() && "Reason for Request",
+    ].filter(Boolean);
+    if (missing.length > 0) {
+      setToast({ message: `Please fill: ${missing.join(", ")}.`, variant: "info" });
+      return;
+    }
+    if (newReqDate < today) {
       setToast({
         message: "Required Date must be today or a future date.",
         variant: "info",
@@ -593,15 +644,14 @@ export default function PurchaseRequisitionsPage() {
     const totalAmt = newItems.reduce((acc, i) => acc + i.quantity * i.estimatedPrice, 0);
     const payload: Partial<PurchaseRequisition> = {
       department: newDept,
-      requestedBy: newRequester,
+      requestedBy: newRequester.trim(),
       requiredDate: newReqDate,
-      priority: newPriority,
+      priority: newPriority as PurchaseRequisition["priority"],
       costCenter: newCostCenter.trim(),
       justification: newJustification,
       estimatedAmount: totalAmt,
       requestedItems: newItems,
       status: isDraft ? "Draft" : "Pending Approval",
-      attachments: formAttachments.map(attachmentToApiPayload),
     };
 
     setSaving(true);
@@ -613,7 +663,8 @@ export default function PurchaseRequisitionsPage() {
       } else {
         await psRequisitionService.create({
           ...payload,
-          requestDate: "Today",
+          sourceModule: "Purchase & Stores",
+          requestDate: today,
           currentApprover: "Purchase Manager",
         });
         setCreateModalOpen(false);
@@ -658,16 +709,6 @@ export default function PurchaseRequisitionsPage() {
 
   return (
     <div className="space-y-5 select-none pb-12">
-      {/* Hidden Native File Input */}
-      <input
-        type="file"
-        multiple
-        ref={fileInputRef}
-        onChange={handleNativeFileSelect}
-        className="hidden"
-        accept=".pdf,.xlsx,.xls,.csv,.docx,.doc,.png,.jpg,.jpeg,.gif,.webp"
-      />
-
       {toast && (
         <AlertBanner
           variant={toast.variant}
@@ -704,16 +745,17 @@ export default function PurchaseRequisitionsPage() {
 
       {/* 5 Summary KPI Cards */}
       {isLoading ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {[1, 2, 3, 4, 5].map((i) => (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <div key={i} className="h-20 rounded-2xl border border-slate-200 bg-white p-4 animate-pulse" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <StatMiniCard label="Total PR" value={`${metrics.total}`} icon={FileText} accent="#10b981" />
           <StatMiniCard label="Pending" value={`${metrics.pending}`} icon={Clock} accent="#d97706" />
           <StatMiniCard label="Approved" value={`${metrics.approved}`} icon={CheckCircle2} accent="#0284c7" />
+          <StatMiniCard label="In Sourcing / Ordering" value={`${metrics.sourcing}`} icon={PackageSearch} accent="#7c3aed" />
           <StatMiniCard label="Rejected" value={`${metrics.rejected}`} icon={AlertTriangle} accent="#dc2626" />
           <StatMiniCard label="Emergency" value={`${metrics.emergency}`} icon={Zap} accent="#e11d48" />
         </div>
@@ -728,10 +770,7 @@ export default function PurchaseRequisitionsPage() {
         onOpenFilters={() => setFilterDrawerOpen(true)}
         statusTabs={[
           { id: "all", label: "All Requisitions" },
-          { id: "pending approval", label: "Pending Approval" },
-          { id: "approved", label: "Approved" },
-          { id: "rejected", label: "Rejected" },
-          { id: "cancelled", label: "Cancelled" },
+          ...PR_STATUSES.map((s) => ({ id: s.toLowerCase(), label: s })),
         ]}
         activeStatusTab={statusFilter}
         onStatusTabChange={setStatusFilter}
@@ -752,9 +791,26 @@ export default function PurchaseRequisitionsPage() {
                 label: "Edit",
                 onClick: () => {
                   const first = filteredPRs.find((p) => selectedIds.has(p.id));
-                  if (first) setEditPR(first);
+                  if (!first) return;
+                  if (!canEditPR(first)) {
+                    setToast({
+                      message: `${first.prNumber} is ${first.status} and can no longer be edited.`,
+                      variant: "info",
+                    });
+                    return;
+                  }
+                  setEditPR(first);
                 },
               },
+              ...(() => {
+                const first = filteredPRs.find((p) => selectedIds.has(p.id));
+                if (!first) return [];
+                const { canCreateRfq, canCreatePo } = sourcingActionsFor(first);
+                return [
+                  ...(canCreateRfq ? [{ label: "Create RFQ", onClick: () => goCreateRfq(first) }] : []),
+                  ...(canCreatePo ? [{ label: "Create PO", onClick: () => goCreatePo(first) }] : []),
+                ];
+              })(),
               {
                 label: "Duplicate",
                 onClick: () => {
@@ -820,6 +876,7 @@ export default function PurchaseRequisitionsPage() {
         title="Filter Purchase Requisitions"
         activeFilterCount={activeFilterCount}
         onReset={() => {
+          setSourceFilter("all");
           setDepartmentFilter("all");
           setStatusFilter("all");
           setPriorityFilter("all");
@@ -832,6 +889,21 @@ export default function PurchaseRequisitionsPage() {
         }}
       >
         <div className="space-y-4 select-none">
+          <FormField label="Source Module">
+            <SelectInput
+              value={sourceFilter}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSourceFilter(e.target.value)}
+              className="w-full text-xs rounded-xl h-9 bg-white"
+            >
+              <option value="all">All Modules</option>
+              {PR_SOURCE_MODULES.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+
           <FormField label="Department">
             <SelectInput
               value={departmentFilter}
@@ -839,9 +911,11 @@ export default function PurchaseRequisitionsPage() {
               className="w-full text-xs rounded-xl h-9 bg-white"
             >
               <option value="all">All Departments</option>
-              <option value="Housekeeping">Housekeeping</option>
-              <option value="Engineering">Engineering</option>
-              <option value="Kitchen">Kitchen (Food & Beverage)</option>
+              {[...new Set(prList.map((pr) => pr.department))].sort().map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
             </SelectInput>
           </FormField>
 
@@ -852,11 +926,11 @@ export default function PurchaseRequisitionsPage() {
               className="w-full text-xs rounded-xl h-9 bg-white"
             >
               <option value="all">All Statuses</option>
-              <option value="pending approval">Pending Approval</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="draft">Draft</option>
+              {PR_STATUSES.map((s) => (
+                <option key={s} value={s.toLowerCase()}>
+                  {s}
+                </option>
+              ))}
             </SelectInput>
           </FormField>
 
@@ -948,9 +1022,10 @@ export default function PurchaseRequisitionsPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
                   {renderPriorityBadge(pr.priority)}
-                  <span>{formatINR(pr.estimatedAmount)}</span>
+                  <span>Est. {formatINR(pr.estimatedAmount)}</span>
                   <span>· {pr.requiredDate}</span>
                 </div>
+                {renderSourcingButtons(pr)}
               </div>
             )}
           />
@@ -978,6 +1053,7 @@ export default function PurchaseRequisitionsPage() {
       {/* DETAIL DRAWER */}
       {selectedPR && (
         <Drawer
+          side="bottom"
           open={!!selectedPR}
           onClose={() => setSelectedPR(null)}
           title={`Purchase Requisition: ${selectedPR.prNumber}`}
@@ -990,6 +1066,7 @@ export default function PurchaseRequisitionsPage() {
               onClose={() => setSelectedPR(null)}
               approveLabel="Approve Requisition"
               rejectLabel="Reject"
+              extraActions={renderSourcingButtons(selectedPR)}
             />
           }
         >
@@ -1004,7 +1081,10 @@ export default function PurchaseRequisitionsPage() {
                 </div>
               </div>
               <h3 className="text-base font-extrabold text-slate-900">{selectedPR.department} Department Request</h3>
-              <p className="text-xs text-slate-500 font-medium">Requested By: {selectedPR.requestedBy} · Date: {selectedPR.requestDate}</p>
+              <p className="text-xs text-slate-500 font-medium">
+                Raised from {selectedPR.sourceModule ?? "Purchase & Stores"} · Requested By: {selectedPR.requestedBy} · Date:{" "}
+                {selectedPR.requestDate}
+              </p>
             </div>
 
             {/* SECTION 1: BASIC INFORMATION */}
@@ -1067,6 +1147,8 @@ export default function PurchaseRequisitionsPage() {
                       <th className="px-3 py-2">Item</th>
                       <th className="px-3 py-2">Category</th>
                       <th className="px-3 py-2">Quantity</th>
+                      {showQtyProgress && <th className="px-3 py-2">Ordered</th>}
+                      {showQtyProgress && <th className="px-3 py-2">Remaining</th>}
                       <th className="px-3 py-2">Unit</th>
                       <th className="px-3 py-2">Est. Price</th>
                       <th className="px-3 py-2">Est. Total</th>
@@ -1074,11 +1156,26 @@ export default function PurchaseRequisitionsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-[11px] font-semibold text-slate-700">
-                    {selectedPR.requestedItems.map((item) => (
+                    {selectedPR.requestedItems.map((item, idx) => {
+                      const line = selectedFulfillment?.items[idx];
+                      return (
                       <tr key={item.id}>
                         <td className="px-3 py-2 font-bold text-slate-900">{item.item}</td>
                         <td className="px-3 py-2 text-slate-500">{item.category}</td>
                         <td className="px-3 py-2 font-extrabold text-slate-800">{item.quantity}</td>
+                        {showQtyProgress && (
+                          <td className="px-3 py-2 text-slate-700">{line?.ordered ?? 0}</td>
+                        )}
+                        {showQtyProgress && (
+                          <td
+                            className={cn(
+                              "px-3 py-2 font-extrabold",
+                              (line?.remaining ?? 0) > 0 ? "text-amber-700" : "text-emerald-700",
+                            )}
+                          >
+                            {line?.remaining ?? item.quantity}
+                          </td>
+                        )}
                         <td className="px-3 py-2 text-slate-500">{item.unit}</td>
                         <td className="px-3 py-2 text-slate-600">₹{item.estimatedPrice}</td>
                         <td className="px-3 py-2 font-extrabold text-slate-900">
@@ -1088,11 +1185,44 @@ export default function PurchaseRequisitionsPage() {
                           {item.remarks || "Standard specification"}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
+
+            {selectedFulfillment &&
+              (selectedFulfillment.rfqs.length > 0 || selectedFulfillment.purchaseOrders.length > 0) && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
+                    Sourcing &amp; Orders
+                  </h4>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-medium">Ordered quantity</span>
+                      <span className="font-extrabold text-slate-900">
+                        {selectedFulfillment.totalOrdered} / {selectedFulfillment.totalRequested}
+                        {selectedFulfillment.totalRemaining > 0
+                          ? ` · ${selectedFulfillment.totalRemaining} remaining`
+                          : " · fully ordered"}
+                      </span>
+                    </div>
+                    {selectedFulfillment.rfqs.map((r) => (
+                      <div key={r.id} className="flex items-center justify-between border-t border-slate-100 pt-2">
+                        <span className="font-mono font-bold text-sky-700">{r.rfqNumber}</span>
+                        <span className="text-slate-500">RFQ · {r.status}</span>
+                      </div>
+                    ))}
+                    {selectedFulfillment.purchaseOrders.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between border-t border-slate-100 pt-2">
+                        <span className="font-mono font-bold text-emerald-700">{p.poNumber}</span>
+                        <span className="text-slate-500">PO · {p.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
             {/* SECTION 3: BUSINESS JUSTIFICATION */}
             <div className="space-y-2">
@@ -1148,6 +1278,7 @@ export default function PurchaseRequisitionsPage() {
             </div>
 
             {/* SECTION 5: ATTACHMENTS */}
+            {(selectedPR.attachments?.length ?? 0) > 0 && (
             <div className="space-y-2">
               <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
                 Attachments
@@ -1174,24 +1305,7 @@ export default function PurchaseRequisitionsPage() {
                 })}
               </div>
             </div>
-
-            {/* SECTION 6: COMMENTS */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
-                Comments
-              </h4>
-              <div className="space-y-2">
-                {selectedPR.comments.map((com) => (
-                  <div key={com.id} className="rounded-xl border border-slate-200 bg-white p-3 space-y-1 text-xs">
-                    <div className="flex items-center justify-between text-slate-500 font-semibold text-[11px]">
-                      <span className="font-extrabold text-slate-800">{com.authorRole} ({com.authorName})</span>
-                      <span>{com.timestamp}</span>
-                    </div>
-                    <p className="text-slate-700 font-medium">{com.commentText}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
 
           </div>
         </Drawer>
@@ -1199,6 +1313,7 @@ export default function PurchaseRequisitionsPage() {
 
       {/* CREATE / EDIT PURCHASE REQUISITION DRAWER (SAP FIORI / ENTERPRISE REDESIGN) */}
       <Drawer
+        side="bottom"
         open={createModalOpen || !!editPR}
         onClose={() => {
           setCreateModalOpen(false);
@@ -1207,55 +1322,59 @@ export default function PurchaseRequisitionsPage() {
         title={editPR ? `Edit Requisition: ${editPR.prNumber}` : "Create Purchase Requisition"}
         width="responsive"
         customHeader={
-          <div className="flex flex-col gap-1 min-w-0">
-            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight truncate">
-              {editPR ? `Edit Requisition: ${editPR.prNumber}` : "Create Purchase Requisition"}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2.5 text-xs font-medium text-slate-500">
-              <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                Draft
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="truncate">
-                <strong className="text-slate-700 font-semibold">Department:</strong> {newDept || "Housekeeping"}
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="truncate">
-                <strong className="text-slate-700 font-semibold">Requester:</strong> {newRequester || "Amit Sharma"}
-              </span>
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="truncate text-base font-bold text-slate-900 sm:text-lg">
+                  {editPR ? `Edit Requisition ${editPR.prNumber}` : "New Purchase Requisition"}
+                </h2>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                  {editPR?.status ?? "Draft"}
+                </span>
+              </div>
+              <p className="truncate text-xs text-slate-500">
+                Request materials for your department. It goes for approval once submitted.
+              </p>
             </div>
           </div>
         }
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setCreateModalOpen(false);
-                setEditPR(null);
-              }}
-              className="h-9 px-4 text-xs font-semibold !bg-white hover:!bg-slate-100 text-slate-700 border-slate-300 rounded-xl cursor-pointer"
-            >
-              Cancel
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleSaveRequisition(true)}
-              className="h-9 px-4 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer"
-            >
-              Save Draft
-            </Button>
-
-            <Button
-              type="button"
-              onClick={() => handleSaveRequisition(false)}
-              className="h-9 px-5 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer focus:ring-2 focus:ring-emerald-500"
-            >
-              Submit Requisition
-            </Button>
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">
+              <strong className="text-slate-800">{newItems.length}</strong> item{newItems.length === 1 ? "" : "s"} ·
+              Estimated <strong className="text-slate-800">₹{newItemsTotal.toLocaleString("en-IN")}</strong>
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setCreateModalOpen(false);
+                  setEditPR(null);
+                }}
+                className="h-9 px-4 text-xs font-semibold !bg-white hover:!bg-slate-100 text-slate-700 border-slate-300 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleSaveRequisition(true)}
+                className="h-9 px-4 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Save Draft
+              </Button>
+              <Button
+                type="button"
+                onClick={() => handleSaveRequisition(false)}
+                className="h-9 px-5 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Send className="h-3.5 w-3.5" /> Submit for Approval
+              </Button>
+            </div>
           </div>
         }
       >
@@ -1264,136 +1383,210 @@ export default function PurchaseRequisitionsPage() {
             e.preventDefault();
             handleSaveRequisition(false);
           }}
-          className="space-y-6 select-none pb-20 focus:outline-hidden"
+          className="grid gap-5 pb-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start"
         >
-          {/* SECTION 1: BASIC INFORMATION CARD */}
-          <div className="bg-white rounded-[12px] border border-slate-200/80 p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h4 className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                Basic Information
-              </h4>
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                Section 1 of 4
-              </span>
-            </div>
+          <div className="min-w-0 space-y-5">
+            {/* REQUEST DETAILS */}
+            <ProcurementFormSection step={1} title="Request Details" subtitle="Who needs it, and by when">
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+                <FormField label="Department" required>
+                  <SelectInput
+                    value={newDept}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewDept(e.target.value)}
+                    className={cn("block h-10 text-sm", !newDept && "text-slate-400")}
+                  >
+                    <option value="" disabled>Select department</option>
+                    <option value="Housekeeping">Housekeeping</option>
+                    <option value="Engineering">Engineering</option>
+                    <option value="Kitchen">Kitchen (Food & Beverage)</option>
+                  </SelectInput>
+                </FormField>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField label="Department" required>
-                <SelectInput
-                  value={newDept}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewDept(e.target.value)}
-                  className="h-9 text-xs focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                >
-                  <option value="Housekeeping">Housekeeping</option>
-                  <option value="Engineering">Engineering</option>
-                  <option value="Kitchen">Kitchen (Food & Beverage)</option>
-                </SelectInput>
-              </FormField>
+                <FormField label="Requester Name" required>
+                  <TextInput
+                    value={newRequester}
+                    placeholder="Who is requesting?"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewRequester(e.target.value)}
+                    className="h-10 text-sm"
+                  />
+                </FormField>
 
-              <FormField label="Requester Name" required>
-                <TextInput
-                  value={newRequester}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewRequester(e.target.value)}
-                  className="h-9 text-xs focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                />
-              </FormField>
+                <FormField label="Required By" required>
+                  <TextInput
+                    type="date"
+                    min={new Date().toISOString().slice(0, 10)}
+                    value={newReqDate}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewReqDate(e.target.value)}
+                    className="h-10 text-sm"
+                  />
+                </FormField>
 
-              <FormField label="Required Date" required>
-                <TextInput
-                  type="date"
-                  min={new Date().toISOString().slice(0, 10)}
-                  value={newReqDate}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewReqDate(e.target.value)}
-                  className="h-9 text-xs focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                />
-              </FormField>
+                <div className="sm:col-span-2 xl:col-span-2">
+                  <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                    Priority <span className="text-red-500">*</span>
+                  </span>
+                  <PrioritySelector value={newPriority} onChange={setNewPriority} />
+                </div>
 
-              <FormField label="Priority" required>
-                <SelectInput
-                  value={newPriority}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewPriority(e.target.value as any)}
-                  className="h-9 text-xs focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                  <option value="Emergency">Emergency</option>
-                </SelectInput>
-              </FormField>
-
-              <div className="md:col-span-2">
                 <FormField label="Cost Center">
                   <SelectInput
                     value={newCostCenter}
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewCostCenter(e.target.value)}
-                    className="h-9 text-xs focus:ring-2 focus:ring-emerald-500 border-slate-300 rounded-lg"
+                    className={cn("block h-10 text-sm", !newCostCenter && "text-slate-400")}
                   >
-                    <option value="">Select cost center (optional)</option>
+                    <option value="">Optional</option>
                     <option value="CC-HK-LINEN">CC-HK-LINEN (Housekeeping Linen Dept)</option>
                     <option value="CC-ENG-HVAC">CC-ENG-HVAC (Engineering HVAC Maintenance)</option>
                     <option value="CC-FB-[#001]">CC-FB-[#001] (F&B Main Kitchen Operating)</option>
                   </SelectInput>
                 </FormField>
               </div>
-            </div>
-          </div>
+            </ProcurementFormSection>
 
-          {/* SECTION 2: REQUESTED ITEMS CARD */}
-          <div className="bg-white rounded-[12px] border border-slate-200/80 p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h4 className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                  Requested Items ({newItems.length})
-                </h4>
-              </div>
-              <Button
-                type="button"
-                onClick={handleOpenInventoryModal}
-                className="h-7 px-2.5 text-[10px] font-bold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer flex items-center gap-1 shadow-xs"
-              >
-                + Add Item
-              </Button>
-            </div>
+            {/* REQUESTED ITEMS */}
+            <ProcurementFormSection
+              step={2}
+              title="Requested Items"
+              subtitle={newItems.length ? `${newItems.length} item${newItems.length === 1 ? "" : "s"} added` : "Pick materials from the product catalog"}
+              action={
+                newItems.length > 0 ? (
+                  <Button
+                    type="button"
+                    onClick={handleOpenInventoryModal}
+                    className="h-8 px-3 text-xs font-semibold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Item
+                  </Button>
+                ) : undefined
+              }
+            >
+              {newItems.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-10 text-center">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-400 ring-1 ring-slate-200">
+                    <PackageSearch className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700">No items yet</p>
+                  <p className="max-w-xs text-xs text-slate-500">Add the materials you need from the product catalog.</p>
+                  <Button
+                    type="button"
+                    onClick={handleOpenInventoryModal}
+                    className="mt-1 h-9 px-4 text-xs font-semibold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add from Catalog
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  {/* DESKTOP TABLE */}
+                  <div className="hidden overflow-hidden rounded-xl border border-slate-200 sm:block">
+                    <div className="max-h-[340px] overflow-y-auto">
+                      <table className="w-full border-collapse text-left text-xs">
+                        <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          <tr className="border-b border-slate-200">
+                            <th className="px-3 py-2.5">Item</th>
+                            <th className="w-24 px-3 py-2.5 text-center">Qty</th>
+                            <th className="w-32 px-3 py-2.5 text-right">Est. Price (₹)</th>
+                            <th className="w-28 px-3 py-2.5 text-right">Est. Total</th>
+                            <th className="px-3 py-2.5">Remarks</th>
+                            <th className="w-10 px-3 py-2.5" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {newItems.map((item) => (
+                            <tr key={item.id} className="hover:bg-slate-50/60">
+                              <td className="min-w-[160px] px-3 py-2.5">
+                                <p className="font-semibold text-slate-900">{item.item}</p>
+                                <p className="text-[11px] text-slate-500">{item.category || "Uncategorised"}</p>
+                              </td>
+                              <td className="px-2 py-2">
+                                <div className="flex items-center gap-1.5">
+                                  <TextInput
+                                    type="number"
+                                    min={1}
+                                    value={item.quantity}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                      handleItemFieldChange(item.id, "quantity", e.target.value)
+                                    }
+                                    className="h-8 text-center text-xs font-semibold"
+                                  />
+                                  <span className="shrink-0 text-[11px] text-slate-500">{item.unit || "Pcs"}</span>
+                                </div>
+                              </td>
+                              <td className="px-2 py-2">
+                                <TextInput
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  value={item.estimatedPrice}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                    handleItemFieldChange(item.id, "estimatedPrice", e.target.value)
+                                  }
+                                  placeholder="0"
+                                  className="h-8 text-right text-xs font-semibold"
+                                />
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2.5 text-right font-semibold text-slate-900">
+                                ₹{(item.quantity * item.estimatedPrice).toLocaleString("en-IN")}
+                              </td>
+                              <td className="min-w-[140px] px-2 py-2">
+                                <TextInput
+                                  value={item.remarks || ""}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                    handleItemFieldChange(item.id, "remarks", e.target.value)
+                                  }
+                                  placeholder="Optional"
+                                  className="h-8 text-xs"
+                                />
+                              </td>
+                              <td className="px-2 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveItemRow(item.id)}
+                                  className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                                  aria-label={`Remove ${item.item}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t border-slate-200 bg-slate-50/70">
+                            <td colSpan={3} className="px-3 py-2.5 text-right text-xs font-medium text-slate-500">
+                              Estimated Total
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2.5 text-right text-sm font-bold text-emerald-800">
+                              ₹{newItemsTotal.toLocaleString("en-IN")}
+                            </td>
+                            <td colSpan={2} />
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
 
-            {/* DESKTOP TABLE */}
-            <div className="hidden sm:block rounded-xl border border-slate-200 bg-white overflow-hidden">
-              <div className="max-h-[280px] overflow-y-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500 z-10">
-                    <tr>
-                      <th className="px-3 py-2">Item</th>
-                      <th className="px-3 py-2">Category</th>
-                      <th className="px-3 py-2 w-20 text-center">Qty</th>
-                      <th className="px-3 py-2">Unit</th>
-                      <th className="px-3 py-2">Est. Price</th>
-                      <th className="px-3 py-2">Est. Total</th>
-                      <th className="px-3 py-2">Remarks</th>
-                      <th className="px-3 py-2 text-right">Delete</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {newItems.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
-                          No items added yet. Click &quot;+ Add Item&quot; to select products from the
-                          catalog.
-                        </td>
-                      </tr>
-                    ) : null}
-                    {newItems.map((item) => {
-                      const estTotal = item.quantity * item.estimatedPrice;
-
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50/60">
-                          <td className="px-3 py-2 font-bold text-slate-900 min-w-[140px]">
-                            {item.item}
-                          </td>
-                          <td className="px-3 py-2 text-slate-600 font-medium text-[11px] whitespace-nowrap">
-                            {item.category || "—"}
-                          </td>
-                          <td className="px-2 py-1.5 w-20">
+                  {/* MOBILE CARDS */}
+                  <div className="space-y-2.5 sm:hidden">
+                    {newItems.map((item) => (
+                      <div key={item.id} className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-semibold text-slate-900">{item.item}</p>
+                            <p className="text-[11px] text-slate-500">{item.category || "Uncategorised"}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItemRow(item.id)}
+                            className="p-1 text-slate-400 hover:text-red-600"
+                            aria-label={`Remove ${item.item}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="block">
+                            <span className="mb-1 block text-[10px] text-slate-500">Qty ({item.unit || "Pcs"})</span>
                             <TextInput
                               type="number"
                               min={1}
@@ -1401,13 +1594,11 @@ export default function PurchaseRequisitionsPage() {
                               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                                 handleItemFieldChange(item.id, "quantity", e.target.value)
                               }
-                              className="h-7 text-xs font-bold text-center border-slate-300"
+                              className="h-8 text-center text-xs font-semibold"
                             />
-                          </td>
-                          <td className="px-3 py-2 text-slate-600 font-medium text-[11px] whitespace-nowrap">
-                            {item.unit || "Pcs"}
-                          </td>
-                          <td className="px-2 py-1.5 w-28">
+                          </label>
+                          <label className="block">
+                            <span className="mb-1 block text-[10px] text-slate-500">Est. Price (₹)</span>
                             <TextInput
                               type="number"
                               min={0}
@@ -1417,201 +1608,61 @@ export default function PurchaseRequisitionsPage() {
                                 handleItemFieldChange(item.id, "estimatedPrice", e.target.value)
                               }
                               placeholder="0"
-                              className="h-7 text-xs font-bold text-right border-slate-300"
+                              className="h-8 text-right text-xs font-semibold"
                             />
-                          </td>
-                          <td className="px-3 py-2 font-extrabold text-emerald-800 whitespace-nowrap">
-                            ₹{estTotal.toLocaleString("en-IN")}
-                          </td>
-                          <td className="px-2 py-1.5 min-w-[130px]">
-                            <TextInput
-                              value={item.remarks || ""}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                                handleItemFieldChange(item.id, "remarks", e.target.value)
-                              }
-                              placeholder="Remarks"
-                              className="h-7 text-[11px] border-slate-300"
-                            />
-                          </td>
-                          <td className="px-3 py-2 text-right whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItemRow(item.id)}
-                              className="p-1 rounded text-slate-400 transition-colors cursor-pointer hover:text-red-600"
-                              title="Delete row"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* MOBILE STACKED CARDS */}
-            <div className="block sm:hidden space-y-2.5">
-              {newItems.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-8 text-center text-xs text-slate-500">
-                  No items added yet. Tap &quot;+ Add Item&quot; to select products.
-                </div>
-              ) : null}
-              {newItems.map((item) => {
-                const estTotal = item.quantity * item.estimatedPrice;
-                return (
-                  <div key={item.id} className="p-3 rounded-lg border border-slate-200 bg-white space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900">{item.item}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItemRow(item.id)}
-                        className="text-slate-400 hover:text-red-600"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div>
-                        <span className="text-slate-500 block text-[10px]">Qty ({item.unit})</span>
-                        <TextInput
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                            handleItemFieldChange(item.id, "quantity", e.target.value)
-                          }
-                          className="h-7 text-xs font-bold text-center border-slate-300"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block text-[10px]">Est. Price (₹)</span>
-                        <TextInput
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={item.estimatedPrice}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                            handleItemFieldChange(item.id, "estimatedPrice", e.target.value)
-                          }
-                          placeholder="0"
-                          className="h-7 text-xs font-bold text-right border-slate-300"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-slate-500 block text-[10px]">Est. Total</span>
-                        <span className="font-extrabold text-emerald-800 text-xs block mt-1">
-                          ₹{estTotal.toLocaleString("en-IN")}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* HIGHLIGHTED ESTIMATED TOTAL SUMMARY CARD */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-xs">
-              <span className="font-bold text-emerald-950">Estimated Total</span>
-              <span className="font-extrabold text-emerald-900 text-base">
-                ₹{newItems.reduce((acc, i) => acc + i.quantity * i.estimatedPrice, 0).toLocaleString("en-IN")}
-              </span>
-            </div>
-          </div>
-
-          {/* SECTION 3: BUSINESS JUSTIFICATION CARD */}
-          <div className="bg-white rounded-[12px] border border-slate-200/80 p-5 shadow-xs space-y-3">
-            <div className="border-b border-slate-100 pb-2">
-              <h4 className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                Business Justification
-              </h4>
-            </div>
-            <FormField label="Reason for Request" required>
-              <TextAreaInput
-                rows={3}
-                value={newJustification}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewJustification(e.target.value)}
-                placeholder="Explain why this purchase is required..."
-                className="w-full h-20 p-3 text-xs leading-relaxed text-slate-900 placeholder:text-slate-400 rounded-lg border border-slate-300 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden resize-none"
-              />
-            </FormField>
-            <p className="text-[10px] text-slate-500 font-medium">
-              Explain why this purchase is required and the business impact if delayed.
-            </p>
-          </div>
-
-          {/* SECTION 4: ATTACHMENTS CARD */}
-          <div className="bg-white rounded-[12px] border border-slate-200/80 p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h4 className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                  Attachments ({formAttachments.length})
-                </h4>
-              </div>
-              <Button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingAttachments}
-                className="h-7 px-2.5 text-[10px] font-bold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer flex items-center gap-1 shadow-xs disabled:opacity-60"
-              >
-                <Plus className="h-3 w-3" /> {uploadingAttachments ? "Uploading…" : "Add Attachment"}
-              </Button>
-            </div>
-
-            {formAttachments.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {formAttachments.map((att) => (
-                  <div
-                    key={att.id}
-                    className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between gap-2 shadow-2xs"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      {renderFileIcon(att.fileType)}
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 truncate" title={att.fileName}>
-                          {att.fileName}
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-medium">
-                          {att.fileSize} • {att.uploadedBy}
+                          </label>
+                        </div>
+                        <p className="text-right font-semibold text-slate-900">
+                          ₹{(item.quantity * item.estimatedPrice).toLocaleString("en-IN")}
                         </p>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewAttachment(att)}
-                        className="px-2 py-0.5 text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
-                      >
-                        Preview
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveAttachment(att.id)}
-                        className="px-2 py-0.5 text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors cursor-pointer"
-                      >
-                        Remove
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-4 text-center text-xs space-y-1 cursor-pointer hover:bg-slate-50"
-              >
-                <Paperclip className="h-5 w-5 mx-auto text-slate-400" />
-                <p className="font-bold text-slate-700">No attachments added.</p>
-                <p className="text-[10px] text-slate-400 font-medium">
-                  Click "+ Add Attachment" to attach supporting documents.
-                </p>
-              </div>
-            )}
+                </>
+              )}
+            </ProcurementFormSection>
+
+            {/* JUSTIFICATION */}
+            <ProcurementFormSection step={3} title="Business Justification" subtitle="Why is this purchase needed?">
+              <FormField label="Reason for Request" required>
+                <TextAreaInput
+                  rows={4}
+                  maxLength={500}
+                  value={newJustification}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewJustification(e.target.value)}
+                  placeholder="Explain the need and the impact if it's delayed…"
+                  className="w-full resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm leading-relaxed text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30"
+                />
+              </FormField>
+              <p className="mt-1 text-right text-[11px] text-slate-400">{newJustification.length}/500</p>
+            </ProcurementFormSection>
           </div>
+
+          {/* LIVE SUMMARY */}
+          <aside className="space-y-4 lg:sticky lg:top-0">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Summary</p>
+              <dl className="space-y-2.5 text-xs">
+                <ProcurementSummaryRow icon={<Building2 className="h-3.5 w-3.5" />} label="Department" value={newDept} />
+                <ProcurementSummaryRow icon={<User className="h-3.5 w-3.5" />} label="Requester" value={newRequester} />
+                <ProcurementSummaryRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Required by" value={newReqDate} />
+                <ProcurementSummaryRow
+                  icon={<AlertTriangle className="h-3.5 w-3.5" />}
+                  label="Priority"
+                  value={newPriority}
+                  valueClassName={priorityTextClass(newPriority)}
+                />
+                <ProcurementSummaryRow icon={<PackageSearch className="h-3.5 w-3.5" />} label="Items" value={newItems.length ? String(newItems.length) : ""} />
+              </dl>
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <p className="text-[11px] text-slate-500">Estimated total</p>
+                <p className="text-xl font-bold text-slate-900">₹{newItemsTotal.toLocaleString("en-IN")}</p>
+              </div>
+            </div>
+            <div className="rounded-xl bg-emerald-50/70 p-4 text-[11px] leading-relaxed text-emerald-900">
+              After approval, Stores can raise an RFQ or a purchase order directly from this requisition.
+            </div>
+          </aside>
         </form>
       </Drawer>
 

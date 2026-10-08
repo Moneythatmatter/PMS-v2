@@ -390,8 +390,8 @@ export function AllBookingsView() {
     const query = search.trim().toLowerCase();
     return scopedBookings
       .filter((booking) => {
-        const matchesSearch =
-          !query ||
+      const matchesSearch =
+        !query ||
           booking.guestName?.toLowerCase().includes(query) ||
           displayBookingNo(booking).toLowerCase().includes(query) ||
           (booking.guestNo ?? "").toLowerCase().includes(query) ||
@@ -401,15 +401,15 @@ export function AllBookingsView() {
           booking.source?.toLowerCase().includes(query) ||
           (booking.groupName ?? "").toLowerCase().includes(query) ||
           (booking.groupNo ?? "").toLowerCase().includes(query);
-        const matchesSource = sourceFilter === "all" || booking.source === sourceFilter;
-        const matchesRoomType =
-          roomTypeFilter === "all" || booking.roomType === roomTypeFilter;
-        return (
-          matchesSearch &&
-          matchesSource &&
-          matchesRoomType &&
-          matchesFilter(booking, activeFilter)
-        );
+      const matchesSource = sourceFilter === "all" || booking.source === sourceFilter;
+      const matchesRoomType =
+        roomTypeFilter === "all" || booking.roomType === roomTypeFilter;
+      return (
+        matchesSearch &&
+        matchesSource &&
+        matchesRoomType &&
+        matchesFilter(booking, activeFilter)
+      );
       })
       .sort((a, b) => bookingRecencyMs(b) - bookingRecencyMs(a));
   }, [scopedBookings, search, activeFilter, sourceFilter, roomTypeFilter]);
@@ -950,72 +950,72 @@ export function AllBookingsView() {
 
                 const booking = row.booking;
                 return (
-                  <div
-                    key={booking.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setViewBooking(booking)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setViewBooking(booking);
-                      }
-                    }}
-                    className="cursor-pointer p-4 transition-colors hover:bg-emerald-50/40 active:bg-emerald-50/60"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-sm font-bold text-white">
-                        {getInitials(booking.guestName)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="font-semibold text-slate-900">{booking.guestName}</p>
-                            <p className="text-xs text-slate-500">
+                <div
+                  key={booking.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setViewBooking(booking)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setViewBooking(booking);
+                    }
+                  }}
+                  className="cursor-pointer p-4 transition-colors hover:bg-emerald-50/40 active:bg-emerald-50/60"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-sm font-bold text-white">
+                      {getInitials(booking.guestName)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-semibold text-slate-900">{booking.guestName}</p>
+                          <p className="text-xs text-slate-500">
                               {formatBookingGuestLine(booking)}
-                            </p>
-                          </div>
-                          <ReservationStatusBadge status={booking.status} />
+                          </p>
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5">
-                            <BedDouble className="h-3 w-3" />
-                            {booking.roomNo} · {booking.roomType}
-                          </span>
-                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5">
-                            <Calendar className="h-3 w-3" />
-                            {booking.checkIn}
-                          </span>
+                        <ReservationStatusBadge status={booking.status} />
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5">
+                          <BedDouble className="h-3 w-3" />
+                          {booking.roomNo} · {booking.roomType}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5">
+                          <Calendar className="h-3 w-3" />
+                          {booking.checkIn}
+                        </span>
                           {booking.createdAt && (
                             <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5">
                               Created {formatBookingCreatedAt(booking.createdAt)}
                             </span>
                           )}
-                        </div>
-                        <div className="mt-3 flex items-center justify-between">
-                          <p className="font-bold text-slate-900">
-                            {formatBalance(booking.balance)}
-                          </p>
-                          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between">
+                        <p className="font-bold text-slate-900">
+                          {formatBalance(booking.balance)}
+                        </p>
+                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                             {(() => {
                               const action = primaryAction(booking);
                               if (!action) return null;
                               const ActionIcon = action.icon;
                               return (
-                                <Link
+                          <Link
                                   href={action.href}
                                   title={action.title}
                                   className={cn("rounded-lg p-2", action.className)}
-                                >
+                          >
                                   <ActionIcon className="h-4 w-4" />
-                                </Link>
+                          </Link>
                               );
                             })()}
-                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
+                </div>
                 );
               })}
             </div>
@@ -1478,61 +1478,61 @@ export function AllBookingsView() {
                     const isNearBottom = idx >= Math.max(0, listRows.length - 2);
                     const isMenuOpen = openMenu === booking.id;
                     return [
-                      <tr
-                        key={booking.id}
-                        onClick={() => setViewBooking(booking)}
-                        className="group cursor-pointer transition-colors hover:bg-emerald-50/30"
-                      >
-                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={selected.has(booking.id)}
-                            onChange={() => toggleOne(booking.id)}
-                            className="rounded border-slate-300"
+                    <tr
+                      key={booking.id}
+                      onClick={() => setViewBooking(booking)}
+                      className="group cursor-pointer transition-colors hover:bg-emerald-50/30"
+                    >
+                      <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(booking.id)}
+                          onChange={() => toggleOne(booking.id)}
+                          className="rounded border-slate-300"
                             aria-label={`Select ${displayBookingNo(booking)}`}
-                          />
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-xs font-bold text-white transition-colors group-hover:from-emerald-600 group-hover:to-emerald-800">
-                              {getInitials(booking.guestName)}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-slate-900">{booking.guestName}</p>
-                              <p className="text-xs text-slate-500">
-                                {formatBookingGuestLine(booking)}
-                              </p>
-                              <p className="text-[11px] text-slate-400">{booking.source}</p>
-                            </div>
+                        />
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-xs font-bold text-white transition-colors group-hover:from-emerald-600 group-hover:to-emerald-800">
+                            {getInitials(booking.guestName)}
                           </div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <p className="font-medium text-slate-800">
-                            Room {booking.roomNo} · {booking.roomType}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {booking.checkIn} – {booking.checkOut}
-                          </p>
-                        </td>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900">{booking.guestName}</p>
+                            <p className="text-xs text-slate-500">
+                                {formatBookingGuestLine(booking)}
+                            </p>
+                            <p className="text-[11px] text-slate-400">{booking.source}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <p className="font-medium text-slate-800">
+                          Room {booking.roomNo} · {booking.roomType}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {booking.checkIn} – {booking.checkOut}
+                        </p>
+                      </td>
                         <td className="px-4 py-3.5">
                           <p className="text-sm text-slate-800">
                             {formatBookingCreatedAt(booking.createdAt)}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <p
-                            className={cn(
-                              "font-semibold",
-                              booking.balance > 0 ? "text-slate-900" : "text-emerald-700",
-                            )}
-                          >
-                            {formatBalance(booking.balance)}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <ReservationStatusBadge status={booking.status} />
-                        </td>
-                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        </p>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <p
+                          className={cn(
+                            "font-semibold",
+                            booking.balance > 0 ? "text-slate-900" : "text-emerald-700",
+                          )}
+                        >
+                          {formatBalance(booking.balance)}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <ReservationStatusBadge status={booking.status} />
+                      </td>
+                      <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <div className="ml-auto grid w-[7.5rem] grid-cols-3 place-items-center gap-0">
                             {(() => {
                               const action = primaryAction(booking);
@@ -1541,29 +1541,29 @@ export function AllBookingsView() {
                               }
                               const ActionIcon = action.icon;
                               return (
-                                <Link
+                          <Link
                                   href={action.href}
                                   className={cn("inline-flex h-8 w-8 items-center justify-center rounded-lg", action.className)}
                                   title={action.title}
                                 >
                                   <ActionIcon className="h-4 w-4" />
-                                </Link>
+                          </Link>
                               );
                             })()}
                             <div
                               className="relative"
                               ref={isMenuOpen ? menuContainerRef : undefined}
                             >
-                              <button
-                                type="button"
-                                onClick={() =>
+                            <button
+                              type="button"
+                              onClick={() =>
                                   setOpenMenu(isMenuOpen ? null : booking.id)
-                                }
+                              }
                                 className="cursor-pointer inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                                aria-label="More actions"
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </button>
+                              aria-label="More actions"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
                               {isMenuOpen && (
                                 <div
                                   className={cn(
@@ -1601,12 +1601,12 @@ export function AllBookingsView() {
                                     booking.status === "No Show"
                                       ? []
                                       : [
-                                          {
-                                            icon: XCircle,
-                                            label: "Cancel",
-                                            onClick: () => setCancelBooking(booking),
-                                            danger: true,
-                                          },
+                                    {
+                                      icon: XCircle,
+                                      label: "Cancel",
+                                      onClick: () => setCancelBooking(booking),
+                                      danger: true,
+                                    },
                                         ]),
                                   ].map(({ icon: Icon, label, onClick, danger }) => (
                                     <button
@@ -1628,11 +1628,11 @@ export function AllBookingsView() {
                                     </button>
                                   ))}
                                 </div>
-                              )}
-                            </div>
-                            <span className="inline-flex h-8 w-8 items-center justify-center" aria-hidden="true" />
+                            )}
                           </div>
-                        </td>
+                            <span className="inline-flex h-8 w-8 items-center justify-center" aria-hidden="true" />
+                        </div>
+                      </td>
                       </tr>,
                     ];
                   })}

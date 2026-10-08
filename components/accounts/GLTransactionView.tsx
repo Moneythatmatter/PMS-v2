@@ -24,7 +24,7 @@ export function GLTransactionView() {
       const [latest] = await accVoucherService.list({ provisional: false, sort: "recent", limit: 1 });
       if (!latest) {
         notify("No transactions have been entered yet.", "error");
-        return;
+      return;
       }
       setLastVoucherId(latest.id);
     } catch (e) {

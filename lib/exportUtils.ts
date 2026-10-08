@@ -109,6 +109,7 @@ export function exportTableAsPdf<T extends Record<string, unknown>>(
   columns: ExportColumn<T>[],
   rows: T[],
   filename?: string,
+  footerLabel = "Hotel PMS — Human Resources",
 ) {
   if (typeof window === "undefined") return;
 
@@ -251,7 +252,7 @@ export function exportTableAsPdf<T extends Record<string, unknown>>(
       { align: "right" },
     );
     doc.text(
-      "Hotel PMS — Human Resources",
+      footerLabel,
       marginLeft,
       pageHeight - 5,
       { align: "left" },

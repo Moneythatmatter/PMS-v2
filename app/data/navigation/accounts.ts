@@ -70,6 +70,7 @@ export const accountsNavItems: ModuleNavItem[] = [
     ],
   },
   { label: "Analysis", href: "/accounts/analysis", icon: "pie-chart" },
+  { label: "Requisitions", href: "/accounts/requisitions", icon: "clipboard-list" },
   {
     label: "Reports",
     href: "/accounts/reports",

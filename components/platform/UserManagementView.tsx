@@ -1,21 +1,51 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ChevronRight, Link2, RefreshCw, Search, ShieldCheck, UserPlus, Users, UserCog } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isPlatformAdmin } from "@/lib/auth";
 import { WorkspaceShell } from "@/components/platform/WorkspaceShell";
 import { Button } from "@/components/ui/Button";
 import {
   platformService,
-  type EmployeeLinkOption,
   type ManagedUserDto,
   type PlatformModule,
   type PropertyDto,
 } from "@/services/platform";
-import type { PermissionLevel } from "@/lib/property";
 import { cn } from "@/lib/utils";
+import { UserFormDrawer } from "./UserFormDrawer";
+import { Avatar } from "./userUi";
 
-const PERM_OPTIONS: PermissionLevel[] = ["read", "write", "admin"];
+type Tab = "all" | "super" | "standard" | "unlinked";
+
+const ROLE_SUGGESTIONS = ["Staff", "Manager", "Front Office", "Housekeeping", "F&B", "Accounts", "HR", "Admin"];
+
+function StatCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  icon: React.ElementType;
+  tone: string;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-sm">
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+        <p className="text-2xl font-extrabold leading-tight text-slate-900">{value}</p>
+        <p className="truncate text-[11px] text-slate-500">{sub}</p>
+      </div>
+      <span className={cn("rounded-xl p-2.5", tone)}>
+        <Icon className="h-5 w-5" />
+      </span>
+    </div>
+  );
+}
 
 export function UserManagementView() {
   const { user } = useAuth();
@@ -23,162 +53,83 @@ export function UserManagementView() {
   const [properties, setProperties] = useState<PropertyDto[]>([]);
   const [modules, setModules] = useState<PlatformModule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    password: "",
-    role: "Staff",
-    isSuperAdmin: false,
-    employeeId: "" as string,
-    propertyIds: [] as string[],
-    permissions: {} as Record<string, Record<string, PermissionLevel>>,
-  });
-  const [employeeOptions, setEmployeeOptions] = useState<EmployeeLinkOption[]>([]);
-  const [saving, setSaving] = useState(false);
-
-  const load = async () => {
-    try {
-      setLoading(true);
-      const [userRows, propRows, modRows] = await Promise.all([
-        platformService.listUsers(),
-        platformService.listProperties(),
-        platformService.listModules(),
-      ]);
-      setUsers(userRows);
-      setProperties(propRows);
-      setModules(modRows);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [notice, setNotice] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<Tab>("all");
+  const [drawer, setDrawer] = useState<{ user: ManagedUserDto | null; key: number } | null>(null);
 
   useEffect(() => {
     if (!isPlatformAdmin(user)) return;
-    void load();
+    let cancelled = false;
+    Promise.all([platformService.listUsers(), platformService.listProperties(), platformService.listModules()])
+      .then(([userRows, propRows, modRows]) => {
+        if (cancelled) return;
+        setUsers(userRows);
+        setProperties(propRows);
+        setModules(modRows);
+      })
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "Failed to load users"))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
-  const selected = useMemo(
-    () => users.find((u) => u.id === selectedId) ?? null,
-    [users, selectedId],
+  const reloadUsers = async () => {
+    setRefreshing(true);
+    try {
+      setUsers(await platformService.listUsers());
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load users");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const propertyName = useMemo(() => new Map(properties.map((p) => [p.id, p.name])), [properties]);
+
+  const stats = useMemo(
+    () => ({
+      total: users.length,
+      active: users.filter((u) => String(u.status ?? "Active").toLowerCase() === "active").length,
+      superAdmins: users.filter((u) => u.isSuperAdmin).length,
+      standard: users.filter((u) => !u.isSuperAdmin).length,
+      linked: users.filter((u) => u.employeeId).length,
+    }),
+    [users],
   );
 
-  useEffect(() => {
-    if (!selected) return;
-    const perms: Record<string, Record<string, PermissionLevel>> = {};
-    for (const p of selected.permissions) {
-      if (!perms[p.propertyId]) perms[p.propertyId] = {};
-      perms[p.propertyId][p.moduleKey] = p.permission;
-    }
-    setForm({
-      name: selected.name,
-      email: selected.email,
-      password: "",
-      role: selected.role,
-      isSuperAdmin: Boolean(selected.isSuperAdmin),
-      employeeId: selected.employeeId ?? "",
-      propertyIds: [...selected.propertyIds],
-      permissions: perms,
-    });
-  }, [selected]);
-
-  useEffect(() => {
-    const propertyId = form.propertyIds[0];
-    if (!propertyId || form.isSuperAdmin) {
-      setEmployeeOptions([]);
-      return;
-    }
-    void platformService
-      .listEmployeeLinkOptions(propertyId)
-      .then(setEmployeeOptions)
-      .catch(() => setEmployeeOptions([]));
-  }, [form.propertyIds, form.isSuperAdmin]);
-
-  const resetNew = () => {
-    setSelectedId(null);
-    setForm({
-      name: "",
-      email: "",
-      password: "",
-      role: "Staff",
-      isSuperAdmin: false,
-      employeeId: "",
-      propertyIds: properties[0] ? [properties[0].id] : [],
-      permissions: {},
-    });
+  const counts: Record<Tab, number> = {
+    all: users.length,
+    super: stats.superAdmins,
+    standard: stats.standard,
+    unlinked: users.filter((u) => !u.isSuperAdmin && !u.employeeId).length,
   };
 
-  const toggleProperty = (propertyId: string) => {
-    setForm((f) => ({
-      ...f,
-      propertyIds: f.propertyIds.includes(propertyId)
-        ? f.propertyIds.filter((id) => id !== propertyId)
-        : [...f.propertyIds, propertyId],
-    }));
-  };
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return [...users]
+      .filter((u) => {
+        if (tab === "super" && !u.isSuperAdmin) return false;
+        if (tab === "standard" && u.isSuperAdmin) return false;
+        if (tab === "unlinked" && (u.isSuperAdmin || u.employeeId)) return false;
+        if (!q) return true;
+        return [u.name, u.email, u.role, u.employeeLabel, ...u.propertyIds.map((id) => propertyName.get(id))].some((v) =>
+          v?.toLowerCase().includes(q),
+        );
+      })
+      .sort((a, b) => Number(Boolean(b.isSuperAdmin)) - Number(Boolean(a.isSuperAdmin)) || a.name.localeCompare(b.name));
+  }, [users, search, tab, propertyName]);
 
-  const setPerm = (
-    propertyId: string,
-    moduleKey: string,
-    permission: PermissionLevel | "",
-  ) => {
-    setForm((f) => {
-      const next = { ...f.permissions };
-      if (!next[propertyId]) next[propertyId] = {};
-      if (!permission) {
-        delete next[propertyId][moduleKey];
-      } else {
-        next[propertyId][moduleKey] = permission;
-      }
-      return { ...f, permissions: next };
-    });
-  };
+  const roleSuggestions = useMemo(
+    () => [...new Set([...ROLE_SUGGESTIONS, ...users.map((u) => u.role).filter(Boolean)])],
+    [users],
+  );
 
-  const flattenPermissions = () => {
-    const rows: Array<{
-      propertyId: string;
-      moduleKey: string;
-      permission: PermissionLevel;
-    }> = [];
-    for (const propertyId of Object.keys(form.permissions)) {
-      for (const [moduleKey, permission] of Object.entries(form.permissions[propertyId])) {
-        rows.push({ propertyId, moduleKey, permission });
-      }
-    }
-    return rows;
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      const payload = {
-        name: form.name,
-        email: form.email,
-        role: form.role,
-        isSuperAdmin: form.isSuperAdmin,
-        employeeId: form.employeeId || null,
-        propertyIds: form.propertyIds,
-        permissions: flattenPermissions(),
-      };
-      if (selected) {
-        await platformService.updateUser(selected.id, payload);
-      } else {
-        if (!form.password) throw new Error("Password is required for new users");
-        await platformService.createUser({ ...payload, password: form.password });
-      }
-      await load();
-      if (!selected) resetNew();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const openDrawer = (u: ManagedUserDto | null) => setDrawer((d) => ({ user: u, key: (d?.key ?? 0) + 1 }));
 
   if (!isPlatformAdmin(user)) {
     return (
@@ -190,207 +141,264 @@ export function UserManagementView() {
 
   return (
     <WorkspaceShell
+      wide
       title="User management"
-      description="Assign properties and module access (read / write / admin)."
+      description="Create staff logins, choose which properties they can open, and set read / write / admin access per module."
       actions={
-        <Button variant="outline" className="w-full sm:w-auto" onClick={resetNew}>
-          New user
-        </Button>
+        <>
+          <Button variant="outline" className="gap-1.5" onClick={() => void reloadUsers()} disabled={refreshing}>
+            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} /> Refresh
+          </Button>
+          <Button className="gap-1.5 bg-emerald-700 hover:bg-emerald-800" onClick={() => openDrawer(null)}>
+            <UserPlus className="h-4 w-4" /> Create user
+          </Button>
+        </>
       }
     >
-      {error && (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+      {(error || notice) && (
+        <p
+          role={error ? "alert" : "status"}
+          className={cn(
+            "mb-4 flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-sm",
+            error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-800",
+          )}
+        >
+          {error ?? notice}
+          <button
+            type="button"
+            onClick={() => (error ? setError(null) : setNotice(null))}
+            className="text-xs font-semibold opacity-70 hover:opacity-100"
+          >
+            Dismiss
+          </button>
         </p>
       )}
 
-      <div className="mt-2 grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[280px_1fr]">
-        <div className="max-h-64 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm lg:max-h-none">
-          <p className="px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Users
-          </p>
-          {loading ? (
-            <p className="px-2 py-4 text-sm text-slate-500">Loading…</p>
-          ) : (
-            <ul className="space-y-1">
-              {users.map((u) => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => setSelectedId(u.id)}
-                  className={cn(
-                    "w-full rounded-xl px-3 py-2.5 text-left text-sm transition-colors",
-                    selectedId === u.id
-                      ? "bg-emerald-50 font-semibold text-emerald-900"
-                      : "text-slate-700 hover:bg-slate-50",
-                  )}
-                >
-                  <p>{u.name}</p>
-                  <p className="text-xs text-slate-400">{u.email}</p>
-                </button>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
-          <h2 className="text-sm font-semibold text-slate-900">
-            {selected ? `Edit — ${selected.name}` : "Create user"}
-          </h2>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              placeholder="Full name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              placeholder="Email"
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              disabled={Boolean(selected)}
-            />
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              placeholder={selected ? "New password (optional)" : "Password"}
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            />
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              placeholder="Role label"
-              value={form.role}
-              onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-            />
-          </div>
-          <label className="mt-4 flex items-center gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={form.isSuperAdmin}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, isSuperAdmin: e.target.checked }))
-              }
-            />
-            Super administrator (all properties & modules)
-          </label>
-
-          {!form.isSuperAdmin && form.propertyIds.length > 0 && (
-            <div className="mt-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Employee portal link
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Required for Employee Portal login. Pick the HR employee record for this user.
-              </p>
-              <select
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                value={form.employeeId}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, employeeId: e.target.value }))
-                }
-              >
-                <option value="">— Not linked —</option>
-                {employeeOptions.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.empCode} — {emp.name} ({emp.email})
-                  </option>
-                ))}
-              </select>
-              {selected?.employeeLabel && !form.employeeId ? (
-                <p className="mt-1 text-xs text-amber-700">
-                  Previously linked: {selected.employeeLabel}
-                </p>
-              ) : null}
-            </div>
-          )}
-
-          {!form.isSuperAdmin && (
-            <>
-              <p className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Property access
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {properties.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => toggleProperty(p.id)}
-                    className={cn(
-                      "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                      form.propertyIds.includes(p.id)
-                        ? "bg-emerald-700 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200",
-                    )}
-                  >
-                    {p.name}
-                  </button>
-                ))}
-              </div>
-
-              <p className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Module permissions
-              </p>
-              <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-                      <th className="py-2 pr-4">Module</th>
-                      {form.propertyIds.map((pid) => (
-                        <th key={pid} className="py-2 pr-4">
-                          {properties.find((p) => p.id === pid)?.name ?? pid}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {modules.map((mod) => (
-                      <tr key={mod.key} className="border-b border-slate-50">
-                        <td className="py-2 pr-4 font-medium text-slate-700">
-                          {mod.label}
-                        </td>
-                        {form.propertyIds.map((pid) => (
-                          <td key={`${mod.key}-${pid}`} className="py-2 pr-4">
-                            <select
-                              className="rounded-lg border border-slate-200 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none"
-                              value={form.permissions[pid]?.[mod.key] ?? ""}
-                              onChange={(e) =>
-                                setPerm(
-                                  pid,
-                                  mod.key,
-                                  e.target.value as PermissionLevel | "",
-                                )
-                              }
-                            >
-                              <option value="">—</option>
-                              {PERM_OPTIONS.map((opt) => (
-                                <option key={opt} value={opt}>
-                                  {opt}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-            <Button
-              className="w-full bg-emerald-700 hover:bg-emerald-800 sm:w-auto"
-              onClick={() => void handleSave()}
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save user"}
-            </Button>
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Total users"
+          value={loading ? "—" : String(stats.total)}
+          sub={`${stats.active} active`}
+          icon={Users}
+          tone="bg-emerald-50 text-emerald-700"
+        />
+        <StatCard
+          label="Super admins"
+          value={loading ? "—" : String(stats.superAdmins)}
+          sub="All properties & modules"
+          icon={ShieldCheck}
+          tone="bg-violet-50 text-violet-700"
+        />
+        <StatCard
+          label="Standard users"
+          value={loading ? "—" : String(stats.standard)}
+          sub="Access set per module"
+          icon={UserCog}
+          tone="bg-sky-50 text-sky-700"
+        />
+        <StatCard
+          label="Linked to HR"
+          value={loading ? "—" : String(stats.linked)}
+          sub="Can use Employee Portal"
+          icon={Link2}
+          tone="bg-amber-50 text-amber-700"
+        />
       </div>
+
+      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+            {(
+              [
+                { id: "all", label: "All" },
+                { id: "super", label: "Super admins" },
+                { id: "standard", label: "Standard" },
+                { id: "unlinked", label: "Not linked to HR" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={cn(
+                  "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                  tab === t.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+                )}
+              >
+                {t.label}
+                <span className={cn("tabular-nums", tab === t.id ? "text-emerald-700" : "text-slate-400")}>{counts[t.id]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="relative sm:w-72">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, email, role or property…"
+              className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-2.5">User</th>
+                <th className="px-4 py-2.5">Role</th>
+                <th className="px-4 py-2.5">Access</th>
+                <th className="px-4 py-2.5">Properties</th>
+                <th className="px-4 py-2.5">Employee link</th>
+                <th className="px-4 py-2.5">Status</th>
+                <th className="w-10 px-4 py-2.5" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                [0, 1, 2, 3].map((i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="h-9 w-9 rounded-full bg-slate-100" />
+                        <span className="space-y-1.5">
+                          <span className="block h-3 w-28 rounded bg-slate-100" />
+                          <span className="block h-2.5 w-36 rounded bg-slate-100" />
+                        </span>
+                      </div>
+                    </td>
+                    {[0, 1, 2, 3, 4, 5].map((j) => (
+                      <td key={j} className="px-4 py-3">
+                        <span className="block h-3 w-16 rounded bg-slate-100" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-14 text-center">
+                    <Users className="mx-auto h-8 w-8 text-slate-300" />
+                    <p className="mt-2 text-sm font-semibold text-slate-600">
+                      {users.length === 0 ? "No users yet" : "No users match these filters"}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {users.length === 0 ? "Create the first staff login." : "Try another tab or clear the search."}
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                rows.map((u) => {
+                  const active = String(u.status ?? "Active").toLowerCase() === "active";
+                  const propNames = u.propertyIds.map((id) => propertyName.get(id) ?? id);
+                  const grants = u.permissions.length;
+                  return (
+                    <tr
+                      key={u.id}
+                      onClick={() => openDrawer(u)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openDrawer(u);
+                        }
+                      }}
+                      tabIndex={0}
+                      className="group cursor-pointer transition-colors hover:bg-emerald-50/40 focus:bg-emerald-50/40 focus:outline-none"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={u.name} seed={u.id} />
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-900">{u.name}</p>
+                            <p className="truncate text-xs text-slate-500">{u.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{u.role || "—"}</td>
+                      <td className="px-4 py-3">
+                        {u.isSuperAdmin ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-200">
+                            <ShieldCheck className="h-3 w-3" /> Super admin
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-600">
+                            <span className="font-semibold text-slate-800">{grants}</span> module grant{grants === 1 ? "" : "s"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {u.isSuperAdmin ? (
+                          <span className="text-xs font-medium text-slate-500">All properties</span>
+                        ) : propNames.length === 0 ? (
+                          <span className="text-xs font-medium text-amber-700">None assigned</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {propNames.slice(0, 2).map((n) => (
+                              <span key={n} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">
+                                {n}
+                              </span>
+                            ))}
+                            {propNames.length > 2 && (
+                              <span className="px-1 py-0.5 text-[11px] text-slate-400" title={propNames.join(", ")}>
+                                +{propNames.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {u.employeeId ? (
+                          <span className="inline-flex max-w-[180px] items-center gap-1 truncate text-xs text-slate-700" title={u.employeeLabel}>
+                            <Link2 className="h-3 w-3 shrink-0 text-emerald-600" /> {u.employeeLabel || "Linked"}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400">Not linked</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                            active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500",
+                          )}
+                        >
+                          <span className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-emerald-500" : "bg-slate-400")} />
+                          {u.status || "Active"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <ChevronRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-emerald-600" />
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        {!loading && rows.length > 0 && (
+          <p className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-500">
+            Showing {rows.length} of {users.length} user{users.length === 1 ? "" : "s"} · click a row to view or edit access
+          </p>
+        )}
+      </div>
+
+      {drawer && (
+        <UserFormDrawer
+          key={drawer.key}
+          open
+          onClose={() => setDrawer(null)}
+          user={drawer.user}
+          properties={properties}
+          modules={modules}
+          roleSuggestions={roleSuggestions}
+          onSaved={(message) => {
+            setDrawer(null);
+            setNotice(message);
+            void reloadUsers();
+          }}
+        />
+      )}
     </WorkspaceShell>
   );
 }

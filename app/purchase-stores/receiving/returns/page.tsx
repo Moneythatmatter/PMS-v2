@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileText,
-  Layers,
   Building2,
   Clock,
   FileSpreadsheet,
@@ -24,6 +23,11 @@ import {
   Package,
   RefreshCcw,
   XCircle,
+  ClipboardCheck,
+  Warehouse,
+  CalendarDays,
+  Loader2,
+  Edit,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -39,14 +43,97 @@ import { ModuleDataTable } from "@/components/pms/ModuleDataTable";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import { ModuleColumn } from "@/components/pms/module-types";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
-import { PurchaseFormCard } from "@/components/purchase-stores/ui/PurchaseFormCard";
 import {
   PurchaseAttachmentList,
   AttachmentItem,
 } from "@/components/purchase-stores/ui/PurchaseAttachmentList";
+import {
+  ProcurementFormSection,
+  ProcurementSummaryRow,
+} from "@/components/purchase-stores/ui/ProcurementFormParts";
 import type { VendorReturnRecord, VRItem } from "@/app/data/vendorReturnsData";
+import type { QualityInspectionRecord } from "@/app/data/qualityInspectionData";
+import { normalizeGrnRecord } from "@/app/data/grnData";
 import { usePsList } from "@/hooks/usePsResource";
-import { psVendorReturnService } from "@/services/purchase-stores/index";
+import {
+  psGrnService,
+  psQualityInspectionService,
+  psVendorReturnService,
+  psWarehouseService,
+} from "@/services/purchase-stores/index";
+
+type VRFormItem = Omit<VRItem, "reason"> & { reason: VRItem["reason"] | "" };
+
+const VR_RETURN_REASONS: VendorReturnRecord["returnReason"][] = [
+  "Damaged Items",
+  "Expired Items",
+  "Wrong Product",
+  "Quality Failure",
+  "Packaging Damage",
+  "Quantity Mismatch",
+];
+
+const VR_ITEM_REASONS: VRItem["reason"][] = [
+  "Damaged",
+  "Expired",
+  "Wrong Item",
+  "Quantity Mismatch",
+  "Quality Failure",
+  "Packaging Damage",
+];
+
+function rejectedLines(qi: QualityInspectionRecord) {
+  return (qi.items ?? []).filter((line) => Number(line.rejectedQty) > 0);
+}
+
+/** Inspection rejection reasons are free text; map them onto the return reason list. */
+function toItemReason(text?: string): VRFormItem["reason"] {
+  const t = (text ?? "").toLowerCase();
+  if (!t) return "";
+  if (t.includes("packag")) return "Packaging Damage";
+  if (t.includes("damag") || t.includes("broken") || t.includes("leak")) return "Damaged";
+  if (t.includes("expir")) return "Expired";
+  if (t.includes("wrong")) return "Wrong Item";
+  if (t.includes("quantity") || t.includes("short")) return "Quantity Mismatch";
+  return "Quality Failure";
+}
+
+function formatVrDate(iso?: string) {
+  if (!iso) return "—";
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function VrDetailSection({
+  title,
+  meta,
+  flush,
+  children,
+}: {
+  title: string;
+  meta?: string;
+  /** Children draw their own edge-to-edge content (tables, lists). */
+  flush?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="flex items-center justify-between gap-3 px-5 py-3.5">
+        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        {meta && <span className="text-xs text-slate-500">{meta}</span>}
+      </div>
+      <div className={flush ? undefined : "border-t border-slate-100 px-5 py-4"}>{children}</div>
+    </section>
+  );
+}
+
+/** Only the quantity rejected at inspection can go back to the supplier. */
+function maxReturnQty(item: Pick<VRItem, "receivedQty" | "acceptedQty">) {
+  const rejected = item.receivedQty - item.acceptedQty;
+  return rejected > 0 ? rejected : item.receivedQty;
+}
 
 export default function VendorReturnsPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -101,89 +188,132 @@ export default function VendorReturnsPage() {
   const [automationLog, setAutomationLog] = useState<string[] | null>(null);
 
   // Form State for Vendor Return Creation / Edit
-  const [formInspectionNum, setFormInspectionNum] = useState("QI-2026-013");
-  const [formGRNNum, setFormGRNNum] = useState("GRN-2026-013");
-  const [formPONum, setFormPONum] = useState("PO-2026-043");
-  const [formSupplier, setFormSupplier] = useState("EcoClean");
-  const [formWarehouse, setFormWarehouse] = useState("Housekeeping Store");
-  const [formReturnDate, setFormReturnDate] = useState("2026-07-24");
-  const [formReturnReason, setFormReturnReason] = useState<VendorReturnRecord["returnReason"]>("Wrong Product");
-  const [formReplacementRequired, setFormReplacementRequired] = useState<boolean>(true);
-  const [formExpectedDate, setFormExpectedDate] = useState("2026-07-28");
-  const [formTransportDetails, setFormTransportDetails] = useState("EcoClean Courier UP-14-CC-8090");
-  const [formRemarks, setFormRemarks] = useState("5 canisters returned due to wrong product code delivery.");
+  const { data: inspections, loading: loadingInspections } = usePsList(() => psQualityInspectionService.list(), []);
+  const { data: grns } = usePsList(() => psGrnService.list(), []);
+  const { data: warehouses } = usePsList(() => psWarehouseService.list(), []);
 
-  // Form Items State
-  const [formItems, setFormItems] = useState<VRItem[]>([
-    {
-      id: "vri-form-1",
-      productCode: "HK-CHM-08",
-      productName: "Glass Polish Concentrated 5L",
-      receivedQty: 5,
-      acceptedQty: 0,
-      returnQty: 5,
-      reason: "Wrong Item",
-      batchNumber: "B-ECO-7742",
-      expiryDate: "2028-06-01",
-      remarks: "Toilet cleaner shipped instead of glass polish",
-    },
-  ]);
+  const [formInspectionNum, setFormInspectionNum] = useState("");
+  const [formGRNNum, setFormGRNNum] = useState("");
+  const [formPONum, setFormPONum] = useState("");
+  const [formSupplier, setFormSupplier] = useState("");
+  const [formWarehouse, setFormWarehouse] = useState("");
+  const [formReturnDate, setFormReturnDate] = useState("");
+  const [formReturnReason, setFormReturnReason] = useState<VendorReturnRecord["returnReason"] | "">("");
+  const [formReplacement, setFormReplacement] = useState<"" | "yes" | "no">("");
+  const [formExpectedDate, setFormExpectedDate] = useState("");
+  const [formTransportDetails, setFormTransportDetails] = useState("");
+  const [formRemarks, setFormRemarks] = useState("");
+  const [formItems, setFormItems] = useState<VRFormItem[]>([]);
+  const [formAttachments, setFormAttachments] = useState<AttachmentItem[]>([]);
 
-  // Form Attachments State
-  const [formAttachments, setFormAttachments] = useState<AttachmentItem[]>([
-    { id: "vra-form-1", fileName: "Inspection_Rejection_Report.pdf", fileSize: "420 KB", fileType: "pdf" },
-    { id: "vra-form-2", fileName: "Return_Gate_Pass_Draft.pdf", fileSize: "290 KB", fileType: "pdf" },
-  ]);
+  const currentInspection = useMemo(
+    () => inspections.find((qi) => qi.inspectionNumber === formInspectionNum) ?? null,
+    [inspections, formInspectionNum],
+  );
 
-  // Auto-fill GRN, PO, Supplier, Warehouse when Inspection Selected
-  const handleInspectionChange = (qiNum: string) => {
-    setFormInspectionNum(qiNum);
-    if (qiNum === "QI-2026-011") {
-      setFormGRNNum("GRN-2026-011");
-      setFormPONum("PO-2026-041");
-      setFormSupplier("Amul Dairy");
-      setFormWarehouse("Main Warehouse");
-    } else if (qiNum === "QI-2026-012") {
-      setFormGRNNum("GRN-2026-012");
-      setFormPONum("PO-2026-042");
-      setFormSupplier("Fresh Farms");
-      setFormWarehouse("Kitchen Store");
-    } else if (qiNum === "QI-2026-013") {
-      setFormGRNNum("GRN-2026-013");
-      setFormPONum("PO-2026-043");
-      setFormSupplier("EcoClean");
-      setFormWarehouse("Housekeeping Store");
-    } else if (qiNum === "QI-2026-014") {
-      setFormGRNNum("GRN-2026-014");
-      setFormPONum("PO-2026-044");
-      setFormSupplier("ABC Linen Pvt Ltd");
-      setFormWarehouse("Central Linen Warehouse");
-    } else if (qiNum === "QI-2026-015") {
-      setFormGRNNum("GRN-2026-015");
-      setFormPONum("PO-2026-045");
-      setFormSupplier("City Electricals");
-      setFormWarehouse("Engineering Maintenance Store");
-    }
+  /** Inspections with rejected stock that don't already have an open return. */
+  const eligibleInspections = useMemo(() => {
+    const returned = new Set(
+      vrList.filter((v) => v.status !== "Cancelled").map((v) => v.inspectionNumber),
+    );
+    return inspections.filter(
+      (qi) =>
+        rejectedLines(qi).length > 0 &&
+        (!returned.has(qi.inspectionNumber) || qi.inspectionNumber === editVR?.inspectionNumber),
+    );
+  }, [inspections, vrList, editVR?.inspectionNumber]);
+
+  const warehouseOptions = useMemo(() => {
+    const names = warehouses.filter((w) => w.status !== "Inactive").map((w) => w.name);
+    return formWarehouse && !names.includes(formWarehouse) ? [formWarehouse, ...names] : names;
+  }, [warehouses, formWarehouse]);
+
+  const totalReturnUnits = formItems.reduce((sum, item) => sum + (Number(item.returnQty) || 0), 0);
+
+  const updateFormItem = (id: string, patch: Partial<VRFormItem>) =>
+    setFormItems((items) => items.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+
+  const openCreateDrawer = () => {
+    setEditVR(null);
+    setFormInspectionNum("");
+    setFormGRNNum("");
+    setFormPONum("");
+    setFormSupplier("");
+    setFormWarehouse("");
+    setFormReturnDate(new Date().toISOString().slice(0, 10));
+    setFormReturnReason("");
+    setFormReplacement("");
+    setFormExpectedDate("");
+    setFormTransportDetails("");
+    setFormRemarks("");
+    setFormItems([]);
+    setFormAttachments([]);
+    setCreateDrawerOpen(true);
   };
 
-  // Sync Form when Editing VR
-  useEffect(() => {
-    if (editVR) {
-      setFormInspectionNum(editVR.inspectionNumber);
-      setFormGRNNum(editVR.grnNumber);
-      setFormPONum(editVR.poNumber);
-      setFormSupplier(editVR.supplierName);
-      setFormWarehouse(editVR.warehouse);
-      setFormReturnDate(editVR.returnDate);
-      setFormReturnReason(editVR.returnReason);
-      setFormReplacementRequired(editVR.replacementDetails.replacementRequired);
-      setFormExpectedDate(editVR.replacementDetails.expectedDate || "");
-      setFormTransportDetails(editVR.transportDetails);
-      setFormRemarks(editVR.remarks || "");
-      setFormItems(editVR.items);
-      setFormAttachments(editVR.attachments);
+  const openEditDrawer = (vr: VendorReturnRecord) => {
+    setEditVR(vr);
+    setFormInspectionNum(vr.inspectionNumber);
+    setFormGRNNum(vr.grnNumber);
+    setFormPONum(vr.poNumber);
+    setFormSupplier(vr.supplierName);
+    setFormWarehouse(vr.warehouse);
+    setFormReturnDate(vr.returnDate);
+    setFormReturnReason(vr.returnReason);
+    setFormReplacement(vr.replacementDetails.replacementRequired ? "yes" : "no");
+    setFormExpectedDate(vr.replacementDetails.expectedDate || "");
+    setFormTransportDetails(vr.transportDetails || "");
+    setFormRemarks(vr.remarks || "");
+    setFormItems(vr.items);
+    setFormAttachments(vr.attachments);
+    setCreateDrawerOpen(true);
+  };
+
+  const closeFormDrawer = () => {
+    setCreateDrawerOpen(false);
+    setEditVR(null);
+  };
+
+  /** Pull supplier, GRN, PO, warehouse and the rejected lines from the chosen inspection. */
+  const handleInspectionChange = (qiNum: string) => {
+    setFormInspectionNum(qiNum);
+    const qi = inspections.find((i) => i.inspectionNumber === qiNum);
+    if (!qi) {
+      setFormGRNNum("");
+      setFormPONum("");
+      setFormSupplier("");
+      setFormWarehouse("");
+      setFormItems([]);
+      return;
     }
-  }, [editVR]);
+    setFormGRNNum(qi.grnNumber);
+    setFormPONum(qi.poNumber);
+    setFormSupplier(qi.supplierName);
+    setFormWarehouse(qi.warehouse);
+
+    const grn = grns.find((g) => g.grnNumber === qi.grnNumber);
+    const grnLines = grn ? normalizeGrnRecord(grn).items : [];
+    setFormItems(
+      rejectedLines(qi).map((line, idx) => {
+        const grnLine = grnLines.find((l) => l.productCode === line.productCode);
+        const batch =
+          grnLine?.batchAllocations.find((b) => b.rejectedQty > 0) ?? grnLine?.batchAllocations[0];
+        return {
+          id: `vri-${line.id || idx}`,
+          productCode: line.productCode,
+          productName: line.productName,
+          receivedQty: Number(line.receivedQty) || 0,
+          acceptedQty: Number(line.acceptedQty) || 0,
+          returnQty: Number(line.rejectedQty) || 0,
+          reason: toItemReason(line.rejectionReason),
+          batchNumber: batch?.batchNumber ?? "",
+          mfgDate: batch?.mfgDate,
+          expiryDate: batch?.expiryDate ?? "",
+          remarks: line.remarks ?? "",
+        };
+      }),
+    );
+  };
 
   // Filtered Vendor Return Records
   const filteredVRs = useMemo(() => {
@@ -207,7 +337,37 @@ export default function VendorReturnsPage() {
   }, [vrList, search, supplierFilter, warehouseFilter, statusFilter, reasonFilter, dateFilter]);
 
   // Handle Save / Submit Vendor Return
-  const handleSaveReturn = async (isSubmit: boolean) => {
+  const handleSaveReturn = async () => {
+    if (saving) return;
+    const missing = [
+      !formInspectionNum && "Quality Inspection",
+      !formWarehouse && "Dispatch Warehouse",
+      !formReturnDate && "Return Date",
+      !formReturnReason && "Return Reason",
+      !formReplacement && "Replacement Required",
+    ].filter(Boolean);
+    if (missing.length > 0) {
+      alert(`Please fill in: ${missing.join(", ")}`);
+      return;
+    }
+
+    const items = formItems.filter((i) => Number(i.returnQty) > 0);
+    if (items.length === 0) {
+      alert("Enter a return quantity for at least one item.");
+      return;
+    }
+    const overReturned = items.find((i) => i.returnQty > maxReturnQty(i));
+    if (overReturned) {
+      alert(`Return quantity for ${overReturned.productName} can't exceed ${maxReturnQty(overReturned)}.`);
+      return;
+    }
+    const withoutReason = items.find((i) => !i.reason);
+    if (withoutReason) {
+      alert(`Select a return reason for ${withoutReason.productName}.`);
+      return;
+    }
+
+    const replacementRequired = formReplacement === "yes";
     const newRecord: Partial<VendorReturnRecord> = {
       returnDate: formReturnDate,
       supplierName: formSupplier,
@@ -215,34 +375,31 @@ export default function VendorReturnsPage() {
       inspectionNumber: formInspectionNum,
       poNumber: formPONum,
       warehouse: formWarehouse,
-      itemsReturnedCount: formItems.length,
-      returnReason: formReturnReason,
-      status: isSubmit ? "Pending Pickup" : "Pending Pickup",
-      transportDetails: formTransportDetails,
-      remarks: formRemarks,
-      items: formItems,
+      itemsReturnedCount: items.length,
+      returnReason: formReturnReason as VendorReturnRecord["returnReason"],
+      status: editVR?.status ?? "Pending Pickup",
+      transportDetails: formTransportDetails.trim(),
+      remarks: formRemarks.trim(),
+      items: items as VRItem[],
       replacementDetails: {
-        replacementRequired: formReplacementRequired,
-        expectedDate: formExpectedDate,
-        status: formReplacementRequired ? "Pending" : "Not Applicable",
-        supplierResponse: "Supplier notified via automated return ticket.",
+        replacementRequired,
+        expectedDate: replacementRequired ? formExpectedDate : "",
+        status: replacementRequired ? editVR?.replacementDetails.status ?? "Pending" : "Not Applicable",
+        supplierResponse: editVR?.replacementDetails.supplierResponse ?? "",
       },
       attachments: formAttachments,
     };
 
     setSaving(true);
     try {
-      let saved: VendorReturnRecord;
-      if (editVR) {
-        saved = await psVendorReturnService.update(editVR.id, newRecord);
-        setEditVR(null);
-      } else {
-        saved = await psVendorReturnService.create(newRecord);
-        setCreateDrawerOpen(false);
-      }
+      const saved = editVR
+        ? await psVendorReturnService.update(editVR.id, newRecord)
+        : await psVendorReturnService.create(newRecord);
+      const wasEdit = Boolean(editVR);
+      closeFormDrawer();
       await reload();
 
-      if (isSubmit) {
+      if (!wasEdit) {
         setAutomationLog([
           "✓ Supplier Notified via Automated Email & Portal (Ref: " + saved.returnNumber + ")",
           "✓ Return Debit Note & Return Gate Pass (RGP) Generated",
@@ -250,7 +407,9 @@ export default function VendorReturnsPage() {
           "✓ Payment Block Triggered for Invoice Verification until Resolution",
           "✓ Purchase Department Notified for Replacement / Credit Note",
           "✓ Accounts Payable Notified for Ledger Adjustment",
-          ...(formReplacementRequired ? ["✓ Replacement Tracking Order Created (Due: " + formExpectedDate + ")"] : []),
+          ...(replacementRequired && formExpectedDate
+            ? ["✓ Replacement Tracking Order Created (Due: " + formExpectedDate + ")"]
+            : []),
         ]);
       }
     } catch (e) {
@@ -440,10 +599,7 @@ export default function VendorReturnsPage() {
         action={
           <Button
             type="button"
-            onClick={() => {
-              setEditVR(null);
-              setCreateDrawerOpen(true);
-            }}
+            onClick={openCreateDrawer}
             className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
           >
             <Plus className="h-4 w-4" /> Create Vendor Return
@@ -515,10 +671,7 @@ export default function VendorReturnsPage() {
                 label: "Edit",
                 onClick: () => {
                   const first = filteredVRs.find((v) => selectedIds.has(v.id));
-                  if (first) {
-                    setEditVR(first);
-                    setCreateDrawerOpen(true);
-                  }
+                  if (first) openEditDrawer(first);
                 },
               },
               {
@@ -626,10 +779,7 @@ export default function VendorReturnsPage() {
         </Button>
         <Button
           type="button"
-          onClick={() => {
-            setEditVR(null);
-            setCreateDrawerOpen(true);
-          }}
+          onClick={openCreateDrawer}
           className="flex-1 h-11 text-xs font-bold !bg-[#0F8A5F] text-white rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
         >
           <Plus className="h-4 w-4" /> + Create
@@ -675,510 +825,703 @@ export default function VendorReturnsPage() {
         )}
       </div>
 
-      {/* CREATE / EDIT VENDOR RETURN MODAL & DRAWER */}
+      {/* CREATE / EDIT VENDOR RETURN DRAWER */}
       <Drawer
+        side="bottom"
         open={createDrawerOpen || !!editVR}
-        onClose={() => {
-          setCreateDrawerOpen(false);
-          setEditVR(null);
-        }}
-        title={editVR ? `Edit Vendor Return: ${editVR.returnNumber}` : "Create Vendor Return"}
+        onClose={closeFormDrawer}
+        title={editVR ? `Edit Vendor Return ${editVR.returnNumber}` : "Create Vendor Return"}
         width="responsive"
+        customHeader={
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 ring-1 ring-red-100">
+              <RotateCcw className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <h2 id="drawer-title" className="truncate text-base font-bold text-slate-900 sm:text-lg">
+                {editVR ? `Edit Vendor Return ${editVR.returnNumber}` : "New Vendor Return"}
+              </h2>
+              <p className="truncate text-xs text-slate-500">
+                Send goods rejected at quality inspection back to the supplier.
+              </p>
+            </div>
+          </div>
+        }
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setCreateDrawerOpen(false);
-                setEditVR(null);
-              }}
-              className="h-9 px-4 text-xs font-semibold !bg-white hover:!bg-slate-100 text-slate-700 border-slate-300 rounded-xl cursor-pointer"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleSaveReturn(false)}
-              className="h-9 px-4 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer"
-            >
-              Save Draft
-            </Button>
-            <Button
-              type="button"
-              onClick={() => handleSaveReturn(true)}
-              className="h-9 px-5 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
-            >
-              <Check className="h-4 w-4" /> Submit Return
-            </Button>
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">
+              <strong className="text-slate-800">{formItems.length}</strong> item{formItems.length === 1 ? "" : "s"} ·{" "}
+              <strong className="text-slate-800">{totalReturnUnits}</strong> unit{totalReturnUnits === 1 ? "" : "s"} to return
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={closeFormDrawer}
+                className="h-9 px-4 text-xs font-semibold !bg-white hover:!bg-slate-100 text-slate-700 border-slate-300 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={saving}
+                onClick={() => void handleSaveReturn()}
+                className="h-9 px-5 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                {editVR ? "Save Changes" : "Submit Return"}
+              </Button>
+            </div>
           </div>
         }
       >
-        <form onSubmit={(e) => { e.preventDefault(); handleSaveReturn(true); }} className="space-y-5 py-1">
-          {/* SECTION 1: HEADER & REFERENCE */}
-          <PurchaseFormCard title="Return Information & References" sectionNumber="Section 1 of 3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <FormField label="Select Quality Inspection (QI)" required>
-                <SelectInput
-                  value={formInspectionNum}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleInspectionChange(e.target.value)}
-                  className="h-11 md:h-9 text-xs font-mono font-bold"
-                >
-                  <option value="QI-2026-013">QI-2026-013 (EcoClean - Leakage Rejection)</option>
-                  <option value="QI-2026-011">QI-2026-011 (Amul Dairy - Damaged Foil)</option>
-                  <option value="QI-2026-012">QI-2026-012 (Fresh Farms - Near Expiry)</option>
-                  <option value="QI-2026-014">QI-2026-014 (ABC Linen - Stitching Defect)</option>
-                  <option value="QI-2026-015">QI-2026-015 (City Electricals - Rating Mismatch)</option>
-                </SelectInput>
-              </FormField>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSaveReturn();
+          }}
+          className="grid gap-5 pb-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start"
+        >
+          <div className="min-w-0 space-y-5">
+            {/* SOURCE INSPECTION */}
+            <ProcurementFormSection step={1} title="Source Inspection" subtitle="Pick the quality inspection that rejected the goods">
+              <div className="space-y-4">
+                <FormField label="Quality Inspection" required>
+                  <div className="relative">
+                    <ClipboardCheck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <SelectInput
+                      value={formInspectionNum}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleInspectionChange(e.target.value)}
+                      disabled={!!editVR || loadingInspections || eligibleInspections.length === 0}
+                      className={cn("block h-10 pl-9 text-sm", formInspectionNum ? "text-slate-900" : "text-slate-400")}
+                    >
+                      <option value="">
+                        {loadingInspections
+                          ? "Loading inspections…"
+                          : eligibleInspections.length === 0
+                            ? "No inspections with rejected items"
+                            : "Select an inspection…"}
+                      </option>
+                      {editVR && !eligibleInspections.some((qi) => qi.inspectionNumber === formInspectionNum) && (
+                        <option value={formInspectionNum}>{formInspectionNum}</option>
+                      )}
+                      {eligibleInspections.map((qi) => {
+                        const rejectedUnits = rejectedLines(qi).reduce((s, l) => s + Number(l.rejectedQty || 0), 0);
+                        return (
+                          <option key={qi.id} value={qi.inspectionNumber}>
+                            {qi.inspectionNumber} · {qi.supplierName} · {rejectedUnits} rejected
+                          </option>
+                        );
+                      })}
+                    </SelectInput>
+                  </div>
+                </FormField>
+                {!loadingInspections && eligibleInspections.length === 0 && !editVR && (
+                  <p className="text-[11px] text-amber-700">
+                    Only completed inspections with rejected quantity, and no open return, can be returned.
+                  </p>
+                )}
 
-              <FormField label="GRN Number (Auto-filled)" required>
-                <TextInput
-                  value={formGRNNum}
-                  readOnly
-                  className="h-11 md:h-9 text-xs font-mono font-bold bg-slate-50 text-slate-700"
-                />
-              </FormField>
+                {formInspectionNum ? (
+                  <dl className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-4 text-xs md:grid-cols-4">
+                    <div className="min-w-0">
+                      <dt className="flex items-center gap-1.5 text-slate-500">
+                        <Building2 className="h-3.5 w-3.5" /> Supplier
+                      </dt>
+                      <dd className="mt-0.5 truncate text-sm font-semibold text-slate-900">{formSupplier || "—"}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="flex items-center gap-1.5 text-slate-500">
+                        <PackageCheck className="h-3.5 w-3.5" /> GRN
+                      </dt>
+                      <dd className="mt-0.5 truncate font-mono text-sm font-semibold text-amber-800">{formGRNNum || "—"}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="flex items-center gap-1.5 text-slate-500">
+                        <FileText className="h-3.5 w-3.5" /> Purchase Order
+                      </dt>
+                      <dd className="mt-0.5 truncate font-mono text-sm font-semibold text-slate-800">{formPONum || "—"}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="flex items-center gap-1.5 text-slate-500">
+                        <Clock className="h-3.5 w-3.5" /> Inspected
+                      </dt>
+                      <dd className="mt-0.5 truncate text-sm font-semibold text-slate-800">
+                        {currentInspection
+                          ? `${currentInspection.inspectionDate || "—"}${currentInspection.inspectorName ? ` · ${currentInspection.inspectorName}` : ""}`
+                          : "—"}
+                      </dd>
+                    </div>
+                  </dl>
+                ) : (
+                  <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 px-4 py-6 text-center">
+                    <p className="text-sm font-semibold text-slate-700">No inspection selected</p>
+                    <p className="max-w-sm text-[11px] text-slate-500">
+                      Supplier, GRN and the rejected items will load from the inspection you choose.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </ProcurementFormSection>
 
-              <FormField label="Supplier (Auto-filled)" required>
-                <TextInput
-                  value={formSupplier}
-                  readOnly
-                  className="h-11 md:h-9 text-xs font-bold bg-slate-50 text-slate-700"
-                />
-              </FormField>
+            {/* RETURN DETAILS */}
+            <ProcurementFormSection step={2} title="Return Details" subtitle="Where it ships from, why, and what the supplier owes">
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+                <FormField label="Dispatch Warehouse" required>
+                  <SelectInput
+                    value={formWarehouse}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormWarehouse(e.target.value)}
+                    className={cn("block h-10 text-sm", !formWarehouse && "text-slate-400")}
+                  >
+                    <option value="">Select warehouse…</option>
+                    {warehouseOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </FormField>
 
-              <FormField label="Warehouse" required>
-                <SelectInput
-                  value={formWarehouse}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormWarehouse(e.target.value)}
-                  className="h-11 md:h-9 text-xs font-medium"
-                >
-                  <option value="Main Warehouse">Main Warehouse</option>
-                  <option value="Kitchen Store">Kitchen Store</option>
-                  <option value="Housekeeping Store">Housekeeping Store</option>
-                  <option value="Central Linen Warehouse">Central Linen Warehouse</option>
-                  <option value="Engineering Maintenance Store">Engineering Maintenance Store</option>
-                </SelectInput>
-              </FormField>
-
-              <FormField label="Return Date" required>
-                <TextInput
-                  type="date"
-                  value={formReturnDate}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormReturnDate(e.target.value)}
-                  className="h-11 md:h-9 text-xs font-medium"
-                />
-              </FormField>
-
-              <FormField label="Overall Return Reason" required>
-                <SelectInput
-                  value={formReturnReason}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormReturnReason(e.target.value as any)}
-                  className="h-11 md:h-9 text-xs font-semibold"
-                >
-                  <option value="Damaged Items">Damaged Items</option>
-                  <option value="Expired Items">Expired Items</option>
-                  <option value="Wrong Product">Wrong Product</option>
-                  <option value="Quality Failure">Quality Failure</option>
-                  <option value="Packaging Damage">Packaging Damage</option>
-                  <option value="Quantity Mismatch">Quantity Mismatch</option>
-                </SelectInput>
-              </FormField>
-
-              <FormField label="Replacement Required?" required>
-                <SelectInput
-                  value={formReplacementRequired ? "yes" : "no"}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormReplacementRequired(e.target.value === "yes")}
-                  className="h-11 md:h-9 text-xs font-bold"
-                >
-                  <option value="yes">Yes - Replacement Needed</option>
-                  <option value="no">No - Debit Note / Credit Only</option>
-                </SelectInput>
-              </FormField>
-
-              {formReplacementRequired && (
-                <FormField label="Expected Replacement Date">
+                <FormField label="Return Date" required>
                   <TextInput
                     type="date"
-                    value={formExpectedDate}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormExpectedDate(e.target.value)}
-                    className="h-11 md:h-9 text-xs font-medium"
+                    value={formReturnDate}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormReturnDate(e.target.value)}
+                    className="h-10 text-sm"
                   />
                 </FormField>
-              )}
 
-              <FormField label="Transport & Logistics Details">
-                <TextInput
-                  value={formTransportDetails}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormTransportDetails(e.target.value)}
-                  placeholder="Carrier name, vehicle #, dispatch bay..."
-                  className="h-11 md:h-9 text-xs"
-                />
-              </FormField>
+                <FormField label="Return Reason" required>
+                  <SelectInput
+                    value={formReturnReason}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                      setFormReturnReason(e.target.value as VendorReturnRecord["returnReason"] | "")
+                    }
+                    className={cn("block h-10 text-sm", !formReturnReason && "text-slate-400")}
+                  >
+                    <option value="">Select reason…</option>
+                    {VR_RETURN_REASONS.map((reason) => (
+                      <option key={reason} value={reason}>
+                        {reason}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </FormField>
 
-              <FormField label="Return Remarks" className="md:col-span-3">
-                <TextInput
-                  value={formRemarks}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormRemarks(e.target.value)}
-                  placeholder="Gate pass instructions, supplier agreement..."
-                  className="h-11 md:h-9 text-xs"
-                />
-              </FormField>
-            </div>
-          </PurchaseFormCard>
-
-          {/* SECTION 2: RETURNED ITEMS GRID */}
-          <PurchaseFormCard
-            title={`Returned Items Grid (${formItems.length} Products)`}
-            sectionNumber="Section 2 of 3"
-            actionSlot={
-              <Button
-                type="button"
-                onClick={() =>
-                  setFormItems([
-                    ...formItems,
-                    {
-                      id: `vri-form-${Date.now()}`,
-                      productCode: "PRD-RET-01",
-                      productName: "Additional Returned Item",
-                      receivedQty: 50,
-                      acceptedQty: 40,
-                      returnQty: 10,
-                      reason: "Damaged",
-                      batchNumber: "B-BATCH-01",
-                      expiryDate: "2027-01-01",
-                      remarks: "Returned during receiving",
-                    },
-                  ])
-                }
-                className="h-8 px-3 text-xs font-bold !bg-emerald-700 text-white rounded-lg cursor-pointer flex items-center gap-1"
-              >
-                <Plus className="h-3.5 w-3.5" /> Add Row
-              </Button>
-            }
-          >
-            <div className="space-y-4 overflow-x-auto">
-              {formItems.map((item, idx) => (
-                <div key={item.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-3 text-xs">
-                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                    <span className="font-bold text-slate-800">Returned Item #{idx + 1}: {item.productName} ({item.productCode})</span>
-                    <button
-                      type="button"
-                      onClick={() => setFormItems(formItems.filter((i) => i.id !== item.id))}
-                      disabled={formItems.length <= 1}
-                      className="text-slate-400 hover:text-red-600 disabled:opacity-30 p-1"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                    <div className="col-span-2">
-                      <span className="text-[10px] font-semibold text-slate-500 block mb-1">Product Description</span>
-                      <TextInput
-                        value={item.productName}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                          setFormItems(formItems.map((i) => (i.id === item.id ? { ...i, productName: e.target.value } : i)))
-                        }
-                        className="h-9 text-xs font-bold bg-white"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-semibold text-slate-500 block mb-1">Received Qty</span>
-                      <TextInput
-                        type="number"
-                        value={item.receivedQty}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const r = Number(e.target.value);
-                          setFormItems(
-                            formItems.map((i) =>
-                              i.id === item.id ? { ...i, receivedQty: r, acceptedQty: Math.max(0, r - i.returnQty) } : i
-                            )
-                          );
-                        }}
-                        className="h-9 text-xs text-center font-semibold bg-white"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-semibold text-slate-500 block mb-1">Accepted Qty</span>
-                      <TextInput
-                        type="number"
-                        value={item.acceptedQty}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const acc = Number(e.target.value);
-                          setFormItems(
-                            formItems.map((i) =>
-                              i.id === item.id ? { ...i, acceptedQty: acc, returnQty: Math.max(0, i.receivedQty - acc) } : i
-                            )
-                          );
-                        }}
-                        className="h-9 text-xs text-center font-semibold bg-white"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-semibold text-slate-500 block mb-1">Return Qty</span>
-                      <TextInput
-                        type="number"
-                        value={item.returnQty}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const ret = Number(e.target.value);
-                          setFormItems(
-                            formItems.map((i) =>
-                              i.id === item.id
-                                ? { ...i, returnQty: ret, acceptedQty: Math.max(0, i.receivedQty - ret) }
-                                : i
-                            )
-                          );
-                        }}
-                        className="h-9 text-xs text-center font-extrabold text-red-600 bg-red-50 border-red-200"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-semibold text-slate-500 block mb-1">Specific Reason</span>
-                      <SelectInput
-                        value={item.reason}
-                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                          setFormItems(
-                            formItems.map((i) => (i.id === item.id ? { ...i, reason: e.target.value as any } : i))
-                          )
-                        }
-                        className="h-9 text-xs font-bold bg-white"
-                      >
-                        <option value="Damaged">Damaged</option>
-                        <option value="Expired">Expired</option>
-                        <option value="Wrong Item">Wrong Item</option>
-                        <option value="Quantity Mismatch">Quantity Mismatch</option>
-                        <option value="Quality Failure">Quality Failure</option>
-                        <option value="Packaging Damage">Packaging Damage</option>
-                      </SelectInput>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                    <div>
-                      <span className="text-[10px] font-semibold text-slate-500 block mb-1">Batch Number</span>
-                      <TextInput
-                        value={item.batchNumber}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                          setFormItems(formItems.map((i) => (i.id === item.id ? { ...i, batchNumber: e.target.value } : i)))
-                        }
-                        className="h-9 text-xs font-mono bg-white"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-semibold text-slate-500 block mb-1">Expiry Date</span>
-                      <TextInput
-                        type="date"
-                        value={item.expiryDate || ""}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                          setFormItems(formItems.map((i) => (i.id === item.id ? { ...i, expiryDate: e.target.value } : i)))
-                        }
-                        className="h-9 text-xs bg-white"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-semibold text-slate-500 block mb-1">Item Remarks</span>
-                      <TextInput
-                        value={item.remarks || ""}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                          setFormItems(formItems.map((i) => (i.id === item.id ? { ...i, remarks: e.target.value } : i)))
-                        }
-                        placeholder="Condition details..."
-                        className="h-9 text-xs bg-white"
-                      />
-                    </div>
+                <div className="space-y-1.5 sm:col-span-2 xl:col-span-1">
+                  <span id="vr-settlement-label" className="block text-xs font-medium text-slate-600">
+                    Supplier Settlement<span className="text-red-500"> *</span>
+                  </span>
+                  <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-labelledby="vr-settlement-label">
+                      {(
+                        [
+                          { value: "yes", label: "Replacement" },
+                          { value: "no", label: "Credit note" },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={formReplacement === opt.value}
+                          onClick={() => setFormReplacement(opt.value)}
+                          className={cn(
+                            "h-10 whitespace-nowrap rounded-lg border px-3 text-xs font-semibold transition-colors",
+                            formReplacement === opt.value
+                              ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
                   </div>
                 </div>
-              ))}
-            </div>
-          </PurchaseFormCard>
 
-          {/* SECTION 3: ATTACHMENTS */}
-          <PurchaseFormCard title="Return Debit Note & Photo Evidence" sectionNumber="Section 3 of 3">
-            <PurchaseAttachmentList
-              attachments={formAttachments}
-              onAddAttachment={(att) => setFormAttachments([...formAttachments, att])}
-              onRemoveAttachment={(id) => setFormAttachments(formAttachments.filter((a) => a.id !== id))}
-            />
-          </PurchaseFormCard>
+                {formReplacement === "yes" && (
+                  <FormField label="Expected Replacement Date">
+                    <TextInput
+                      type="date"
+                      value={formExpectedDate}
+                      min={formReturnDate || undefined}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormExpectedDate(e.target.value)}
+                      className="h-10 text-sm"
+                    />
+                  </FormField>
+                )}
+
+                <FormField label="Transport & Logistics">
+                  <TextInput
+                    value={formTransportDetails}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormTransportDetails(e.target.value)}
+                    placeholder="Carrier, vehicle no., docket no."
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+
+                <div className="sm:col-span-2 xl:col-span-3">
+                  <FormField label="Remarks">
+                    <TextInput
+                      value={formRemarks}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormRemarks(e.target.value)}
+                      placeholder="Gate pass instructions, supplier agreement…"
+                      className="h-10 text-sm"
+                    />
+                  </FormField>
+                </div>
+              </div>
+            </ProcurementFormSection>
+
+            {/* RETURNED ITEMS */}
+            <ProcurementFormSection
+              step={3}
+              title="Returned Items"
+              subtitle="Rejected lines from the inspection — adjust quantities if only part is going back"
+            >
+              {formItems.length === 0 ? (
+                <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 px-4 py-6 text-center">
+                  <Package className="h-5 w-5 text-slate-400" />
+                  <p className="text-sm font-semibold text-slate-700">No items yet</p>
+                  <p className="max-w-sm text-[11px] text-slate-500">
+                    Select an inspection above to load the items it rejected.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {formItems.map((item) => {
+                    const max = maxReturnQty(item);
+                    return (
+                      <div key={item.id} className="rounded-xl border border-slate-200 bg-white">
+                        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900">{item.productName}</p>
+                            <p className="text-xs text-slate-500">
+                              <span className="font-mono">{item.productCode || "—"}</span> · Received {item.receivedQty} ·
+                              Accepted {item.acceptedQty} · <span className="font-medium text-red-600">Rejected {max}</span>
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setFormItems((items) => items.filter((i) => i.id !== item.id))}
+                            disabled={formItems.length <= 1}
+                            className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-30"
+                            aria-label={`Remove ${item.productName}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 px-4 py-3 md:grid-cols-[110px_minmax(0,1fr)_minmax(0,1fr)_150px] xl:grid-cols-[110px_minmax(0,1fr)_minmax(0,1fr)_150px_minmax(0,1.3fr)]">
+                          <FormField label="Return Qty" required>
+                            <TextInput
+                              type="number"
+                              min={0}
+                              max={max}
+                              value={item.returnQty}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                updateFormItem(item.id, { returnQty: Math.max(0, Number(e.target.value) || 0) })
+                              }
+                              className={cn(
+                                "h-9 text-center text-sm font-semibold",
+                                item.returnQty > max && "border-red-400 text-red-600",
+                              )}
+                            />
+                          </FormField>
+                          <FormField label="Reason" required>
+                            <SelectInput
+                              value={item.reason}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                                updateFormItem(item.id, { reason: e.target.value as VRFormItem["reason"] })
+                              }
+                              className={cn("block h-9 text-sm", !item.reason && "text-slate-400")}
+                            >
+                              <option value="">Select…</option>
+                              {VR_ITEM_REASONS.map((reason) => (
+                                <option key={reason} value={reason}>
+                                  {reason}
+                                </option>
+                              ))}
+                            </SelectInput>
+                          </FormField>
+                          <FormField label="Batch No.">
+                            <TextInput
+                              value={item.batchNumber}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                updateFormItem(item.id, { batchNumber: e.target.value })
+                              }
+                              placeholder="—"
+                              className="h-9 font-mono text-sm"
+                            />
+                          </FormField>
+                          <FormField label="Expiry">
+                            <TextInput
+                              type="date"
+                              value={item.expiryDate || ""}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                updateFormItem(item.id, { expiryDate: e.target.value })
+                              }
+                              className="h-9 text-sm"
+                            />
+                          </FormField>
+                          <div className="col-span-2 md:col-span-4 xl:col-span-1">
+                            <FormField label="Item Remarks">
+                              <TextInput
+                                value={item.remarks || ""}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                  updateFormItem(item.id, { remarks: e.target.value })
+                                }
+                                placeholder="Condition details…"
+                                className="h-9 text-sm"
+                              />
+                            </FormField>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </ProcurementFormSection>
+
+            {/* ATTACHMENTS */}
+            <ProcurementFormSection step={4} title="Debit Note & Photo Evidence" subtitle="Optional — rejection photos, gate pass, debit note">
+              <PurchaseAttachmentList
+                attachments={formAttachments}
+                onAddAttachment={(att) => setFormAttachments((list) => [...list, att])}
+                onRemoveAttachment={(id) => setFormAttachments((list) => list.filter((a) => a.id !== id))}
+              />
+            </ProcurementFormSection>
+          </div>
+
+          <aside className="space-y-4 lg:sticky lg:top-0">
+            <section className="rounded-xl border border-slate-200 bg-white p-5">
+              <h3 className="text-sm font-semibold text-slate-900">Return Summary</h3>
+              <dl className="mt-4 space-y-3 text-xs">
+                <ProcurementSummaryRow icon={<ClipboardCheck className="h-3.5 w-3.5" />} label="Inspection" value={formInspectionNum} valueClassName="font-mono" />
+                <ProcurementSummaryRow icon={<Building2 className="h-3.5 w-3.5" />} label="Supplier" value={formSupplier} />
+                <ProcurementSummaryRow icon={<Warehouse className="h-3.5 w-3.5" />} label="Ships from" value={formWarehouse} />
+                <ProcurementSummaryRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Return date" value={formReturnDate} />
+                <ProcurementSummaryRow icon={<AlertTriangle className="h-3.5 w-3.5" />} label="Reason" value={formReturnReason} />
+                <ProcurementSummaryRow
+                  icon={<RefreshCcw className="h-3.5 w-3.5" />}
+                  label="Settlement"
+                  value={formReplacement === "yes" ? "Replacement" : formReplacement === "no" ? "Credit note" : ""}
+                />
+              </dl>
+              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
+                <div>
+                  <p className="text-[11px] text-slate-500">Items</p>
+                  <p className="text-lg font-bold text-slate-900">{formItems.length}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500">Units to return</p>
+                  <p className="text-lg font-bold text-red-600">{totalReturnUnits}</p>
+                </div>
+              </div>
+            </section>
+          </aside>
         </form>
       </Drawer>
 
-      {/* VIEW RETURN SIDE DRAWER */}
-      {selectedVR && (
-        <Drawer
-          open={!!selectedVR}
-          onClose={() => setSelectedVR(null)}
-          title={`Vendor Return: ${selectedVR.returnNumber}`}
-          width="lg"
-        >
-          <div className="space-y-6 pb-6 select-none">
-            {/* HEADER SUMMARY CARD */}
-            <div className="rounded-2xl border border-red-200 bg-red-50/70 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-xs font-extrabold text-red-900">{selectedVR.returnNumber}</span>
-                <div className="flex items-center gap-2">
-                  {renderReasonBadge(selectedVR.returnReason)}
-                  {renderStatusBadge(selectedVR.status)}
-                </div>
-              </div>
-              <h3 className="text-sm font-extrabold text-slate-900">{selectedVR.supplierName}</h3>
-              <p className="text-xs text-slate-500 font-medium">
-                GRN: {selectedVR.grnNumber} • QI: {selectedVR.inspectionNumber} • PO: {selectedVR.poNumber}
-              </p>
-            </div>
+      {/* VIEW RETURN DRAWER */}
+      {selectedVR && (() => {
+        const vr = selectedVR;
+        const totals = vr.items.reduce(
+          (acc, item) => ({
+            received: acc.received + (Number(item.receivedQty) || 0),
+            accepted: acc.accepted + (Number(item.acceptedQty) || 0),
+            returned: acc.returned + (Number(item.returnQty) || 0),
+          }),
+          { received: 0, accepted: 0, returned: 0 },
+        );
+        const replacement = vr.replacementDetails;
+        const replacementTone =
+          {
+            Pending: "bg-amber-50 text-amber-800 ring-amber-200",
+            Dispatched: "bg-blue-50 text-blue-700 ring-blue-200",
+            Received: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+          }[replacement.status as string] ?? "bg-slate-100 text-slate-600 ring-slate-200";
 
-            {/* SECTION 1: RETURN INFORMATION */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-              <h4 className="text-xs font-extrabold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-red-600" /> Return Information
-              </h4>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Return Number</span>
-                  <span className="font-mono font-bold text-slate-900">{selectedVR.returnNumber}</span>
+        return (
+          <Drawer
+            side="bottom"
+            open={!!selectedVR}
+            onClose={() => setSelectedVR(null)}
+            title={`Vendor Return ${vr.returnNumber}`}
+            width="lg"
+            customHeader={
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 ring-1 ring-red-100">
+                  <RotateCcw className="h-5 w-5" />
                 </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Return Date</span>
-                  <span className="font-semibold text-slate-800">{selectedVR.returnDate}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Supplier</span>
-                  <span className="font-bold text-slate-900">{selectedVR.supplierName}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Purchase Order</span>
-                  <span className="font-mono font-bold text-slate-800">{selectedVR.poNumber}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">GRN Number</span>
-                  <span className="font-mono font-bold text-amber-800">{selectedVR.grnNumber}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Inspection Number</span>
-                  <span className="font-mono font-bold text-emerald-800">{selectedVR.inspectionNumber}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Dispatch Warehouse</span>
-                  <span className="font-semibold text-slate-800">{selectedVR.warehouse}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Transport Details</span>
-                  <span className="font-medium text-slate-700">{selectedVR.transportDetails}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* SECTION 2: RETURNED ITEMS TABLE */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-              <h4 className="text-xs font-extrabold text-slate-900 border-b border-slate-100 pb-2 flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-red-600" /> Returned Items Breakdown
-                </span>
-                <span className="text-[11px] text-slate-500 font-semibold">{selectedVR.items.length} Products</span>
-              </h4>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
-                      <th className="py-2 px-2">Product</th>
-                      <th className="py-2 px-2 text-center">Received Qty</th>
-                      <th className="py-2 px-2 text-center">Accepted Qty</th>
-                      <th className="py-2 px-2 text-center">Returned Qty</th>
-                      <th className="py-2 px-2">Reason</th>
-                      <th className="py-2 px-2">Batch No</th>
-                      <th className="py-2 px-2">Expiry</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium">
-                    {selectedVR.items.map((item) => (
-                      <tr key={item.id}>
-                        <td className="py-2.5 px-2 font-bold text-slate-900">
-                          {item.productName}
-                          <div className="text-[10px] font-normal text-slate-400">{item.productCode}</div>
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-slate-700">{item.receivedQty}</td>
-                        <td className="py-2.5 px-2 text-center font-extrabold text-emerald-700">{item.acceptedQty}</td>
-                        <td className="py-2.5 px-2 text-center font-extrabold text-red-600">{item.returnQty}</td>
-                        <td className="py-2.5 px-2">
-                          <span className="text-red-700 font-bold">{item.reason}</span>
-                        </td>
-                        <td className="py-2.5 px-2 font-mono text-slate-700">{item.batchNumber}</td>
-                        <td className="py-2.5 px-2 text-slate-600">{item.expiryDate}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* SECTION 3: REPLACEMENT DETAILS */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-              <h4 className="text-xs font-extrabold text-slate-900 border-b border-slate-100 pb-2 flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <RefreshCcw className="h-4 w-4 text-blue-600" /> Replacement Tracking Details
-                </span>
-                <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                  {selectedVR.replacementDetails.replacementRequired ? "Replacement Requested" : "Debit Note Only"}
-                </span>
-              </h4>
-
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Expected Replacement Date</span>
-                  <span className="font-bold text-slate-900">{selectedVR.replacementDetails.expectedDate || "N/A"}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Replacement Status</span>
-                  <span className="font-semibold text-blue-700">{selectedVR.replacementDetails.status}</span>
-                </div>
-                <div className="col-span-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200/70">
-                  <span className="text-[10px] text-slate-400 block font-medium">Supplier Response & Notes</span>
-                  <p className="text-xs font-medium text-slate-700 mt-0.5">{selectedVR.replacementDetails.supplierResponse}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* SECTION 4: ATTACHMENTS */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-              <h4 className="text-xs font-extrabold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
-                <FileText className="h-4 w-4 text-slate-600" /> Return Notes & Photo Evidence
-              </h4>
-
-              <div className="space-y-2">
-                {selectedVR.attachments.map((att) => (
-                  <div key={att.id} className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs">
-                    <span className="font-semibold text-slate-800 flex items-center gap-2">
-                      <FileSpreadsheet className="h-4 w-4 text-slate-500" />
-                      {att.fileName} ({att.fileSize})
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => alert(`Downloading ${att.fileName}`)}
-                      className="text-xs font-bold text-red-700 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Download className="h-3.5 w-3.5" /> Download
-                    </button>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 id="drawer-title" className="font-mono text-base font-bold text-slate-900 sm:text-lg">
+                      {vr.returnNumber}
+                    </h2>
+                    {renderStatusBadge(vr.status)}
+                    {renderReasonBadge(vr.returnReason)}
                   </div>
-                ))}
+                  <p className="truncate text-xs text-slate-500">
+                    {vr.supplierName || "—"} · Returned {formatVrDate(vr.returnDate)} · Ships from {vr.warehouse || "—"}
+                  </p>
+                </div>
               </div>
-            </div>
+            }
+            footer={
+              <div className="flex w-full flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-slate-500">
+                  <strong className="text-slate-800">{vr.items.length}</strong> item{vr.items.length === 1 ? "" : "s"} ·{" "}
+                  <strong className="text-red-600">{totals.returned}</strong> unit{totals.returned === 1 ? "" : "s"} returned
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setSelectedVR(null)}
+                    className="h-9 px-4 text-xs font-semibold !bg-white hover:!bg-slate-100 text-slate-700 border-slate-300 rounded-xl cursor-pointer"
+                  >
+                    Close
+                  </Button>
+                  {vr.status === "Pending Pickup" && (
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setSelectedVR(null);
+                        openEditDrawer(vr);
+                      }}
+                      className="h-9 px-4 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <Edit className="h-3.5 w-3.5" /> Edit Return
+                    </Button>
+                  )}
+                </div>
+              </div>
+            }
+          >
+            <div className="grid gap-5 pb-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+              <div className="min-w-0 space-y-5">
+                <VrDetailSection title="Returned Items" meta={`${vr.items.length} product${vr.items.length === 1 ? "" : "s"}`} flush>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-y border-slate-100 bg-slate-50/70 text-[11px] uppercase tracking-wide text-slate-500">
+                          <th className="px-5 py-2.5 font-medium">Product</th>
+                          <th className="px-3 py-2.5 font-medium">Batch / Expiry</th>
+                          <th className="px-3 py-2.5 text-right font-medium">Received</th>
+                          <th className="px-3 py-2.5 text-right font-medium">Accepted</th>
+                          <th className="px-5 py-2.5 text-right font-medium">Returned</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {vr.items.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-5 py-6 text-center text-xs text-slate-400">
+                              No items on this return.
+                            </td>
+                          </tr>
+                        ) : (
+                          vr.items.map((item, idx) => (
+                            <tr key={item.id || `vri-${idx}`} className="align-top">
+                              <td className="px-5 py-3">
+                                <p className="font-medium text-slate-900">{item.productName}</p>
+                                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                                  {item.productCode && <span className="font-mono">{item.productCode}</span>}
+                                  {item.reason && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 ring-1 ring-inset ring-red-200">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                                      {item.reason}
+                                    </span>
+                                  )}
+                                </p>
+                                {item.remarks && <p className="mt-1 text-xs text-slate-500">{item.remarks}</p>}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3 text-xs">
+                                <p className="font-mono text-slate-700">{item.batchNumber || "—"}</p>
+                                <p className="text-slate-400">{item.expiryDate ? `Exp ${formatVrDate(item.expiryDate)}` : "No expiry"}</p>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-slate-700">{item.receivedQty}</td>
+                              <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-emerald-700">{item.acceptedQty}</td>
+                              <td className="whitespace-nowrap px-5 py-3 text-right font-semibold tabular-nums text-red-600">{item.returnQty}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      {vr.items.length > 1 && (
+                        <tfoot>
+                          <tr className="border-t border-slate-200 bg-slate-50/70 text-sm">
+                            <td colSpan={2} className="px-5 py-2.5 text-right text-xs font-medium text-slate-500">
+                              Total
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-medium tabular-nums text-slate-700">{totals.received}</td>
+                            <td className="px-3 py-2.5 text-right font-medium tabular-nums text-emerald-700">{totals.accepted}</td>
+                            <td className="px-5 py-2.5 text-right font-semibold tabular-nums text-red-600">{totals.returned}</td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </VrDetailSection>
 
-            {/* CLOSE BUTTON */}
-            <Button
-              type="button"
-              onClick={() => setSelectedVR(null)}
-              className="w-full h-10 text-xs font-bold !bg-slate-900 text-white rounded-xl shadow-xs cursor-pointer"
-            >
-              Close Return View
-            </Button>
-          </div>
-        </Drawer>
-      )}
+                <VrDetailSection
+                  title="Supplier Settlement"
+                  meta={replacement.replacementRequired ? "Replacement requested" : "Credit note only"}
+                >
+                  <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-3">
+                    <div>
+                      <dt className="text-xs text-slate-500">Settlement</dt>
+                      <dd className="mt-0.5 text-sm font-medium text-slate-900">
+                        {replacement.replacementRequired ? "Replacement goods" : "Debit / credit note"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-slate-500">Expected replacement</dt>
+                      <dd
+                        className={cn(
+                          "mt-0.5 text-sm",
+                          replacement.replacementRequired && replacement.expectedDate
+                            ? "font-medium text-slate-900"
+                            : "text-slate-300",
+                        )}
+                      >
+                        {replacement.replacementRequired
+                          ? replacement.expectedDate
+                            ? formatVrDate(replacement.expectedDate)
+                            : "Not set"
+                          : "Not applicable"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-slate-500">Status</dt>
+                      <dd className="mt-1">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ring-1 ring-inset",
+                            replacementTone,
+                          )}
+                        >
+                          {replacement.status}
+                        </span>
+                      </dd>
+                    </div>
+                    <div className="sm:col-span-3">
+                      <dt className="text-xs text-slate-500">Supplier response</dt>
+                      <dd
+                        className={cn(
+                          "mt-0.5 whitespace-pre-line text-sm",
+                          replacement.supplierResponse ? "text-slate-800" : "text-slate-400",
+                        )}
+                      >
+                        {replacement.supplierResponse || "No response yet."}
+                      </dd>
+                    </div>
+                  </dl>
+                </VrDetailSection>
+
+                <VrDetailSection title="Logistics & Notes">
+                  <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                    <div className="min-w-0">
+                      <dt className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <Truck className="h-3.5 w-3.5" /> Transport
+                      </dt>
+                      <dd className={cn("mt-0.5 break-words text-sm", vr.transportDetails ? "font-medium text-slate-900" : "text-slate-300")}>
+                        {vr.transportDetails || "Not specified"}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <FileText className="h-3.5 w-3.5" /> Remarks
+                      </dt>
+                      <dd className={cn("mt-0.5 whitespace-pre-line break-words text-sm", vr.remarks ? "text-slate-800" : "text-slate-300")}>
+                        {vr.remarks || "None"}
+                      </dd>
+                    </div>
+                  </dl>
+                </VrDetailSection>
+
+                {vr.attachments.length > 0 && (
+                  <VrDetailSection title="Debit Note & Photo Evidence" meta={`${vr.attachments.length}`}>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {vr.attachments.map((att) => (
+                        <div
+                          key={att.id}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <FileSpreadsheet className="h-4 w-4 shrink-0 text-slate-400" />
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-medium text-slate-800">{att.fileName}</p>
+                              <p className="text-[11px] text-slate-400">{att.fileSize}</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => alert(`Downloading ${att.fileName}`)}
+                            className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                          >
+                            <Download className="h-3 w-3" /> Download
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </VrDetailSection>
+                )}
+              </div>
+
+              <aside className="space-y-5 lg:sticky lg:top-0">
+                <section className="rounded-xl border border-slate-200 bg-white p-5">
+                  <h3 className="text-sm font-semibold text-slate-900">Summary</h3>
+                  <div className="mt-4 grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-3 text-center">
+                    <div>
+                      <p className="text-[11px] text-slate-500">Received</p>
+                      <p className="text-base font-bold tabular-nums text-slate-900">{totals.received}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-slate-500">Accepted</p>
+                      <p className="text-base font-bold tabular-nums text-emerald-700">{totals.accepted}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-slate-500">Returned</p>
+                      <p className="text-base font-bold tabular-nums text-red-600">{totals.returned}</p>
+                    </div>
+                  </div>
+                  <dl className="mt-4 space-y-3 text-xs">
+                    <ProcurementSummaryRow icon={<Building2 className="h-3.5 w-3.5" />} label="Supplier" value={vr.supplierName} />
+                    <ProcurementSummaryRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Return date" value={vr.returnDate ? formatVrDate(vr.returnDate) : ""} />
+                    <ProcurementSummaryRow icon={<Warehouse className="h-3.5 w-3.5" />} label="Ships from" value={vr.warehouse} />
+                    <ProcurementSummaryRow icon={<AlertTriangle className="h-3.5 w-3.5" />} label="Reason" value={vr.returnReason} />
+                  </dl>
+                </section>
+
+                <section className="rounded-xl border border-slate-200 bg-white p-5">
+                  <h3 className="text-sm font-semibold text-slate-900">References</h3>
+                  <dl className="mt-4 space-y-3 text-xs">
+                    <ProcurementSummaryRow
+                      icon={<ClipboardCheck className="h-3.5 w-3.5" />}
+                      label="Inspection"
+                      value={vr.inspectionNumber}
+                      valueClassName="font-mono text-emerald-700"
+                    />
+                    <ProcurementSummaryRow
+                      icon={<PackageCheck className="h-3.5 w-3.5" />}
+                      label="GRN"
+                      value={vr.grnNumber}
+                      valueClassName="font-mono text-amber-700"
+                    />
+                    <ProcurementSummaryRow
+                      icon={<FileText className="h-3.5 w-3.5" />}
+                      label="Purchase order"
+                      value={vr.poNumber}
+                      valueClassName="font-mono"
+                    />
+                  </dl>
+                </section>
+              </aside>
+            </div>
+          </Drawer>
+        );
+      })()}
     </div>
   );
 }

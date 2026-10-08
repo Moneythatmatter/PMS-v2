@@ -7,6 +7,7 @@ import type { Booking } from "@/app/data/types";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { usePropertyOptional } from "@/components/platform/PropertyProvider";
 import { formatBookingCreatedAt } from "@/lib/reservation-dates";
 import { allBookingsDetailHref } from "@/lib/check-in-navigation";
 
@@ -17,6 +18,8 @@ interface BookingListProps {
 
 export function BookingList({ bookings, loading = false }: BookingListProps) {
   const [search, setSearch] = useState("");
+  const propertyCtx = usePropertyOptional();
+  const canOpenFrontOffice = propertyCtx?.canRead("front_office") ?? true;
 
   const filtered = bookings.filter(
     (b) =>
@@ -37,6 +40,7 @@ export function BookingList({ bookings, loading = false }: BookingListProps) {
             Bookings created today
           </p>
         </div>
+        {canOpenFrontOffice && (
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
         <Link href="/frontoffice/dashboard" className="w-full sm:w-auto">
           <Button size="sm" variant="outline" className="w-full shrink-0 gap-1.5 sm:w-auto">
@@ -50,6 +54,7 @@ export function BookingList({ bookings, loading = false }: BookingListProps) {
           </Button>
         </Link>
         </div>
+        )}
       </div>
       <div className="mb-4">
         <div className="relative w-full sm:max-w-xs">

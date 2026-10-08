@@ -38,6 +38,7 @@ import type {
 import { reportDefinitions, reportStatusClass } from "@/app/data/frontoffice/reports";
 import { reportService } from "@/services/front-office";
 import { ReportCharts } from "@/components/frontoffice/ReportCharts";
+import { downloadXlsx, slugifyFilename } from "@/lib/xlsx";
 import { NightAuditView } from "@/components/frontoffice/NightAuditView";
 import { SelectInput, FODatePicker, formatINR } from "@/components/frontoffice/ui";
 import { ModuleDataTable, ModulePageShell } from "@/components/pms";
@@ -313,6 +314,16 @@ function normalizeRow(type: ReportId, row: Record<string, unknown>, index: numbe
   } as ReportRow;
 }
 
+/** Row ids fall back to room / booking numbers, which repeat across stays — suffix repeats so table keys stay unique. */
+function withUniqueIds(rows: ReportRow[]): ReportRow[] {
+  const seen = new Map<string, number>();
+  return rows.map((row) => {
+    const uses = seen.get(row.id) ?? 0;
+    seen.set(row.id, uses + 1);
+    return uses === 0 ? row : { ...row, id: `${row.id}-${uses}` };
+  });
+}
+
 function buildStats(
   base: ReportDefinition,
   rows: ReportRow[],
@@ -353,24 +364,34 @@ function buildStats(
   ];
 }
 
-function exportCsv(title: string, columns: ReportDefinition["columns"], rows: ReportRow[]) {
-  const header = columns.map((c) => c.header).join(",");
-  const body = rows
-    .map((row) =>
-      columns
-        .map((c) => `"${String(row[c.key] ?? "").replace(/"/g, '""')}"`)
-        .join(","),
-    )
-    .join("\n");
-  const blob = new Blob([[header, body].filter(Boolean).join("\n")], {
-    type: "text/csv;charset=utf-8;",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${title.toLowerCase().replace(/\s+/g, "-")}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+function excelValue(value: ReportRow[string], format?: "currency" | "percent") {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "number" || !format) return value;
+  const numeric = Number(String(value).replace(/[₹,%\s]/g, ""));
+  return String(value).trim() !== "" && Number.isFinite(numeric) ? numeric : value;
+}
+
+function exportExcel(
+  title: string,
+  columns: ReportDefinition["columns"],
+  rows: ReportRow[],
+  filters: { fromDate: string; toDate: string; status: string; search: string },
+) {
+  downloadXlsx(`${slugifyFilename(title)}-${filters.fromDate}-to-${filters.toDate}`, [
+    {
+      name: title,
+      title: `${title} — Front Office`,
+      meta: [
+        ["Period", `${filters.fromDate} to ${filters.toDate}`],
+        ...(filters.status !== "all" ? ([["Status", filters.status]] as [string, string][]) : []),
+        ...(filters.search.trim() ? ([["Search", filters.search.trim()]] as [string, string][]) : []),
+        ["Records", rows.length],
+        ["Generated", new Date().toLocaleString("en-IN")],
+      ],
+      header: columns.map((c) => c.header),
+      rows: rows.map((row) => columns.map((c) => excelValue(row[c.key], c.format))),
+    },
+  ]);
 }
 
 function ReportListView({ type }: { type: ReportId }) {
@@ -601,10 +622,18 @@ function ReportListView({ type }: { type: ReportId }) {
           size="sm"
           variant="outline"
           className="gap-1"
-          onClick={() => exportCsv(base.title, base.columns, filtered)}
+          onClick={() =>
+            exportExcel(base.title, base.columns, filtered, {
+              fromDate,
+              toDate,
+              status: statusFilter,
+              search,
+            })
+          }
+          disabled={loading}
         >
           <Download className="h-3.5 w-3.5" />
-          Export
+          Export Excel
         </Button>
       }
       aboveTable={

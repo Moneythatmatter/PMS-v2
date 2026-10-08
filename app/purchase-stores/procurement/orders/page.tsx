@@ -43,7 +43,11 @@ import {
   psRequisitionService,
   psProductService,
 } from "@/services/purchase-stores/index";
-import type { PurchaseRequisition } from "@/app/data/purchaseRequisitionsData";
+import {
+  remainingByPrItemId,
+  type PRFulfillment,
+  type PurchaseRequisition,
+} from "@/app/data/purchaseRequisitionsData";
 import {
   catalogItemLabel,
   normalizePoLineItem,
@@ -77,7 +81,16 @@ export default function PurchaseOrdersPage() {
     setIsMounted(true);
   }, []);
 
-  const { data: poListRaw, loading: poLoading, reload: reloadPos } = usePsList(() => psPurchaseOrderService.list(), []);
+  const { data: poListRaw, loading: poLoading, reload: reloadPoList } = usePsList(() => psPurchaseOrderService.list(), []);
+  const { data: fulfillmentList, reload: reloadFulfillment } = usePsList(
+    () => psRequisitionService.fulfillment(),
+    [],
+  );
+  const fulfillmentByPr = useMemo(
+    () => new Map<string, PRFulfillment>(fulfillmentList.map((f) => [f.prNumber, f])),
+    [fulfillmentList],
+  );
+  const reloadPos = () => Promise.all([reloadPoList(), reloadFulfillment()]);
   const { data: products, loading: loadingProducts } = usePsList(() => psProductService.list(), []);
   const productCatalog = useMemo(() => productsToCatalog(products), [products]);
   const poList = useMemo(
@@ -135,6 +148,27 @@ export default function PurchaseOrdersPage() {
 
   const [formAttachments, setFormAttachments] = useState<AttachmentItem[]>([]);
 
+  const linkablePRs = useMemo(() => {
+    const ownPR = editPO?.linkedPR?.trim();
+    return requisitions.filter(
+      (pr) => pr.prNumber === ownPR || fulfillmentByPr.get(pr.prNumber)?.canCreatePo,
+    );
+  }, [requisitions, fulfillmentByPr, editPO]);
+
+  /** Remaining PR quantity per PR item, excluding what the PO being edited already holds. */
+  const remainingForForm = useMemo(() => {
+    const f = formLinkedPR ? fulfillmentByPr.get(formLinkedPR) : undefined;
+    const remaining = remainingByPrItemId(f);
+    if (!remaining || !editPO || editPO.linkedPR?.trim() !== formLinkedPR) return remaining;
+    const adjusted = { ...remaining };
+    for (const line of editPO.items) {
+      if (line.prItemId && line.prItemId in adjusted) {
+        adjusted[line.prItemId] += Number(line.quantity) || 0;
+      }
+    }
+    return adjusted;
+  }, [formLinkedPR, fulfillmentByPr, editPO]);
+
   const handleLinkedPRChange = (prNumber: string) => {
     setFormLinkedPR(prNumber);
     if (prNumber) {
@@ -142,9 +176,13 @@ export default function PurchaseOrdersPage() {
       if (pr) {
         setFormDepartment(pr.department);
         if (products.length > 0) {
-          setFormItems(poLinesFromPr(pr.requestedItems, products));
+          setFormItems(
+            poLinesFromPr(pr.requestedItems, products, remainingByPrItemId(fulfillmentByPr.get(prNumber))),
+          );
         }
       }
+    } else {
+      setFormItems((prev) => prev.map(({ prItemId: _prItemId, ...line }) => line));
     }
   };
 
@@ -180,6 +218,55 @@ export default function PurchaseOrdersPage() {
     setFormItems(first ? [poLineFromProduct(first)] : defaults.formItems);
     setFormAttachments(defaults.formAttachments);
   };
+
+  // "Create PO" from the requisition page: /orders?fromPR=PR-…
+  useEffect(() => {
+    const fromPR = new URLSearchParams(window.location.search).get("fromPR");
+    if (!fromPR) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    void Promise.all([
+      psRequisitionService.list(),
+      psRequisitionService.fulfillment(),
+      psProductService.list(),
+    ])
+      .then(([prs, fulfillments, productRows]) => {
+        const pr = prs.find((p) => p.prNumber === fromPR);
+        const fulfillment = fulfillments.find((f) => f.prNumber === fromPR);
+        if (!pr || !fulfillment?.canCreatePo) {
+          setToast({ message: `${fromPR} is not open for a direct PO.`, variant: "info" });
+          return;
+        }
+        setEditPO(null);
+        resetCreateForm();
+        setFormLinkedPR(fromPR);
+        setFormDepartment(pr.department);
+        setFormItems(poLinesFromPr(pr.requestedItems, productRows, remainingByPrItemId(fulfillment)));
+        setCreateDrawerOpen(true);
+      })
+      .catch(() => setToast({ message: `Could not load ${fromPR}.`, variant: "info" }));
+  }, []);
+
+  // "View PO" from the RFQ page: /orders?po=PO-…
+  useEffect(() => {
+    const poNumber = new URLSearchParams(window.location.search).get("po");
+    if (!poNumber) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    void Promise.all([psPurchaseOrderService.list(), psProductService.list()])
+      .then(([pos, productRows]) => {
+        const po = pos.find((p) => p.poNumber === poNumber);
+        if (!po) {
+          setToast({ message: `${poNumber} was not found.`, variant: "info" });
+          return;
+        }
+        setSelectedPO({
+          ...po,
+          items: po.items.map((item, i) =>
+            normalizePoLineItem(item as Parameters<typeof normalizePoLineItem>[0], i, productRows),
+          ),
+        });
+      })
+      .catch(() => setToast({ message: `Could not load ${poNumber}.`, variant: "info" }));
+  }, []);
 
   // Sync Form when Editing PO
   useEffect(() => {
@@ -654,6 +741,7 @@ export default function PurchaseOrdersPage() {
 
       {/* CREATE / EDIT PO DRAWER */}
       <Drawer
+        side="bottom"
         open={createDrawerOpen || !!editPO}
         onClose={() => {
           setCreateDrawerOpen(false);
@@ -712,7 +800,7 @@ export default function PurchaseOrdersPage() {
                   disabled={loadingPRs}
                 >
                   <option value={NO_LINKED_PR}>No linked PR — Direct Procurement</option>
-                  {requisitions.map((pr) => (
+                  {linkablePRs.map((pr) => (
                     <option key={pr.id} value={pr.prNumber}>
                       {prOptionLabel(pr)}
                     </option>
@@ -786,7 +874,8 @@ export default function PurchaseOrdersPage() {
               <Button
                 type="button"
                 onClick={handleAddPoLine}
-                disabled={loadingProducts || products.length === 0}
+                disabled={loadingProducts || products.length === 0 || Boolean(formLinkedPR)}
+                title={formLinkedPR ? `Lines are limited to items on ${formLinkedPR}` : undefined}
                 className="h-8 px-3 text-xs font-bold !bg-emerald-700 text-white rounded-lg cursor-pointer flex items-center gap-1"
               >
                 <Plus className="h-3.5 w-3.5" /> Add Line Item
@@ -827,6 +916,17 @@ export default function PurchaseOrdersPage() {
                       }}
                       className="h-9 text-xs text-center font-bold"
                     />
+                    {item.prItemId && remainingForForm?.[item.prItemId] !== undefined && (
+                      <span
+                        className={
+                          item.quantity > remainingForForm[item.prItemId]
+                            ? "mt-1 block text-[10px] font-semibold text-red-600"
+                            : "mt-1 block text-[10px] text-slate-400"
+                        }
+                      >
+                        Remaining on PR: {remainingForForm[item.prItemId]}
+                      </span>
+                    )}
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 block font-medium mb-1">Unit Rate (₹)</span>

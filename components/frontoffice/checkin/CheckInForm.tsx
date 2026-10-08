@@ -28,6 +28,8 @@ import {
   roomService,
   roomTypeService,
 } from "@/services/front-office";
+import type { RoomAvailabilityBlock } from "@/services/front-office/rooms";
+import { filterRoomsForStay } from "@/lib/room-availability";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -97,6 +99,15 @@ const defaultWalkIn = {
   nights: 1,
   paymentMode: "Cash",
 };
+
+function addDaysIso(iso: string, days: number) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 function generateWalkInRef() {
   return `WI-${String(Date.now()).slice(-6)}`;
@@ -323,6 +334,8 @@ export function CheckInForm() {
   >([]);
   const [roomIdByNo, setRoomIdByNo] = useState<Record<string, string>>({});
   const [roomTypeRates, setRoomTypeRates] = useState<Record<string, number>>({});
+  const [roomTypeNames, setRoomTypeNames] = useState<string[]>([]);
+  const [walkInBlocks, setWalkInBlocks] = useState<RoomAvailabilityBlock[]>([]);
   const [arrivalDate, setArrivalDate] = useState(() => todayIso());
   const [expandedArrivalGroups, setExpandedArrivalGroups] = useState<
     Set<string>
@@ -382,11 +395,19 @@ export function CheckInForm() {
         setRoomIdByNo(idByNo);
 
         const rates: Record<string, number> = {};
+        const typeNames: string[] = [];
         for (const rt of roomTypes) {
           if (rt.name) rates[rt.name] = rt.baseRate || 0;
           if (rt.code) rates[rt.code] = rt.baseRate || 0;
+          if (rt.name && rt.status !== "Inactive") typeNames.push(rt.name);
         }
+        for (const r of roomCards) {
+          const name = String(r.type ?? "").trim();
+          if (name && !typeNames.includes(name)) typeNames.push(name);
+        }
+        typeNames.sort((a, b) => a.localeCompare(b));
         setRoomTypeRates(rates);
+        setRoomTypeNames(typeNames);
       } catch {
         if (!cancelled) {
           setPmsBookings([]);
@@ -871,6 +892,9 @@ export function CheckInForm() {
       if (walkIn.bookingType === "Company" && !walkIn.companyId) {
         newErrors.companyName = "Please select a company.";
       }
+      if (!walkIn.roomType) {
+        newErrors.roomType = "Room type is required.";
+      }
     }
 
     if (checkInMode === "reserved" && isGroupBooking && !booking?.guestId) {
@@ -916,6 +940,7 @@ export function CheckInForm() {
     if (!idFile && !lockedIdentityFields.idNumber) {
       missingLabels.push("Upload ID Document");
     }
+    if (checkInMode === "walkin" && !walkIn.roomType) missingLabels.push("Room Type");
     if (!String(roomForApi || "").trim()) missingLabels.push("Assigned Room Number");
     if (checkInMode === "walkin" && !walkIn.paymentMode) {
       missingLabels.push("Payment Mode");
@@ -1189,8 +1214,80 @@ export function CheckInForm() {
     }
   };
 
+  const walkInCheckInIso = todayIso();
+  const walkInCheckOutIso = addDaysIso(
+    walkInCheckInIso,
+    Math.max(1, walkIn.nights),
+  );
+
+  useEffect(() => {
+    if (checkInMode !== "walkin") return;
+    let cancelled = false;
+    void roomService
+      .blocks(walkInCheckInIso, walkInCheckOutIso)
+      .then((blocks) => {
+        if (!cancelled) setWalkInBlocks(blocks);
+      })
+      .catch(() => {
+        if (!cancelled) setWalkInBlocks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [checkInMode, walkInCheckInIso, walkInCheckOutIso]);
+
+  const walkInFreeRooms = useMemo(() => {
+    const free = new Set(
+      filterRoomsForStay(
+        availableRooms.map((r) => r.roomNo),
+        pmsBookings as ReservationBooking[],
+        walkInCheckInIso,
+        walkInCheckOutIso,
+        walkInBlocks,
+      ),
+    );
+    return availableRooms
+      .filter((r) => free.has(r.roomNo))
+      .sort((a, b) =>
+        a.roomNo.localeCompare(b.roomNo, undefined, { numeric: true }),
+      );
+  }, [availableRooms, pmsBookings, walkInCheckInIso, walkInCheckOutIso, walkInBlocks]);
+
+  const walkInRoomTypes = useMemo(
+    () =>
+      roomTypeNames.map((name) => ({
+        name,
+        available: walkInFreeRooms.filter(
+          (r) => r.roomType?.toLowerCase() === name.toLowerCase(),
+        ).length,
+      })),
+    [roomTypeNames, walkInFreeRooms],
+  );
+
+  const walkInRooms = useMemo(() => {
+    const type = walkIn.roomType.trim().toLowerCase();
+    if (!type) return [];
+    return walkInFreeRooms
+      .filter((r) => r.roomType?.toLowerCase() === type)
+      .map((r) => ({ roomNo: r.roomNo, roomType: r.roomType }));
+  }, [walkInFreeRooms, walkIn.roomType]);
+
+  const handleWalkInRoomTypeChange = (type: string) => {
+    setWalkIn((p) => ({ ...p, roomType: type }));
+    const current = availableRooms.find((r) => r.roomNo === assignedRoom);
+    if (
+      !type ||
+      (current && current.roomType?.toLowerCase() !== type.toLowerCase())
+    ) {
+      setAssignedRoom("");
+    }
+    if (type && errors.roomType) {
+      setErrors((p) => ({ ...p, roomType: "" }));
+    }
+  };
+
   const assignableRooms = useMemo(() => {
-    const type = String(walkIn.roomType || booking?.roomType || "").trim();
+    const type = String(booking?.roomType || "").trim();
     const matchingType = type
       ? availableRooms.filter(
         (r) => r.roomType?.toLowerCase() === type.toLowerCase(),
@@ -1219,11 +1316,9 @@ export function CheckInForm() {
       });
     }
     return list;
-  }, [availableRooms, walkIn.roomType, booking?.roomType, assignedRoom]);
+  }, [availableRooms, booking?.roomType, assignedRoom]);
 
-  const preferredRoomType = String(
-    walkIn.roomType || booking?.roomType || "",
-  ).trim();
+  const preferredRoomType = String(booking?.roomType || "").trim();
 
   const reservedRoomDisplay = useMemo(() => {
     const roomKey = String(assignedRoom || booking?.roomNo || "").trim();
@@ -1284,6 +1379,7 @@ export function CheckInForm() {
           onClick={() => {
             setCheckInMode("walkin");
             setBooking(null);
+            setAssignedRoom("");
             setLookupError("");
             setLockedIdentityFields({});
             setIdFile("");
@@ -1309,8 +1405,7 @@ export function CheckInForm() {
           <p className="text-sm text-slate-600">
             {activeGuestName} has been assigned to{" "}
             <strong>
-              Room{" "}
-              {checkInMode === "reserved" ? assignedRoom : walkIn.room}
+              Room {assignedRoom}
             </strong>
             .
           </p>
@@ -1325,6 +1420,7 @@ export function CheckInForm() {
               setRoomGuests([]);
               setRoomGuestErrors({});
               setWalkIn({ ...defaultWalkIn });
+              setAssignedRoom("");
               setWalkInRef(generateWalkInRef());
             }}
             className="!bg-[#0F8A5F] rounded-xl font-bold text-white"
@@ -2004,8 +2100,11 @@ export function CheckInForm() {
               onAssignedRoomChange={setAssignedRoom}
               remarks={remarks}
               onRemarksChange={setRemarks}
-              availableRooms={assignableRooms}
-              preferredRoomType={preferredRoomType}
+              availableRooms={walkInRooms}
+              roomTypes={walkInRoomTypes}
+              selectedRoomType={walkIn.roomType}
+              onRoomTypeChange={handleWalkInRoomTypeChange}
+              roomTypeError={errors.roomType}
             />
           </SectionCard>
 
