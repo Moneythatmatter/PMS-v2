@@ -18,7 +18,8 @@ export interface OperationsToolbarProps {
   onSearchChange: (value: string) => void;
   searchPlaceholder?: string;
   activeFilterCount?: number;
-  onOpenFilters: () => void;
+  onOpenFilters?: () => void;
+  showFilters?: boolean;
   statusTabs?: StatusTabOption[];
   activeStatusTab?: string;
   onStatusTabChange?: (id: string) => void;
@@ -32,6 +33,7 @@ export function OperationsToolbar({
   searchPlaceholder = "Search by ID, room, staff or keyword…",
   activeFilterCount = 0,
   onOpenFilters,
+  showFilters = true,
   statusTabs,
   activeStatusTab,
   onStatusTabChange,
@@ -58,6 +60,7 @@ export function OperationsToolbar({
             : undefined
         }
         beforeFilters={
+          showFilters ? (
           <Button
             type="button"
             variant="outline"
@@ -75,6 +78,7 @@ export function OperationsToolbar({
               </span>
             )}
           </Button>
+          ) : undefined
         }
         selectionBar={selectionBar}
       />

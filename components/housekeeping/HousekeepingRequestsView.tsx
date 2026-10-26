@@ -12,6 +12,51 @@ import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
 import { getSmartStaffRecommendation } from "@/components/housekeeping/HousekeepingActions";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
+import { CreateCleaningTaskForm } from "@/components/housekeeping/CreateCleaningTaskForm";
+import { hkGuestRequestService } from "@/services/housekeeping";
+import {
+  formatGuestRequestTypeLabel,
+  parseLaundryRequest,
+  type GuestRequestDto,
+} from "@/components/housekeeping/guestRequestUtils";
+import type { HousekeepingRequest } from "@/app/data/frontoffice/modules";
+
+const LAUNDRY_SERVICES = ["Wash & Iron", "Dry Clean", "Iron Only"] as const;
+
+function statusBadgeClass(status: HousekeepingRequest["status"]) {
+  if (status === "Completed") return "bg-emerald-50 text-emerald-700";
+  if (status === "In Progress") return "bg-amber-50 text-amber-700";
+  if (status === "Cancelled") return "bg-slate-100 text-slate-500";
+  return "bg-red-50 text-red-700";
+}
+
+function toGuestRequestDto(req: HousekeepingRequest): GuestRequestDto {
+  return {
+    id: req.apiId ?? req.id,
+    requestNumber: req.id,
+    roomId: req.roomId ?? "",
+    roomNo: req.room,
+    bookingId: req.bookingId ?? null,
+    bookingNo: req.bookingNo,
+    guestName: req.guest,
+    requestType: req.requestType,
+    description: req.issue,
+    status: "PENDING",
+    priority: req.priority.toUpperCase(),
+  };
+}
+
+/** Guest-QR requests wait for staff to turn them into a task / laundry job. */
+function reviewAction(req: HousekeepingRequest): "cleaning" | "laundry" | null {
+  if (!req.fromGuestQr || req.status !== "Open") return null;
+  if (req.requestType === "CLEANING") return "cleaning";
+  if (req.requestType === "LAUNDRY") return "laundry";
+  return null;
+}
+
+function errorMessage(e: unknown, fallback: string) {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
 
 const REQUEST_ITEMS = [
   "Extra Towels",
@@ -39,7 +84,84 @@ export function HousekeepingRequestsView() {
     completeHKRequest,
     updateHKRequest,
     currentUsername,
+    refreshFromApi,
   } = useHousekeeping();
+
+  const [cleaningFrom, setCleaningFrom] = useState<GuestRequestDto | null>(null);
+  const [foRooms, setFoRooms] = useState<RoomDto[]>([]);
+  const [laundryFrom, setLaundryFrom] = useState<HousekeepingRequest | null>(null);
+  const [laundryService, setLaundryService] = useState<string>(LAUNDRY_SERVICES[0]);
+  const [laundryUrgency, setLaundryUrgency] = useState<"Normal" | "Express">("Normal");
+  const [laundryNotes, setLaundryNotes] = useState("");
+  const [declineFrom, setDeclineFrom] = useState<HousekeepingRequest | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  const openCreateCleaning = (req: HousekeepingRequest) => {
+    setReviewError(null);
+    setCleaningFrom(toGuestRequestDto(req));
+    if (foRooms.length === 0) {
+      void roomService.list().then(setFoRooms).catch(() => setFoRooms([]));
+    }
+  };
+
+  const openCreateLaundry = (req: HousekeepingRequest) => {
+    const parsed = parseLaundryRequest(req.issue);
+    setReviewError(null);
+    setLaundryService(parsed.serviceType);
+    setLaundryUrgency(parsed.urgency as "Normal" | "Express");
+    setLaundryNotes(parsed.notes);
+    setLaundryFrom(req);
+  };
+
+  const openDecline = (req: HousekeepingRequest) => {
+    setReviewError(null);
+    setDeclineReason("");
+    setDeclineFrom(req);
+  };
+
+  const openReview = (req: HousekeepingRequest) => {
+    const action = reviewAction(req);
+    if (action === "cleaning") openCreateCleaning(req);
+    else if (action === "laundry") openCreateLaundry(req);
+  };
+
+  const handleCreateLaundryJob = async () => {
+    if (!laundryFrom) return;
+    setReviewBusy(true);
+    setReviewError(null);
+    try {
+      await hkGuestRequestService.createLaundryJob(laundryFrom.apiId ?? laundryFrom.id, {
+        serviceType: laundryService,
+        urgency: laundryUrgency,
+        notes: laundryNotes.trim() || undefined,
+      });
+      setLaundryFrom(null);
+      await refreshFromApi();
+    } catch (e) {
+      setReviewError(errorMessage(e, "Could not create the laundry job."));
+    } finally {
+      setReviewBusy(false);
+    }
+  };
+
+  const handleDecline = async () => {
+    if (!declineFrom) return;
+    setReviewBusy(true);
+    setReviewError(null);
+    try {
+      await hkGuestRequestService.cancel(declineFrom.apiId ?? declineFrom.id, {
+        notes: declineReason.trim() ? `Declined: ${declineReason.trim()}` : "Declined by staff",
+      });
+      setDeclineFrom(null);
+      await refreshFromApi();
+    } catch (e) {
+      setReviewError(errorMessage(e, "Could not decline the request."));
+    } finally {
+      setReviewBusy(false);
+    }
+  };
 
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -198,7 +320,9 @@ export function HousekeepingRequestsView() {
       
       let matchPill = true;
       if (selectedPill === "Open") matchPill = r.status === "Open";
-      else if (selectedPill === "Assigned") matchPill = r.assignedStaff !== "—" && r.status !== "Completed";
+      else if (selectedPill === "Guest QR") matchPill = Boolean(r.fromGuestQr);
+      else if (selectedPill === "Assigned")
+        matchPill = r.assignedStaff !== "—" && r.status !== "Completed" && r.status !== "Cancelled";
       else if (selectedPill === "In Progress") matchPill = r.status === "In Progress";
       else if (selectedPill === "Completed") matchPill = r.status === "Completed";
       else if (selectedPill === "High") matchPill = r.priority === "High";
@@ -324,7 +448,7 @@ export function HousekeepingRequestsView() {
 
   const handleOpenEdit = (id: string) => {
     const req = requests.find((r) => r.id === id);
-    if (!req || req.status === "Completed") return;
+    if (!req || req.status === "Completed" || req.status === "Cancelled") return;
     setDetailReqId(id);
     setEditIssue(req.issue);
     setEditPriority(req.priority);
@@ -422,6 +546,7 @@ export function HousekeepingRequestsView() {
         statusTabs={[
           { id: "all", label: "All" },
           { id: "Open", label: "Open" },
+          { id: "Guest QR", label: "Guest QR" },
           { id: "Assigned", label: "Assigned" },
           { id: "In Progress", label: "In Progress" },
           { id: "Completed", label: "Completed" },
@@ -453,6 +578,7 @@ export function HousekeepingRequestsView() {
               <option value="Open">Open</option>
               <option value="In Progress">In Progress</option>
               <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
             </SelectInput>
           </FormField>
         </div>
@@ -484,15 +610,12 @@ export function HousekeepingRequestsView() {
                     {req.bookingNo && (
                       <p className="text-[10px] text-slate-400">{req.bookingNo}</p>
                     )}
+                    <RequestTags req={req} />
                   </div>
                   <span
                     className={cn(
                       "shrink-0 rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase",
-                      req.status === "Completed"
-                        ? "bg-emerald-50 text-emerald-700"
-                        : req.status === "In Progress"
-                        ? "bg-amber-50 text-amber-700"
-                        : "bg-red-50 text-red-700"
+                      statusBadgeClass(req.status),
                     )}
                   >
                     {req.status}
@@ -514,18 +637,33 @@ export function HousekeepingRequestsView() {
                   <span>·</span>
                   <span>{formatDisplayDate(req)}</span>
                 </div>
-                {(isOpen || isProgress || req.status !== "Completed") && (
+                {(isOpen || isProgress) && (
                   <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-                    {req.status !== "Completed" && (
-                      <Button
-                        variant="outline"
-                        onClick={() => handleOpenEdit(req.id)}
-                        className="py-1.5 px-3 text-[11px] font-semibold text-slate-700 border-slate-200"
-                      >
-                        Edit
-                      </Button>
+                    {reviewAction(req) && (
+                      <>
+                        <Button
+                          onClick={() => openReview(req)}
+                          className="py-1.5 px-3 text-[11px] font-semibold bg-emerald-700 hover:bg-emerald-800 text-white"
+                        >
+                          {reviewAction(req) === "laundry" ? "Create laundry job" : "Create task"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => openDecline(req)}
+                          className="py-1.5 px-3 text-[11px] font-semibold text-red-700 border-red-200"
+                        >
+                          Decline
+                        </Button>
+                      </>
                     )}
-                    {isOpen && (
+                    <Button
+                      variant="outline"
+                      onClick={() => handleOpenEdit(req.id)}
+                      className="py-1.5 px-3 text-[11px] font-semibold text-slate-700 border-slate-200"
+                    >
+                      Edit
+                    </Button>
+                    {isOpen && !reviewAction(req) && (
                       <Button
                         variant="outline"
                         onClick={() => handleOpenAssign(req.id)}
@@ -592,6 +730,7 @@ export function HousekeepingRequestsView() {
                     {req.bookingNo && (
                       <p className="text-[9px] text-slate-400">{req.bookingNo}</p>
                     )}
+                    <RequestTags req={req} />
                   </td>
                   <td className="px-5 py-4 text-slate-700 font-medium max-w-xs truncate">{req.issue}</td>
                   <td className="px-5 py-4">
@@ -619,18 +758,31 @@ export function HousekeepingRequestsView() {
                     <span
                       className={cn(
                         "rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase",
-                        req.status === "Completed"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : req.status === "In Progress"
-                          ? "bg-amber-50 text-amber-700"
-                          : "bg-red-50 text-red-700"
+                        statusBadgeClass(req.status),
                       )}
                     >
                       {req.status}
                     </span>
                   </td>
                   <td className="px-5 py-4 text-right space-x-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                    {req.status !== "Completed" && (
+                    {reviewAction(req) && (
+                      <>
+                        <Button
+                          onClick={() => openReview(req)}
+                          className="py-1 px-2.5 text-[10px] font-semibold bg-emerald-700 hover:bg-emerald-800 text-white"
+                        >
+                          {reviewAction(req) === "laundry" ? "Create laundry job" : "Create task"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => openDecline(req)}
+                          className="py-1 px-2.5 text-[10px] font-semibold text-red-700 border-red-200"
+                        >
+                          Decline
+                        </Button>
+                      </>
+                    )}
+                    {(isOpen || isProgress) && (
                       <Button
                         variant="outline"
                         onClick={() => handleOpenEdit(req.id)}
@@ -639,7 +791,7 @@ export function HousekeepingRequestsView() {
                         Edit
                       </Button>
                     )}
-                    {isOpen && (
+                    {isOpen && !reviewAction(req) && (
                       <Button
                         variant="outline"
                         onClick={() => handleOpenAssign(req.id)}
@@ -666,6 +818,7 @@ export function HousekeepingRequestsView() {
                       </div>
                     )}
                     {req.status === "Completed" && <span className="text-[10px] text-slate-400">✓ Done</span>}
+                    {req.status === "Cancelled" && <span className="text-[10px] text-slate-400">Declined</span>}
                   </td>
                 </tr>
               );
@@ -859,6 +1012,15 @@ export function HousekeepingRequestsView() {
                       <span className="text-[10px] font-bold uppercase text-slate-400">Room</span>
                       <p className="font-semibold text-slate-800">{detailRequest.room}</p>
                     </div>
+                    {(detailRequest.requestType || detailRequest.fromGuestQr) && (
+                      <div>
+                        <span className="text-[10px] font-bold uppercase text-slate-400">Type</span>
+                        <p className="font-semibold text-slate-800">
+                          {formatGuestRequestTypeLabel(detailRequest.requestType)}
+                          {detailRequest.fromGuestQr ? " · Guest QR" : ""}
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <span className="text-[10px] font-bold uppercase text-slate-400">Guest</span>
                       <p className="font-semibold text-slate-800">{detailRequest.guest}</p>
@@ -889,15 +1051,41 @@ export function HousekeepingRequestsView() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {detailRequest.status !== "Completed" && (
+                  {reviewAction(detailRequest) && (
+                    <>
+                      <Button
+                        onClick={() => {
+                          handleCloseDetail();
+                          openReview(detailRequest);
+                        }}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white"
+                      >
+                        {reviewAction(detailRequest) === "laundry"
+                          ? "Create laundry job"
+                          : "Create cleaning task"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          handleCloseDetail();
+                          openDecline(detailRequest);
+                        }}
+                        className="text-red-700 border-red-200"
+                      >
+                        Decline
+                      </Button>
+                    </>
+                  )}
+                  {(detailRequest.status === "Open" || detailRequest.status === "In Progress") && (
                     <Button
+                      variant="outline"
                       onClick={handleStartEdit}
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1.5"
+                      className="flex items-center gap-1.5"
                     >
                       <Pencil className="h-3.5 w-3.5" /> Edit Request
                     </Button>
                   )}
-                  {detailRequest.status === "Open" && (
+                  {detailRequest.status === "Open" && !reviewAction(detailRequest) && (
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -1114,6 +1302,141 @@ export function HousekeepingRequestsView() {
           </div>
         )}
       </Drawer>
+
+      {/* Drawer: Guest QR cleaning → cleaning task */}
+      <Drawer
+        open={Boolean(cleaningFrom)}
+        onClose={() => setCleaningFrom(null)}
+        title={`Create cleaning task — ${cleaningFrom?.requestNumber ?? ""}`}
+      >
+        {cleaningFrom && (
+          <CreateCleaningTaskForm
+            key={cleaningFrom.id}
+            foRooms={foRooms}
+            sourceGuestRequest={cleaningFrom}
+            lockRoom
+            lockedRoomLabel={cleaningFrom.roomNo}
+            onCreated={() => {
+              setCleaningFrom(null);
+              void refreshFromApi();
+            }}
+          />
+        )}
+      </Drawer>
+
+      {/* Drawer: Guest QR laundry → laundry job */}
+      <Drawer
+        open={Boolean(laundryFrom)}
+        onClose={() => setLaundryFrom(null)}
+        title={`Create laundry job — ${laundryFrom?.id ?? ""}`}
+      >
+        {laundryFrom && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs">
+              <p className="font-bold text-slate-800">
+                Room {laundryFrom.room} · {laundryFrom.guest}
+              </p>
+              {laundryFrom.bookingNo && (
+                <p className="text-[10px] text-slate-400">{laundryFrom.bookingNo}</p>
+              )}
+              <p className="mt-1 text-slate-600">{laundryFrom.issue}</p>
+            </div>
+            <FormField label="Service" required>
+              <SelectInput
+                value={laundryService}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setLaundryService(e.target.value)}
+              >
+                {LAUNDRY_SERVICES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </SelectInput>
+            </FormField>
+            <FormField label="Turnaround">
+              <SelectInput
+                value={laundryUrgency}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setLaundryUrgency(e.target.value as "Normal" | "Express")
+                }
+              >
+                <option value="Normal">Normal</option>
+                <option value="Express">Express</option>
+              </SelectInput>
+            </FormField>
+            <FormField label="Notes">
+              <TextAreaInput
+                value={laundryNotes}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setLaundryNotes(e.target.value)}
+                placeholder="Optional notes for the laundry team"
+              />
+            </FormField>
+            <p className="text-[11px] text-slate-500">
+              Creates a laundry job in Collection status. Items and charges are added on the Laundry page.
+            </p>
+            {reviewError && <p className="text-xs font-semibold text-red-600">{reviewError}</p>}
+            <Button
+              onClick={() => void handleCreateLaundryJob()}
+              disabled={reviewBusy}
+              className="w-full bg-emerald-700 hover:bg-emerald-800 text-white h-10 text-sm font-semibold rounded-lg"
+            >
+              {reviewBusy ? "Creating…" : "Create laundry job"}
+            </Button>
+          </div>
+        )}
+      </Drawer>
+
+      {/* Drawer: Decline guest QR request */}
+      <Drawer
+        open={Boolean(declineFrom)}
+        onClose={() => setDeclineFrom(null)}
+        title={`Decline request — ${declineFrom?.id ?? ""}`}
+      >
+        {declineFrom && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs">
+              <p className="font-bold text-slate-800">
+                Room {declineFrom.room} · {declineFrom.guest}
+              </p>
+              <p className="mt-1 text-slate-600">{declineFrom.issue}</p>
+            </div>
+            <FormField label="Reason">
+              <TextAreaInput
+                value={declineReason}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDeclineReason(e.target.value)}
+                placeholder="e.g. Room already serviced today"
+              />
+            </FormField>
+            {reviewError && <p className="text-xs font-semibold text-red-600">{reviewError}</p>}
+            <button
+              type="button"
+              onClick={() => void handleDecline()}
+              disabled={reviewBusy}
+              className="w-full h-10 rounded-lg bg-red-600 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {reviewBusy ? "Declining…" : "Decline request"}
+            </button>
+          </div>
+        )}
+      </Drawer>
+    </div>
+  );
+}
+
+function RequestTags({ req }: { req: HousekeepingRequest }) {
+  if (!req.fromGuestQr && !req.requestType) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {req.fromGuestQr && (
+        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-bold uppercase text-indigo-700">
+          Guest QR
+        </span>
+      )}
+      {req.requestType && (
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase text-slate-600">
+          {formatGuestRequestTypeLabel(req.requestType)}
+        </span>
+      )}
     </div>
   );
 }

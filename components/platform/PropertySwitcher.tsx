@@ -113,12 +113,10 @@ export function PropertySwitcher({ className }: { className?: string }) {
       }
       className={cn(
         "z-[100] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl",
-        isMobile
-          ? "fixed left-3 right-3 max-h-[min(70dvh,22rem)]"
-          : "absolute right-0 mt-1.5 w-72 max-h-56",
+        isMobile ? "fixed left-3 right-3" : "absolute right-0 mt-1.5 w-72",
       )}
     >
-      <div className="border-b border-slate-100 px-3 py-2.5">
+      <div className="shrink-0 border-b border-slate-100 px-3 py-2.5">
         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
           Your properties
         </p>
@@ -129,7 +127,7 @@ export function PropertySwitcher({ className }: { className?: string }) {
         )}
       </div>
 
-      <div className="max-h-[min(50dvh,14rem)] overflow-y-auto py-1 sm:max-h-56">
+      <div className="max-h-[min(50dvh,16rem)] overflow-y-auto overscroll-contain py-1">
         {loading ? (
           <div className="flex items-center gap-2 px-3 py-3 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
@@ -176,7 +174,7 @@ export function PropertySwitcher({ className }: { className?: string }) {
         )}
       </div>
 
-      <div className="border-t border-slate-100 p-1.5">
+      <div className="shrink-0 border-t border-slate-100 p-1.5">
         <button
           type="button"
           onMouseDown={(event) => event.preventDefault()}

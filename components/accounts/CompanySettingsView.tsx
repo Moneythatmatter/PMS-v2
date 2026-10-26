@@ -39,7 +39,7 @@ type SettingsTab = "general" | "vouchers" | "gl" | "tax";
 
 const EDITABLE_FIELDS = [
   "currentFiscalYearId", "accountingMethod", "decimalPlaces", "allowFutureTransactions", "allowBackDatedPosting",
-  "backDatedLimitDays", "lockDateBefore", "requireVoucherApproval", "autoVoucherNumbering", "voucherResetFrequency",
+  "backDatedLimitDays", "backDatedLimitMode", "backDatedFromDate", "lockDateBefore", "requireVoucherApproval", "autoVoucherNumbering", "voucherResetFrequency",
   "allowManualVoucherNo", "preventDuplicateVouchers", "requirePostingApproval", "allowNegativeCash",
   "enforceCreditLimit", "defaultReceivableAccountId", "defaultPayableAccountId", "defaultRoundOffAccountId",
   "defaultGuestDepositAccountId", "enableGst", "enableEinvoice", "defaultTaxRegion", "enableTdsDeductions",
@@ -52,6 +52,8 @@ const CONTROL_DEFAULTS: Partial<CompanySettings> = {
   allowFutureTransactions: false,
   allowBackDatedPosting: true,
   backDatedLimitDays: 30,
+  backDatedLimitMode: "Days",
+  backDatedFromDate: null,
   lockDateBefore: null,
   requireVoucherApproval: false,
   autoVoucherNumbering: true,
@@ -71,6 +73,27 @@ function formatTimestamp(value: string | null | undefined): string {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatIsoDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/** Earliest voucher date allowed by the back-dated rule, or null when unrestricted. */
+function backDatedEarliest(s: CompanySettings): string | null {
+  if (!s.allowBackDatedPosting) return todayIso();
+  if (s.backDatedLimitMode === "Date") return s.backDatedFromDate ? s.backDatedFromDate.slice(0, 10) : null;
+  const days = Number(s.backDatedLimitDays) || 0;
+  if (days <= 0) return null;
+  const d = new Date(`${todayIso()}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
 }
 
 export function CompanySettingsView() {
@@ -149,6 +172,16 @@ export function CompanySettingsView() {
   // Handlers for Save & Reset
   const handleSaveSettings = () => {
     if (!settings) return;
+    if (settings.allowBackDatedPosting && settings.backDatedLimitMode === "Date") {
+      if (!settings.backDatedFromDate) {
+        setToastMessage("Select the earliest date allowed for back-dated vouchers.", "error");
+        return;
+      }
+      if (settings.backDatedFromDate.slice(0, 10) > todayIso()) {
+        setToastMessage("Back-dated from date cannot be in the future.", "error");
+        return;
+      }
+    }
     const body: Partial<CompanySettings> = {};
     for (const f of EDITABLE_FIELDS) {
       (body as Record<string, unknown>)[f] = settings[f];
@@ -441,20 +474,63 @@ export function CompanySettingsView() {
                     </label>
 
                     {settings.allowBackDatedPosting && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-slate-500 font-medium">Limit:</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={365}
-                          value={settings.backDatedLimitDays}
-                          onChange={(e) => handleChange("backDatedLimitDays", Math.max(0, parseInt(e.target.value, 10) || 0))}
-                          className="w-16 h-7 rounded-lg border border-slate-300 bg-white px-2 text-center text-xs font-mono font-bold"
-                        />
-                        <span className="text-[11px] text-slate-500 font-medium">days</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] text-slate-500 font-medium">Limit by:</span>
+                        <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5">
+                          {(["Days", "Date"] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => handleChange("backDatedLimitMode", mode)}
+                              className={cn(
+                                "h-6 rounded-md px-2.5 text-[11px] font-semibold transition",
+                                (settings.backDatedLimitMode ?? "Days") === mode
+                                  ? "bg-emerald-600 text-white"
+                                  : "text-slate-600 hover:bg-slate-100"
+                              )}
+                            >
+                              {mode}
+                            </button>
+                          ))}
+                        </div>
+
+                        {settings.backDatedLimitMode === "Date" ? (
+                          <div className="w-40">
+                            <FODatePicker
+                              value={settings.backDatedFromDate ? settings.backDatedFromDate.slice(0, 10) : ""}
+                              onChange={(val) => handleChange("backDatedFromDate", val || null)}
+                              placeholder="From date"
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <input
+                              type="number"
+                              min={1}
+                              max={365}
+                              value={settings.backDatedLimitDays}
+                              onChange={(e) => handleChange("backDatedLimitDays", Math.max(0, parseInt(e.target.value, 10) || 0))}
+                              className="w-16 h-7 rounded-lg border border-slate-300 bg-white px-2 text-center text-xs font-mono font-bold"
+                            />
+                            <span className="text-[11px] text-slate-500 font-medium">days</span>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
+                  {settings.allowBackDatedPosting && (
+                    <p className="text-[11px] text-slate-500 -mt-1">
+                      {(() => {
+                        const earliest = backDatedEarliest(settings);
+                        if (settings.backDatedLimitMode === "Date" && !earliest) {
+                          return "Select the earliest date vouchers can be posted on.";
+                        }
+                        return earliest
+                          ? `Vouchers can be dated from ${formatIsoDate(earliest)} onwards.`
+                          : "No back-dated limit — any open period can be posted to.";
+                      })()}
+                    </p>
+                  )}
 
                   <label className="flex items-center gap-2.5 cursor-pointer font-semibold text-slate-800 pt-1 border-t border-slate-200/60">
                     <input
@@ -753,6 +829,21 @@ export function CompanySettingsView() {
                 <div className="flex justify-between py-1 border-b border-slate-200/60">
                   <span className="text-slate-500">Accounting Method:</span>
                   <span className="font-bold text-emerald-800">{settings.accountingMethod} Basis</span>
+                </div>
+
+                <div className="flex justify-between py-1 border-b border-slate-200/60">
+                  <span className="text-slate-500">Back-Dated Limit:</span>
+                  <span className="font-semibold text-slate-800">
+                    {!settings.allowBackDatedPosting
+                      ? "Not allowed"
+                      : settings.backDatedLimitMode === "Date"
+                        ? settings.backDatedFromDate
+                          ? `From ${formatIsoDate(settings.backDatedFromDate.slice(0, 10))}`
+                          : "Date not set"
+                        : Number(settings.backDatedLimitDays) > 0
+                          ? `${settings.backDatedLimitDays} days`
+                          : "No limit"}
+                  </span>
                 </div>
 
                 <div className="flex justify-between py-1 border-b border-slate-200/60">

@@ -12,7 +12,9 @@ import {
   ChevronDown,
   Layers,
   Lock,
+  Pencil,
   Plus,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { AccountTreeNode } from "@/services/accounts";
@@ -29,6 +31,10 @@ export interface AccountTreeViewProps {
   onCreateAccountClick?: () => void;
   /** Shows an "open ledger" icon on each row. */
   onOpenLedger?: (node: AccountTreeNode) => void;
+  /** Shows an edit icon on each row. */
+  onEditNode?: (node: AccountTreeNode) => void;
+  /** Shows a delete icon on each row. */
+  onDeleteNode?: (node: AccountTreeNode) => void;
   className?: string;
 }
 
@@ -42,8 +48,18 @@ export function AccountTreeView({
   onCollapseAll,
   onCreateAccountClick,
   onOpenLedger,
+  onEditNode,
+  onDeleteNode,
   className,
 }: AccountTreeViewProps) {
+  const rowActionClass = (isSelected: boolean, hoverTone: string) =>
+    cn(
+      "shrink-0 rounded-md p-0.5 transition-opacity",
+      isSelected
+        ? "text-emerald-100 hover:bg-emerald-800"
+        : cn("text-slate-400 opacity-0 hover:bg-slate-200 group-hover:opacity-100 focus:opacity-100", hoverTone),
+    );
+
   const [searchQuery, setSearchQuery] = useState("");
   const [filterInactive, setFilterInactive] = useState(false);
 
@@ -210,14 +226,37 @@ export function AccountTreeView({
                 e.stopPropagation();
                 onOpenLedger(node);
               }}
-              className={cn(
-                "shrink-0 rounded-md p-0.5 transition-opacity",
-                isSelected
-                  ? "text-emerald-100 hover:bg-emerald-800"
-                  : "text-slate-400 opacity-0 hover:bg-slate-200 hover:text-emerald-700 group-hover:opacity-100 focus:opacity-100",
-              )}
+              className={rowActionClass(isSelected, "hover:text-emerald-700")}
             >
               <BookOpen className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          {onEditNode && (
+            <button
+              type="button"
+              title={`Edit ${node.accountType === "Group" ? "group" : "ledger"}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditNode(node);
+              }}
+              className={rowActionClass(isSelected, "hover:text-sky-700")}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          {onDeleteNode && (
+            <button
+              type="button"
+              title={`Delete ${node.accountType === "Group" ? "group" : "ledger"}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteNode(node);
+              }}
+              className={rowActionClass(isSelected, "hover:text-rose-700")}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   TrendingUp,
   TrendingDown,
@@ -20,6 +21,7 @@ import {
   ChevronDown,
   ChevronRight,
   Receipt,
+  BookOpen,
 } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import {
@@ -66,6 +68,12 @@ export function ProfitLossView() {
   const [sortOn, setSortOn] = useState<"seqNo" | "acId">("seqNo");
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const router = useRouter();
+  const openLedger = (accountId: string) => {
+    const params = new URLSearchParams({ accountId, from: appliedFromDate, to: appliedToDate });
+    router.push(`/accounts/reports/general-ledger?${params.toString()}`);
+  };
 
   const { lookups } = useAccLookups();
   const currentFy = useMemo(() => {
@@ -226,10 +234,17 @@ export function ProfitLossView() {
           <div className="text-slate-400 italic">No transactions</div>
         ) : (
           s.accounts.map((a) => (
-            <div key={a.accountId} className="flex justify-between gap-3 hover:text-slate-900">
-              <span className="truncate">
-                <span className="font-mono text-[10px] text-slate-400 mr-1.5">{a.code}</span>
-                {a.name.toUpperCase()}
+            <button
+              type="button"
+              key={a.accountId}
+              onClick={() => openLedger(a.accountId)}
+              title={`Open ${a.name} ledger transactions`}
+              className="group w-full flex justify-between gap-3 rounded px-1 -mx-1 text-left cursor-pointer hover:bg-emerald-50/60 hover:text-emerald-800"
+            >
+              <span className="truncate flex items-center gap-1">
+                <span className="font-mono text-[10px] text-slate-400 mr-0.5">{a.code}</span>
+                <span className="truncate group-hover:underline underline-offset-2">{a.name.toUpperCase()}</span>
+                <BookOpen className="h-3 w-3 shrink-0 text-emerald-600 opacity-0 transition-opacity group-hover:opacity-100" />
               </span>
               <span className="font-mono shrink-0">
                 {formatINR(a.amount)}
@@ -237,7 +252,7 @@ export function ProfitLossView() {
                   <span className="ml-2 text-[10px] text-slate-400">PY {formatINR(a.previousAmount)}</span>
                 )}
               </span>
-            </div>
+            </button>
           ))
         )}
       </div>

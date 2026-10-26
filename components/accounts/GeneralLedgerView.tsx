@@ -45,7 +45,11 @@ function addMonths(iso: string, months: number): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
-export function GeneralLedgerView({ initialAccountId }: { initialAccountId?: string } = {}) {
+export function GeneralLedgerView({
+  initialAccountId,
+  initialFromDate,
+  initialToDate,
+}: { initialAccountId?: string; initialFromDate?: string; initialToDate?: string } = {}) {
   // Filters Panel / Mobile Drawer Toggle
   const [showFilters, setShowFilters] = useState(true);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
@@ -66,11 +70,13 @@ export function GeneralLedgerView({ initialAccountId }: { initialAccountId?: str
 
   // Date Range Controls
   const fyStart = fyStartIso();
-  const [fromDate, setFromDate] = useState(fyStart);
-  const [toDate, setToDate] = useState(todayIso());
-  const [appliedFromDate, setAppliedFromDate] = useState(fyStart);
-  const [appliedToDate, setAppliedToDate] = useState(todayIso());
-  const [datePreset, setDatePreset] = useState("fy");
+  const startFrom = initialFromDate ?? fyStart;
+  const startTo = initialToDate ?? todayIso();
+  const [fromDate, setFromDate] = useState(startFrom);
+  const [toDate, setToDate] = useState(startTo);
+  const [appliedFromDate, setAppliedFromDate] = useState(startFrom);
+  const [appliedToDate, setAppliedToDate] = useState(startTo);
+  const [datePreset, setDatePreset] = useState(initialFromDate || initialToDate ? "" : "fy");
   const [sortOn, setSortOn] = useState<"vouchDt" | "vouchNo">("vouchDt");
 
   // Report display options (lean V1)

@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   CheckCircle2,
   Printer,
   Download,
-  X,
   Scale,
   Columns,
   ListFilter,
@@ -15,6 +15,7 @@ import {
   Building,
   Loader2,
   AlertCircle,
+  BookOpen,
 } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import {
@@ -23,18 +24,8 @@ import {
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
 import { accReportService, type BalanceSheetSection } from "@/services/accounts";
-import { useAccLookups, useAccQuery, todayIso, formatDate } from "@/components/accounts/accountsApi";
+import { useAccLookups, useAccQuery, todayIso, fyStartIso, formatDate } from "@/components/accounts/accountsApi";
 import { cn } from "@/lib/utils";
-
-type DrillItem = {
-  accountId: string;
-  code: string;
-  name: string;
-  section: string;
-  groupName: string;
-  amount: number;
-  previousAmount: number;
-};
 
 export function BalanceSheetView() {
   // As On Date Filter State
@@ -54,13 +45,17 @@ export function BalanceSheetView() {
   // Show Previous Year Comparison State
   const [showPrevYear, setShowPrevYear] = useState(true);
 
-  // Selected Item for Drill-down Modal
-  const [selectedDrillItem, setSelectedDrillItem] = useState<DrillItem | null>(null);
-
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const { lookups } = useAccLookups();
+  const router = useRouter();
+  const openLedger = (accountId: string) => {
+    const fy = lookups?.fiscalYears.find((f) => f.startDate <= appliedAsOn && f.endDate >= appliedAsOn);
+    const from = fy?.startDate.slice(0, 10) ?? fyStartIso();
+    const params = new URLSearchParams({ accountId, from, to: appliedAsOn });
+    router.push(`/accounts/reports/general-ledger?${params.toString()}`);
+  };
   const company =
     lookups?.companies.find((c) => c.status === "Active") ?? lookups?.companies[0] ?? null;
 
@@ -186,14 +181,14 @@ export function BalanceSheetView() {
                   {group.accounts.map((acc) => (
                     <div
                       key={acc.accountId}
-                      onClick={() =>
-                        setSelectedDrillItem({ ...acc, section: section.section, groupName: group.groupName })
-                      }
-                      className="flex items-center justify-between p-2 pl-5 rounded-lg hover:bg-slate-50 cursor-pointer border border-transparent hover:border-slate-200 transition-all font-medium text-slate-800"
+                      onClick={() => openLedger(acc.accountId)}
+                      title={`Open ${acc.name} ledger transactions`}
+                      className="group flex items-center justify-between p-2 pl-5 rounded-lg hover:bg-emerald-50/60 cursor-pointer border border-transparent hover:border-emerald-200 transition-all font-medium text-slate-800"
                     >
                       <span className="flex items-center gap-1.5">
                         <span className="text-slate-400 font-mono text-[10px]">{acc.code}</span>
-                        <span>{acc.name}</span>
+                        <span className="group-hover:text-emerald-800 group-hover:underline underline-offset-2">{acc.name}</span>
+                        <BookOpen className="h-3 w-3 shrink-0 text-emerald-600 opacity-0 transition-opacity group-hover:opacity-100" />
                       </span>
 
                       <div className="flex items-center gap-3 font-mono">
@@ -240,12 +235,14 @@ export function BalanceSheetView() {
                 {group.accounts.map((acc) => (
                   <div
                     key={acc.accountId}
-                    onClick={() =>
-                      setSelectedDrillItem({ ...acc, section: section.section, groupName: group.groupName })
-                    }
-                    className="flex items-center justify-between p-2 pl-10 rounded-lg hover:bg-slate-50 cursor-pointer font-medium text-slate-700 border-b border-slate-100"
+                    onClick={() => openLedger(acc.accountId)}
+                    title={`Open ${acc.name} ledger transactions`}
+                    className="group flex items-center justify-between p-2 pl-10 rounded-lg hover:bg-emerald-50/60 cursor-pointer font-medium text-slate-700 border-b border-slate-100"
                   >
-                    <span>{acc.name}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="group-hover:text-emerald-800 group-hover:underline underline-offset-2">{acc.name}</span>
+                      <BookOpen className="h-3 w-3 shrink-0 text-emerald-600 opacity-0 transition-opacity group-hover:opacity-100" />
+                    </span>
                     <span className="font-mono">{formatINR(acc.amount)}</span>
                   </div>
                 ))}
@@ -613,61 +610,6 @@ export function BalanceSheetView() {
         </>
       )}
 
-      {/* Drill-down Detail Modal */}
-      {selectedDrillItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xl w-full max-w-lg p-5 space-y-4 font-sans text-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <div>
-                <span className="font-mono text-[10px] uppercase text-slate-500 font-bold">
-                  {selectedDrillItem.section} › {selectedDrillItem.groupName}
-                </span>
-                <h3 className="font-bold text-sm text-slate-900">
-                  {selectedDrillItem.name} ({selectedDrillItem.code})
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedDrillItem(null)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2 font-mono">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Current Balance (As On {formatDate(data?.asOn)}):</span>
-                <strong className="text-emerald-800 text-sm font-bold">
-                  {formatINR(selectedDrillItem.amount)}
-                </strong>
-              </div>
-
-              {showPrevYear && (
-                <div className="flex justify-between border-t border-slate-200 pt-1 text-slate-600">
-                  <span>Previous Year Balance (As On {formatDate(data?.compareAsOn)}):</span>
-                  <strong className="font-semibold">{formatINR(selectedDrillItem.previousAmount)}</strong>
-                </div>
-              )}
-            </div>
-
-            <div className="p-3 bg-slate-100 rounded-lg border border-slate-200 text-slate-700 text-xs font-medium">
-              Balances include all posted vouchers up to the as-on date. Open the General Ledger report for the voucher-level breakdown of this account.
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedDrillItem(null)}
-                className="rounded-lg text-xs font-semibold cursor-pointer"
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </ModulePageShell>
   );
 }

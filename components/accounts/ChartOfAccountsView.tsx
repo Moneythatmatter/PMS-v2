@@ -110,6 +110,10 @@ const toForm = (n: AccountTreeNode): AccountForm => ({
   status: n.status,
 });
 
+function collectDescendants(node: AccountTreeNode): AccountTreeNode[] {
+  return node.children.flatMap((c) => [c, ...collectDescendants(c)]);
+}
+
 function findNode(nodes: AccountTreeNode[], id: string): AccountTreeNode | null {
   for (const n of nodes) {
     if (n.id === id) return n;
@@ -319,36 +323,49 @@ export function ChartOfAccountsView() {
     }
   };
 
-  const handleDeleteAttempt = async () => {
-    if (!activeNode) return;
-    const childCount = activeNode.children.length;
-    const transactionCount = activeNode.transactionCount || 0;
+  const handleDeleteAttempt = async (node: AccountTreeNode | null = activeNode) => {
+    if (!node) return;
+    const descendants = collectDescendants(node);
+    const transactionCount = [node, ...descendants].reduce((sum, n) => sum + (n.transactionCount || 0), 0);
 
-    if (activeNode.isSystemAccount) {
-      setDeleteDialogProps({ isOpen: true, reason: "system_account", childCount, transactionCount });
-      return;
-    }
-    if (childCount > 0) {
-      setDeleteDialogProps({ isOpen: true, reason: "has_children", childCount, transactionCount });
-      return;
-    }
     if (transactionCount > 0) {
+      setSelectedNodeId(node.id);
       setDeleteDialogProps({ isOpen: true, reason: "has_transactions", childCount: 0, transactionCount });
       return;
     }
 
-    if (!window.confirm(`Delete account '${activeNode.name}' (${activeNode.code})? This cannot be undone.`)) {
-      return;
+    const kind = node.accountType === "Group" ? "group" : "ledger";
+    const lines = [`Delete ${kind} '${node.name}' (${node.code})?`];
+    if (descendants.length) {
+      lines.push(`Its ${descendants.length} sub-account${descendants.length === 1 ? "" : "s"} will also be deleted.`);
     }
+    if (node.isSystemAccount) lines.push("This is a system account used by default postings.");
+    lines.push("This cannot be undone.");
+    if (!window.confirm(lines.join("\n\n"))) return;
+
     try {
-      await accAccountService.remove(activeNode.id);
+      await accAccountService.remove(node.id);
       invalidateAccLookups();
-      setSelectedNodeId(activeNode.parentId ?? "");
+      if (activeNode && (activeNode.id === node.id || descendants.some((d) => d.id === activeNode.id))) {
+        setSelectedNodeId(node.parentId ?? "");
+      }
       await reloadAll();
-      notify(`Deleted account '${activeNode.name}'.`);
+      notify(
+        `Deleted ${kind} '${node.name}'${descendants.length ? ` and ${descendants.length} sub-account(s)` : ""}.`
+      );
     } catch (e) {
       notify(accErrorMessage(e), "error");
     }
+  };
+
+  const handleEditNode = (node: AccountTreeNode) => {
+    setSelectedNodeId(node.id);
+    window.setTimeout(() => {
+      const input = document.getElementById("coa-account-name") as HTMLInputElement | null;
+      input?.scrollIntoView({ behavior: "smooth", block: "center" });
+      input?.focus();
+      input?.select();
+    }, 50);
   };
 
   const applyCreateParent = (parentId: string, type: AccountType) => {
@@ -432,7 +449,10 @@ export function ChartOfAccountsView() {
     ? flatAccounts.find((a) => a.id === formData.parentId)?.level
     : undefined;
   const displayLevel = formData?.parentId ? (parentLevel ?? 0) + 1 : 1;
-  const natureLocked = Boolean(activeNode?.isSystemAccount || formData?.parentId);
+  const natureLocked = Boolean(formData?.parentId);
+  const blockedParentIds = new Set(
+    activeNode ? [activeNode.id, ...collectDescendants(activeNode).map((d) => d.id)] : []
+  );
 
   const initialLoading = (treeQ.loading && !treeQ.data) || (listQ.loading && !listQ.data);
   const loadError = (!treeQ.data && treeQ.error) || (!listQ.data && listQ.error) || null;
@@ -554,6 +574,8 @@ export function ChartOfAccountsView() {
             onCollapseAll={handleCollapseAll}
             onCreateAccountClick={handleOpenCreateModal}
             onOpenLedger={(node) => router.push(ledgerHref(node.id))}
+            onEditNode={handleEditNode}
+            onDeleteNode={(node) => void handleDeleteAttempt(node)}
           />
         </div>
 
@@ -640,9 +662,9 @@ export function ChartOfAccountsView() {
             icon={<FileText className="h-4 w-4" />}
             badge={
               activeNode.isSystemAccount ? (
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
                   <Lock className="h-3 w-3" />
-                  System Account (Locked)
+                  System Account
                 </span>
               ) : undefined
             }
@@ -656,39 +678,30 @@ export function ChartOfAccountsView() {
                 />
               </FormField>
 
-              <FormField
-                label="Account Code"
-                required
-                helperText={activeNode.isSystemAccount ? "System account codes cannot be changed." : undefined}
-              >
+              <FormField label="Account Code" required>
                 <div className="flex items-center gap-1.5">
                   <TextInput
                     value={formData.code}
-                    readOnly={activeNode.isSystemAccount}
                     onChange={(e) => handleFormChange("code", e.target.value)}
                     placeholder="e.g. 1111"
-                    className={cn(
-                      "font-mono font-bold text-slate-900",
-                      activeNode.isSystemAccount && "bg-slate-50 cursor-not-allowed"
-                    )}
+                    className="font-mono font-bold text-slate-900"
                   />
-                  {!activeNode.isSystemAccount && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRegenerateCode}
-                      title="Suggest next available code under the parent"
-                      className="h-9 px-2 text-xs font-bold bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100 shrink-0"
-                    >
-                      <Sparkles className="h-3.5 w-3.5 text-amber-600" />
-                    </Button>
-                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRegenerateCode}
+                    title="Suggest next available code under the parent"
+                    className="h-9 px-2 text-xs font-bold bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100 shrink-0"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+                  </Button>
                 </div>
               </FormField>
 
               <FormField label="Account Name" required className="sm:col-span-2">
                 <TextInput
+                  id="coa-account-name"
                   value={formData.name}
                   onChange={(e) => handleFormChange("name", e.target.value)}
                   placeholder="Enter formal account title..."
@@ -698,15 +711,10 @@ export function ChartOfAccountsView() {
 
               <FormField
                 label="Parent Account / Group"
-                helperText={
-                  activeNode.isSystemAccount
-                    ? "System accounts cannot change parent hierarchy."
-                    : "Organizes this account under the selected parent group."
-                }
+                helperText="Moves this account (and its sub-accounts) under the selected group."
               >
                 <SelectInput
                   value={formData.parentId || ""}
-                  disabled={activeNode.isSystemAccount}
                   onChange={(e) => {
                     const selectedParent = allGroups.find((g) => g.id === e.target.value);
                     setFormData((prev) =>
@@ -719,13 +727,10 @@ export function ChartOfAccountsView() {
                         : prev
                     );
                   }}
-                  className={cn(
-                    activeNode.isSystemAccount && "bg-slate-50 cursor-not-allowed text-slate-600"
-                  )}
                 >
                   <option value="">Root Level (No Parent)</option>
                   {allGroups
-                    .filter((grp) => grp.id !== activeNode.id)
+                    .filter((grp) => !blockedParentIds.has(grp.id))
                     .map((grp) => (
                       <option key={grp.id} value={grp.id}>
                         {grp.code} - {grp.name} ({grp.nature})
@@ -738,10 +743,10 @@ export function ChartOfAccountsView() {
                 label="Account Nature"
                 required
                 helperText={
-                  activeNode.isSystemAccount
-                    ? "Root nature is permanently locked for system accounts."
-                    : formData.parentId
-                      ? "Inherited automatically from the parent group."
+                  formData.parentId
+                    ? "Inherited automatically from the parent group."
+                    : formData.accountType === "Group"
+                      ? "Changing a root group's nature also updates all its sub-accounts."
                       : undefined
                 }
               >
@@ -783,12 +788,7 @@ export function ChartOfAccountsView() {
               >
                 <SelectInput
                   value={formData.accountType}
-                  disabled={activeNode.isSystemAccount}
                   onChange={(e) => handleFormChange("accountType", e.target.value as AccountType)}
-                  className={cn(
-                    activeNode.isSystemAccount &&
-                      "bg-slate-50 cursor-not-allowed text-slate-600 font-bold"
-                  )}
                 >
                   <option value="Group">Group (Header / Category)</option>
                   <option value="Ledger">Ledger (Transactional Account)</option>

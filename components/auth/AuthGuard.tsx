@@ -10,6 +10,7 @@ import { MODULE_ROUTES, moduleRouteForPath } from "@/lib/module-access";
 
 const PUBLIC_PATHS = new Set(["/login"]);
 const WORKSPACE_PATHS = /^\/properties(\/|$)/;
+const GUEST_PORTAL_PATHS = /^\/guest(\/|$)/;
 
 function FullScreenMessage({ children }: { children: React.ReactNode }) {
   return (
@@ -26,20 +27,21 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isLogin = pathname === "/login";
   const isWorkspace = WORKSPACE_PATHS.test(pathname ?? "");
+  const isGuestPortal = GUEST_PORTAL_PATHS.test(pathname ?? "");
   const property = propertyCtx?.property ?? null;
   const propertyLoading = propertyCtx?.loading ?? false;
   const permissionsReady = propertyCtx?.permissionsReady ?? true;
   const firstAllowedRoute = propertyCtx?.firstAllowedRoute ?? null;
 
   const moduleRoute = moduleRouteForPath(pathname);
-  const checkModule = Boolean(user && property && !isWorkspace && moduleRoute);
+  const checkModule = Boolean(user && property && !isWorkspace && !isGuestPortal && moduleRoute);
   const moduleDenied =
     checkModule && permissionsReady && !!moduleRoute && !propertyCtx?.canRead(moduleRoute.key);
   const redirectToAllowed =
     moduleDenied && moduleRoute?.key === "dashboard" && !!firstAllowedRoute;
 
   useEffect(() => {
-    if (loading || propertyLoading) return;
+    if (isGuestPortal || loading || propertyLoading) return;
 
     if (!user && !isLogin && !PUBLIC_PATHS.has(pathname ?? "")) {
       router.replace(`/login?next=${encodeURIComponent(pathname || "/properties")}`);
@@ -65,6 +67,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     propertyLoading,
     isLogin,
     isWorkspace,
+    isGuestPortal,
     property,
     pathname,
     router,
@@ -72,6 +75,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     firstAllowedRoute,
   ]);
 
+  if (isGuestPortal) return <>{children}</>;
   if (loading || propertyLoading) return <FullScreenMessage>Loading…</FullScreenMessage>;
 
   if (!user && !isLogin) return null;

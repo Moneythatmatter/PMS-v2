@@ -523,9 +523,10 @@ export function ClosingStockView() {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
+            variant="outline"
             size="sm"
             onClick={openCreate}
-            className="rounded-xl text-xs font-bold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-xs"
+            className="rounded-xl text-xs font-bold border-slate-300 text-slate-700 shadow-xs"
           >
             <Plus className="h-3.5 w-3.5 mr-1 text-slate-600" />
             Add Item
@@ -533,10 +534,11 @@ export function ClosingStockView() {
 
           <Button
             type="button"
+            variant="outline"
             size="sm"
             onClick={handleAuditAll}
             disabled={busy || draftUnposted.length === 0}
-            className="rounded-xl text-xs font-bold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-xs"
+            className="rounded-xl text-xs font-bold border-slate-300 text-slate-700 shadow-xs"
           >
             {busy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5 mr-1 text-slate-600" />}
             Mark Audited ({draftUnposted.length})

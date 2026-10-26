@@ -127,8 +127,10 @@ export function ModuleRowDetail({
       {/* QR for table records */}
       {isTableRow && (
         <TableQrPreview
+          tableId={String(row.id)}
           tableNo={tableNo}
           outletId={resolvedOutletId}
+          outletName={outletName}
           linked={qrLinked || String(row.qr ?? "").length > 0}
           onDownloaded={onQrDownloaded}
         />

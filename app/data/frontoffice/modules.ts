@@ -234,12 +234,18 @@ export interface HousekeepingRequest {
   room: string;
   issue: string;
   priority: "Low" | "Medium" | "High";
-  status: "Open" | "In Progress" | "Completed";
+  status: "Open" | "In Progress" | "Completed" | "Cancelled";
   assignedStaff: string;
   createdAt: string;
   createdAtLabel?: string;
   bookingId?: string;
   bookingNo?: string;
+  /** guest_requests primary key (id above is the display number). */
+  apiId?: string;
+  roomId?: string;
+  requestType?: string;
+  /** Raised by the guest from the in-room QR portal. */
+  fromGuestQr?: boolean;
   assignmentType?: "Auto" | "Manual";
   assignmentHistory?: {
     timestamp: string;

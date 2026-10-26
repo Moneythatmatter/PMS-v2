@@ -1,5 +1,7 @@
-import { CashiersClosingView } from "@/components/frontoffice/CashiersClosingView";
+"use client";
+
+import { CashierDeskView } from "@/components/frontoffice/CashierDeskView";
 
 export default function CashiersClosingPage() {
-  return <CashiersClosingView />;
+  return <CashierDeskView mode="closing" />;
 }

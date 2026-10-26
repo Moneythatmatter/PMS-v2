@@ -27,7 +27,7 @@ import { ModulePageShell } from "@/components/pms";
 import { Button, Drawer, Modal, StatusBadge } from "@/components/ui";
 import { HRKPICard } from "@/components/hr/shared/HRKPICard";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
-import { hrPayslipService, hrEmployeeService } from "@/services/human-resources";
+import { hrPayslipService, hrEmployeeService, hrPayrollService } from "@/services/human-resources";
 import { mapPayslipFromApi, mapEmployeeFromApi } from "@/lib/hr/api-mappers";
 import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 
@@ -88,8 +88,10 @@ export function PayslipsView() {
 
 
 
+  const [sending, setSending] = useState(false);
+
   // Filters State
-  const [selectedMonth, setSelectedMonth] = useState("August 2026");
+  const [selectedMonth, setSelectedMonth] = useState("ALL");
   const [selectedDept, setSelectedDept] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
@@ -116,31 +118,61 @@ export function PayslipsView() {
 
   // Dashboard KPI Metrics
   const metrics = useMemo(() => {
-    const generated = payslips.filter((p) => p.status === "Generated" || p.status === "Sent").length + 115; // 119
-    const sent = payslips.filter((p) => p.status === "Sent").length + 95; // 97
-    const pending = payslips.filter((p) => p.status === "Pending").length + 6; // 7
-    const totalPayrollAmount = payslips.reduce((sum, p) => sum + p.netSalary, 3200000);
+    const generated = filteredPayslips.length;
+    const sent = filteredPayslips.filter((p) => p.status === "Sent").length;
+    const pending = filteredPayslips.filter((p) => p.status !== "Sent").length;
+    const totalPayrollAmount = filteredPayslips.reduce((sum, p) => sum + p.netSalary, 0);
 
     return { generated, sent, pending, totalPayrollAmount };
-  }, [payslips]);
+  }, [filteredPayslips]);
+
+  const monthOptions = useMemo(() => [...new Set(payslips.map((p) => p.month).filter(Boolean))], [payslips]);
+  const deptOptions = useMemo(
+    () => [...new Set(payslips.map((p) => p.department).filter(Boolean))].sort(),
+    [payslips],
+  );
+  const unsentIds = useMemo(
+    () => filteredPayslips.filter((p) => p.status !== "Sent").map((p) => p.id),
+    [filteredPayslips],
+  );
 
   // Handlers
-  const handleEmailPayslip = (p: PayslipRecord) => {
-    const today = new Date().toLocaleDateString("en-GB");
-    setPayslips((prev) =>
-      prev.map((item) => (item.id === p.id ? { ...item, status: "Sent", sentDate: today } : item))
-    );
-    setToastMessage(`Payslip emailed successfully to ${p.employeeName} (${p.employeeId}).`);
+  const handleEmailPayslip = async (p: PayslipRecord) => {
+    if (p.status === "Sent" || sending) return;
+    setSending(true);
+    try {
+      await hrPayrollService.sendPayslip(p.id);
+      await loadPayslips();
+      setViewingPayslip((cur) => (cur?.id === p.id ? null : cur));
+      setToastMessage(`Payslip ${p.payslipNo} sent to ${p.employeeName}. It is now visible in their employee portal.`);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to send payslip");
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleDownloadPDF = (p: PayslipRecord) => {
     setToastMessage(`Downloading official PDF payslip for ${p.employeeName} (${p.payslipNo})...`);
   };
 
-  const handleBulkEmailAll = () => {
-    const today = new Date().toLocaleDateString("en-GB");
-    setPayslips((prev) => prev.map((item) => ({ ...item, status: "Sent", sentDate: today })));
-    setToastMessage("Bulk email dispatched! All generated payslips sent to respective employees.");
+  const handleBulkEmailAll = async () => {
+    if (!unsentIds.length || sending) return;
+    if (!window.confirm(`Send ${unsentIds.length} payslip(s)? Sent payslips become visible to employees and their payroll can no longer be unlocked.`)) return;
+    setSending(true);
+    try {
+      const result = await hrPayrollService.sendPayslipsBatch({ ids: unsentIds });
+      await loadPayslips();
+      setToastMessage(
+        result.skipped.length
+          ? `Sent ${result.sent} payslip(s); ${result.skipped.length} skipped (${result.skipped[0].reason}).`
+          : `Sent ${result.sent} payslip(s).`,
+      );
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "Failed to send payslips");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -160,11 +192,12 @@ export function PayslipsView() {
           <Button
             type="button"
             size="sm"
-            onClick={handleBulkEmailAll}
+            onClick={() => void handleBulkEmailAll()}
+            disabled={sending || unsentIds.length === 0}
             className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs cursor-pointer"
           >
             <Mail className="mr-1.5 h-3.5 w-3.5" />
-            Email All Payslips
+            Send All Unsent ({unsentIds.length})
           </Button>
 
           <Button
@@ -187,28 +220,28 @@ export function PayslipsView() {
         <HRKPICard
           label="Payslips Generated"
           value={`${metrics.generated}`}
-          subtitle="Ready for Disbursement"
+          subtitle="Created on payroll approval"
           tone="blue"
           icon={<FileText className="h-5 w-5" />}
         />
         <HRKPICard
           label="Payslips Sent"
           value={`${metrics.sent}`}
-          subtitle="Emailed to Employees"
+          subtitle="Visible in employee portal"
           tone="emerald"
           icon={<CheckCircle2 className="h-5 w-5" />}
         />
         <HRKPICard
-          label="Pending Payslips"
+          label="Not Yet Sent"
           value={`${metrics.pending}`}
-          subtitle="Awaiting Final Sign-off"
+          subtitle="Generated, awaiting send"
           tone="amber"
           icon={<FileCheck className="h-5 w-5" />}
         />
         <HRKPICard
           label="Total Payroll Amount"
           value={`₹${(metrics.totalPayrollAmount / 100000).toFixed(2)}L`}
-          subtitle="Net Salary Disbursed"
+          subtitle="Net salary on these payslips"
           tone="purple"
           icon={<DollarSign className="h-5 w-5" />}
         />
@@ -248,9 +281,9 @@ export function PayslipsView() {
                 className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-extrabold text-slate-800"
               >
                 <option value="ALL">All Months</option>
-                <option value="August 2026">August 2026</option>
-                <option value="July 2026">July 2026</option>
-                <option value="June 2026">June 2026</option>
+                {monthOptions.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
               </select>
 
               <select
@@ -259,9 +292,9 @@ export function PayslipsView() {
                 className="text-xs rounded-xl border border-slate-200 py-2 px-3 bg-white font-semibold text-slate-800"
               >
                 <option value="ALL">All Departments</option>
-                <option value="Front Office">Front Office</option>
-                <option value="Housekeeping">Housekeeping</option>
-                <option value="Food & Beverage">Food &amp; Beverage</option>
+                {deptOptions.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
               </select>
 
               <select
@@ -272,14 +305,13 @@ export function PayslipsView() {
                 <option value="ALL">All Statuses</option>
                 <option value="Generated">🔵 Generated</option>
                 <option value="Sent">🟢 Sent</option>
-                <option value="Pending">🟡 Pending</option>
               </select>
 
               <button
                 type="button"
                 onClick={() => {
                   setSearchTerm("");
-                  setSelectedMonth("August 2026");
+                  setSelectedMonth("ALL");
                   setSelectedDept("ALL");
                   setSelectedStatus("ALL");
                 }}
@@ -389,10 +421,11 @@ export function PayslipsView() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => handleEmailPayslip(p)}
+                        onClick={() => void handleEmailPayslip(p)}
+                        disabled={sending || p.status === "Sent"}
                         className="rounded-xl text-xs font-semibold text-emerald-800 border-emerald-300 hover:bg-emerald-50"
                       >
-                        <Mail className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Email
+                        <Mail className="h-3.5 w-3.5 mr-1 text-emerald-600" /> {p.status === "Sent" ? "Sent" : "Send"}
                       </Button>
                     </div>
                   </td>
@@ -461,11 +494,12 @@ export function PayslipsView() {
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleEmailPayslip(p);
+                  void handleEmailPayslip(p);
                 }}
+                disabled={sending || p.status === "Sent"}
                 className="w-full bg-emerald-700 text-white text-xs font-bold"
               >
-                Email
+                {p.status === "Sent" ? "Sent" : "Send"}
               </Button>
             </div>
           </div>
@@ -608,10 +642,11 @@ export function PayslipsView() {
               <Button
                 type="button"
                 size="sm"
-                onClick={() => handleEmailPayslip(viewingPayslip)}
+                onClick={() => void handleEmailPayslip(viewingPayslip)}
+                disabled={sending || viewingPayslip.status === "Sent"}
                 className="rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white"
               >
-                <Mail className="h-3.5 w-3.5 mr-1" /> Email Payslip
+                <Mail className="h-3.5 w-3.5 mr-1" /> {viewingPayslip.status === "Sent" ? "Already Sent" : "Send Payslip"}
               </Button>
             </div>
           </div>
@@ -635,8 +670,9 @@ export function PayslipsView() {
                 className="w-full rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
               >
                 <option value="ALL">All Months</option>
-                <option value="August 2026">August 2026</option>
-                <option value="July 2026">July 2026</option>
+                {monthOptions.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
               </select>
             </div>
 
@@ -648,9 +684,9 @@ export function PayslipsView() {
                 className="w-full rounded-xl border border-slate-200 p-2.5 bg-white font-semibold"
               >
                 <option value="ALL">All Departments</option>
-                <option value="Front Office">Front Office</option>
-                <option value="Housekeeping">Housekeeping</option>
-                <option value="Food & Beverage">Food &amp; Beverage</option>
+                {deptOptions.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
               </select>
             </div>
 

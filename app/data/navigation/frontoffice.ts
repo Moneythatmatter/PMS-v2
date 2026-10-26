@@ -14,7 +14,18 @@ export const frontOfficeNavItems: ModuleNavItem[] = [
   { label: "Payments", href: "/frontoffice/payments", icon: "credit-card" },
   { label: "Room Transfer", href: "/frontoffice/room-transfer", icon: "arrow-right-left" },
   { label: "Extend Stay", href: "/frontoffice/extend-stay", icon: "calendar-plus" },
-  { label: "Cashier's Closing", href: "/frontoffice/cashiers-closing", icon: "wallet" },
+  {
+    label: "Cashier",
+    href: "/frontoffice/cashier/start",
+    icon: "wallet",
+    children: [
+      { label: "Start Shift", href: "/frontoffice/cashier/start", icon: "clock" },
+      { label: "Active Session", href: "/frontoffice/cashier/session", icon: "wallet" },
+      { label: "Closing", href: "/frontoffice/cashier/closing", icon: "receipt" },
+      { label: "History", href: "/frontoffice/cashier/history", icon: "history" },
+      { label: "Approvals", href: "/frontoffice/cashier/approvals", icon: "user-check" },
+    ],
+  },
   { label: "Day Closing", href: "/frontoffice/day-closing", icon: "calendar-clock" },
   { label: "Wake-up Calls", href: "/frontoffice/wake-up-calls", icon: "bell" },
   { label: "Guest Feedback", href: "/frontoffice/guest-feedback", icon: "message-square" },
@@ -31,6 +42,8 @@ export const frontOfficeNavItems: ModuleNavItem[] = [
       { label: "Tariff Plans", href: "/frontoffice/masters/tariff-plans", icon: "tag" },
       { label: "Companies", href: "/frontoffice/masters/companies", icon: "building-2" },
       { label: "Booking Sources", href: "/frontoffice/masters/booking-sources", icon: "globe" },
+      { label: "Staff", href: "/frontoffice/masters/staff", icon: "users" },
+      { label: "Shifts", href: "/frontoffice/masters/shifts", icon: "clock" },
     ],
   },
   {

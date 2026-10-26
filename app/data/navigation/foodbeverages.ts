@@ -10,6 +10,7 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
       { label: "Outlets", href: "/food-beverages/restaurants/outlets", icon: "building-2" },
       { label: "Tables", href: "/food-beverages/restaurants/tables", icon: "layout-grid" },
       { label: "Reservations", href: "/food-beverages/restaurants/reservations", icon: "calendar-check" },
+      { label: "Guest Order Requests", href: "/food-beverages/restaurants/guest-requests", icon: "bell" },
       { label: "Orders", href: "/food-beverages/restaurants/orders", icon: "clipboard-list" },
       { label: "All Orders", href: "/food-beverages/restaurants/all-orders", icon: "history" },
       { label: "Bills", href: "/food-beverages/restaurants/bills", icon: "receipt" },
@@ -26,6 +27,7 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
       { label: "Units", href: "/food-beverages/masters/units", icon: "ruler" },
       { label: "Tax Groups", href: "/food-beverages/masters/tax-groups", icon: "percent" },
       { label: "Outlet Types", href: "/food-beverages/masters/outlet-types", icon: "building-2" },
+      { label: "Staff", href: "/food-beverages/masters/staff", icon: "users" },
     ],
   },
   {

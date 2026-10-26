@@ -8,8 +8,8 @@ export interface StaffMasterRecord {
   assignedFloors: string;
   phone: string;
   email: string;
-  status: "Active" | "Inactive" | "Draft" | "Suspended" | "Archived";
-  employmentType: "Full-Time" | "Contract" | "Part-Time";
+  status: "Active" | "Inactive" | "On Leave" | "Draft" | "Suspended" | "Archived";
+  employmentType: string;
   joinDate: string;
   creditCapacity: number;
   remarks?: string;

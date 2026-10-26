@@ -2,20 +2,59 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Building2, ConciergeBell, LogOut, Menu, Users } from "lucide-react";
+import { createContext, useEffect, useState } from "react";
+import {
+  BarChart3,
+  BedDouble,
+  Building2,
+  CalendarCheck,
+  ChevronDown,
+  ConciergeBell,
+  DoorOpen,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  TrendingUp,
+  UserCircle,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isPlatformAdmin } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+
+export const WorkspaceActionSlotContext = createContext<HTMLDivElement | null>(null);
+
+type WorkspaceNavChild = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
 
 type WorkspaceNavItem = {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   adminOnly?: boolean;
+  children?: WorkspaceNavChild[];
 };
 
 const navItems: WorkspaceNavItem[] = [
+  { href: "/properties/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  {
+    href: "/properties/reports",
+    label: "Reports",
+    icon: BarChart3,
+    children: [
+      { href: "/properties/reports/arrivals", label: "Daily Arrival", icon: CalendarCheck },
+      { href: "/properties/reports/departures", label: "Departure Report", icon: LogOut },
+      { href: "/properties/reports/occupancy", label: "Occupancy Report", icon: BedDouble },
+      { href: "/properties/reports/revenue", label: "Revenue Report", icon: TrendingUp },
+      { href: "/properties/reports/in-house", label: "Guest Report", icon: UserCircle },
+      { href: "/properties/reports/rooms", label: "Room Report", icon: DoorOpen },
+      { href: "/properties/reports/outstanding", label: "Outstanding", icon: Wallet },
+    ],
+  },
   { href: "/properties", label: "Properties", icon: Building2 },
   { href: "/properties/users", label: "User management", icon: Users, adminOnly: true },
 ];
@@ -33,6 +72,10 @@ function WorkspaceSidebar({
   onLogout: () => void;
   className?: string;
 }) {
+  const reportsActive = pathname?.startsWith("/properties/reports") ?? false;
+  const [reportsToggle, setReportsToggle] = useState<boolean | null>(null);
+  const reportsOpen = reportsToggle ?? reportsActive;
+
   return (
     <aside className={cn("flex flex-col bg-black", className)}>
       <div className="border-b border-slate-800 px-4 py-4">
@@ -55,9 +98,52 @@ function WorkspaceSidebar({
         {navItems.map((item) => {
           if (item.adminOnly && !isPlatformAdmin(user)) return null;
           const Icon = item.icon;
-          const active =
-            pathname === item.href ||
-            (item.href !== "/properties" && pathname?.startsWith(item.href));
+          if (item.children) {
+            return (
+              <div key={item.label}>
+                <button
+                  type="button"
+                  onClick={() => setReportsToggle(!reportsOpen)}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                    reportsActive
+                      ? "bg-emerald-950/70 text-white"
+                      : "text-slate-400 hover:bg-white/5 hover:text-white",
+                  )}
+                >
+                  <Icon className={cn("h-4 w-4 shrink-0", reportsActive && "text-emerald-400")} />
+                  <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+                  <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform", reportsOpen && "rotate-180")} />
+                </button>
+                {reportsOpen && (
+                  <ul className="ml-3 mt-1 space-y-1 border-l border-slate-700 pl-2">
+                    {item.children.map((child) => {
+                      const ChildIcon = child.icon;
+                      const childActive = pathname === child.href;
+                      return (
+                        <li key={child.href}>
+                          <Link
+                            href={child.href}
+                            onClick={onNavigate}
+                            className={cn(
+                              "flex items-center gap-2.5 rounded-full px-3 py-2 text-sm transition-colors",
+                              childActive
+                                ? "bg-emerald-700 text-white"
+                                : "text-slate-400 hover:bg-white/5 hover:text-white",
+                            )}
+                          >
+                            <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                            <span className="min-w-0 flex-1 leading-snug">{child.label}</span>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            );
+          }
+          const active = pathname === item.href;
           return (
             <Link
               key={item.href}
@@ -118,10 +204,12 @@ export function WorkspaceShell({
   const router = useRouter();
   const { user, logout } = useAuth();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  useEffect(() => {
+  const [navPath, setNavPath] = useState(pathname);
+  const [actionSlot, setActionSlot] = useState<HTMLDivElement | null>(null);
+  if (pathname !== navPath) {
+    setNavPath(pathname);
     setMobileNavOpen(false);
-  }, [pathname]);
+  }
 
   useEffect(() => {
     if (!mobileNavOpen) return;
@@ -138,6 +226,7 @@ export function WorkspaceShell({
   };
 
   return (
+    <WorkspaceActionSlotContext.Provider value={actionSlot}>
     <div className="group/shell flex min-h-screen min-w-0 bg-[#f7f8f7]" data-workspace-sidebar="">
       {/* Desktop sidebar */}
       <WorkspaceSidebar
@@ -216,11 +305,9 @@ export function WorkspaceShell({
                     </p>
                   )}
                 </div>
-                {actions && (
-                  <div className="flex w-full shrink-0 flex-row flex-wrap gap-2 sm:w-auto">
-                    {actions}
-                  </div>
-                )}
+                <div ref={setActionSlot} className="flex w-full shrink-0 flex-row flex-wrap gap-2 empty:hidden sm:w-auto">
+                  {actions}
+                </div>
               </div>
             </div>
           )}
@@ -230,5 +317,6 @@ export function WorkspaceShell({
         </main>
       </div>
     </div>
+    </WorkspaceActionSlotContext.Provider>
   );
 }

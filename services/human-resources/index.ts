@@ -34,8 +34,22 @@ export const hrPayrollService = {
     return api.get<Record<string, unknown>[]>(hrPath(`/payroll/records${q}`));
   },
   getRecord: (id: string) => api.get<Record<string, unknown>>(hrPath(`/payroll/records/${id}`)),
-  approveRecord: (id: string, changedBy?: string) =>
-    api.post(hrPath(`/payroll/records/${id}/approve`), { changedBy }),
+  calculate: (body: { month: number; year: number; employeeIds?: string[] }) =>
+    api.post<PayrollCalculateResult>(hrPath("/payroll/records/calculate"), body),
+  updateRecord: (id: string, body: Record<string, unknown>) =>
+    api.put<Record<string, unknown>>(hrPath(`/payroll/records/${id}`), body),
+  verifyRecord: (id: string) =>
+    api.post<Record<string, unknown>>(hrPath(`/payroll/records/${id}/verify`), {}),
+  verifyBatch: (body: PayrollBatchTarget) =>
+    api.post<PayrollBatchResult>(hrPath("/payroll/records/verify-batch"), body),
+  approveRecord: (id: string) =>
+    api.post<Record<string, unknown>>(hrPath(`/payroll/records/${id}/approve`), {}),
+  approveBatch: (body: PayrollBatchTarget) =>
+    api.post<PayrollBatchResult>(hrPath("/payroll/records/approve-batch"), body),
+  unlockRecord: (id: string, reason: string) =>
+    api.post<Record<string, unknown>>(hrPath(`/payroll/records/${id}/unlock`), { reason }),
+  listPayments: (id: string) =>
+    api.get<Record<string, unknown>[]>(hrPath(`/payroll/records/${id}/payments`)),
   recordPayment: (
     id: string,
     body: {
@@ -45,10 +59,23 @@ export const hrPayrollService = {
       transactionReference: string;
       status: string;
       remarks?: string;
-      recordedBy?: string;
     },
-  ) => api.post(hrPath(`/payroll/records/${id}/payments`), body),
+  ) => api.post<{ payrollStatus: string }>(hrPath(`/payroll/records/${id}/payments`), body),
+  sendPayslip: (payslipId: string) =>
+    api.post<Record<string, unknown>>(hrPath(`/payslips/${payslipId}/send`), {}),
+  sendPayslipsBatch: (body: { ids?: string[]; payrollIds?: string[]; month?: number; year?: number }) =>
+    api.post<{ sent: number; skipped: { id: string; reason: string }[] }>(hrPath("/payslips/send-batch"), body),
   listAuditLogs: () => api.get<Record<string, unknown>[]>(hrPath("/payroll/audit-logs")),
+};
+
+export type PayrollBatchTarget = { ids?: string[]; month?: number; year?: number };
+export type PayrollBatchResult = { updated: number; skipped: { id: string; reason: string }[] };
+export type PayrollCalculateResult = {
+  batchId: string;
+  calculated: number;
+  draft: number;
+  skipped: { employeeId: string; reason: string }[];
+  total: number;
 };
 
 export const hrDepartmentService = crud<Record<string, unknown>>("/masters/departments");

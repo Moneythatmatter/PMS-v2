@@ -1438,13 +1438,19 @@ export function ModuleListPage({
                   variant="outline"
                   className="gap-1.5"
                   onClick={async () => {
-                    await downloadAllTableQrs(
-                      scopedRows.map((row) => ({
-                        tableNo: String(row.tableNo ?? row.id),
-                        outletId: String(row.outletId ?? outletId ?? "outlet"),
-                      })),
-                    );
-                    setToast(`Downloaded ${scopedRows.length} QR image(s).`);
+                    try {
+                      const count = await downloadAllTableQrs(
+                        scopedRows.map((row) => ({
+                          tableId: String(row.id),
+                          tableNo: String(row.tableNo ?? row.id),
+                          outletId: String(row.outletId ?? outletId ?? "outlet"),
+                          outletName: selectedOutlet?.name,
+                        })),
+                      );
+                      setToast(`Downloaded ${count} QR image(s).`);
+                    } catch (e) {
+                      setToast(e instanceof Error ? e.message : "Failed to generate QR codes");
+                    }
                   }}
                 >
                   <Download className="h-3.5 w-3.5" />
@@ -1456,6 +1462,7 @@ export function ModuleListPage({
               {scopedRows.map((row) => (
                 <TableQrCard
                   key={row.id}
+                  tableId={String(row.id)}
                   tableNo={String(row.tableNo ?? row.id)}
                   section={row.section ? String(row.section) : undefined}
                   outletId={String(row.outletId ?? outletId ?? "outlet")}

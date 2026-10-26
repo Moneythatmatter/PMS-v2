@@ -62,6 +62,7 @@ function uiPriority(priority?: string): HousekeepingRequest["priority"] {
 function uiStatus(status?: string, assignedTo?: string | null): HousekeepingRequest["status"] {
   const raw = String(status ?? "").toUpperCase();
   if (raw === "COMPLETED") return "Completed";
+  if (raw === "CANCELLED") return "Cancelled";
   if (raw === "IN_PROGRESS" || raw === "ASSIGNED") return "In Progress";
   if (assignedTo && String(assignedTo).trim() && assignedTo !== "—") {
     return "In Progress";
@@ -114,6 +115,30 @@ export function normalizeGuestRequest(row: GuestRequestDto): HousekeepingRequest
     assignmentHistory: [],
     bookingId: row.bookingId ?? undefined,
     bookingNo: bookingLabel ?? undefined,
+    apiId: row.id,
+    roomId: row.roomId,
+    requestType: row.requestType ? String(row.requestType).toUpperCase() : undefined,
+    fromGuestQr: isGuestQrRequest(row),
+  };
+}
+
+export function isGuestQrRequest(row: Pick<GuestRequestDto, "description">): boolean {
+  return /via guest QR/i.test(row.description ?? "");
+}
+
+/** Reads service + turnaround out of a guest-QR laundry description. */
+export function parseLaundryRequest(description: string) {
+  const service = description.match(/Service:\s*([^·]+)/i)?.[1]?.trim();
+  const turnaround = description.match(/Turnaround:\s*([^·]+)/i)?.[1]?.trim();
+  const notes = description
+    .split("·")
+    .map((p) => p.trim())
+    .filter((p) => p && !/via guest QR|^Service:|^Turnaround:/i.test(p))
+    .join(" · ");
+  return {
+    serviceType: service && ["Wash & Iron", "Dry Clean", "Iron Only"].includes(service) ? service : "Wash & Iron",
+    urgency: turnaround === "Express" ? "Express" : "Normal",
+    notes,
   };
 }
 

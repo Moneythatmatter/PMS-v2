@@ -210,6 +210,11 @@ export const hkGuestRequestService = {
     api.post<
       import("@/components/housekeeping/guestRequestUtils").GuestRequestDto
     >(hkPath(`/guest-requests/${id}/cancel`), body ?? {}),
+  createLaundryJob: (id: string, body: { serviceType: string; urgency: string; notes?: string }) =>
+    api.post<{
+      request: import("@/components/housekeeping/guestRequestUtils").GuestRequestDto;
+      jobId: string;
+    }>(hkPath(`/guest-requests/${id}/laundry-job`), body),
 };
 export const hkLostFoundService = {
   list: (query = "") =>

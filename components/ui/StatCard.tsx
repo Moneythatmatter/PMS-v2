@@ -18,18 +18,20 @@ export function StatCard({ stat }: StatCardProps) {
         <p className="truncate text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
           {stat.value}
         </p>
-        <span
-          className={`inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium sm:text-xs ${
-            isUp ? "text-emerald-600" : "text-red-500"
-          }`}
-        >
-          {isUp ? (
-            <TrendingUp className="h-3.5 w-3.5" />
-          ) : (
-            <TrendingDown className="h-3.5 w-3.5" />
-          )}
-          {stat.change}
-        </span>
+        {stat.change ? (
+          <span
+            className={`inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium sm:text-xs ${
+              isUp ? "text-emerald-600" : "text-red-500"
+            }`}
+          >
+            {isUp ? (
+              <TrendingUp className="h-3.5 w-3.5" />
+            ) : (
+              <TrendingDown className="h-3.5 w-3.5" />
+            )}
+            {stat.change}
+          </span>
+        ) : null}
       </div>
     </Card>
   );

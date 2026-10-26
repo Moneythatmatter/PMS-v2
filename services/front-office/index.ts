@@ -43,4 +43,6 @@ export {
   dayClosingService,
   reportService,
 } from "./closing";
+export { cashierSessionService } from "./cashier-sessions";
+export type { CashierSession, CashierSessionDetail, CashierLine } from "./cashier-sessions";
 export { billingFolioService, billingTransactionService } from "../billing";

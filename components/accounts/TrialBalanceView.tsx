@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   ChevronRight,
   ChevronDown,
@@ -19,6 +20,7 @@ import {
   AlertCircle,
   Filter,
   Loader2,
+  BookOpen,
 } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import {
@@ -71,6 +73,16 @@ export function TrialBalanceView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [orderBy, setOrderBy] = useState<"acGroup" | "seqNo" | "name">("seqNo");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const router = useRouter();
+  const openLedger = (accountId: string) => {
+    const params = new URLSearchParams({ accountId, from: appliedFromDate, to: appliedToDate });
+    router.push(`/accounts/reports/general-ledger?${params.toString()}`);
+  };
+  const handleRowClick = (item: TrialBalanceRow) => {
+    if (item.accountType === "Group") toggleExpand(item.accountId);
+    else openLedger(item.accountId);
+  };
 
   const { lookups } = useAccLookups();
   const currentFy = useMemo(() => {
@@ -826,9 +838,10 @@ export function TrialBalanceView() {
                 return (
                   <div
                     key={item.accountId}
-                    onClick={() => isGroup && toggleExpand(item.accountId)}
+                    onClick={() => handleRowClick(item)}
+                    title={isGroup ? undefined : `Open ${item.name} ledger transactions`}
                     className={cn(
-                      "rounded-xl border border-slate-200 bg-white p-3.5 transition-all shadow-2xs",
+                      "rounded-xl border border-slate-200 bg-white p-3.5 transition-all shadow-2xs cursor-pointer",
                       isGroup && "bg-slate-50/90 border-slate-300 font-bold",
                       isSubLedger && "ml-4 border-l-2 border-l-emerald-500 bg-slate-50/30"
                     )}
@@ -994,9 +1007,11 @@ export function TrialBalanceView() {
                     return (
                       <tr
                         key={item.accountId}
-                        onClick={() => isGroup && toggleExpand(item.accountId)}
+                        onClick={() => handleRowClick(item)}
+                        title={isGroup ? undefined : `Open ${item.name} ledger transactions`}
                         className={cn(
-                          "transition-colors hover:bg-slate-50/80 cursor-pointer select-none",
+                          "group transition-colors cursor-pointer select-none",
+                          isGroup ? "hover:bg-slate-50/80" : "hover:bg-emerald-50/60",
                           isGroup && "bg-slate-50/70 font-bold text-slate-900",
                           isSubLedger && "text-slate-600 text-[11px]"
                         )}
@@ -1036,13 +1051,17 @@ export function TrialBalanceView() {
                             className={cn(
                               isGroup
                                 ? "font-bold text-slate-900"
-                                : isSubLedger
-                                ? "text-slate-600 font-normal"
-                                : "font-semibold text-slate-800"
+                                : cn(
+                                    "group-hover:text-emerald-700 group-hover:underline underline-offset-2",
+                                    isSubLedger ? "text-slate-600 font-normal" : "font-semibold text-slate-800"
+                                  )
                             )}
                           >
                             {item.name}
                           </span>
+                          {!isGroup && (
+                            <BookOpen className="h-3.5 w-3.5 shrink-0 text-emerald-600 opacity-0 transition-opacity group-hover:opacity-100" />
+                          )}
                         </td>
 
                         {/* Opening Dr & Cr */}

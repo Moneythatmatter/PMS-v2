@@ -404,7 +404,17 @@ export default async function AccountsPage({
   if (slugPath === "reports/general-ledger" || slugPath === "general-ledger") {
     const query = await searchParams;
     const accountId = typeof query.accountId === "string" ? query.accountId : undefined;
-    return <GeneralLedgerView key={accountId ?? "none"} initialAccountId={accountId} />;
+    const isoParam = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+    const from = isoParam(query.from);
+    const to = isoParam(query.to);
+    return (
+      <GeneralLedgerView
+        key={`${accountId ?? "none"}|${from ?? ""}|${to ?? ""}`}
+        initialAccountId={accountId}
+        initialFromDate={from}
+        initialToDate={to}
+      />
+    );
   }
 
   if (

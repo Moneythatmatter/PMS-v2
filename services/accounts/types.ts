@@ -73,6 +73,8 @@ export type CompanySettings = {
   allowFutureTransactions: boolean;
   allowBackDatedPosting: boolean;
   backDatedLimitDays: number;
+  backDatedLimitMode: "Days" | "Date";
+  backDatedFromDate: string | null;
   lockDateBefore: string | null;
   requireVoucherApproval: boolean;
   autoVoucherNumbering: boolean;

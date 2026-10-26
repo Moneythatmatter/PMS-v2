@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BedDouble, CheckCircle2, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { BedDouble, CheckCircle2, Pencil, Plus, QrCode, RotateCcw, Trash2 } from "lucide-react";
 import type { RoomMaster, RoomTypeMaster } from "@/app/data/frontoffice/masters";
 import { roomService, roomTypeService } from "@/services/front-office";
+import { GuestPortalApi } from "@/services/front-office/guest-portal";
+import { RoomQrPanel, downloadAllRoomQrs } from "./RoomQrPanel";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
@@ -48,6 +50,40 @@ export function RoomsView() {
   const [maxOccupancy, setMaxOccupancy] = useState("2");
   const [bedType, setBedType] = useState<string>("Queen");
   const [isActive, setIsActive] = useState(true);
+  const [qrTokens, setQrTokens] = useState<Record<string, string>>({});
+  const [qrDownloading, setQrDownloading] = useState(false);
+
+  const loadQrTokens = async () => {
+    const list = await GuestPortalApi.qrTokens();
+    const map = Object.fromEntries(list.map((t) => [t.roomId, t.token]));
+    setQrTokens(map);
+    return map;
+  };
+
+  const openPreview = (row: RoomMaster) => {
+    setPreview(row);
+    if (row.id && !qrTokens[row.id]) loadQrTokens().catch(() => undefined);
+  };
+
+  const handleDownloadAllQr = async () => {
+    setQrDownloading(true);
+    try {
+      const map = await loadQrTokens();
+      const rooms = items
+        .filter((r) => r.isActive !== false && r.id && map[r.id])
+        .map((r) => ({ roomNo: r.roomNo, roomId: r.id as string, token: map[r.id as string] }));
+      if (!rooms.length) {
+        showToast("No active rooms to generate QR codes for.", "error");
+        return;
+      }
+      await downloadAllRoomQrs(rooms);
+      showToast(`Downloaded ${rooms.length} room QR code${rooms.length > 1 ? "s" : ""}.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to generate QR codes", "error");
+    } finally {
+      setQrDownloading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -218,10 +254,22 @@ export function RoomsView() {
         title="Rooms"
         description="Physical room inventory — number, type, capacity, bed, and active flag."
         action={
-          <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800" onClick={openCreate}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Add Room
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={handleDownloadAllQr}
+              disabled={qrDownloading || !items.length}
+            >
+              <QrCode className="h-3.5 w-3.5" />
+              {qrDownloading ? "Generating…" : "Download all QR"}
+            </Button>
+            <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800" onClick={openCreate}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add Room
+            </Button>
+          </div>
         }
       />
 
@@ -265,7 +313,7 @@ export function RoomsView() {
               <tr
                 key={row.id}
                 className="cursor-pointer hover:bg-emerald-50/40"
-                onClick={() => setPreview(row)}
+                onClick={() => openPreview(row)}
               >
                 <td className="px-4 py-3 font-semibold text-slate-900">{row.roomNo}</td>
                 <td className="px-4 py-3 text-slate-600">{row.roomType}</td>
@@ -350,6 +398,7 @@ export function RoomsView() {
         }
       >
         {preview && (
+          <div className="space-y-5">
           <dl className="space-y-3 text-sm">
             {[
               ["Room No.", preview.roomNo],
@@ -366,6 +415,16 @@ export function RoomsView() {
               </div>
             ))}
           </dl>
+          {preview.id && (
+            <RoomQrPanel
+              roomNo={preview.roomNo}
+              roomId={preview.id}
+              token={qrTokens[preview.id] ?? null}
+              inactive={preview.isActive === false}
+              onCopied={() => showToast(`Guest portal link for Room ${preview.roomNo} copied.`)}
+            />
+          )}
+          </div>
         )}
       </Drawer>
 

@@ -49,8 +49,135 @@ export type ManagedUserDto = {
   }>;
 };
 
+export type PortfolioProperty = {
+  id: string;
+  name: string;
+  code: string;
+  city: string;
+  rooms: number;
+  occupied: number;
+  occupancyPct: number;
+  inHouse: number;
+  arrivals: number;
+  departures: number;
+  reservations: number;
+  roomRevenue: number;
+  outstanding: number;
+  dirtyRooms: number;
+  openOrders: number;
+  employees: number;
+  openWorkOrders: number;
+  pendingPurchases: number;
+  openDeals: number;
+  bookings: number;
+  revenue: number;
+  earnedRoomRevenue?: number;
+  roomNightsSold?: number;
+  availableRoomNights?: number;
+  periodOccupancyPct?: number;
+  adr?: number;
+  revpar?: number;
+  fbRevenue?: number;
+  fbOrders?: number;
+  payrollCost?: number;
+  purchaseSpend?: number;
+  expenses?: number;
+  profit?: number;
+  cancellations?: number;
+  noShows?: number;
+  stayNights?: number;
+  stayCount?: number;
+  avgLos?: number;
+  oooRooms?: number;
+  pendingPayroll?: number;
+  unpaidPayroll?: number;
+  pendingLeaves?: number;
+  overdueWorkOrders?: number;
+  absentToday?: number;
+  prevRevenue?: number;
+  prevFbRevenue?: number;
+  prevRoomNightsSold?: number;
+  prevAvailableRoomNights?: number;
+  prevExpenses?: number;
+};
+
+export type PortfolioTrendPoint = {
+  propertyId: string;
+  label: string;
+  sort: string;
+  roomRevenue: number;
+  fbRevenue: number;
+  roomNightsSold: number;
+  availableRoomNights: number;
+};
+
+export type PortfolioAlert = {
+  id: string;
+  propertyId: string;
+  propertyName: string;
+  severity: "high" | "medium";
+  title: string;
+  detail: string;
+  owner: string;
+  href: string;
+};
+
+export type PortfolioSeriesPoint = {
+  month: string;
+  booked: number;
+  canceled: number;
+  revenue: number;
+};
+
+export type PortfolioPlatform = {
+  name: string;
+  count: number;
+};
+
+export type PortfolioMovement = {
+  id: string;
+  kind: "arrival" | "departure" | "stay";
+  propertyId: string;
+  propertyName: string;
+  guest: string;
+  bookingNo: string;
+  room: string;
+  status: string;
+  amount: number;
+  balance: number;
+  checkIn: string;
+  checkOut: string;
+};
+
+export type PortfolioSnapshot = {
+  from: string;
+  to: string;
+  totals: Omit<PortfolioProperty, "id" | "name" | "code" | "city"> & {
+    properties: number;
+  };
+  properties: PortfolioProperty[];
+  series: PortfolioSeriesPoint[];
+  platforms: PortfolioPlatform[];
+  arrivals: PortfolioMovement[];
+  departures: PortfolioMovement[];
+  staying: PortfolioMovement[];
+  trend?: PortfolioTrendPoint[];
+  alerts?: PortfolioAlert[];
+  coverage?: { fb: boolean; purchases: boolean };
+  definitions?: {
+    revenue: string;
+    expenses: string;
+    profit: string;
+    occupancy: string;
+  };
+};
+
 export const platformService = {
   listProperties: () => api.get<PropertyDto[]>("/api/platform/properties"),
+  getPortfolio: (from: string, to: string) =>
+    api.get<PortfolioSnapshot>(
+      `/api/platform/portfolio?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    ),
   createProperty: (body: {
     name: string;
     code: string;
