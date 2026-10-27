@@ -17,7 +17,7 @@ export async function syncTaskForRoom(
 
     if (action === "assign-start") {
       if (task.status === "PENDING" && meta?.staff) {
-        task = await hkTaskService.assign(task.id, meta.staff);
+        task = await hkTaskService.assign(task.id, [meta.staff]);
       }
       if (task.status === "PENDING" || task.status === "ASSIGNED") {
         await hkTaskService.start(task.id);

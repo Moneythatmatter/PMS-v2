@@ -1,6 +1,14 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -245,6 +253,16 @@ const statusConfig: Record<
     legend: "bg-slate-400 border-slate-500",
     ring: "ring-slate-400/60",
   },
+};
+
+/** Flat fill for multi-day stays so adjacent cells read as one bar. */
+const JOINED_STAY_FILL: Record<DayStatus, string> = {
+  available: "#6ee7b7",
+  reserved: "#7dd3fc",
+  occupied: "#7c3aed",
+  dirty: "#fcd34d",
+  maintenance: "#fdba74",
+  blocked: "#94a3b8",
 };
 
 const CALENDAR_LEGEND_ORDER: DayStatus[] = [
@@ -924,9 +942,39 @@ export function RoomAvailabilityView() {
                             </div>
                           </button>
                         </td>
-                        {gridDays.map((d) => {
+                        {gridDays.map((d, dayIdx) => {
                           const status = (row.days[d] ?? "available") as DayStatus;
                           const cfg = statusConfig[status];
+                          const sameStay = (other?: string) => {
+                            if (!other) return false;
+                            const a = row.bookings?.[d];
+                            const b = row.bookings?.[other];
+                            return Boolean(
+                              a && b && a.id === b.id && row.days[other] === status,
+                            );
+                          };
+                          const joinPrev = sameStay(gridDays[dayIdx - 1]);
+                          const joinNext = sameStay(gridDays[dayIdx + 1]);
+                          const joined = joinPrev || joinNext;
+                          const radius = "0.75rem";
+                          const shapeStyle: CSSProperties = joined
+                            ? {
+                                borderTopLeftRadius: joinPrev ? 0 : radius,
+                                borderBottomLeftRadius: joinPrev ? 0 : radius,
+                                borderTopRightRadius: joinNext ? 0 : radius,
+                                borderBottomRightRadius: joinNext ? 0 : radius,
+                                ...(joinPrev ? { borderLeftWidth: 0 } : {}),
+                                ...(joinNext ? { borderRightWidth: 0 } : {}),
+                                width: joinPrev && joinNext
+                                  ? "100%"
+                                  : "calc(50% + 1.25rem)",
+                                marginLeft: joinPrev ? 0 : "auto",
+                                marginRight: joinNext ? 0 : "auto",
+                                background: JOINED_STAY_FILL[status],
+                                boxShadow: "none",
+                              }
+                            : {};
+                          const showMarker = !joinPrev;
                           const cellKey = `${row.room}-${d}`;
                           const isToday = d === todayIso;
                           const isHovered = hoveredCell === cellKey;
@@ -961,12 +1009,15 @@ export function RoomAvailabilityView() {
                             <td
                               key={d}
                               className={cn(
-                                "px-0.5 py-2.5 text-center",
+                                "py-2.5 text-center",
+                                joinPrev ? "pl-0" : "pl-0.5",
+                                joinNext ? "pr-0" : "pr-0.5",
                                 isToday && "bg-emerald-50/40",
                               )}
                             >
                               <button
                                 type="button"
+                                style={shapeStyle}
                                 onMouseDown={(e) => {
                                   e.preventDefault();
                                   handleCellMouseDown(row, d, status);
@@ -975,10 +1026,11 @@ export function RoomAvailabilityView() {
                                 title={cellTitle}
                                 aria-label={`Room ${row.room}, ${formatDayLabel(d)}: ${cfg.label}`}
                                 className={cn(
-                                  "relative mx-auto flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border transition-all duration-150",
+                                  "relative flex h-10 cursor-pointer items-center justify-center border transition-all duration-150",
+                                  !joined && "mx-auto w-10 rounded-xl",
                                   cfg.cell,
-                                  isHovered && !inDragPreview && "scale-105 ring-2",
-                                  isHovered && !inDragPreview && cfg.ring,
+                                  isHovered && !inDragPreview && !joined && "scale-105 ring-2",
+                                  isHovered && !inDragPreview && !joined && cfg.ring,
                                   inDragPreview &&
                                     "z-10 scale-105 bg-emerald-200/90 ring-2 ring-emerald-500 ring-offset-1",
                                   inBookingPreview &&
@@ -986,10 +1038,10 @@ export function RoomAvailabilityView() {
                                     "ring-2 ring-emerald-600 ring-offset-1",
                                 )}
                               >
-                                {status === "occupied" && (
+                                {status === "occupied" && showMarker && (
                                   <span className="h-2 w-2 rounded-full bg-white/95 shadow-sm" />
                                 )}
-                                {status === "reserved" && (
+                                {status === "reserved" && showMarker && (
                                   <span className="h-2 w-2 rounded-full bg-sky-700" />
                                 )}
                                 {status === "maintenance" && (

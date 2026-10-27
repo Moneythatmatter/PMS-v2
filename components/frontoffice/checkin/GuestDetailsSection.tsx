@@ -1,8 +1,18 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useId, useMemo, useState } from "react";
+import { Eye, X } from "lucide-react";
 import { FormField, TextInput } from "@/components/frontoffice/ui";
 import { SearchSelect } from "@/components/frontoffice/SearchSelect";
+import {
+  GuestDocumentPreviewModal,
+  type PreviewableFile,
+} from "@/components/frontoffice/guest-documents/GuestDocumentPreviewModal";
+import {
+  GUEST_DOCUMENT_ACCEPT,
+  GuestDocumentsPanel,
+} from "@/components/frontoffice/guest-documents/GuestDocumentsPanel";
+import { MAX_ATTACHMENT_BYTES } from "@/app/data/purchaseAttachmentUtils";
 import { cn } from "@/lib/utils";
 import {
   countries,
@@ -46,8 +56,10 @@ export type GuestDetails = {
 interface GuestDetailsSectionProps {
   guestDetails: GuestDetails;
   onChange: (key: string, value: string) => void;
-  onFileUpload?: (filename: string) => void;
-  idFile?: string;
+  onFileUpload?: (file: File | null) => void;
+  idFile?: File | null;
+  /** Existing guest — lists their saved ID documents. */
+  guestId?: string | null;
   errors?: Record<string, boolean | string>;
   readOnlyFields?: Partial<Record<keyof GuestDetails, boolean>>;
   /** Include name / mobile / email at the top (group room guest form). */
@@ -61,11 +73,30 @@ export function GuestDetailsSection({
   onChange,
   onFileUpload,
   idFile,
+  guestId,
   errors = {},
   readOnlyFields = {},
   includeContact = false,
   onIdentityBlur,
 }: GuestDetailsSectionProps) {
+  const [preview, setPreview] = useState<PreviewableFile | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const inputId = useId();
+
+  const openPreview = () => {
+    if (!idFile) return;
+    setPreview({
+      fileName: idFile.name,
+      mimeType: idFile.type,
+      fileSize: idFile.size,
+      src: URL.createObjectURL(idFile),
+    });
+  };
+
+  const closePreview = () => {
+    if (preview?.src.startsWith("blob:")) URL.revokeObjectURL(preview.src);
+    setPreview(null);
+  };
   const isReadOnly = (key: keyof GuestDetails) => Boolean(readOnlyFields[key]);
   const fieldClass = (key: keyof GuestDetails) =>
     cn(
@@ -279,25 +310,61 @@ export function GuestDetailsSection({
       </FormField>
 
       {onFileUpload && !idOnFile && (
-        <FormField label="Upload ID Document" required error={errors?.idFile}>
-          <div className="flex items-center gap-3">
+        <FormField
+          label="Upload ID Document"
+          required
+          error={fileError ?? errors?.idFile}
+        >
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="file"
-              id="id-file-upload"
+              id={inputId}
+              accept={GUEST_DOCUMENT_ACCEPT}
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) onFileUpload(file.name);
+                e.target.value = "";
+                if (!file) return;
+                if (file.size > MAX_ATTACHMENT_BYTES) {
+                  setFileError("File is too large. Maximum size is 5 MB.");
+                  return;
+                }
+                setFileError(null);
+                onFileUpload(file);
               }}
             />
             <label
-              htmlFor="id-file-upload"
+              htmlFor={inputId}
               className="cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
             >
-              Choose File
+              {idFile ? "Change File" : "Choose File"}
             </label>
             {idFile ? (
-              <span className="text-xs font-medium text-emerald-700">{idFile}</span>
+              <>
+                <button
+                  type="button"
+                  onClick={openPreview}
+                  className="max-w-[180px] truncate text-xs font-medium text-emerald-700 hover:underline"
+                  title={idFile.name}
+                >
+                  {idFile.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={openPreview}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
+                >
+                  <Eye className="h-3 w-3" /> Preview
+                </button>
+                <button
+                  type="button"
+                  title="Remove file"
+                  onClick={() => onFileUpload(null)}
+                  className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </>
             ) : (
               <span className="text-xs text-slate-400">No file chosen</span>
             )}
@@ -307,11 +374,21 @@ export function GuestDetailsSection({
 
       {idOnFile && (
         <FormField label="ID Document">
-          <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            On file from guest profile
-          </p>
+          {guestId ? (
+            <GuestDocumentsPanel
+              guestId={guestId}
+              compact
+              emptyText="ID number on file — no scanned copy uploaded."
+            />
+          ) : (
+            <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              On file from guest profile
+            </p>
+          )}
         </FormField>
       )}
+
+      <GuestDocumentPreviewModal file={preview} onClose={closePreview} />
     </>
   );
 }

@@ -1,4 +1,5 @@
 import type { HKRoom, HKTask } from "./HousekeepingTypes";
+import { todayIso } from "@/lib/reservation-dates";
 
 const ACTIVE_TASK_STATUSES = new Set([
   "PENDING",
@@ -13,13 +14,22 @@ const OVERDUE_EXCLUDED_STATUSES = new Set([
   "CANCELLED",
 ]);
 
+export function taskAssigneeNames(
+  task: Pick<HKTask, "assignedStaffNames" | "assignedToName" | "assignedTo">,
+): string[] {
+  if (task.assignedStaffNames?.length) return task.assignedStaffNames;
+  const single = task.assignedToName ?? task.assignedTo;
+  return single ? [single] : [];
+}
+
+/** Unfinished task whose cleaning date has passed. */
 export function isTaskOverdue(
-  task: Pick<HKTask, "dueAt" | "status" | "isOverdue">,
+  task: Pick<HKTask, "scheduledDate" | "status" | "isOverdue">,
 ): boolean {
-  if (task.isOverdue) return true;
-  if (!task.dueAt) return false;
   if (OVERDUE_EXCLUDED_STATUSES.has(task.status)) return false;
-  return new Date(task.dueAt).getTime() < Date.now();
+  if (task.isOverdue) return true;
+  const date = String(task.scheduledDate ?? "").slice(0, 10);
+  return Boolean(date) && date < todayIso();
 }
 
 export function isActiveTask(task: HKTask): boolean {

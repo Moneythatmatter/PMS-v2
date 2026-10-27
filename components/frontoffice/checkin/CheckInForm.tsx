@@ -27,7 +27,10 @@ import {
   reservationService,
   roomService,
   roomTypeService,
+  tariffPlanService,
+  guestDocumentService,
 } from "@/services/front-office";
+import { readFileAsDataUrl } from "@/app/data/purchaseAttachmentUtils";
 import type { RoomAvailabilityBlock } from "@/services/front-office/rooms";
 import { filterRoomsForStay } from "@/lib/room-availability";
 import { Button } from "@/components/ui/Button";
@@ -94,6 +97,7 @@ const defaultWalkIn = {
   companyName: "",
   companyId: "",
   roomType: "",
+  mealPlan: "",
   room: "",
   adults: 1,
   nights: 1,
@@ -313,7 +317,7 @@ export function CheckInForm() {
   const [assignedRoom, setAssignedRoom] = useState("");
   const [deposit, setDeposit] = useState(0);
   const [remarks, setRemarks] = useState("");
-  const [idFile, setIdFile] = useState("");
+  const [idFile, setIdFile] = useState<File | null>(null);
   const [lockedIdentityFields, setLockedIdentityFields] = useState<
     Partial<Record<keyof GuestDetails, boolean>>
   >({});
@@ -334,6 +338,7 @@ export function CheckInForm() {
   >([]);
   const [roomIdByNo, setRoomIdByNo] = useState<Record<string, string>>({});
   const [roomTypeRates, setRoomTypeRates] = useState<Record<string, number>>({});
+  const [walkInRateOverride, setWalkInRateOverride] = useState<number | null>(null);
   const [roomTypeNames, setRoomTypeNames] = useState<string[]>([]);
   const [walkInBlocks, setWalkInBlocks] = useState<RoomAvailabilityBlock[]>([]);
   const [arrivalDate, setArrivalDate] = useState(() => todayIso());
@@ -361,10 +366,11 @@ export function CheckInForm() {
     let cancelled = false;
     (async () => {
       try {
-        const [bookings, roomCards, roomTypes, guests] = await Promise.all([
+        const [bookings, roomCards, roomTypes, tariffPlans, guests] = await Promise.all([
           reservationService.list(),
           roomService.status(),
           roomTypeService.list().catch(() => []),
+          tariffPlanService.list().catch(() => []),
           guestService.list().catch(() => [] as GuestProfile[]),
         ]);
         if (cancelled) return;
@@ -396,9 +402,18 @@ export function CheckInForm() {
 
         const rates: Record<string, number> = {};
         const typeNames: string[] = [];
+        for (const tp of tariffPlans) {
+          const key = String(tp.roomType ?? "").trim().toLowerCase();
+          const rate = Number(tp.baseRate) || 0;
+          if (!key || rate <= 0 || tp.status === "Inactive") continue;
+          if (!rates[key] || rate < rates[key]) rates[key] = rate;
+        }
         for (const rt of roomTypes) {
-          if (rt.name) rates[rt.name] = rt.baseRate || 0;
-          if (rt.code) rates[rt.code] = rt.baseRate || 0;
+          const rate = Number(rt.baseRate) || 0;
+          if (rate > 0) {
+            if (rt.name) rates[rt.name.trim().toLowerCase()] = rate;
+            if (rt.code) rates[rt.code.trim().toLowerCase()] = rate;
+          }
           if (rt.name && rt.status !== "Inactive") typeNames.push(rt.name);
         }
         for (const r of roomCards) {
@@ -489,8 +504,10 @@ export function CheckInForm() {
     () => Object.values(lockedIdentityFields).some(Boolean),
     [lockedIdentityFields],
   );
-  const walkInRate = roomTypeRates[walkIn.roomType] ?? 0;
-  const walkInTotal = walkInRate * walkIn.nights * walkIn.adults;
+  const walkInDefaultRate =
+    roomTypeRates[walkIn.roomType.trim().toLowerCase()] ?? 0;
+  const walkInRate = walkInRateOverride ?? walkInDefaultRate;
+  const walkInTotal = walkInRate * Math.max(1, walkIn.nights);
   const walkInGuestName =
     [walkIn.firstName, walkIn.lastName].filter(Boolean).join(" ") || "Guest";
 
@@ -595,7 +612,7 @@ export function CheckInForm() {
       });
       setSelectedStayingGuestId(guest.id);
       setLockedIdentityFields(profileLockedFields(profile));
-      if (profile.idNumber) setIdFile("On file");
+      if (profile.idNumber) setIdFile(null);
       if (alsoWalkIn) {
         setWalkIn((prev) => ({
           ...prev,
@@ -691,7 +708,7 @@ export function CheckInForm() {
     setBooking(bookingRecord);
     setBookingId(displayBookingNo(bookingRecord));
     setLockedIdentityFields({});
-    setIdFile("");
+    setIdFile(null);
     const preassigned = String(bookingRecord.roomNo || "").trim();
     const isRealRoom =
       preassigned &&
@@ -725,7 +742,7 @@ export function CheckInForm() {
         );
         setLockedIdentityFields(profileLockedFields(profileDetails));
         if (profileDetails.idNumber) {
-          setIdFile("On file");
+          setIdFile(null);
         }
       } catch {
         setGuestDetails(guestDetailsFromBooking(bookingRecord));
@@ -897,7 +914,7 @@ export function CheckInForm() {
       }
     }
 
-    if (checkInMode === "reserved" && isGroupBooking && !booking?.guestId) {
+    if (checkInMode === "reserved" && isGroupBooking) {
       if (!String(guestDetails.firstName ?? "").trim()) {
         contactErrors.firstName = "Required";
       }
@@ -941,6 +958,7 @@ export function CheckInForm() {
       missingLabels.push("Upload ID Document");
     }
     if (checkInMode === "walkin" && !walkIn.roomType) missingLabels.push("Room Type");
+    if (checkInMode === "walkin" && walkInRate <= 0) missingLabels.push("Rate per Night");
     if (!String(roomForApi || "").trim()) missingLabels.push("Assigned Room Number");
     if (checkInMode === "walkin" && !walkIn.paymentMode) {
       missingLabels.push("Payment Mode");
@@ -1099,6 +1117,36 @@ export function CheckInForm() {
         return ids;
       }
 
+      /** Saved after check-in so a failed upload never blocks the stay. */
+      async function uploadIdDocument(
+        guestId: string | undefined,
+        reservationId: string,
+      ): Promise<boolean> {
+        if (!idFile) return true;
+        try {
+          let ownerId = guestId;
+          if (!ownerId) {
+            const fresh = await reservationService.get(reservationId);
+            ownerId = fresh.guestId || undefined;
+          }
+          if (!ownerId) return false;
+          await guestDocumentService.create({
+            guestId: ownerId,
+            reservationId,
+            documentType: guestDetails.idProofType || undefined,
+            fileName: idFile.name,
+            mimeType: idFile.type || undefined,
+            fileSize: idFile.size,
+            dataUrl: await readFileAsDataUrl(idFile),
+          });
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      let idUploaded = true;
+
       if (checkInMode === "reserved" && booking) {
         const roomRefId =
           (roomForApi && roomIdByNo[roomForApi]) || roomForApi || undefined;
@@ -1123,6 +1171,9 @@ export function CheckInForm() {
             idNumber: guestDetails.idNumber || undefined,
           });
           guestId = createdGuest.id;
+          const createdId = createdGuest.id;
+          setSelectedStayingGuestId(createdId);
+          setBooking((prev) => (prev ? { ...prev, guestId: createdId } : prev));
           await reservationService.update(booking.id, {
             guestId,
             specialRequests: remarksWithGuests || undefined,
@@ -1150,6 +1201,7 @@ export function CheckInForm() {
           companionGuestIds,
           ...guestPayload,
         });
+        idUploaded = await uploadIdDocument(guestId, booking.id);
       } else {
         const checkIn = formatStayDate(new Date());
         const checkOutDate = new Date();
@@ -1187,6 +1239,8 @@ export function CheckInForm() {
           checkOut,
           nights: walkIn.nights,
           adults: walkIn.adults,
+          roomRate: walkInRate,
+          mealPlan: walkIn.mealPlan || undefined,
           totalAmount: walkInTotal,
           advancePaid: deposit,
           paymentMode: walkIn.paymentMode,
@@ -1200,11 +1254,15 @@ export function CheckInForm() {
           roomRefId: walkInRoomRef,
           companionGuestIds,
         });
+        idUploaded = await uploadIdDocument(walkInGuestId, created.id);
       }
 
       setCompleted(true);
       showToast(
-        `Check-in completed successfully for ${guestNameForApi} in Room ${roomForApi}!`,
+        idUploaded
+          ? `Check-in completed successfully for ${guestNameForApi} in Room ${roomForApi}!`
+          : `Checked in ${guestNameForApi} in Room ${roomForApi}, but the ID document could not be saved. Upload it from the guest profile.`,
+        idUploaded ? "success" : "error",
       );
     } catch (e) {
       showToast(
@@ -1274,6 +1332,7 @@ export function CheckInForm() {
 
   const handleWalkInRoomTypeChange = (type: string) => {
     setWalkIn((p) => ({ ...p, roomType: type }));
+    setWalkInRateOverride(null);
     const current = availableRooms.find((r) => r.roomNo === assignedRoom);
     if (
       !type ||
@@ -1382,7 +1441,7 @@ export function CheckInForm() {
             setAssignedRoom("");
             setLookupError("");
             setLockedIdentityFields({});
-            setIdFile("");
+            setIdFile(null);
           }}
           className={cn(
             "flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all cursor-pointer",
@@ -1415,11 +1474,12 @@ export function CheckInForm() {
               setBooking(null);
               setBookingId("");
               setLockedIdentityFields({});
-              setIdFile("");
+              setIdFile(null);
               setGuestDetails({ ...emptyGuestDetails });
               setRoomGuests([]);
               setRoomGuestErrors({});
               setWalkIn({ ...defaultWalkIn });
+              setWalkInRateOverride(null);
               setAssignedRoom("");
               setWalkInRef(generateWalkInRef());
             }}
@@ -1468,7 +1528,7 @@ export function CheckInForm() {
                     setGuestDetails({ ...emptyGuestDetails });
                     setRoomGuests([]);
                     setRoomGuestErrors({});
-                    setIdFile("");
+                    setIdFile(null);
                   }}
                   onEnter={() => handleLookupBooking()}
                   placeholder="e.g. BK-38, Atul, or 98765…"
@@ -1804,7 +1864,7 @@ export function CheckInForm() {
                           idProofType: "",
                           idNumber: "",
                         });
-                        setIdFile("");
+                        setIdFile(null);
                       }}
                       className="shrink-0 text-xs font-medium text-slate-400 hover:text-slate-600"
                     >
@@ -1874,6 +1934,7 @@ export function CheckInForm() {
                       }
                     }}
                     idFile={idFile}
+                    guestId={selectedStayingGuestId || booking?.guestId}
                     errors={identityErrors}
                     readOnlyFields={lockedIdentityFields}
                   />
@@ -2085,6 +2146,7 @@ export function CheckInForm() {
                 }
               }}
               idFile={idFile}
+              guestId={selectedStayingGuestId}
               errors={identityErrors}
               readOnlyFields={lockedIdentityFields}
             />
@@ -2105,6 +2167,8 @@ export function CheckInForm() {
               selectedRoomType={walkIn.roomType}
               onRoomTypeChange={handleWalkInRoomTypeChange}
               roomTypeError={errors.roomType}
+              mealPlan={walkIn.mealPlan}
+              onMealPlanChange={(val) => setWalkIn((p) => ({ ...p, mealPlan: val }))}
             />
           </SectionCard>
 
@@ -2121,6 +2185,10 @@ export function CheckInForm() {
               deposit={deposit}
               onDepositChange={setDeposit}
               totalAmount={walkInTotal}
+              nights={walkIn.nights}
+              onNightsChange={(n) => setWalkIn((p) => ({ ...p, nights: n }))}
+              rate={walkInRate}
+              onRateChange={setWalkInRateOverride}
             />
           </SectionCard>
 

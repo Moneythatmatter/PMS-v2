@@ -23,6 +23,50 @@ export function isRoomVacantStatus(status?: string): boolean {
   return String(status ?? "").trim().toLowerCase() === "vacant";
 }
 
+export function isRoomDirtyCard(card: { status?: string; housekeeping?: string }): boolean {
+  const status = String(card.status ?? "").trim().toLowerCase();
+  const hk = String(card.housekeeping ?? "").trim().toLowerCase();
+  return status === "dirty" || hk === "dirty";
+}
+
+/**
+ * Room can be offered for sale: vacant (inspected) or clean. Dirty rooms are
+ * offered only when the clerk opts in; occupied / blocked / cleaning never are.
+ */
+export function isRoomOfferable(
+  card: { status?: string; housekeeping?: string },
+  includeDirty = false,
+): boolean {
+  const status = String(card.status ?? "").trim().toLowerCase();
+  if (isRoomDirtyCard(card)) return includeDirty && (status === "dirty" || status === "vacant" || status === "clean");
+  return status === "vacant" || status === "clean";
+}
+
+const MOVE_IN_BLOCKING_STATUSES = new Set([
+  "occupied",
+  "blocked",
+  "maintenance",
+  "reserved",
+  "out of order",
+  "out of service",
+  "dirty",
+  "cleaning",
+]);
+
+/** Ready to move a guest into: not occupied/blocked and housekeeping has finished cleaning it. */
+export function isRoomFreeToMoveIn(
+  card: { status?: string; housekeeping?: string; guestName?: string; maintenance?: string },
+  includeDirty = false,
+): boolean {
+  const status = String(card.status ?? "").trim().toLowerCase();
+  const hk = String(card.housekeeping ?? "").trim().toLowerCase();
+  const hasGuest = Boolean(card.guestName?.trim());
+  const underMaintenance = Boolean(card.maintenance && card.maintenance !== "OK");
+  const allowed = (s: string) =>
+    !MOVE_IN_BLOCKING_STATUSES.has(s) || (includeDirty && s === "dirty");
+  return allowed(status) && allowed(hk) && !underMaintenance && !hasGuest;
+}
+
 function blockOverlapsStay(
   block: RoomAvailabilityBlock,
   checkIn: string,

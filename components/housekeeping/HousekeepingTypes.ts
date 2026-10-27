@@ -90,7 +90,9 @@ export interface HKPublicArea {
   category: "Lobby" | "Restaurant" | "Corridor" | "Gym" | "Spa" | "Restroom" | "Pool" | "Parking" | "Banquet Hall" | "Washroom" | "Garden";
   floor: string;
   location: string;
+  /** Display names, comma-separated when several staff are assigned. */
   assignedStaff: string;
+  assignedStaffIds?: string[];
   supervisor: string;
   cleaningFrequency: string;
   status: "Dirty" | "Assigned" | "Cleaning" | "Pending Inspection" | "Inspected" | "Clean" | "Blocked";
@@ -275,14 +277,14 @@ export interface HKTask {
   createdAt?: string;
   updatedAt?: string;
   scheduledDate?: string | null;
-  scheduledStartAt?: string | null;
-  dueAt?: string | null;
   isOverdue?: boolean;
   roomNo?: string;
   bookingNo?: string;
   requestNumber?: string;
   requestDescription?: string;
   assignedToName?: string;
+  assignedStaffIds?: string[] | null;
+  assignedStaffNames?: string[];
   createdByName?: string;
   approvedByName?: string;
 }

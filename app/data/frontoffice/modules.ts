@@ -71,6 +71,20 @@ export interface RoomStatusCard {
   checkoutDate?: string;
 }
 
+export interface GuestDocument {
+  id: string;
+  guestId: string;
+  reservationId?: string | null;
+  documentType?: string | null;
+  fileName: string;
+  mimeType?: string | null;
+  fileSize?: number | null;
+  /** Base64 data URL of the uploaded file. */
+  dataUrl: string;
+  uploadedBy?: string | null;
+  createdAt?: string;
+}
+
 export interface GuestProfile {
   id: string;
   guestNo?: string;

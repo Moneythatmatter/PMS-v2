@@ -25,7 +25,11 @@ import {
   TextInput,
   formatINR,
 } from "@/components/frontoffice/ui";
-import { SearchSelect, RoomTypeAvailabilityOption } from "@/components/frontoffice/SearchSelect";
+import {
+  IncludeDirtyRoomsToggle,
+  SearchSelect,
+  RoomTypeAvailabilityOption,
+} from "@/components/frontoffice/SearchSelect";
 import { CompanySearchSelect } from "@/components/frontoffice/CompanySearchSelect";
 import { groupService } from "@/services/front-office/groups";
 import {
@@ -38,7 +42,7 @@ import type { ReservationBooking } from "@/app/data/types/frontoffice";
 import type { RoomAvailabilityBlock } from "@/services/front-office/rooms";
 import {
   filterRoomsForStay,
-  isRoomVacantStatus,
+  isRoomOfferable,
 } from "@/lib/room-availability";
 import {
   paymentModes,
@@ -199,7 +203,25 @@ export function NewGroupReservationForm() {
 
   const [roomTypes, setRoomTypes] = useState<RoomTypeOption[]>([]);
   const [tariffOptions, setTariffOptions] = useState<TariffOption[]>([]);
-  const [roomsByType, setRoomsByType] = useState<Record<string, string[]>>({});
+  const [roomCards, setRoomCards] = useState<
+    { roomNo: string; type?: string; status?: string; housekeeping?: string }[]
+  >([]);
+  const [includeDirty, setIncludeDirty] = useState(false);
+  const roomsByType = useMemo(() => {
+    const byType: Record<string, string[]> = {};
+    for (const r of roomCards) {
+      if (!isRoomOfferable(r, includeDirty)) continue;
+      const key = String(r.type ?? "").trim() || "Other";
+      if (!byType[key]) byType[key] = [];
+      byType[key].push(r.roomNo);
+    }
+    for (const key of Object.keys(byType)) {
+      byType[key].sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true }),
+      );
+    }
+    return byType;
+  }, [roomCards, includeDirty]);
   const [reservations, setReservations] = useState<ReservationBooking[]>([]);
   const [availabilityBlocks, setAvailabilityBlocks] = useState<
     RoomAvailabilityBlock[]
@@ -329,19 +351,7 @@ export function NewGroupReservationForm() {
       .filter((p) => p.id);
     setTariffOptions(plans);
 
-    const byType: Record<string, string[]> = {};
-    for (const r of roomCards) {
-      if (!isRoomVacantStatus(r.status)) continue;
-      const key = String(r.type ?? "").trim() || "Other";
-      if (!byType[key]) byType[key] = [];
-      byType[key].push(r.roomNo);
-    }
-    for (const key of Object.keys(byType)) {
-      byType[key].sort((a, b) =>
-        a.localeCompare(b, undefined, { numeric: true }),
-      );
-    }
-    setRoomsByType(byType);
+    setRoomCards(roomCards);
 
     const typeOptions: RoomTypeOption[] = [];
     for (const rt of types as Array<{
@@ -831,6 +841,11 @@ export function NewGroupReservationForm() {
                   {errors.rooms ? (
                     <p className="text-sm text-red-600">{errors.rooms}</p>
                   ) : null}
+
+                  <IncludeDirtyRoomsToggle
+                    checked={includeDirty}
+                    onChange={setIncludeDirty}
+                  />
 
                   {lines.map((line, idx) => {
                     const roomsOfType = line.roomType

@@ -16,17 +16,25 @@ import {
   RefreshCw,
   Search,
   Send,
+  Percent,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { FormSection, FormField, TextInput, SelectInput, TextAreaInput } from "@/components/frontoffice/ui";
-import { LedgerPickerModal, type LedgerPickerOption, type NewLedgerInput } from "./LedgerPickerModal";
+import {
+  LedgerPickerModal,
+  type LedgerPickerOption,
+  type NewLedgerInput,
+  type TaxPickerOption,
+} from "./LedgerPickerModal";
 import { cn } from "@/lib/utils";
 import {
   accAccountService,
   accCompanyService,
+  accTaxDefinitionService,
   accVoucherService,
   type Account,
   type Company,
+  type TaxDefinition,
   type VoucherDetail,
   type VoucherInput,
 } from "@/services/accounts";
@@ -49,12 +57,34 @@ interface JournalRow {
   credit: number;
   chequeNo: string;
   chequeDate: string;
-  gstRate: string;
+  narration: string;
+  /** Tax group driving this line's amount (client-only; cleared on manual amount / ledger edits). */
+  taxId: string;
 }
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const rowAmount = (r: JournalRow) => (r.type === "Dr" ? r.debit : r.credit) || 0;
+
+/** Tax base: non-tax lines on the same side, falling back to the opposite side. */
+const taxBaseFor = (rows: JournalRow[], row: JournalRow) => {
+  const sideTotal = (type: "Dr" | "Cr") =>
+    rows.filter((r) => r.key !== row.key && !r.taxId && r.type === type).reduce((s, r) => s + rowAmount(r), 0);
+  return sideTotal(row.type) || sideTotal(row.type === "Dr" ? "Cr" : "Dr");
+};
+
+const taxAmountFor = (tax: TaxPickerOption, base: number) =>
+  tax.calculationType === "Fixed" ? round2(Number(tax.rate) || 0) : round2((base * (Number(tax.rate) || 0)) / 100);
+
+const applyTaxes = (rows: JournalRow[], taxes: Map<string, TaxPickerOption>): JournalRow[] =>
+  rows.map((row) => {
+    const tax = row.taxId ? taxes.get(row.taxId) : undefined;
+    if (!tax) return row;
+    const amount = taxAmountFor(tax, taxBaseFor(rows, row));
+    return { ...row, debit: row.type === "Dr" ? amount : 0, credit: row.type === "Cr" ? amount : 0 };
+  });
 
 export type VoucherNotify = (message: string, variant?: "success" | "error") => void;
 
-const GST_RATES = ["0", "5", "12", "18", "28"];
 const MUTABLE_STATUSES = ["Draft", "Provisional", "Posted"];
 
 let rowSeq = 0;
@@ -67,7 +97,8 @@ const newRow = (type: "Dr" | "Cr"): JournalRow => ({
   credit: 0,
   chequeNo: "",
   chequeDate: "",
-  gstRate: "",
+  narration: "",
+  taxId: "",
 });
 const blankRows = () => [newRow("Dr"), newRow("Cr")];
 
@@ -81,7 +112,8 @@ const rowsFromVoucher = (v: VoucherDetail): JournalRow[] =>
     credit: Number(l.credit) || 0,
     chequeNo: l.chequeNo ?? "",
     chequeDate: l.chequeDate ?? "",
-    gstRate: l.gstRate === null || l.gstRate === undefined ? "" : String(l.gstRate),
+    narration: l.narration ?? "",
+    taxId: "",
   }));
 
 export const statusBadgeClass = (status: string) =>
@@ -113,6 +145,25 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
     () => (isModal ? Promise.resolve([]) : accCompanyService.list()),
     [isModal],
   );
+  const taxDefinitions = useAccQuery<TaxDefinition[]>(() => accTaxDefinitionService.list(), []);
+  const taxOptions = useMemo<TaxPickerOption[]>(
+    () =>
+      (taxDefinitions.data ?? [])
+        .filter((t) => t.status === "Active")
+        .map((t) => ({
+          id: t.id,
+          taxCode: t.taxCode,
+          taxName: t.taxName,
+          taxType: t.taxType,
+          rate: Number(t.rate) || 0,
+          calculationType: t.calculationType,
+          outputAccountId: t.outputAccountId,
+          outputAccountName: t.outputAccountName,
+        }))
+        .sort((a, b) => a.taxCode.localeCompare(b.taxCode, undefined, { numeric: true })),
+    [taxDefinitions.data],
+  );
+  const taxMap = useMemo(() => new Map(taxOptions.map((t) => [t.id, t])), [taxOptions]);
 
   const [current, setCurrent] = useState<VoucherDetail | null>(voucher);
   const [voucherTypeId, setVoucherTypeId] = useState(voucher?.voucherTypeId ?? "");
@@ -168,8 +219,14 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
         base.push({ id: l.accountId, code: l.accountCode ?? "", name: l.accountName ?? "Account" });
       }
     }
+    for (const t of taxOptions) {
+      if (t.outputAccountId && !known.has(t.outputAccountId)) {
+        known.add(t.outputAccountId);
+        base.push({ id: t.outputAccountId, code: "", name: t.outputAccountName ?? t.taxName });
+      }
+    }
     return base;
-  }, [lookups, current]);
+  }, [lookups, current, taxOptions]);
   const ledgerOptions = useMemo(
     () => ledgerPickerOptions.map((l) => ({ id: l.id, label: `${l.code} - ${l.name}` })),
     [ledgerPickerOptions],
@@ -267,7 +324,7 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
       if (nextType === "Cr") row.credit = Math.round(difference * 100) / 100;
       else row.debit = Math.round(difference * 100) / 100;
     }
-    setRows((prev) => [...prev, row]);
+    setRows((prev) => applyTaxes([...prev, row], taxMap));
   };
 
   const handleDeleteRow = (key: string) => {
@@ -275,14 +332,26 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
       notify("A voucher needs at least two lines (one debit and one credit).", "error");
       return;
     }
-    setRows((prev) => prev.filter((r) => r.key !== key));
+    setRows((prev) => applyTaxes(prev.filter((r) => r.key !== key), taxMap));
+  };
+
+  const handleSelectTax = (key: string, tax: TaxPickerOption) => {
+    if (!tax.outputAccountId) return;
+    const accountId = tax.outputAccountId;
+    setRows((prev) =>
+      applyTaxes(
+        prev.map((row) => (row.key === key ? { ...row, accountId, taxId: tax.id } : row)),
+        taxMap,
+      ),
+    );
   };
 
   const handleUpdateRow = <K extends keyof JournalRow>(key: string, field: K, value: JournalRow[K]) => {
-    setRows((prev) =>
-      prev.map((row) => {
+    setRows((prev) => {
+      const next = prev.map((row) => {
         if (row.key !== key) return row;
         const updated: JournalRow = { ...row, [field]: value };
+        if (field === "accountId" || field === "debit" || field === "credit") updated.taxId = "";
         if (field === "type") {
           const amount = row.debit || row.credit;
           updated.debit = value === "Dr" ? amount : 0;
@@ -295,8 +364,18 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
           updated.type = "Cr";
         }
         return updated;
-      }),
-    );
+      });
+      return field === "chequeNo" || field === "chequeDate" || field === "narration" || field === "divisionId"
+        ? next
+        : applyTaxes(next, taxMap);
+    });
+  };
+
+  const taxNote = (row: JournalRow) => {
+    const tax = row.taxId ? taxMap.get(row.taxId) : undefined;
+    if (!tax) return "";
+    if (tax.calculationType === "Fixed") return `${tax.taxCode} · Fixed ${formatINR(Number(tax.rate) || 0)}`;
+    return `${tax.taxCode} @ ${Number(tax.rate)}% on ${formatINR(taxBaseFor(rows, row))}`;
   };
 
   const buildInput = (): VoucherInput | null => {
@@ -351,7 +430,7 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
         divisionId: r.divisionId || null,
         chequeNo: r.chequeNo.trim(),
         chequeDate: r.chequeDate || null,
-        gstRate: r.gstRate === "" ? null : Number(r.gstRate),
+        narration: r.narration.trim() || taxNote(r),
       })),
     };
   };
@@ -606,7 +685,7 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
                   <th className="px-3 py-2.5 min-w-[120px] border-r border-slate-200">Cheque No.</th>
                   <th className="px-3 py-2.5 min-w-[140px] border-r border-slate-200">Cheque Date</th>
                   <th className="px-3 py-2.5 min-w-[150px] border-r border-slate-200">Analysis (Division)</th>
-                  <th className="px-3 py-2.5 min-w-[100px] border-r border-slate-200">GST</th>
+                  <th className="px-3 py-2.5 min-w-[220px] border-r border-slate-200">Narration</th>
                   <th className="px-3 py-2.5 w-12 text-center">Action</th>
                 </tr>
               </thead>
@@ -640,6 +719,12 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
                         </span>
                         <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                       </button>
+                      {row.taxId && taxMap.has(row.taxId) && (
+                        <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
+                          <Percent className="h-2.5 w-2.5" />
+                          {taxNote(row)}
+                        </span>
+                      )}
                     </td>
                     <td className="p-2 border-r border-slate-100">
                       <TextInput
@@ -689,19 +774,15 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
                       </SelectInput>
                     </td>
                     <td className="p-2 border-r border-slate-100">
-                      <SelectInput
-                        value={row.gstRate}
+                      <TextInput
+                        value={row.narration}
                         disabled={!editable}
-                        onChange={(e) => handleUpdateRow(row.key, "gstRate", e.target.value)}
+                        maxLength={500}
+                        onChange={(e) => handleUpdateRow(row.key, "narration", e.target.value)}
+                        placeholder={commonNarration.trim() || "Line narration..."}
+                        title={row.narration || undefined}
                         className="h-8 text-xs"
-                      >
-                        <option value="">—</option>
-                        {GST_RATES.map((g) => (
-                          <option key={g} value={g}>
-                            {g}%
-                          </option>
-                        ))}
-                      </SelectInput>
+                      />
                     </td>
                     <td className="p-2 text-center">
                       <button
@@ -860,6 +941,9 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
           onClose={() => setLedgerPickerRowKey(null)}
           accounts={lookups?.accounts}
           onCreate={handleQuickCreateLedger}
+          taxes={taxOptions}
+          selectedTaxId={ledgerPickerRow.taxId || undefined}
+          onSelectTax={(tax) => handleSelectTax(ledgerPickerRow.key, tax)}
         />
       )}
 
@@ -982,6 +1066,9 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
                         <td className="px-3 py-1.5 border-r border-slate-200 font-bold">{l.entryType ?? (l.credit > 0 ? "Cr" : "Dr")}</td>
                         <td className="px-3 py-1.5 border-r border-slate-200">
                           {l.accountCode} - {l.accountName}
+                          {l.narration && (
+                            <span className="block text-[10px] italic text-slate-500">{l.narration}</span>
+                          )}
                         </td>
                         <td className="px-3 py-1.5 border-r border-slate-200">
                           {[l.partyName, l.divisionName].filter(Boolean).join(" / ") || "—"}

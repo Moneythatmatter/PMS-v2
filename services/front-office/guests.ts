@@ -1,6 +1,7 @@
 import { api, foPath } from "../api";
 import type {
   FolioEntry,
+  GuestDocument,
   GuestProfile,
   GuestStayHistory,
   InvoiceRecord,
@@ -25,6 +26,18 @@ export const guestStayHistoryService = {
   byGuest: (guestId: string) =>
     api.get<GuestStayHistory[]>(
       foPath(`/guest-stay-history?guestId=${encodeURIComponent(guestId)}`),
+    ),
+};
+
+export const guestDocumentService = {
+  ...crud<GuestDocument>("/guest-documents"),
+  byGuest: (guestId: string) =>
+    api.get<GuestDocument[]>(
+      foPath(`/guest-documents?guestId=${encodeURIComponent(guestId)}`),
+    ),
+  byReservation: (reservationId: string) =>
+    api.get<GuestDocument[]>(
+      foPath(`/guest-documents?reservationId=${encodeURIComponent(reservationId)}`),
     ),
 };
 

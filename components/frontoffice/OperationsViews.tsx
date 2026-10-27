@@ -20,6 +20,17 @@ import type { InHouseGuest, RoomStatusCard, RoomTransferRecord } from "@/app/dat
 import { reservationService, roomService, transferService } from "@/services/front-office";
 import { todayIso } from "@/lib/reservation-dates";
 import { GuestSearchSelect } from "@/components/frontoffice/GuestSearchSelect";
+import {
+  SearchSelect,
+  RoomTypeAvailabilityOption,
+  IncludeDirtyRoomsToggle,
+} from "@/components/frontoffice/SearchSelect";
+import {
+  getBlockedRoomNos,
+  isRoomDirtyCard,
+  isRoomFreeToMoveIn,
+} from "@/lib/room-availability";
+import type { ReservationBooking } from "@/app/data/types";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -59,30 +70,10 @@ function SectionCard({
   );
 }
 
-function isRoomVacant(r: RoomStatusCard): boolean {
-  const st = String(r.status || "").trim().toLowerCase();
-  const hasGuest = Boolean(r.guestName && r.guestName.trim());
-  const underMaintenance = Boolean(r.maintenance && r.maintenance !== "OK");
+const ALL_CATEGORIES = "__all__";
 
-  if (
-    st === "occupied" ||
-    st === "blocked" ||
-    st === "maintenance" ||
-    underMaintenance ||
-    hasGuest
-  ) {
-    return false;
-  }
-
-  return (
-    st === "vacant" ||
-    st.includes("vacant") ||
-    st === "clean" ||
-    st === "ready" ||
-    st === "available" ||
-    st !== "reserved"
-  );
-}
+const sameText = (a?: string, b?: string) =>
+  Boolean(a && b && a.trim().toLowerCase() === b.trim().toLowerCase());
 
 export function RoomTransferView() {
   const [search, setSearch] = useState("");
@@ -95,6 +86,9 @@ export function RoomTransferView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newRoom, setNewRoom] = useState("");
+  const [roomCategory, setRoomCategory] = useState(ALL_CATEGORIES);
+  const [includeDirty, setIncludeDirty] = useState(false);
+  const [bookings, setBookings] = useState<ReservationBooking[]>([]);
   const [transferDate, setTransferDate] = useState(todayIso);
   const [reason, setReason] = useState("");
   const [transfers, setTransfers] = useState<RoomTransferRecord[]>([]);
@@ -109,13 +103,15 @@ export function RoomTransferView() {
     (async () => {
       try {
         setLoading(true);
-        const [xfer, inHouse, rooms] = await Promise.all([
+        const [xfer, inHouse, rooms, allBookings] = await Promise.all([
           transferService.list(),
           reservationService.inHouse(),
           roomService.status(),
+          reservationService.list().catch(() => [] as ReservationBooking[]),
         ]);
         if (!cancelled) {
           setTransfers(xfer);
+          setBookings(allBookings);
           const mapped = inHouse as InHouseGuest[];
           setGuests(mapped);
           if (mapped[0]) setGuest(mapped[0]);
@@ -146,34 +142,78 @@ export function RoomTransferView() {
     return rows;
   }, [transfers, search, statusFilter, sortBy]);
 
+  /** Vacant now and not booked by anyone else between the transfer date and the guest's check-out. */
   const availableRooms = useMemo(() => {
+    const bookedForStay = guest
+      ? getBlockedRoomNos(bookings, transferDate, guest.checkOut, [], guest.id)
+      : new Set<string>();
     const list = roomCards.filter(
-      (r) => isRoomVacant(r) && (!guest || r.roomNo !== guest.room),
+      (r) =>
+        isRoomFreeToMoveIn(r, includeDirty) &&
+        !bookedForStay.has(r.roomNo) &&
+        (!guest || r.roomNo !== guest.room),
     );
 
-    const guestType = guest?.roomType?.trim().toLowerCase();
     return list.sort((a, b) => {
-      if (guestType) {
-        const aSame = a.type?.trim().toLowerCase() === guestType ? 0 : 1;
-        const bSame = b.type?.trim().toLowerCase() === guestType ? 0 : 1;
+      if (guest?.roomType) {
+        const aSame = sameText(a.type, guest.roomType) ? 0 : 1;
+        const bSame = sameText(b.type, guest.roomType) ? 0 : 1;
         if (aSame !== bSame) return aSame - bSame;
       }
       return a.roomNo.localeCompare(b.roomNo, undefined, { numeric: true });
     });
-  }, [guest, roomCards]);
+  }, [guest, roomCards, bookings, transferDate, includeDirty]);
 
   const sameTypeCount = useMemo(() => {
     if (!guest?.roomType) return 0;
-    const target = guest.roomType.trim().toLowerCase();
-    return availableRooms.filter(
-      (r) => r.type?.trim().toLowerCase() === target,
-    ).length;
+    return availableRooms.filter((r) => sameText(r.type, guest.roomType)).length;
   }, [guest, availableRooms]);
+
+  const categoryOptions = useMemo(() => {
+    const names = [...new Set(roomCards.map((r) => r.type?.trim()).filter(Boolean) as string[])].sort(
+      (a, b) => a.localeCompare(b),
+    );
+    return [
+      { id: ALL_CATEGORIES, label: "All categories", hint: String(availableRooms.length) },
+      ...names.map((name) => ({
+        id: name,
+        label: name,
+        hint: String(availableRooms.filter((r) => sameText(r.type, name)).length),
+      })),
+    ];
+  }, [roomCards, availableRooms]);
+
+  const categoryRooms = useMemo(
+    () =>
+      roomCategory === ALL_CATEGORIES
+        ? availableRooms
+        : availableRooms.filter((r) => sameText(r.type, roomCategory)),
+    [availableRooms, roomCategory],
+  );
+
+  const roomOptions = useMemo(
+    () =>
+      categoryRooms.map((r) => ({
+        id: `${r.roomNo} - ${r.type}`,
+        label: `Room ${r.roomNo}`,
+        hint: [
+          r.type,
+          r.floor,
+          isRoomDirtyCard(r) ? "Dirty" : "",
+          sameText(r.type, guest?.roomType) ? "Same category" : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      })),
+    [categoryRooms, guest],
+  );
 
   const resetForm = () => {
     setGuest(guests[0] ?? null);
     setGuestSearch("");
     setNewRoom("");
+    setRoomCategory(ALL_CATEGORIES);
+    setIncludeDirty(false);
     setTransferDate(todayIso());
     setReason("");
   };
@@ -196,6 +236,10 @@ export function RoomTransferView() {
       setToast("Please select a different room from the guest's current room.");
       return;
     }
+    if (!availableRooms.some((r) => r.roomNo === targetRoomNo)) {
+      setToast(`Room ${targetRoomNo} is not available for this stay. Please pick another room.`);
+      return;
+    }
     if (!transferDate || transferDate < todayIso()) {
       setToast("Transfer date cannot be in the past.");
       return;
@@ -205,9 +249,7 @@ export function RoomTransferView() {
     setSubmitting(true);
 
     try {
-      const record = await transferService.create({
-        guestName: guest.guestName,
-        fromRoom: guest.room,
+      await reservationService.transferRoom(guest.id, {
         toRoom: targetRoomNo,
         date: new Date(`${transferDate}T00:00:00`).toLocaleDateString("en-IN", {
           day: "numeric",
@@ -215,20 +257,19 @@ export function RoomTransferView() {
           year: "numeric",
         }),
         reason: reason || "Guest request",
-        status: "Completed",
       });
 
-      // Update transfer records and close the form immediately
-      setTransfers((prev) => [record, ...prev]);
       setTransferOpen(false);
       resetForm();
-      setToast(`${guest.guestName} transferred from Room ${guest.room} to ${record.toRoom}.`);
+      setToast(`${guest.guestName} transferred from Room ${guest.room} to ${targetRoomNo}.`);
 
       // Refresh status in background without blocking form closure
       Promise.all([
+        transferService.list().catch(() => null),
         roomService.status().catch(() => null),
         reservationService.inHouse().catch(() => null),
-      ]).then(([updatedRooms, updatedInHouse]) => {
+      ]).then(([updatedTransfers, updatedRooms, updatedInHouse]) => {
+        if (updatedTransfers) setTransfers(updatedTransfers);
         if (updatedRooms) setRoomCards(updatedRooms);
         if (updatedInHouse) {
           const mapped = updatedInHouse as InHouseGuest[];
@@ -266,28 +307,54 @@ export function RoomTransferView() {
         Current: Room {guest.room} · {guest.roomType} · Check-out {guest.checkOut}
       </div>
 
-      <FormField label="New Room" required>
-        <SelectInput
-          value={newRoom}
-          onChange={(e) => setNewRoom(e.target.value)}
-        >
-          <option value="">
-            {availableRooms.length === 0
-              ? "No vacant rooms available"
-              : "Select available room"}
-          </option>
-          {availableRooms.map((r) => {
-            const isSameType =
-              guest?.roomType &&
-              r.type?.trim().toLowerCase() === guest.roomType.trim().toLowerCase();
-            return (
-              <option key={r.roomNo} value={`${r.roomNo} - ${r.type}`}>
-                {r.roomNo} — {r.type} ({r.floor}){isSameType ? " · Same Category" : ""}
-              </option>
-            );
-          })}
-        </SelectInput>
-      </FormField>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FormField label="Room Category" required>
+          <SearchSelect
+            options={categoryOptions}
+            selectedId={roomCategory}
+            placeholder="Search room category…"
+            onSelect={(opt) => {
+              setRoomCategory(opt.id);
+              setNewRoom("");
+            }}
+            onClear={() => {
+              setRoomCategory(ALL_CATEGORIES);
+              setNewRoom("");
+            }}
+            renderOption={(opt) => (
+              <RoomTypeAvailabilityOption label={opt.label} count={Number(opt.hint ?? 0)} />
+            )}
+          />
+          <IncludeDirtyRoomsToggle
+            checked={includeDirty}
+            onChange={(checked) => {
+              setIncludeDirty(checked);
+              setNewRoom("");
+            }}
+          />
+        </FormField>
+        <FormField label="New Room" required>
+          <SearchSelect
+            options={roomOptions}
+            selectedId={newRoom || null}
+            disabled={roomOptions.length === 0}
+            placeholder={
+              roomOptions.length === 0
+                ? roomCategory === ALL_CATEGORIES
+                  ? "No available rooms"
+                  : `No available ${roomCategory} rooms`
+                : `Search ${roomOptions.length} available room${roomOptions.length === 1 ? "" : "s"}…`
+            }
+            onSelect={(opt) => setNewRoom(opt.id)}
+            onClear={() => setNewRoom("")}
+          />
+        </FormField>
+      </div>
+      {guest.roomType && (
+        <p className="-mt-2 text-[11px] text-slate-500">
+          {sameTypeCount} available in the guest&apos;s current category ({guest.roomType}).
+        </p>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField label="Transfer Date" required>
@@ -667,17 +734,7 @@ export function ExtendStayView() {
       return;
     }
     try {
-      const formatted = new Date(newCheckout).toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
-      await reservationService.extendStay(guest.id, {
-        checkOut: formatted,
-        nights: guest.nights + extraNights,
-        totalAmount: guest.balance + extraCharges,
-        balance: guest.balance + extraCharges,
-      });
+      await reservationService.extendStay(guest.id, { checkOut: newCheckout });
       setApproved(true);
       setToast(
         `Stay extended for ${guest.guestName} — ${extraNights} extra night(s), ${formatINR(extraCharges)} added.`,
@@ -965,5 +1022,3 @@ export function ExtendStayView() {
   );
 }
 
-
-export { GroupBookingView } from "./GroupBookingView";

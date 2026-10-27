@@ -26,7 +26,8 @@ import type {
   ReservationSummaryStat,
 } from "@/app/data/types";
 import { roomTypes } from "@/app/data/frontoffice/constants";
-import { reservationService } from "@/services/front-office";
+import { billingFolioService, reservationService } from "@/services/front-office";
+import type { FolioListItem } from "@/app/data/types/billing";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -47,13 +48,13 @@ import {
   isNoShowEligible,
 } from "@/lib/reservation-dates";
 import { checkInHref, checkOutHref } from "@/lib/check-in-navigation";
-import { BookingDetailDrawer } from "./BookingDetailDrawer";
 import { printBookingDetail } from "./bookingPrintUtils";
 import { ReservationStatusBadge } from "./ReservationStatusBadge";
 import { ReservationSummaryCards } from "./ReservationSummaryCards";
 
 const statusFilters: { id: ReservationFilter; label: string }[] = [
   { id: "all", label: "All" },
+  { id: "group", label: "Group Reservations" },
   { id: "arriving-today", label: "Arriving Today" },
   { id: "in-house", label: "In-House" },
   { id: "reserved", label: "Reserved" },
@@ -124,6 +125,37 @@ type BookingListRow =
       groupNo?: string | null;
       children: ReservationBooking[];
     };
+
+/** Reservation.balance is not updated by folio payments — the folio is the source of truth. */
+function applyFolioBalances(
+  bookings: ReservationBooking[],
+  folios: FolioListItem[],
+): ReservationBooking[] {
+  const byBooking = new Map<string, FolioListItem>();
+  for (const folio of folios) {
+    const bookingId = String(folio.bookingId ?? "").trim();
+    if (!bookingId) continue;
+    const existing = byBooking.get(bookingId);
+    if (!existing || (folio.status === "OPEN" && existing.status !== "OPEN")) {
+      byBooking.set(bookingId, folio);
+    }
+  }
+  return bookings.map((b) => {
+    const folio = byBooking.get(b.id);
+    return folio ? { ...b, balance: Number(folio.balanceAmount ?? 0) } : b;
+  });
+}
+
+/** Group balance = master folio + every room folio in the group. */
+function sumGroupFolioBalances(folios: FolioListItem[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const folio of folios) {
+    const groupId = String(folio.resolvedGroupId ?? folio.groupId ?? "").trim();
+    if (!groupId) continue;
+    totals.set(groupId, (totals.get(groupId) ?? 0) + Number(folio.balanceAmount ?? 0));
+  }
+  return totals;
+}
 
 function deriveGroupStatus(children: ReservationBooking[]): string {
   const statuses = [...new Set(children.map((c) => String(c.status ?? "").trim()).filter(Boolean))];
@@ -201,6 +233,8 @@ function matchesFilter(booking: ReservationBooking, filter: ReservationFilter) {
   switch (filter) {
     case "all":
       return true;
+    case "group":
+      return Boolean(booking.groupId);
     case "arriving-today":
       return (
         isArrivingToday(booking) &&
@@ -227,6 +261,10 @@ function matchesFilter(booking: ReservationBooking, filter: ReservationFilter) {
   }
 }
 
+function bookingDetailHref(booking: ReservationBooking) {
+  return `/frontoffice/reservation/all-bookings/${encodeURIComponent(booking.id)}`;
+}
+
 function findBookingByKey(bookings: ReservationBooking[], key: string) {
   const trimmed = key.trim();
   if (!trimmed) return null;
@@ -248,14 +286,17 @@ export function AllBookingsView() {
   const guestIdQuery = searchParams.get("guestId") ?? "";
   const [bookings, setBookings] = useState<ReservationBooking[]>([]);
   const [summaryStats, setSummaryStats] = useState<ReservationSummaryStat[]>([]);
+  const [groupBalances, setGroupBalances] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [activeFilter, setActiveFilter] = useState<ReservationFilter>("all");
+  const filterQuery = searchParams.get("filter");
+  const [activeFilter, setActiveFilter] = useState<ReservationFilter>(() =>
+    statusFilters.some((f) => f.id === filterQuery) ? (filterQuery as ReservationFilter) : "all",
+  );
   const [sourceFilter, setSourceFilter] = useState("all");
   const [roomTypeFilter, setRoomTypeFilter] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [viewBooking, setViewBooking] = useState<ReservationBooking | null>(null);
   const [cancelBooking, setCancelBooking] = useState<ReservationBooking | null>(null);
   const [noShowBooking, setNoShowBooking] = useState<ReservationBooking | null>(null);
   const [groupAction, setGroupAction] = useState<{
@@ -302,12 +343,14 @@ export function AllBookingsView() {
     (async () => {
       try {
         setLoading(true);
-        const [list, summary] = await Promise.all([
+        const [list, summary, folios] = await Promise.all([
           reservationService.list(),
           reservationService.summary(),
+          billingFolioService.list().catch(() => [] as FolioListItem[]),
         ]);
         if (!cancelled) {
-          setBookings(list);
+          setBookings(applyFolioBalances(list, folios));
+          setGroupBalances(sumGroupFolioBalances(folios));
           setSummaryStats(summary);
           setError(null);
         }
@@ -324,27 +367,16 @@ export function AllBookingsView() {
     };
   }, []);
 
+  const openBooking = (booking: ReservationBooking) => {
+    router.push(bookingDetailHref(booking));
+  };
+
+  /** Old `?bookingId=` deep links now open the booking detail page. */
   useEffect(() => {
     if (!bookingQuery || bookings.length === 0) return;
     const match = findBookingByKey(bookings, bookingQuery);
-    if (match) setViewBooking(match);
-  }, [bookingQuery, bookings]);
-
-  const closeBookingDetail = () => {
-    setViewBooking(null);
-    if (bookingQuery) {
-      const params = new URLSearchParams(searchParams.toString());
-      params.delete("bookingId");
-      params.delete("booking");
-      const qs = params.toString();
-      router.replace(
-        qs
-          ? `/frontoffice/reservation/all-bookings?${qs}`
-          : "/frontoffice/reservation/all-bookings",
-        { scroll: false },
-      );
-    }
-  };
+    if (match) router.replace(bookingDetailHref(match));
+  }, [bookingQuery, bookings, router]);
 
   const clearGuestFilter = () => {
     router.replace("/frontoffice/reservation/all-bookings", { scroll: false });
@@ -370,7 +402,9 @@ export function AllBookingsView() {
       Object.fromEntries(
         statusFilters.map((f) => [
           f.id,
-          scopedBookings.filter((b) => matchesFilter(b, f.id)).length,
+          f.id === "group"
+            ? new Set(scopedBookings.map((b) => b.groupId).filter(Boolean)).size
+            : scopedBookings.filter((b) => matchesFilter(b, f.id)).length,
         ]),
       ) as Record<ReservationFilter, number>,
     [scopedBookings],
@@ -602,6 +636,12 @@ export function AllBookingsView() {
               <Download className="h-3.5 w-3.5" />
               Export
             </Button>
+            <Link href="/frontoffice/reservation/new?mode=group">
+              <Button type="button" variant="outline" size="sm" className="gap-1.5">
+                <Users className="h-3.5 w-3.5" />
+                New Group Booking
+              </Button>
+            </Link>
             <Link href="/frontoffice/reservation/new">
               <Button size="sm" className="gap-1.5 bg-emerald-700 shadow-sm hover:bg-emerald-800">
                 <Plus className="h-3.5 w-3.5" />
@@ -732,10 +772,9 @@ export function AllBookingsView() {
               {listRows.map((row) => {
                 if (row.kind === "group") {
                   const expanded = expandedGroups.has(row.groupId);
-                  const balance = row.children.reduce(
-                    (sum, c) => sum + Number(c.balance ?? 0),
-                    0,
-                  );
+                  const balance =
+                    groupBalances.get(row.groupId) ??
+                    row.children.reduce((sum, c) => sum + Number(c.balance ?? 0), 0);
                   const checkIn = row.children
                     .map((c) => c.checkIn)
                     .filter(Boolean)
@@ -913,15 +952,15 @@ export function AllBookingsView() {
                       </div>
                       {expanded
                         ? row.children.map((booking) => (
-                            <div
-                              key={booking.id}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => setViewBooking(booking)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  setViewBooking(booking);
+                <div
+                  key={booking.id}
+                  role="button"
+                  tabIndex={0}
+                              onClick={() => openBooking(booking)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                                  openBooking(booking);
                                 }
                               }}
                               className="cursor-pointer border-t border-slate-100 bg-slate-50/70 py-3 pl-8 pr-4 transition-colors hover:bg-emerald-50/40"
@@ -954,11 +993,11 @@ export function AllBookingsView() {
                   key={booking.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => setViewBooking(booking)}
+                  onClick={() => openBooking(booking)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      setViewBooking(booking);
+                      openBooking(booking);
                     }
                   }}
                   className="cursor-pointer p-4 transition-colors hover:bg-emerald-50/40 active:bg-emerald-50/60"
@@ -1057,10 +1096,9 @@ export function AllBookingsView() {
                   {listRows.flatMap((row, idx) => {
                     if (row.kind === "group") {
                       const expanded = expandedGroups.has(row.groupId);
-                      const balance = row.children.reduce(
-                        (sum, c) => sum + Number(c.balance ?? 0),
-                        0,
-                      );
+                      const balance =
+                        groupBalances.get(row.groupId) ??
+                        row.children.reduce((sum, c) => sum + Number(c.balance ?? 0), 0);
                       const checkIn = row.children
                         .map((c) => c.checkIn)
                         .filter(Boolean)
@@ -1295,9 +1333,9 @@ export function AllBookingsView() {
                             cIdx >= Math.max(0, row.children.length - 2);
                           const isMenuOpen = openMenu === booking.id;
                           nodes.push(
-                            <tr
-                              key={booking.id}
-                              onClick={() => setViewBooking(booking)}
+                    <tr
+                      key={booking.id}
+                              onClick={() => openBooking(booking)}
                               className="cursor-pointer bg-slate-50/80 transition-colors hover:bg-emerald-50/30"
                             >
                               <td
@@ -1480,7 +1518,7 @@ export function AllBookingsView() {
                     return [
                     <tr
                       key={booking.id}
-                      onClick={() => setViewBooking(booking)}
+                      onClick={() => openBooking(booking)}
                       className="group cursor-pointer transition-colors hover:bg-emerald-50/30"
                     >
                       <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
@@ -1651,19 +1689,6 @@ export function AllBookingsView() {
           </>
         )}
       </div>
-
-      <BookingDetailDrawer
-        booking={viewBooking}
-        onClose={closeBookingDetail}
-        onCancel={(b) => {
-          closeBookingDetail();
-          setCancelBooking(b);
-        }}
-        onNoShow={(b) => {
-          closeBookingDetail();
-          setNoShowBooking(b);
-        }}
-      />
 
       <ConfirmModal
         open={!!cancelBooking}

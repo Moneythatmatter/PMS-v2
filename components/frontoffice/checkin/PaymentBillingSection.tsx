@@ -13,6 +13,10 @@ interface PaymentBillingSectionProps {
   deposit: number;
   onDepositChange: (val: number) => void;
   totalAmount: number;
+  nights?: number;
+  onNightsChange?: (val: number) => void;
+  rate?: number;
+  onRateChange?: (val: number) => void;
 }
 
 export function PaymentBillingSection({
@@ -21,6 +25,10 @@ export function PaymentBillingSection({
   deposit,
   onDepositChange,
   totalAmount,
+  nights,
+  onNightsChange,
+  rate,
+  onRateChange,
 }: PaymentBillingSectionProps) {
   const balance = Math.max(0, totalAmount - deposit);
   const paymentOptions = useMemo(
@@ -30,6 +38,33 @@ export function PaymentBillingSection({
 
   return (
     <>
+      {onNightsChange && (
+        <FormField label="Nights" required>
+          <TextInput
+            type="number"
+            min="1"
+            className={inputClass}
+            value={nights || ""}
+            onChange={(e) =>
+              onNightsChange(Math.max(1, parseInt(e.target.value, 10) || 1))
+            }
+          />
+        </FormField>
+      )}
+
+      {onRateChange && (
+        <FormField label="Rate per Night (₹)" required>
+          <TextInput
+            type="number"
+            min="0"
+            className={inputClass}
+            value={rate || ""}
+            placeholder="Enter nightly rate"
+            onChange={(e) => onRateChange(parseFloat(e.target.value) || 0)}
+          />
+        </FormField>
+      )}
+
       <FormField label="Payment Mode" required>
         <SearchSelect
           options={paymentOptions}

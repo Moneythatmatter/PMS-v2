@@ -142,6 +142,7 @@ export interface ReservationBooking {
 
 export type ReservationFilter =
   | "all"
+  | "group"
   | "arriving-today"
   | "confirmed"
   | "in-house"

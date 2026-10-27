@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
 import { hkGuestRequestService, hkTaskService } from "@/services/housekeeping";
 import { roomService, type RoomDto } from "@/services/front-office/rooms";
 import type { HKTask } from "@/components/housekeeping/HousekeepingTypes";
@@ -20,11 +19,12 @@ import {
   isTaskOverdue,
 } from "@/components/housekeeping/taskUtils";
 import { CleaningTaskDetailPanel } from "@/components/housekeeping/CleaningTaskDetailPanel";
+import { StaffAvatarStack } from "@/components/housekeeping/StaffMultiSelect";
+import { taskAssigneeNames } from "@/components/housekeeping/taskUtils";
 import { CreateCleaningTaskForm } from "@/components/housekeeping/CreateCleaningTaskForm";
 import {
   Clock,
   CheckCircle2,
-  User,
   Sparkles,
   ClipboardList,
   Plus,
@@ -68,8 +68,6 @@ function statusPillClass(tone: ReturnType<typeof taskStatusTone>) {
 }
 
 export default function RoomCleaningOperations() {
-  const { staff } = useHousekeeping();
-
   const [tasks, setTasks] = useState<HKTask[]>([]);
   const [guestRequests, setGuestRequests] = useState<GuestRequestDto[]>([]);
   const [foRooms, setFoRooms] = useState<RoomDto[]>([]);
@@ -130,7 +128,7 @@ export default function RoomCleaningOperations() {
         (task.taskNumber ?? "").toLowerCase().includes(q) ||
         (task.roomNo ?? task.roomId).toLowerCase().includes(q) ||
         formatTaskTypeLabel(task.taskType).toLowerCase().includes(q) ||
-        (task.assignedToName ?? task.assignedTo ?? "").toLowerCase().includes(q);
+        taskAssigneeNames(task).join(" ").toLowerCase().includes(q);
       
       let matchStatus = true;
       if (statusFilter === "open") {
@@ -434,9 +432,8 @@ export default function RoomCleaningOperations() {
                 </div>
 
                 <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                  <div className="flex items-center gap-1">
-                    <User className="h-3 w-3" />
-                    <span>{task.assignedToName ?? task.assignedTo ?? "Unassigned"}</span>
+                  <div className="flex min-w-0 items-center gap-1">
+                    <StaffAvatarStack names={taskAssigneeNames(task)} />
                   </div>
                   <span className="font-semibold uppercase text-[10px] text-slate-400">
                     {task.priority}
@@ -467,8 +464,8 @@ export default function RoomCleaningOperations() {
         }
         description={
           createFromRequest
-            ? "Schedule and create a cleaning task from this guest request."
-            : "Select a room, set the schedule, and create one cleaning task."
+            ? "Create a cleaning task from this guest request."
+            : "Select a room and create one cleaning task."
         }
       >
         <CreateCleaningTaskForm
@@ -495,7 +492,6 @@ export default function RoomCleaningOperations() {
         {selectedTask && (
           <CleaningTaskDetailPanel
             task={selectedTask}
-            staff={staff}
             onUpdated={reloadTasks}
           />
         )}

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { BedDouble, ClipboardList, Info, Play, Users } from "lucide-react";
 import { reservationService } from "@/services/front-office/reservations";
 import { roomService } from "@/services/front-office/rooms";
 import { hkGuestRequestService, hkTaskService } from "@/services/housekeeping";
@@ -12,20 +13,16 @@ import type { RoomDto } from "@/services/front-office/rooms";
 import type { ReservationBooking } from "@/app/data/types";
 import type { HKTask, HkTaskType } from "./HousekeepingTypes";
 import { formatTaskTypeLabel } from "./taskUtils";
+import { useHrHousekeepers } from "./useHrHousekeepers";
+import { StaffMultiSelect } from "./StaffMultiSelect";
 import { Button } from "@/components/ui/Button";
 import { DropdownSelect } from "@/components/ui/DropdownSelect";
 import {
-  SelectInput,
   FormField,
   TextAreaInput,
-  TextInput,
 } from "@/components/frontoffice/ui";
 import { todayIso } from "@/lib/reservation-dates";
-import {
-  clampToMinIsoDate,
-  combineDateAndTime,
-  isPastIsoDate,
-} from "@/lib/hk-task-schedule";
+import { formatScheduleDate } from "@/lib/hk-task-schedule";
 import { getFoRoomStatusConfig, getFoRoomStatusListBadge } from "@/lib/frontoffice/room-status-colors";
 import { isActiveRoomBookingStatus } from "@/lib/frontoffice/active-booking";
 import { cn } from "@/lib/utils";
@@ -53,20 +50,6 @@ const TASK_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 
 function roomKey(room: RoomDto): string {
   return String(room.id ?? room.roomNo);
-}
-
-function formatTimeLabel(value: string): string {
-  const [h, m] = value.split(":");
-  const hour = Number(h);
-  const minute = Number(m);
-  if (Number.isNaN(hour) || Number.isNaN(minute)) return value;
-  const period = hour >= 12 ? "PM" : "AM";
-  const hour12 = hour % 12 || 12;
-  return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
-}
-
-function isDueBeforeStart(startTime: string, dueTime: string): boolean {
-  return dueTime <= startTime;
 }
 
 export type CreateCleaningTaskFormProps = {
@@ -117,16 +100,11 @@ export function CreateCleaningTaskForm({
       : "MEDIUM",
   );
   const [notes, setNotes] = useState(sourceGuestRequest?.description ?? "");
-  const [cleaningDate, setCleaningDate] = useState(todayIso());
-  const [startTime, setStartTime] = useState("09:00");
-  const [dueTime, setDueTime] = useState("11:00");
-  const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [roomBooking, setRoomBooking] = useState<ReservationBooking | null>(null);
   const [linkBooking, setLinkBooking] = useState(true);
   const [loadingBooking, setLoadingBooking] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<"create" | "start" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const minCleaningDate = todayIso();
   const [roomStatusByKey, setRoomStatusByKey] = useState<
     Record<string, { status: string; guestName?: string }>
   >({});
@@ -135,6 +113,8 @@ export function CreateCleaningTaskForm({
   const [selectedRequestId, setSelectedRequestId] = useState(
     sourceGuestRequest?.id ?? "",
   );
+  const { housekeepers, loading: loadingStaff } = useHrHousekeepers();
+  const [assignees, setAssignees] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -296,45 +276,18 @@ export function CreateCleaningTaskForm({
     [foRooms, roomStatusByKey],
   );
 
-  const handleCleaningDateChange = (value: string) => {
-    setCleaningDate(clampToMinIsoDate(value, minCleaningDate));
-  };
-
-  const handleSubmit = async () => {
+  const handleSubmit = async (startNow = false) => {
     if (!roomId.trim()) {
       setError("Select a room.");
       return;
     }
-    if (!cleaningDate.trim()) {
-      setError("Cleaning date is required.");
+    if (startNow && !assignees.length) {
+      setError("Assign at least one housekeeper to start cleaning now.");
       return;
     }
-    if (isPastIsoDate(cleaningDate, minCleaningDate)) {
-      setError("Cleaning date cannot be in the past.");
-      return;
-    }
-    if (scheduleEnabled) {
-      if (!startTime.trim() || !dueTime.trim()) {
-        setError("Start time and due time are required.");
-        return;
-      }
-      if (isDueBeforeStart(startTime, dueTime)) {
-        setError("Due time must be after start time.");
-        return;
-      }
-    }
-
-    setCreating(true);
+    setCreating(startNow ? "start" : "create");
     setError(null);
     try {
-      const schedulePayload = scheduleEnabled
-        ? {
-            scheduledDate: cleaningDate,
-            scheduledStartAt: combineDateAndTime(cleaningDate, startTime),
-            dueAt: combineDateAndTime(cleaningDate, dueTime),
-          }
-        : { scheduledDate: cleaningDate };
-
       const task = await hkTaskService.create({
         roomId: (fromGuestRequest
           ? sourceGuestRequest!.roomId
@@ -347,28 +300,61 @@ export function CreateCleaningTaskForm({
         taskType: fromGuestRequest || selectedRequestId ? "GUEST_REQUEST" : taskType,
         priority: priority as HKTask["priority"],
         notes: notes.trim() || undefined,
-        ...schedulePayload,
+        scheduledDate: todayIso(),
       });
+
+      let result = task;
+      let assigned = false;
+      if (assignees.length) {
+        try {
+          result = await hkTaskService.assign(task.id, assignees);
+          assigned = true;
+        } catch (e) {
+          window.alert(
+            `Task created, but assigning staff failed: ${
+              e instanceof Error ? e.message : "unknown error"
+            }. Assign it from the task details.`,
+          );
+        }
+      }
+      if (startNow && assigned) {
+        try {
+          result = await hkTaskService.start(task.id);
+        } catch (e) {
+          window.alert(
+            `Task created and assigned, but starting cleaning failed: ${
+              e instanceof Error ? e.message : "unknown error"
+            }. Start it from the task details.`,
+          );
+        }
+      }
 
       if (!fromGuestRequest) {
         setNotes("");
         setTaskType("REGULAR_CLEANING");
         setPriority("MEDIUM");
-        setScheduleEnabled(false);
         setSelectedRequestId("");
         if (!lockedFromRequest) setRoomId("");
       }
-      onCreated?.(task);
+      setAssignees([]);
+      onCreated?.(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create task");
     } finally {
-      setCreating(false);
+      setCreating(null);
     }
   };
 
   const selectedRoom = foRooms.find(
     (r) => roomKey(r) === roomId || r.roomNo === roomId,
   );
+  const summaryRoom = fromGuestRequest
+    ? `Room ${sourceGuestRequest!.roomNo ?? sourceGuestRequest!.roomId}`
+    : selectedRoom
+      ? `Room ${selectedRoom.roomNo}`
+      : roomId.trim()
+        ? `Room ${roomId}`
+        : "No room selected";
 
   return (
     <div className="space-y-4">
@@ -378,6 +364,7 @@ export function CreateCleaningTaskForm({
         </p>
       )}
 
+      <FormSection step={1} icon={BedDouble} title="Room & guest">
       <FormField label="Room" required>
         {lockedFromRequest ? (
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
@@ -416,6 +403,13 @@ export function CreateCleaningTaskForm({
         )}
       </FormField>
 
+      {!fromGuestRequest && !roomId.trim() ? (
+        <p className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-[11px] text-slate-500">
+          <Info className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          Pick a room — we&apos;ll find its active booking and open guest requests.
+        </p>
+      ) : (
+      <>
       <FormField label="Guest booking">
         {fromGuestRequest ? (
           sourceGuestRequest?.bookingId ? (
@@ -574,137 +568,186 @@ export function CreateCleaningTaskForm({
           )}
         </FormField>
       )}
-
-      <div className={scheduleEnabled ? "" : "grid gap-4 sm:grid-cols-2"}>
-        {!scheduleEnabled && (
-          <FormField label="Cleaning Date" required>
-            <TextInput
-              type="date"
-              min={minCleaningDate}
-              value={cleaningDate}
-              onChange={(e) => handleCleaningDateChange(e.target.value)}
-              className="text-xs"
-            />
-          </FormField>
-        )}
-        {!fromGuestRequest && (
-          <FormField label="Task Type" required>
-            <SelectInput
-              value={taskType}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                setTaskType(e.target.value as HkTaskType)
-              }
-              className="text-xs"
-            >
-              {TASK_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {formatTaskTypeLabel(t)}
-                </option>
-              ))}
-            </SelectInput>
-          </FormField>
-        )}
-      </div>
-
-      <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs">
-        <input
-          type="checkbox"
-          checked={scheduleEnabled}
-          onChange={(e) => setScheduleEnabled(e.target.checked)}
-          className="mt-0.5 rounded border-slate-300"
-        />
-        <span>
-          <span className="block font-semibold text-slate-900">
-            Schedule this task
-          </span>
-          <span className="text-slate-500">
-            Set a time window on the cleaning date
-          </span>
-        </span>
-      </label>
-
-      {scheduleEnabled && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-          <p className="mb-3 text-xs font-semibold text-slate-800">Schedule</p>
-          <div className="space-y-3">
-            <FormField label="Cleaning Date" required>
-              <TextInput
-                type="date"
-                min={minCleaningDate}
-                value={cleaningDate}
-                onChange={(e) => handleCleaningDateChange(e.target.value)}
-                className="text-xs"
-              />
-            </FormField>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="Start Time" required>
-                <TextInput
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="text-xs"
-                />
-              </FormField>
-              <FormField label="Due Time" required>
-                <TextInput
-                  type="time"
-                  value={dueTime}
-                  onChange={(e) => setDueTime(e.target.value)}
-                  className="text-xs"
-                />
-              </FormField>
-            </div>
-            {startTime && dueTime && !isDueBeforeStart(startTime, dueTime) && (
-              <p className="text-[11px] text-slate-500">
-                Window: {formatTimeLabel(startTime)} – {formatTimeLabel(dueTime)}
-              </p>
-            )}
-          </div>
-        </div>
+      </>
       )}
 
-      <FormField label="Priority">
-        <SelectInput
-          value={priority}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-            setPriority(e.target.value)
-          }
-          className="text-xs"
-        >
-          {TASK_PRIORITIES.map((p) => (
-            <option key={p} value={p}>
-              {p.charAt(0) + p.slice(1).toLowerCase()}
-            </option>
-          ))}
-        </SelectInput>
-      </FormField>
+      </FormSection>
 
-      <FormField
-        label="Notes"
-        helperText={
-          fromGuestRequest
-            ? "Prefilled from the guest request — edit if needed."
-            : undefined
-        }
+      <FormSection
+        step={2}
+        icon={ClipboardList}
+        title="Task details"
+        hint={`Cleaning date: today (${formatScheduleDate(todayIso())})`}
       >
+      {!fromGuestRequest && (
+        <ChipGroup label="Type">
+          {TASK_TYPES.map((t) => (
+            <Chip key={t} active={taskType === t} onClick={() => setTaskType(t)}>
+              {formatTaskTypeLabel(t).replace(/ Cleaning$/, "")}
+            </Chip>
+          ))}
+        </ChipGroup>
+      )}
+
+      <ChipGroup label="Priority">
+        {TASK_PRIORITIES.map((p) => (
+          <Chip key={p} active={priority === p} onClick={() => setPriority(p)}>
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                priority === p ? "bg-white" : PRIORITY_DOT[p],
+              )}
+            />
+            {p.charAt(0) + p.slice(1).toLowerCase()}
+          </Chip>
+        ))}
+      </ChipGroup>
+
+      <div className="space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          Notes
+          {fromGuestRequest && (
+            <span className="ml-1.5 normal-case tracking-normal text-slate-400">
+              · prefilled from guest request
+            </span>
+          )}
+        </p>
         <TextAreaInput
           value={notes}
           onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
             setNotes(e.target.value)
           }
-          rows={3}
-          placeholder="Optional instructions for housekeeper…"
-          className="min-h-[88px] text-xs leading-relaxed"
+          rows={2}
+          placeholder="Instructions for the housekeeper (optional)"
+          className="min-h-[60px] text-xs leading-relaxed"
         />
-      </FormField>
+      </div>
+      </FormSection>
 
-      <Button
-        className="w-full bg-emerald-700 hover:bg-emerald-800"
-        onClick={() => void handleSubmit()}
-        disabled={creating}
+      <FormSection
+        step={3}
+        icon={Users}
+        title="Assign team"
+        hint="Optional — leave empty to assign later."
       >
-        {creating ? "Creating…" : submitLabel}
-      </Button>
+        <StaffMultiSelect
+          staff={housekeepers}
+          value={assignees}
+          onChange={setAssignees}
+          loading={loadingStaff}
+          placeholder="Select housekeepers…"
+        />
+      </FormSection>
+
+      <div className="sticky -bottom-5 z-10 -mx-5 -mb-5 border-t border-slate-200 bg-white/95 px-5 py-3 backdrop-blur">
+        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
+          <span className="font-semibold text-slate-800">{summaryRoom}</span>
+          <span className="text-slate-300">•</span>
+          <span>{formatTaskTypeLabel(fromGuestRequest || selectedRequestId ? "GUEST_REQUEST" : taskType)}</span>
+          <span className="text-slate-300">•</span>
+          <span className="inline-flex items-center gap-1">
+            <span className={cn("h-1.5 w-1.5 rounded-full", PRIORITY_DOT[priority as keyof typeof PRIORITY_DOT])} />
+            {priority.charAt(0) + priority.slice(1).toLowerCase()}
+          </span>
+          <span className="text-slate-300">•</span>
+          <span>{assignees.length ? `${assignees.length} staff` : "Unassigned"}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="outline"
+            className="w-full border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+            onClick={() => void handleSubmit(false)}
+            disabled={creating !== null}
+          >
+            {creating === "create" ? "Creating…" : submitLabel}
+          </Button>
+          <Button
+            className="flex w-full items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-800"
+            onClick={() => void handleSubmit(true)}
+            disabled={creating !== null || assignees.length === 0}
+            title={assignees.length ? undefined : "Assign at least one housekeeper first"}
+          >
+            <Play className="h-3.5 w-3.5 fill-current" />
+            {creating === "start" ? "Starting…" : "Create & Start"}
+          </Button>
+        </div>
+        {assignees.length === 0 && (
+          <p className="mt-1.5 text-center text-[10px] text-slate-400">
+            Select a housekeeper to create and start cleaning right away.
+          </p>
+        )}
+      </div>
     </div>
+  );
+}
+
+function ChipGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+          : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-700",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+const PRIORITY_DOT: Record<(typeof TASK_PRIORITIES)[number], string> = {
+  LOW: "bg-slate-400",
+  MEDIUM: "bg-amber-500",
+  HIGH: "bg-orange-500",
+  URGENT: "bg-red-600",
+};
+
+function FormSection({
+  step,
+  icon: Icon,
+  title,
+  hint,
+  children,
+}: {
+  step: number;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white">
+      <header className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-2.5">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[11px] font-bold text-white">
+          {step}
+        </span>
+        <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-slate-900">
+          <Icon className="h-3.5 w-3.5 text-slate-400" />
+          {title}
+        </h3>
+        {hint && <p className="ml-auto truncate text-[11px] text-slate-500">{hint}</p>}
+      </header>
+      <div className="space-y-4 p-4">{children}</div>
+    </section>
   );
 }

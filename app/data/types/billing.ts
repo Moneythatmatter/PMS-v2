@@ -32,6 +32,21 @@ export interface FolioListItem {
   isGroupMaster?: boolean;
 }
 
+export interface FolioCharge {
+  id: string;
+  folioId: string;
+  reservationId?: string | null;
+  chargeCategory: string;
+  description?: string;
+  quantity?: number;
+  unitPrice?: number;
+  amount: number;
+  responsibility?: string | null;
+  sourceModule?: string | null;
+  sourceType?: string | null;
+  createdAt?: string;
+}
+
 export type LedgerTransactionType = "PAYMENT" | "REFUND" | "ADJUSTMENT";
 
 export interface LedgerTransaction {
@@ -46,6 +61,7 @@ export interface LedgerTransaction {
   bookingId?: string | null;
   guestId?: string | null;
   sourceModule?: string | null;
+  sourceType?: string | null;
   externalReference?: string | null;
   transactionDate: string;
   notes?: string | null;

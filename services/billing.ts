@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { FolioListItem, LedgerTransaction } from "@/app/data/types/billing";
+import type { FolioCharge, FolioListItem, LedgerTransaction } from "@/app/data/types/billing";
 
 const txnPath = (segment: string) =>
   `/api${segment.startsWith("/") ? segment : `/${segment}`}`;
@@ -14,6 +14,27 @@ export const billingFolioService = {
     return api.get<FolioListItem[]>(txnPath(`/folios${q ? `?${q}` : ""}`));
   },
   get: (id: string) => api.get<FolioListItem>(txnPath(`/folios/${id}`)),
+  ensure: (bookingId: string, guestId?: string | null) =>
+    api.post<FolioListItem>(txnPath("/folios/ensure"), { bookingId, guestId: guestId ?? null }),
+};
+
+export type FolioChargeCategory = "FOOD_BEVERAGE" | "MINIBAR" | "LAUNDRY" | "OTHER";
+
+export interface PostFolioChargeInput {
+  bookingId: string;
+  chargeCategory: FolioChargeCategory;
+  description: string;
+  quantity?: number;
+  unitPrice: number;
+}
+
+export const folioChargeService = {
+  list: (bookingId: string) =>
+    api.get<FolioCharge[]>(
+      txnPath(`/folios/charges?bookingId=${encodeURIComponent(bookingId)}`),
+    ),
+  post: (input: PostFolioChargeInput) =>
+    api.post<FolioCharge>(txnPath("/folios/charges"), input),
 };
 
 export interface RecordFrontOfficePaymentInput {

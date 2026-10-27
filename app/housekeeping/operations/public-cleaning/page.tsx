@@ -54,6 +54,30 @@ import {
 } from "@/components/frontoffice/ui";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 import { HKPublicArea, HKPublicAreaChecklistItem } from "@/app/data/housekeeping";
+import { hkPublicAreaService } from "@/services/housekeeping";
+import { useHrHousekeepers, type HrHousekeeper } from "@/components/housekeeping/useHrHousekeepers";
+import { StaffAvatarStack, StaffMultiSelect } from "@/components/housekeeping/StaffMultiSelect";
+
+function areaStaffNames(area: Pick<HKPublicArea, "assignedStaff">): string[] {
+  return String(area.assignedStaff ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s && s !== "Unassigned");
+}
+
+function areaStaffIds(area: HKPublicArea, staff: HrHousekeeper[]): string[] {
+  if (area.assignedStaffIds?.length) return area.assignedStaffIds;
+  return areaStaffNames(area)
+    .map((name) => staff.find((s) => s.name === name)?.id)
+    .filter((id): id is string => Boolean(id));
+}
+
+function staffNamesFor(ids: string[], staff: HrHousekeeper[]): string {
+  return ids
+    .map((id) => staff.find((s) => s.id === id)?.name)
+    .filter(Boolean)
+    .join(", ");
+}
 
 
 
@@ -169,8 +193,14 @@ export default function PublicAreaCleaning() {
   const [supervisorNotes, setSupervisorNotes] = useState("");
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
+  const { housekeepers: hrHousekeepers, loading: loadingHrStaff } = useHrHousekeepers();
+
   // Assignment states inside the console drawer (populated from area details)
-  const [assignedHousekeeper, setAssignedHousekeeper] = useState("");
+  const [assignedStaffIds, setAssignedStaffIds] = useState<string[]>([]);
+  const [savingAssignment, setSavingAssignment] = useState(false);
+  const [assignmentSaved, setAssignmentSaved] = useState(false);
+  const [newAreaStaffIds, setNewAreaStaffIds] = useState<string[]>([]);
+  const [editAreaStaffIds, setEditAreaStaffIds] = useState<string[]>([]);
   const [assignedSupervisor, setAssignedSupervisor] = useState("");
   const [assignedPriority, setAssignedPriority] = useState<HKPublicArea["priority"]>("Medium");
   const [assignedFrequency, setAssignedFrequency] = useState("");
@@ -269,7 +299,7 @@ export default function PublicAreaCleaning() {
   useEffect(() => {
     if (selectedArea) {
       setCheckedTasks(selectedArea.checklist.filter(c => c.completed).map(c => c.task));
-      setAssignedHousekeeper(selectedArea.assignedStaff);
+      setAssignedStaffIds(areaStaffIds(selectedArea, hrHousekeepers));
       setAssignedSupervisor(selectedArea.supervisor);
       setAssignedPriority(selectedArea.priority);
       setAssignedFrequency(selectedArea.cleaningFrequency);
@@ -278,7 +308,7 @@ export default function PublicAreaCleaning() {
       setRemarks("");
       setSupervisorNotes("");
     }
-  }, [selectedArea]);
+  }, [selectedArea, hrHousekeepers]);
 
   // Compute KPI stats dynamically
   const stats = useMemo(() => {
@@ -297,16 +327,12 @@ export default function PublicAreaCleaning() {
   }, [publicAreas]);
 
   const uniqueStaff = useMemo(() => {
-    return Array.from(new Set(publicAreas.map((a) => a.assignedStaff).filter(Boolean))).sort();
+    return Array.from(new Set(publicAreas.flatMap((a) => areaStaffNames(a)))).sort();
   }, [publicAreas]);
 
   const uniqueCategories = useMemo(() => {
     return Array.from(new Set(publicAreas.map((a) => a.category))).sort();
   }, [publicAreas]);
-
-  const housekeepersList = useMemo(() => {
-    return staff.filter((s) => s.role === "Housekeeper");
-  }, [staff]);
 
   const supervisorsList = useMemo(() => {
     return staff.filter((s) => s.role === "Supervisor" || s.name.includes("Ramesh"));
@@ -345,7 +371,7 @@ export default function PublicAreaCleaning() {
       const matchCategory = filterCategory === "all" || area.category === filterCategory;
       const matchPriority = filterPriority === "all" || area.priority === filterPriority;
       const matchFloor = filterFloor === "all" || area.floor === filterFloor;
-      const matchStaff = filterStaff === "all" || area.assignedStaff === filterStaff;
+      const matchStaff = filterStaff === "all" || areaStaffNames(area).includes(filterStaff);
 
       return matchSearch && matchStatus && matchCategory && matchPriority && matchFloor && matchStaff;
     });
@@ -464,25 +490,41 @@ export default function PublicAreaCleaning() {
   };
 
   // Save assignment changes in console drawer (Supervisor / Admin)
-  const handleSaveAssignment = () => {
-    if (!selectedAreaId) return;
-    // Determine status: if dirty and housekeeper assigned -> Assigned
-    let status = selectedArea?.status;
-    if (status === "Dirty" && assignedHousekeeper) {
-      status = "Assigned";
-    }
+  const handleSaveAssignment = async () => {
+    if (!selectedAreaId || !selectedArea) return;
+    let status = selectedArea.status;
+    if (status === "Dirty" && assignedStaffIds.length) status = "Assigned";
+    if (status === "Assigned" && !assignedStaffIds.length) status = "Dirty";
 
-    updatePublicArea(selectedAreaId, {
-      assignedStaff: assignedHousekeeper,
+    const fields: Partial<HKPublicArea> = {
+      assignedStaff: staffNamesFor(assignedStaffIds, hrHousekeepers),
+      assignedStaffIds,
       supervisor: assignedSupervisor,
       priority: assignedPriority,
       cleaningFrequency: assignedFrequency,
       estDuration: assignedDuration,
       nextCleaning: assignedNextCleaning,
-      status: status
-    });
-    
-    alert("Assignment changes saved successfully.");
+      status,
+    };
+
+    setSavingAssignment(true);
+    try {
+      try {
+        await hkPublicAreaService.update(selectedAreaId, fields);
+      } catch (e) {
+        if (!(e instanceof Error) || !/assigned_staff_ids/i.test(e.message)) throw e;
+        const { assignedStaffIds: _ids, ...rest } = fields;
+        void _ids;
+        await hkPublicAreaService.update(selectedAreaId, rest);
+      }
+      updatePublicArea(selectedAreaId, fields);
+      setAssignmentSaved(true);
+      setTimeout(() => setAssignmentSaved(false), 2000);
+    } catch (e) {
+      alert(`Could not save assignment: ${e instanceof Error ? e.message : "unknown error"}`);
+    } finally {
+      setSavingAssignment(false);
+    }
   };
 
   // Supervisor quick mark clean
@@ -529,7 +571,13 @@ export default function PublicAreaCleaning() {
       return;
     }
     setScheduleError("");
-    addPublicArea(newArea);
+    addPublicArea({
+      ...newArea,
+      assignedStaff: staffNamesFor(newAreaStaffIds, hrHousekeepers),
+      assignedStaffIds: newAreaStaffIds,
+      status: newArea.status === "Dirty" && newAreaStaffIds.length ? "Assigned" : newArea.status,
+    });
+    setNewAreaStaffIds([]);
     setIsAddModalOpen(false);
     // Reset form
     setNewArea({
@@ -566,13 +614,18 @@ export default function PublicAreaCleaning() {
       estDuration: area.estDuration,
       inspectionStatus: area.inspectionStatus,
     });
+    setEditAreaStaffIds(areaStaffIds(area, hrHousekeepers));
     setIsEditModalOpen(true);
   };
 
   // Admin edit area submit
   const handleEditAreaSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updatePublicArea(editAreaForm.id, editAreaForm);
+    updatePublicArea(editAreaForm.id, {
+      ...editAreaForm,
+      assignedStaff: staffNamesFor(editAreaStaffIds, hrHousekeepers),
+      assignedStaffIds: editAreaStaffIds,
+    });
     setIsEditModalOpen(false);
   };
 
@@ -906,12 +959,9 @@ export default function PublicAreaCleaning() {
 
                       {/* Core Details List (Collapsed by default, no accordions) */}
                       <div className="mt-3.5 space-y-1.5 border-t border-slate-50 pt-2.5 text-[10px] text-slate-500 font-medium">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Housekeeper:</span>
-                          <span className="font-bold text-slate-700 flex items-center gap-1">
-                            <User className="h-3 w-3 text-slate-400" />
-                            {area.assignedStaff || "Unassigned"}
-                          </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-slate-400 shrink-0">Team:</span>
+                          <StaffAvatarStack names={areaStaffNames(area)} />
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-slate-400">Last Cleaning:</span>
@@ -1165,16 +1215,25 @@ export default function PublicAreaCleaning() {
               {/* Editable Fields for Supervisor / Admin if not actively cleaning */}
               {selectedArea.status !== "Cleaning" && selectedArea.status !== "Pending Inspection" && (currentUserRole === "Supervisor" || currentUserRole === "Executive Housekeeper") ? (
                 <div className="space-y-3 text-xs font-semibold">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <FormField label="Assigned Housekeeper">
-                      <SelectInput value={assignedHousekeeper} onChange={(e) => setAssignedHousekeeper(e.target.value)}>
-                        <option value="">Unassigned</option>
-                        {housekeepersList.map((h) => (
-                          <option key={h.id} value={h.name}>{h.name}</option>
-                        ))}
-                      </SelectInput>
-                    </FormField>
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-800">Cleaning team</span>
+                      <span className="text-[10px] font-medium text-slate-500">
+                        {assignedStaffIds.length
+                          ? `${assignedStaffIds.length} selected`
+                          : "Select one or more"}
+                      </span>
+                    </div>
+                    <StaffMultiSelect
+                      staff={hrHousekeepers}
+                      value={assignedStaffIds}
+                      onChange={setAssignedStaffIds}
+                      loading={loadingHrStaff}
+                      placeholder="Select housekeepers…"
+                    />
+                  </div>
 
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <FormField label="Assigned Supervisor">
                       <SelectInput value={assignedSupervisor} onChange={(e) => setAssignedSupervisor(e.target.value)}>
                         {supervisorsList.map((s) => (
@@ -1204,18 +1263,27 @@ export default function PublicAreaCleaning() {
                     </FormField>
                   </div>
 
-                  <div className="flex justify-end pt-1">
-                    <Button onClick={handleSaveAssignment} className="bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs py-1.5 px-3 rounded-lg">
-                      Save Assignment Details
+                  <div className="flex items-center justify-end gap-3 pt-1">
+                    {assignmentSaved && (
+                      <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                        <Check className="h-3.5 w-3.5" /> Saved
+                      </span>
+                    )}
+                    <Button
+                      onClick={() => void handleSaveAssignment()}
+                      disabled={savingAssignment}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs py-1.5 px-3 rounded-lg"
+                    >
+                      {savingAssignment ? "Saving…" : "Save Assignment"}
                     </Button>
                   </div>
                 </div>
               ) : (
                 // Read Only View of assignment details during active progress
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                  <div>
-                    <span className="text-slate-400 block text-[9px] uppercase font-bold">Assigned Housekeeper</span>
-                    <span className="text-slate-700 font-bold">{selectedArea.assignedStaff || "Unassigned"}</span>
+                  <div className="col-span-2">
+                    <span className="text-slate-400 block text-[9px] uppercase font-bold mb-1">Cleaning team</span>
+                    <StaffAvatarStack names={areaStaffNames(selectedArea)} max={5} />
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[9px] uppercase font-bold">Assigned Supervisor</span>
@@ -1583,21 +1651,17 @@ export default function PublicAreaCleaning() {
               />
             </FormField>
 
-            <FormField label="Assigned Housekeeper">
-              <SelectInput
-                value={newArea.assignedStaff}
-                onChange={(e) => setNewArea({ ...newArea, assignedStaff: e.target.value })}
-              >
-                <option value="">Unassigned</option>
-                {staff
-                  .filter((s) => s.role === "Housekeeper")
-                  .map((s) => (
-                    <option key={s.id} value={s.name}>
-                      {s.name}
-                    </option>
-                  ))}
-              </SelectInput>
-            </FormField>
+            <div className="sm:col-span-2">
+              <FormField label="Cleaning team">
+                <StaffMultiSelect
+                  staff={hrHousekeepers}
+                  value={newAreaStaffIds}
+                  onChange={setNewAreaStaffIds}
+                  loading={loadingHrStaff}
+                  placeholder="Select housekeepers…"
+                />
+              </FormField>
+            </div>
 
             <FormField label="Assigned Supervisor">
               <SelectInput
@@ -1738,26 +1802,22 @@ export default function PublicAreaCleaning() {
               />
             </FormField>
 
-            <FormField label="Assigned Housekeeper">
-              <SelectInput
-                value={editAreaForm.assignedStaff || ""}
-                onChange={(e) => {
-                  const name = e.target.value;
-                  // If assigning staff from dirty -> status updates to Assigned
-                  const status = editAreaForm.status === "Dirty" && name ? "Assigned" : editAreaForm.status;
-                  setEditAreaForm({ ...editAreaForm, assignedStaff: name, status });
-                }}
-              >
-                <option value="">Unassigned</option>
-                {staff
-                  .filter((s) => s.role === "Housekeeper")
-                  .map((s) => (
-                    <option key={s.id} value={s.name}>
-                      {s.name}
-                    </option>
-                  ))}
-              </SelectInput>
-            </FormField>
+            <div className="sm:col-span-2">
+              <FormField label="Cleaning team">
+                <StaffMultiSelect
+                  staff={hrHousekeepers}
+                  value={editAreaStaffIds}
+                  onChange={(ids) => {
+                    setEditAreaStaffIds(ids);
+                    const status =
+                      editAreaForm.status === "Dirty" && ids.length ? "Assigned" : editAreaForm.status;
+                    setEditAreaForm({ ...editAreaForm, status });
+                  }}
+                  loading={loadingHrStaff}
+                  placeholder="Select housekeepers…"
+                />
+              </FormField>
+            </div>
 
             <FormField label="Assigned Supervisor">
               <SelectInput

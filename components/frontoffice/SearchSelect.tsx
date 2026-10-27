@@ -79,6 +79,27 @@ export function SearchSelect({
   );
 }
 
+/** Checkbox shown under a room type / category picker to also count dirty rooms. */
+export function IncludeDirtyRoomsToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="mt-1.5 flex w-fit cursor-pointer items-center gap-1.5 text-[11px] font-medium text-slate-600">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-3.5 w-3.5 rounded border-slate-300 accent-emerald-600"
+      />
+      Include dirty rooms
+    </label>
+  );
+}
+
 /** Room type row: name + red availability count badge. */
 export function RoomTypeAvailabilityOption({
   label,

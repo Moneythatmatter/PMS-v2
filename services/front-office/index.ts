@@ -22,6 +22,7 @@ export {
 export {
   guestService,
   guestStayHistoryService,
+  guestDocumentService,
   folioService,
   paymentService,
   invoiceService,
@@ -45,4 +46,8 @@ export {
 } from "./closing";
 export { cashierSessionService } from "./cashier-sessions";
 export type { CashierSession, CashierSessionDetail, CashierLine } from "./cashier-sessions";
-export { billingFolioService, billingTransactionService } from "../billing";
+export {
+  billingFolioService,
+  billingTransactionService,
+  folioChargeService,
+} from "../billing";

@@ -416,7 +416,7 @@ export default function GroupBookingDetailPage() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              href="/frontoffice/group-booking"
+              href="/frontoffice/reservation/all-bookings?filter=group"
               className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
             >
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />

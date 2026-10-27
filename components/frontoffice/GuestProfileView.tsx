@@ -7,7 +7,6 @@ import {
   Award,
   Calendar,
   Crown,
-  Eye,
   FileText,
   Globe,
   Hash,
@@ -46,13 +45,8 @@ import { displayGuestNo } from "@/lib/guest-display";
 import { displayBookingNo } from "@/lib/booking-display";
 import { allBookingsDetailHref, allBookingsGuestHref } from "@/lib/check-in-navigation";
 import { ReservationStatusBadge } from "@/components/frontoffice/reservation/ReservationStatusBadge";
-import {
-  buildGuestDocuments,
-  documentStatusClass,
-  DocumentPreviewModal,
-  GuestEditModal,
-  type GuestDocumentItem,
-} from "@/components/frontoffice/GuestProfileModals";
+import { GuestEditModal } from "@/components/frontoffice/GuestProfileModals";
+import { GuestDocumentsPanel } from "@/components/frontoffice/guest-documents/GuestDocumentsPanel";
 
 const tabs = [
   "Personal",
@@ -131,7 +125,6 @@ export function GuestProfileView() {
   const [allBookings, setAllBookings] = useState<ReservationBooking[]>([]);
   const [allFeedbacks, setAllFeedbacks] = useState<GuestFeedbackRecord[]>([]);
   const [editOpen, setEditOpen] = useState(false);
-  const [previewDoc, setPreviewDoc] = useState<GuestDocumentItem | null>(null);
   const appliedDeepLinkRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -219,7 +212,6 @@ export function GuestProfileView() {
   const closeDrawer = () => {
     setDrawerOpen(false);
     setEditOpen(false);
-    setPreviewDoc(null);
     if (guestIdQuery) {
       const params = new URLSearchParams(searchParams.toString());
       params.delete("guestId");
@@ -447,7 +439,6 @@ export function GuestProfileView() {
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onEditGuest={() => setEditOpen(true)}
-            onPreviewDocument={setPreviewDoc}
             stays={stays}
             bookings={bookings}
             feedback={feedback}
@@ -456,19 +447,12 @@ export function GuestProfileView() {
       </Drawer>
 
       {selected && (
-        <>
-          <GuestEditModal
-            guest={selected}
-            open={editOpen}
-            onClose={() => setEditOpen(false)}
-            onSaved={handleGuestSaved}
-          />
-          <DocumentPreviewModal
-            guest={selected}
-            document={previewDoc}
-            onClose={() => setPreviewDoc(null)}
-          />
-        </>
+        <GuestEditModal
+          guest={selected}
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          onSaved={handleGuestSaved}
+        />
       )}
     </div>
   );
@@ -479,7 +463,6 @@ function ProfilePanel({
   activeTab,
   onTabChange,
   onEditGuest,
-  onPreviewDocument,
   stays,
   bookings,
   feedback,
@@ -488,13 +471,10 @@ function ProfilePanel({
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
   onEditGuest: () => void;
-  onPreviewDocument: (doc: GuestDocumentItem) => void;
   stays: GuestStayHistory[];
   bookings: ReservationBooking[];
   feedback: GuestFeedbackRecord[];
 }) {
-  const documents = buildGuestDocuments(guest);
-
   return (
     <div>
       <div className="mb-4 rounded-xl border border-slate-100 bg-gradient-to-r from-slate-50/90 to-white p-4">
@@ -665,39 +645,24 @@ function ProfilePanel({
         )}
 
         {activeTab === "Documents" && (
-          <div className="space-y-2">
-            {documents.map((doc) => (
-              <div
-                key={doc.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 px-4 py-3"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <FileText className="h-4 w-4 shrink-0 text-slate-400" />
-                  <span className="truncate text-sm font-medium text-slate-900">{doc.name}</span>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-xs font-medium",
-                      documentStatusClass(doc.status),
-                    )}
-                  >
-                    {doc.status}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!doc.canPreview}
-                    onClick={() => onPreviewDocument(doc)}
-                    className="gap-1.5"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    Preview
-                  </Button>
-                </div>
-              </div>
-            ))}
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg border border-slate-100 bg-slate-50/60 px-4 py-3 text-xs">
+              <span className="text-slate-500">
+                ID Type:{" "}
+                <span className="font-semibold text-slate-800">{guest.idType || "—"}</span>
+              </span>
+              <span className="text-slate-500">
+                ID Number:{" "}
+                <span className="font-semibold text-slate-800">{guest.idNumber || "—"}</span>
+              </span>
+            </div>
+            <GuestDocumentsPanel
+              guestId={guest.id}
+              documentType={guest.idType}
+              allowUpload
+              allowDelete
+              emptyText="No ID documents uploaded for this guest."
+            />
           </div>
         )}
 

@@ -130,7 +130,6 @@ function HKRoomStatusCardTile({
 export default function RoomStatusOperations() {
   const {
     rooms,
-    staff,
     checklists,
     pauseCleaning,
     resumeCleaning,
@@ -541,7 +540,6 @@ export default function RoomStatusOperations() {
             {selectedRoomActiveTask ? (
               <CleaningTaskDetailPanel
                 task={selectedRoomActiveTask}
-                staff={staff}
                 onUpdated={async () => {
                   await reloadTasks();
                 }}

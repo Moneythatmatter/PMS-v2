@@ -75,8 +75,8 @@ export const hkTaskService = {
     api.get<HKTask>(hkPath(`/tasks/room/${encodeURIComponent(roomId)}/active`)),
   create: (body: Partial<HKTask> & { roomId: string }) =>
     api.post<HKTask>(hkPath("/tasks"), body),
-  assign: (id: string, assignedTo: string) =>
-    api.post<HKTask>(hkPath(`/tasks/${id}/assign`), { assignedTo }),
+  assign: (id: string, assignedStaffIds: string[]) =>
+    api.post<HKTask>(hkPath(`/tasks/${id}/assign`), { assignedStaffIds }),
   start: (id: string) => api.post<HKTask>(hkPath(`/tasks/${id}/start`), {}),
   complete: (id: string, body?: { notes?: string; remarks?: string }) =>
     api.post<HKTask>(hkPath(`/tasks/${id}/complete`), body ?? {}),

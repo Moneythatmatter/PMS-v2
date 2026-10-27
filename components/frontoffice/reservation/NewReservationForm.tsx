@@ -42,7 +42,11 @@ import {
   guestToFormFields,
   splitGuestName,
 } from "@/components/frontoffice/guestFormUtils";
-import { SearchSelect, RoomTypeAvailabilityOption } from "@/components/frontoffice/SearchSelect";
+import {
+  SearchSelect,
+  RoomTypeAvailabilityOption,
+  IncludeDirtyRoomsToggle,
+} from "@/components/frontoffice/SearchSelect";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -58,8 +62,10 @@ import type { ReservationBooking, ReservationStatus } from "@/app/data/types/fro
 import { normalizeToIso } from "@/lib/reservation-dates";
 import {
   filterRoomsForStay,
-  isRoomVacantStatus,
+  isRoomDirtyCard,
+  isRoomOfferable,
 } from "@/lib/room-availability";
+import type { RoomStatusCard } from "@/app/data/frontoffice/modules";
 import type { RoomAvailabilityBlock } from "@/services/front-office/rooms";
 
 function nightsBetween(checkIn: string, checkOut: string) {
@@ -139,7 +145,7 @@ const bookingTypeOptions = [
   { id: "Company", label: "Company", hint: "Corporate" },
 ] as const;
 
-const NON_EDITABLE_STATUSES = new Set(["Cancelled", "Checked Out", "No Show"]);
+const NON_EDITABLE_STATUSES = new Set(["Cancelled", "No Show"]);
 
 export function NewReservationForm() {
   const searchParams = useSearchParams();
@@ -172,14 +178,41 @@ export function NewReservationForm() {
   const [editLoading, setEditLoading] = useState(isEditMode);
   const [editLoadError, setEditLoadError] = useState<string | null>(null);
   const [editBookingStatus, setEditBookingStatus] = useState<ReservationStatus | null>(null);
-  const [allRoomNos, setAllRoomNos] = useState<string[]>([]);
-  const [roomIdByNo, setRoomIdByNo] = useState<Record<string, string>>({});
-  const [typeByRoomNo, setTypeByRoomNo] = useState<Record<string, string>>({});
+  /** Checked-out stays are billed and closed — only guest/booking metadata stays editable. */
+  const stayLocked = isEditMode && editBookingStatus === "Checked Out";
+  const [roomCards, setRoomCards] = useState<RoomStatusCard[]>([]);
+  const [includeDirty, setIncludeDirty] = useState(false);
   const [reservations, setReservations] = useState<ReservationBooking[]>([]);
   const [availabilityBlocks, setAvailabilityBlocks] = useState<RoomAvailabilityBlock[]>([]);
   const [tariffByPlanMap, setTariffByPlanMap] = useState<Record<string, number>>({});
   const [baseRateByRoomMap, setBaseRateByRoomMap] = useState<Record<string, number>>({});
-  const [allRoomsByType, setAllRoomsByType] = useState<Record<string, string[]>>({});
+  /** Offerable rooms (vacant / clean, plus dirty when opted in); stay availability is checked separately. */
+  const { allRoomNos, roomIdByNo, typeByRoomNo, allRoomsByType } = useMemo(() => {
+    const byType: Record<string, string[]> = {};
+    const nos: string[] = [];
+    const idByNo: Record<string, string> = {};
+    const typeByNo: Record<string, string> = {};
+    for (const r of roomCards) {
+      if (!isRoomOfferable(r, includeDirty)) continue;
+      nos.push(r.roomNo);
+      if (r.id) idByNo[r.roomNo] = r.id;
+      const key = r.type || "Other";
+      typeByNo[r.roomNo] = key;
+      (byType[key] ??= []).push(r.roomNo);
+    }
+    const byNumber = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+    for (const key of Object.keys(byType)) byType[key].sort(byNumber);
+    return {
+      allRoomNos: nos.sort(byNumber),
+      roomIdByNo: idByNo,
+      typeByRoomNo: typeByNo,
+      allRoomsByType: byType,
+    };
+  }, [roomCards, includeDirty]);
+  const dirtyRoomNos = useMemo(
+    () => new Set(roomCards.filter(isRoomDirtyCard).map((r) => r.roomNo)),
+    [roomCards],
+  );
   const [roomTypeOptions, setRoomTypeOptions] = useState<string[]>(() => [
     ...roomTypes,
   ]);
@@ -352,27 +385,7 @@ export function NewReservationForm() {
 
         setReservations(reservationList);
 
-        // Only vacant rooms are offered; availability for the stay is then checked against reservations.
-        const byType: Record<string, string[]> = {};
-        const nos: string[] = [];
-        const idByNo: Record<string, string> = {};
-        const typeByNo: Record<string, string> = {};
-        for (const r of roomCards) {
-          if (!isRoomVacantStatus(r.status)) continue;
-          nos.push(r.roomNo);
-          if (r.id) idByNo[r.roomNo] = r.id;
-          const key = r.type || "Other";
-          typeByNo[r.roomNo] = key;
-          if (!byType[key]) byType[key] = [];
-          byType[key].push(r.roomNo);
-        }
-        for (const key of Object.keys(byType)) {
-          byType[key].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-        }
-        setAllRoomNos(nos.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
-        setRoomIdByNo(idByNo);
-        setTypeByRoomNo(typeByNo);
-        setAllRoomsByType(byType);
+        setRoomCards(roomCards);
 
         const roomRates: Record<string, number> = {};
         const typeNames: string[] = [];
@@ -437,9 +450,7 @@ export function NewReservationForm() {
         }
       } catch {
         if (!cancelled) {
-          setAllRoomNos([]);
-          setAllRoomsByType({});
-          setTypeByRoomNo({});
+          setRoomCards([]);
           setReservations([]);
         }
       }
@@ -595,9 +606,12 @@ export function NewReservationForm() {
     return rooms.map((r) => ({
       id: r,
       label: `Room ${r}`,
-      hint: typeByRoomNo[r] || form.roomType || undefined,
+      hint:
+        [typeByRoomNo[r] || form.roomType, dirtyRoomNos.has(r) ? "Dirty" : ""]
+          .filter(Boolean)
+          .join(" · ") || undefined,
     }));
-  }, [filteredRooms, form.roomNumber, form.roomType, typeByRoomNo]);
+  }, [filteredRooms, form.roomNumber, form.roomType, typeByRoomNo, dirtyRoomNos]);
 
   const roomAvailabilityWarning = useMemo(() => {
     if (form.roomType) {
@@ -841,8 +855,11 @@ export function NewReservationForm() {
     } else if (form.checkIn && form.checkOut <= form.checkIn) {
       next.checkOut = "Check-out date must be after check-in date";
     }
-    if (!form.roomType) next.roomType = "Required";
-    if (form.advancePaid > 0) {
+    if (!form.roomType && !stayLocked) next.roomType = "Required";
+    if (stayLocked) {
+      delete next.checkIn;
+      delete next.checkOut;
+    } else if (form.advancePaid > 0) {
       if (!form.paymentMode.trim()) {
         next.paymentMode = "Required when advance is collected";
       }
@@ -857,7 +874,7 @@ export function NewReservationForm() {
             : "Required — enter card auth / reference from POS or bank";
       }
     }
-    if (form.advancePaid > totalAmount && totalAmount > 0) {
+    if (!stayLocked && form.advancePaid > totalAmount && totalAmount > 0) {
       next.advancePaid = "Advance cannot exceed total amount";
     }
     Object.assign(next, checkGuestUniqueness());
@@ -932,7 +949,17 @@ export function NewReservationForm() {
         specialRequests: form.notes || undefined,
       };
 
-      const booking = isEditMode
+      const booking = stayLocked
+        ? await reservationService.update(editBookingId, {
+            guestId: payload.guestId,
+            sourceId: payload.sourceId,
+            adults: payload.adults,
+            children: payload.children,
+            bookingType: payload.bookingType,
+            companyName: payload.companyName,
+            specialRequests: payload.specialRequests,
+          })
+        : isEditMode
         ? await reservationService.update(editBookingId, {
             ...payload,
             status: editBookingStatus ?? undefined,
@@ -1223,12 +1250,21 @@ export function NewReservationForm() {
               </FormField>
             </SectionCard>
 
-            <SectionCard icon={BedDouble} title="Booking Details" description="Stay dates, room allocation, tariff, and booking type">
+            <SectionCard
+              icon={BedDouble}
+              title="Booking Details"
+              description={
+                stayLocked
+                  ? "Guest has checked out — dates, room, and tariff are locked. Booking type, guests, and source can still be corrected."
+                  : "Stay dates, room allocation, tariff, and booking type"
+              }
+            >
               <FormField label="Check-in Date" required>
                 <TextInput
                   className={inputClass}
                   type="date"
-                  min={todayStr}
+                  disabled={stayLocked}
+                  min={stayLocked ? undefined : todayStr}
                   value={form.checkIn}
                   onChange={(e) => update("checkIn", e.target.value)}
                 />
@@ -1238,6 +1274,7 @@ export function NewReservationForm() {
                 <TextInput
                   className={inputClass}
                   type="date"
+                  disabled={stayLocked}
                   min={form.checkIn || todayStr}
                   value={form.checkOut}
                   onChange={(e) => update("checkOut", e.target.value)}
@@ -1303,6 +1340,7 @@ export function NewReservationForm() {
                   selectedId={form.roomType || null}
                   placeholder="Search room type…"
                   inputClassName={inputClass}
+                  disabled={stayLocked}
                   onSelect={(opt) => update("roomType", opt.id)}
                   onClear={() => update("roomType", "")}
                   renderOption={(opt) => (
@@ -1312,12 +1350,22 @@ export function NewReservationForm() {
                     />
                   )}
                 />
+                {!stayLocked && (
+                  <IncludeDirtyRoomsToggle
+                    checked={includeDirty}
+                    onChange={(checked) => {
+                      setIncludeDirty(checked);
+                      if (!checked && dirtyRoomNos.has(form.roomNumber)) update("roomNumber", "");
+                    }}
+                  />
+                )}
                 {errors.roomType && <p className="text-xs text-red-500">{errors.roomType}</p>}
               </FormField>
               <FormField label="Room Number">
                 <SearchSelect
                   options={roomSelectOptions}
                   selectedId={form.roomNumber || null}
+                  disabled={stayLocked}
                   placeholder={
                     filteredRooms.length === 0 &&
                     (Boolean(form.roomType) ||
@@ -1343,7 +1391,7 @@ export function NewReservationForm() {
                   }}
                   onClear={() => update("roomNumber", "")}
                 />
-                {roomAvailabilityWarning && (
+                {roomAvailabilityWarning && !stayLocked && (
                   <p className="text-xs font-medium text-red-600">
                     {roomAvailabilityWarning}
                   </p>
@@ -1363,6 +1411,7 @@ export function NewReservationForm() {
                   selectedId={form.tariffPlan || null}
                   placeholder="Search tariff plan…"
                   inputClassName={inputClass}
+                  disabled={stayLocked}
                   onSelect={(opt) => {
                     update("tariffPlan", opt.id);
                     const selected = tariffPlanOptions.find((p) => p.id === opt.id);
@@ -1379,6 +1428,7 @@ export function NewReservationForm() {
                   selectedId={form.mealPlan || null}
                   placeholder="Search meal plan…"
                   inputClassName={inputClass}
+                  disabled={stayLocked}
                   onSelect={(opt) => update("mealPlan", opt.id)}
                   onClear={() => update("mealPlan", "")}
                 />
@@ -1395,6 +1445,11 @@ export function NewReservationForm() {
               </FormField>
             </SectionCard>
 
+            {stayLocked ? (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Payments for a checked-out booking are recorded from the booking details page using Add Payment.
+              </p>
+            ) : (
             <SectionCard
               icon={CreditCard}
               title="Payment"
@@ -1468,6 +1523,7 @@ export function NewReservationForm() {
                 </FormField>
               )}
             </SectionCard>
+            )}
           </div>
 
           {/* Sticky summary sidebar */}

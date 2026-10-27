@@ -462,6 +462,8 @@ export type VoucherLine = {
   chequeNo: string;
   chequeDate: string | null;
   gstRate: number | null;
+  /** Line narration; empty means the voucher narration applies. */
+  narration?: string;
   reconciled: boolean;
   reconDate: string | null;
 };
@@ -536,6 +538,7 @@ export type VoucherLineInput = {
   chequeNo?: string;
   chequeDate?: string | null;
   gstRate?: number | null;
+  narration?: string;
 };
 
 export type BillAllocationInput = { billId: string; amount: number; deductions?: number };

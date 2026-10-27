@@ -5,8 +5,8 @@ import { DepartmentStaffView } from "@/components/workforce/DepartmentStaffView"
 export default function StaffWorkforceMastersPage() {
   return (
     <DepartmentStaffView
-      eyebrow="Housekeeping Masters"
-      title="Workforce & Staffing Masters"
+        eyebrow="Housekeeping Masters"
+        title="Workforce & Staffing Masters"
       description="Staff for this property from Human Resources, with role, department, shift, contact, and status."
       department="housekeeping"
       fallbackToAll

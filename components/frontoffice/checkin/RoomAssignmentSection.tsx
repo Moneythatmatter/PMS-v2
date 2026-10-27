@@ -7,6 +7,7 @@ import {
   SearchSelect,
   RoomTypeAvailabilityOption,
 } from "@/components/frontoffice/SearchSelect";
+import { mealPlans } from "@/app/data/frontoffice/constants";
 import { cn } from "@/lib/utils";
 
 const inputClass = "rounded-xl";
@@ -33,6 +34,9 @@ interface RoomAssignmentSectionProps {
   selectedRoomType?: string;
   onRoomTypeChange?: (val: string) => void;
   roomTypeError?: string;
+  /** When set, a Meal Plan picker is shown. */
+  mealPlan?: string;
+  onMealPlanChange?: (val: string) => void;
 }
 
 function normalizeRooms(rooms: RoomOption[] | string[]): RoomOption[] {
@@ -52,7 +56,13 @@ export function RoomAssignmentSection({
   selectedRoomType,
   onRoomTypeChange,
   roomTypeError,
+  mealPlan,
+  onMealPlanChange,
 }: RoomAssignmentSectionProps) {
+  const mealPlanOptions = useMemo(
+    () => mealPlans.map((m) => ({ id: m, label: m })),
+    [],
+  );
   const rooms = useMemo(() => normalizeRooms(availableRooms), [availableRooms]);
   const hasTypePicker = Boolean(roomTypes && onRoomTypeChange);
   const awaitingType = hasTypePicker && !selectedRoomType;
@@ -129,6 +139,18 @@ export function RoomAssignmentSection({
                     count={Number(opt.hint ?? 0)}
                   />
                 )}
+              />
+            </FormField>
+          ) : null}
+          {onMealPlanChange ? (
+            <FormField label="Meal Plan">
+              <SearchSelect
+                options={mealPlanOptions}
+                selectedId={mealPlan || null}
+                placeholder="Search meal plan…"
+                inputClassName={inputClass}
+                onSelect={(opt) => onMealPlanChange(opt.id)}
+                onClear={() => onMealPlanChange("")}
               />
             </FormField>
           ) : null}

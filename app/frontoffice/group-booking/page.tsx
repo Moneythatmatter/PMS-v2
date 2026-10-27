@@ -1,5 +1,5 @@
-import { GroupBookingView } from "@/components/frontoffice/OperationsViews";
+import { redirect } from "next/navigation";
 
 export default function GroupBookingPage() {
-  return <GroupBookingView />;
+  redirect("/frontoffice/reservation/all-bookings?filter=group");
 }

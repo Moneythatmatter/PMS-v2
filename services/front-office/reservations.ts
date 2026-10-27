@@ -62,6 +62,8 @@ export const reservationService = {
     id: string,
     body: { checkOut: string; nights?: number; totalAmount?: number; balance?: number },
   ) => api.post<ReservationBooking>(foPath(`/reservations/${id}/extend-stay`), body),
+  transferRoom: (id: string, body: { toRoom: string; reason?: string; date?: string }) =>
+    api.post<ReservationBooking>(foPath(`/reservations/${id}/transfer-room`), body),
   summary: () =>
     api.get<ReservationSummaryStat[]>(foPath("/reservations/summary")),
   inHouse: () =>

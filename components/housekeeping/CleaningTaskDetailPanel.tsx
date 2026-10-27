@@ -2,61 +2,68 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Play, CheckCircle2 } from "lucide-react";
+import {
+  Play,
+  CheckCircle2,
+  CalendarDays,
+  BookOpen,
+  MessageSquare,
+  Users,
+} from "lucide-react";
 import { hkTaskService } from "@/services/housekeeping";
-import type { HKStaff, HKTask } from "./HousekeepingTypes";
+import type { HKTask } from "./HousekeepingTypes";
+import { useHrHousekeepers } from "./useHrHousekeepers";
+import { StaffAvatar, StaffMultiSelect } from "./StaffMultiSelect";
+import { cn } from "@/lib/utils";
 import {
   formatTaskStatusLabel,
   formatTaskTypeLabel,
   isTaskOverdue,
 } from "./taskUtils";
-import {
-  formatScheduleDate,
-  formatScheduleTime,
-} from "@/lib/hk-task-schedule";
+import { formatScheduleDate } from "@/lib/hk-task-schedule";
 import { Button } from "@/components/ui/Button";
-import { SelectInput, FormField } from "@/components/frontoffice/ui";
 
 export type CleaningTaskDetailPanelProps = {
   task: HKTask;
-  staff: HKStaff[];
   onUpdated?: () => void | Promise<void>;
   roomStatusLink?: string;
 };
 
 export function CleaningTaskDetailPanel({
   task,
-  staff,
   onUpdated,
   roomStatusLink = "/housekeeping/operations/rooms",
 }: CleaningTaskDetailPanelProps) {
-  const housekeepers = useMemo(
-    () => staff.filter((s) => s.role === "Housekeeper"),
-    [staff],
-  );
+  const { housekeepers, loading: loadingStaff } = useHrHousekeepers();
 
-  const currentAssigneeName = useMemo(() => {
-    return (
-      task.assignedToName ??
-      housekeepers.find(
-        (h) => h.id === task.assignedTo || h.name === task.assignedTo,
-      )?.name ??
-      task.assignedTo ??
-      ""
-    );
-  }, [task.assignedToName, task.assignedTo, housekeepers]);
+  const currentAssigneeIds = useMemo(() => {
+    const keys = task.assignedStaffIds?.length
+      ? task.assignedStaffIds
+      : task.assignedTo
+        ? [task.assignedTo]
+        : [];
+    return keys
+      .map((key) => housekeepers.find((h) => h.id === key || h.name === key)?.id)
+      .filter((id): id is string => Boolean(id));
+  }, [task.assignedStaffIds, task.assignedTo, housekeepers]);
 
-  const [assignee, setAssignee] = useState(() => currentAssigneeName);
+  const assignedNames = useMemo(() => {
+    if (task.assignedStaffNames?.length) return task.assignedStaffNames;
+    return task.assignedToName ? [task.assignedToName] : [];
+  }, [task.assignedStaffNames, task.assignedToName]);
+
+  const [assignees, setAssignees] = useState<string[]>([]);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  const currentKey = currentAssigneeIds.join("|");
   useEffect(() => {
-    setAssignee(currentAssigneeName);
-  }, [task.id, currentAssigneeName]);
+    setAssignees(currentKey ? currentKey.split("|") : []);
+  }, [task.id, currentKey]);
 
-  const isAlreadyAssigned = Boolean(
-    currentAssigneeName && assignee === currentAssigneeName,
-  );
+  const unchanged =
+    [...assignees].sort().join("|") === [...currentAssigneeIds].sort().join("|");
+  const overdue = isTaskOverdue(task);
 
   const runTaskAction = async (fn: () => Promise<unknown>) => {
     setActionBusy(true);
@@ -79,117 +86,109 @@ export function CleaningTaskDetailPanel({
         </p>
       )}
 
-      <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 text-xs space-y-2">
-        <div className="flex justify-between">
-          <span className="text-slate-400">Task</span>
-          <span className="font-bold text-slate-800">
-            {task.taskNumber ?? task.id.slice(0, 8)}
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-slate-400">Room</span>
-          <span className="font-semibold text-slate-700">
-            {task.roomNo ?? task.roomId}
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-slate-400">Type</span>
-          <span className="font-semibold text-slate-700">
-            {formatTaskTypeLabel(task.taskType)}
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-slate-400">Status</span>
-          <span className="font-bold text-slate-800">
-            {formatTaskStatusLabel(task.status)}
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-slate-400">Priority</span>
-          <span className="font-semibold text-slate-700">{task.priority}</span>
-        </div>
-        {task.bookingNo && (
-          <div className="flex justify-between">
-            <span className="text-slate-400">Booking</span>
-            <span className="font-semibold text-slate-700">{task.bookingNo}</span>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-start justify-between gap-3 bg-gradient-to-r from-emerald-50 to-white px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {task.taskNumber ?? task.id.slice(0, 8)}
+            </p>
+            <p className="text-lg font-bold leading-tight text-slate-900">
+              Room {task.roomNo ?? task.roomId}
+            </p>
+            <p className="text-xs text-slate-500">{formatTaskTypeLabel(task.taskType)}</p>
           </div>
-        )}
-        {task.requestId && (
-          <div className="flex justify-between gap-4">
-            <span className="text-slate-400 shrink-0">Guest request</span>
-            <span className="text-right font-semibold text-slate-700">
-              {task.requestNumber ?? task.requestId.slice(0, 8)}
-              {task.requestDescription
-                ? ` — ${task.requestDescription}`
-                : ""}
+          <div className="flex flex-col items-end gap-1.5">
+            <span
+              className={cn(
+                "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase",
+                STATUS_BADGE[task.status] ?? "border-slate-200 bg-slate-50 text-slate-600",
+              )}
+            >
+              {formatTaskStatusLabel(task.status)}
+            </span>
+            <span
+              className={cn(
+                "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase",
+                PRIORITY_BADGE[task.priority] ?? "border-slate-200 bg-slate-50 text-slate-600",
+              )}
+            >
+              {task.priority}
             </span>
           </div>
-        )}
-        {(task.scheduledDate || task.scheduledStartAt || task.dueAt) && (
-          <div className="space-y-1.5 border-t border-slate-100 pt-2">
-            {task.scheduledDate && (
-              <div className="flex justify-between">
-                <span className="text-slate-400">Cleaning date</span>
-                <span className="font-semibold text-slate-700">
-                  {formatScheduleDate(task.scheduledDate)}
+        </div>
+
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-3 text-xs">
+          <DetailItem icon={CalendarDays} label="Cleaning date">
+            {task.scheduledDate ? formatScheduleDate(task.scheduledDate) : "—"}
+            {overdue && (
+              <span className="ml-1.5 rounded bg-red-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-red-600">
+                Overdue
+              </span>
+            )}
+          </DetailItem>
+          <DetailItem icon={BookOpen} label="Booking">
+            {task.bookingNo ?? "—"}
+          </DetailItem>
+          {task.requestId && (
+            <div className="col-span-2">
+              <DetailItem icon={MessageSquare} label="Guest request">
+                {task.requestNumber ?? task.requestId.slice(0, 8)}
+                {task.requestDescription ? ` — ${task.requestDescription}` : ""}
+              </DetailItem>
+            </div>
+          )}
+          <div className="col-span-2">
+            <DetailItem icon={Users} label="Assigned team">
+              {assignedNames.length ? (
+                <span className="mt-0.5 flex flex-wrap gap-1">
+                  {assignedNames.map((name) => (
+                    <span
+                      key={name}
+                      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-0.5 pl-0.5 pr-2 text-[11px] font-semibold text-slate-700"
+                    >
+                      <StaffAvatar id={name} name={name} size="xs" />
+                      {name}
+                    </span>
+                  ))}
                 </span>
-              </div>
-            )}
-            {(task.scheduledStartAt || task.dueAt) && (
-              <div className="flex justify-between gap-4">
-                <span className="text-slate-400 shrink-0">Time window</span>
-                <span className="text-right font-semibold text-slate-700">
-                  {formatScheduleTime(task.scheduledStartAt)}
-                  {" – "}
-                  {formatScheduleTime(task.dueAt)}
-                </span>
-              </div>
-            )}
-            {isTaskOverdue(task) && (
-              <p className="text-[11px] font-semibold text-red-600">Overdue</p>
-            )}
+              ) : (
+                <span className="text-slate-400">Unassigned</span>
+              )}
+            </DetailItem>
           </div>
-        )}
+        </dl>
+
         {task.notes && (
-          <div className="pt-2 border-t border-slate-100 text-slate-600">
-            <strong>Notes:</strong> {task.notes}
+          <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-2.5 text-xs text-slate-600">
+            <span className="font-semibold text-slate-700">Notes: </span>
+            {task.notes}
           </div>
         )}
       </div>
 
       {(task.status === "PENDING" || task.status === "ASSIGNED") && (
-        <div className="space-y-3">
-          <FormField label="Assign Housekeeper">
-            <SelectInput
-              value={assignee}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                setAssignee(e.target.value)
-              }
-            >
-              {housekeepers.length === 0 ? (
-                <option value="">No housekeepers configured</option>
-              ) : (
-                <>
-                  <option value="" disabled>
-                    Select housekeeper…
-                  </option>
-                  {housekeepers.map((h) => (
-                    <option key={h.id} value={h.name}>
-                      {h.name}
-                    </option>
-                  ))}
-                </>
-              )}
-            </SelectInput>
-          </FormField>
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div>
+            <h4 className="text-sm font-semibold text-slate-900">
+              {currentAssigneeIds.length ? "Update team" : "Assign team"}
+            </h4>
+            <p className="text-[11px] text-slate-500">Select one or more housekeepers.</p>
+          </div>
+          <StaffMultiSelect
+            staff={housekeepers}
+            value={assignees}
+            onChange={setAssignees}
+            loading={loadingStaff}
+            placeholder="Select housekeepers…"
+          />
           <Button
             className="w-full bg-emerald-700 hover:bg-emerald-800 text-white"
-            disabled={actionBusy || !assignee || isAlreadyAssigned}
+            disabled={actionBusy || assignees.length === 0 || unchanged}
             onClick={() =>
-              void runTaskAction(() => hkTaskService.assign(task.id, assignee))
+              void runTaskAction(() => hkTaskService.assign(task.id, assignees))
             }
           >
-            Assign Task
+            {assignees.length > 1 ? `Assign ${assignees.length} staff` : "Assign Task"}
           </Button>
           {(task.status === "ASSIGNED" || task.assignedTo) && (
             <Button
@@ -248,6 +247,41 @@ export function CleaningTaskDetailPanel({
       >
         View room status board →
       </Link>
+    </div>
+  );
+}
+
+const STATUS_BADGE: Partial<Record<HKTask["status"], string>> = {
+  PENDING: "border-amber-200 bg-amber-50 text-amber-700",
+  ASSIGNED: "border-indigo-200 bg-indigo-50 text-indigo-700",
+  IN_PROGRESS: "border-sky-200 bg-sky-50 text-sky-700",
+  PENDING_INSPECTION: "border-blue-200 bg-blue-50 text-blue-700",
+  APPROVED: "border-emerald-200 bg-emerald-50 text-emerald-700",
+};
+
+const PRIORITY_BADGE: Record<string, string> = {
+  LOW: "border-slate-200 bg-slate-50 text-slate-600",
+  MEDIUM: "border-amber-200 bg-amber-50 text-amber-700",
+  HIGH: "border-orange-200 bg-orange-50 text-orange-700",
+  URGENT: "border-red-200 bg-red-600 text-white",
+};
+
+function DetailItem({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        <Icon className="h-3 w-3" />
+        {label}
+      </dt>
+      <dd className="mt-0.5 font-semibold text-slate-800">{children}</dd>
     </div>
   );
 }

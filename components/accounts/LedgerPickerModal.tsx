@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BookOpen, Check, Loader2, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, Loader2, Percent, Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface LedgerPickerOption {
@@ -24,6 +24,17 @@ export interface LedgerPickerAccount {
   category?: string | null;
 }
 
+export interface TaxPickerOption {
+  id: string;
+  taxCode: string;
+  taxName: string;
+  taxType?: string;
+  rate: number;
+  calculationType: "Percentage" | "Fixed";
+  outputAccountId: string | null;
+  outputAccountName?: string | null;
+}
+
 export interface NewLedgerInput {
   name: string;
   code: string;
@@ -44,6 +55,18 @@ interface LedgerPickerModalProps {
   accounts?: LedgerPickerAccount[];
   /** Enables the "New Ledger" quick-create form. Should throw an Error with a readable message on failure. */
   onCreate?: (input: NewLedgerInput) => Promise<LedgerPickerOption>;
+  /** Tax groups from the Tax/GST master; shows a "Tax" filter pill when provided. */
+  taxes?: TaxPickerOption[];
+  selectedTaxId?: string;
+  onSelectTax?: (tax: TaxPickerOption) => void;
+}
+
+const TAX_FILTER = "__tax__";
+
+function formatTaxRate(tax: TaxPickerOption) {
+  return tax.calculationType === "Fixed"
+    ? `₹${Number(tax.rate).toLocaleString("en-IN")}`
+    : `${Number(tax.rate)}%`;
 }
 
 function suggestCode(accounts: LedgerPickerAccount[], group: LedgerPickerAccount | undefined): string {
@@ -66,9 +89,16 @@ export function LedgerPickerModal({
   onClose,
   accounts = [],
   onCreate,
+  taxes,
+  selectedTaxId,
+  onSelectTax,
 }: LedgerPickerModalProps) {
+  const taxEnabled = Boolean(taxes && onSelectTax);
   const [query, setQuery] = useState("");
-  const [natureFilter, setNatureFilter] = useState("all");
+  const [natureFilter, setNatureFilter] = useState(
+    taxEnabled && selectedTaxId ? TAX_FILTER : "all",
+  );
+  const taxMode = taxEnabled && natureFilter === TAX_FILTER;
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -151,6 +181,22 @@ export function LedgerPickerModal({
       });
   }, [ledgers, query, natureFilter]);
 
+  const filteredTaxes = useMemo(() => {
+    if (!taxEnabled) return [];
+    const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return (taxes ?? []).filter((t) => {
+      if (!terms.length) return true;
+      const hay = `${t.taxCode} ${t.taxName} ${t.taxType ?? ""} ${t.rate} ${t.outputAccountName ?? ""}`.toLowerCase();
+      return terms.every((term) => hay.includes(term));
+    });
+  }, [taxEnabled, taxes, query]);
+
+  const chooseTax = (tax: TaxPickerOption | undefined) => {
+    if (!tax || !tax.outputAccountId || !onSelectTax) return;
+    onSelectTax(tax);
+    onClose();
+  };
+
   const groups = useMemo(() => {
     const out: { nature: string; items: { ledger: LedgerPickerOption; index: number }[] }[] = [];
     filtered.forEach((ledger, index) => {
@@ -162,7 +208,8 @@ export function LedgerPickerModal({
     return out;
   }, [filtered]);
 
-  const safeActive = Math.min(activeIndex, Math.max(filtered.length - 1, 0));
+  const listLength = taxMode ? filteredTaxes.length : filtered.length;
+  const safeActive = Math.min(activeIndex, Math.max(listLength - 1, 0));
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -197,13 +244,14 @@ export function LedgerPickerModal({
       onClose();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex(Math.min(safeActive + 1, filtered.length - 1));
+      setActiveIndex(Math.min(safeActive + 1, listLength - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex(Math.max(safeActive - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      choose(filtered[safeActive]);
+      if (taxMode) chooseTax(filteredTaxes[safeActive]);
+      else choose(filtered[safeActive]);
     }
   };
 
@@ -371,13 +419,13 @@ export function LedgerPickerModal({
                 setQuery(e.target.value);
                 setActiveIndex(0);
               }}
-              placeholder="Search by ledger code, name or category…"
+              placeholder={taxMode ? "Search tax code, name or rate…" : "Search by ledger code, name or category…"}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
             />
           </div>
-          {natures.length > 1 && (
+          {(natures.length > 1 || taxEnabled) && (
             <div className="flex flex-wrap gap-1.5">
-              {["all", ...natures].map((n) => (
+              {["all", ...natures, ...(taxEnabled ? [TAX_FILTER] : [])].map((n) => (
                 <button
                   key={n}
                   type="button"
@@ -386,13 +434,18 @@ export function LedgerPickerModal({
                     setActiveIndex(0);
                   }}
                   className={cn(
-                    "rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors",
+                    "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors",
                     natureFilter === n
-                      ? "border-emerald-600 bg-emerald-600 text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                      ? n === TAX_FILTER
+                        ? "border-violet-600 bg-violet-600 text-white"
+                        : "border-emerald-600 bg-emerald-600 text-white"
+                      : n === TAX_FILTER
+                        ? "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
                   )}
                 >
-                  {n === "all" ? "All" : n}
+                  {n === TAX_FILTER && <Percent className="h-3 w-3" />}
+                  {n === "all" ? "All" : n === TAX_FILTER ? "Tax" : n}
                 </button>
               ))}
             </div>
@@ -400,7 +453,56 @@ export function LedgerPickerModal({
         </div>
 
         <div ref={listRef} className="min-h-[120px] flex-1 overflow-y-auto py-1">
-          {filtered.length === 0 ? (
+          {taxMode ? (
+            filteredTaxes.length === 0 ? (
+              <div className="px-5 py-8 text-center text-sm text-slate-500">
+                {query.trim()
+                  ? `No tax group matches “${query.trim()}”.`
+                  : "No active tax groups. Create them in Accounts → Tax / GST Master."}
+              </div>
+            ) : (
+              <>
+                <p className="sticky top-0 z-10 bg-violet-50/95 px-5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-600">
+                  Tax groups — picks the mapped ledger and calculates the amount
+                </p>
+                {filteredTaxes.map((tax, index) => {
+                  const isActive = index === safeActive;
+                  const isSelected = tax.id === selectedTaxId;
+                  const noLedger = !tax.outputAccountId;
+                  return (
+                    <button
+                      key={tax.id}
+                      type="button"
+                      data-index={index}
+                      disabled={noLedger}
+                      onMouseMove={() => {
+                        if (!isActive) setActiveIndex(index);
+                      }}
+                      onClick={() => chooseTax(tax)}
+                      className={cn(
+                        "flex w-full items-center gap-3 px-5 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                        isActive && !noLedger ? "bg-violet-50" : "bg-white",
+                      )}
+                    >
+                      <span className="w-14 shrink-0 font-mono text-xs font-bold text-violet-600">{tax.taxCode}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className={cn("block truncate", isSelected ? "font-bold text-violet-800" : "font-medium text-slate-900")}>
+                          {tax.taxName}
+                        </span>
+                        <span className={cn("block truncate text-[11px]", noLedger ? "text-rose-500" : "text-slate-400")}>
+                          {noLedger ? "No output ledger mapped in Tax / GST Master" : `→ ${tax.outputAccountName ?? "Mapped ledger"}`}
+                        </span>
+                      </span>
+                      <span className="shrink-0 rounded-md bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-700">
+                        {formatTaxRate(tax)}
+                      </span>
+                      {isSelected && <Check className="h-4 w-4 shrink-0 text-violet-600" />}
+                    </button>
+                  );
+                })}
+              </>
+            )
+          ) : filtered.length === 0 ? (
             <div className="px-5 py-8 text-center">
               <p className="text-sm text-slate-500">
                 {query.trim() ? `No ledger matches “${query.trim()}”.` : "No ledgers available."}
@@ -464,7 +566,9 @@ export function LedgerPickerModal({
 
         <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/60 px-5 py-2 text-[11px] text-slate-500">
           <span>
-            {filtered.length} of {ledgers.length} ledgers
+            {taxMode
+              ? `${filteredTaxes.length} of ${taxes?.length ?? 0} tax groups`
+              : `${filtered.length} of ${ledgers.length} ledgers`}
           </span>
           <span className="hidden sm:inline">↑ ↓ to navigate · Enter to select · Esc to close</span>
         </div>
