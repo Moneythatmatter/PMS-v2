@@ -17,6 +17,8 @@ import {
   Search,
   Send,
   Percent,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { FormSection, FormField, TextInput, SelectInput, TextAreaInput } from "@/components/frontoffice/ui";
@@ -30,10 +32,12 @@ import { cn } from "@/lib/utils";
 import {
   accAccountService,
   accCompanyService,
+  accPartyBillService,
   accTaxDefinitionService,
   accVoucherService,
   type Account,
   type Company,
+  type PartyBill,
   type TaxDefinition,
   type VoucherDetail,
   type VoucherInput,
@@ -60,7 +64,24 @@ interface JournalRow {
   narration: string;
   /** Tax group driving this line's amount (client-only; cleared on manual amount / ledger edits). */
   taxId: string;
+  /** Receipt / Payment mode: party bill settled by this line. */
+  billId: string;
 }
+
+type RpKind = "Receipt" | "Payment";
+const bankSideFor = (kind: RpKind): "Dr" | "Cr" => (kind === "Receipt" ? "Dr" : "Cr");
+const counterSideFor = (kind: RpKind): "Dr" | "Cr" => (kind === "Receipt" ? "Cr" : "Dr");
+const asRpKind = (category: string | null | undefined): RpKind | null =>
+  category === "Receipt" || category === "Payment" ? category : null;
+
+/** A saved voucher opens in Receipt / Payment layout when it is one bank line against counter lines. */
+const rpKindOfVoucher = (v: VoucherDetail): RpKind | null => {
+  const kind = asRpKind(v.voucherCategory);
+  if (!kind || !v.bankCashAccountId) return null;
+  const bankSide = bankSideFor(kind);
+  const bankLines = v.lines.filter((l) => l.entryType === bankSide);
+  return bankLines.length === 1 && bankLines[0].accountId === v.bankCashAccountId ? kind : null;
+};
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const rowAmount = (r: JournalRow) => (r.type === "Dr" ? r.debit : r.credit) || 0;
@@ -99,10 +120,27 @@ const newRow = (type: "Dr" | "Cr"): JournalRow => ({
   chequeDate: "",
   narration: "",
   taxId: "",
+  billId: "",
 });
 const blankRows = () => [newRow("Dr"), newRow("Cr")];
 
-const rowsFromVoucher = (v: VoucherDetail): JournalRow[] =>
+const rowsFromVoucher = (v: VoucherDetail): JournalRow[] => {
+  const rows = journalRowsFromVoucher(v);
+  const kind = rpKindOfVoucher(v);
+  if (!kind) return rows;
+  const bankSide = bankSideFor(kind);
+  const pending = [...(v.allocations ?? [])];
+  return rows
+    .filter((r) => r.type !== bankSide)
+    .map((r) => {
+      const i = pending.findIndex((a) => round2(Number(a.amount)) === round2(rowAmount(r)));
+      if (i < 0) return r;
+      const [a] = pending.splice(i, 1);
+      return { ...r, billId: a.billId };
+    });
+};
+
+const journalRowsFromVoucher = (v: VoucherDetail): JournalRow[] =>
   v.lines.map((l) => ({
     key: `row-${++rowSeq}`,
     type: l.entryType ?? (l.credit > 0 ? "Cr" : "Dr"),
@@ -114,6 +152,7 @@ const rowsFromVoucher = (v: VoucherDetail): JournalRow[] =>
     chequeDate: l.chequeDate ?? "",
     narration: l.narration ?? "",
     taxId: "",
+    billId: "",
   }));
 
 export const statusBadgeClass = (status: string) =>
@@ -175,6 +214,10 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
   );
   const [commonNarration, setCommonNarration] = useState(voucher?.narration ?? "");
   const [rows, setRows] = useState<JournalRow[]>(() => (voucher ? rowsFromVoucher(voucher) : blankRows()));
+  const [bankCashAccountId, setBankCashAccountId] = useState(voucher?.bankCashAccountId ?? "");
+  const [paymentMethodId, setPaymentMethodId] = useState(voucher?.paymentMethodId ?? "");
+  const [instrumentNo, setInstrumentNo] = useState(voucher?.instrumentNo ?? "");
+  const [instrumentDate, setInstrumentDate] = useState(voucher?.instrumentDate ?? "");
 
   const [preview, setPreview] = useState<{ key: string; voucherNo: string; error: string | null } | null>(null);
   const [previewNonce, setPreviewNonce] = useState(0);
@@ -201,6 +244,80 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
   const editable = !current || MUTABLE_STATUSES.includes(current.status);
   const isDraftOrNew = !current || current.status === "Draft";
   const status = current?.status ?? "New";
+
+  const rpKind: RpKind | null = current ? rpKindOfVoucher(current) : asRpKind(voucherType?.category);
+  const bankAccounts = useMemo(() => lookups?.bankCashAccounts ?? [], [lookups]);
+  const bankId = bankCashAccountId || bankAccounts[0]?.id || "";
+  const paymentMethod = lookups?.paymentMethods.find((m) => m.id === paymentMethodId);
+  const billsLocked = current?.status === "Posted";
+
+  const partyBillsQuery = useAccQuery<PartyBill[]>(
+    () =>
+      rpKind && voucherPartyId
+        ? accPartyBillService.list({
+            partyId: voucherPartyId,
+            moduleType: rpKind === "Receipt" ? "AR" : "AP",
+            pendingOnly: true,
+          })
+        : Promise.resolve([]),
+    [rpKind, voucherPartyId],
+  );
+  const billOptions = useMemo(() => {
+    const out = (partyBillsQuery.data ?? []).map((b) => ({
+      id: b.id,
+      label: `${b.billNo} · ${formatDate(b.billDate)} · Bal ${formatINR(b.balance)}`,
+      balance: b.balance,
+    }));
+    for (const a of current?.allocations ?? []) {
+      if (!out.some((o) => o.id === a.billId)) {
+        out.push({ id: a.billId, label: `${a.billNo ?? "Bill"} · settled ${formatINR(a.amount)}`, balance: 0 });
+      }
+    }
+    return out;
+  }, [partyBillsQuery.data, current]);
+
+  const partyAccountFor = (partyId: string, kind: RpKind | null) => {
+    if (!partyId || !kind) return "";
+    const party = lookups?.parties.find((p) => p.id === partyId);
+    return (kind === "Receipt" ? party?.receivableAccountId : party?.payableAccountId) ?? "";
+  };
+
+  const handlePartyChange = (id: string) => {
+    if (rpKind) {
+      const prevAccount = partyAccountFor(voucherPartyId, rpKind);
+      const nextAccount = partyAccountFor(id, rpKind);
+      setRows((prev) =>
+        prev.map((r) => ({
+          ...r,
+          billId: "",
+          accountId:
+            nextAccount && !r.taxId && (!r.accountId || r.accountId === prevAccount) ? nextAccount : r.accountId,
+        })),
+      );
+    }
+    setVoucherPartyId(id);
+  };
+
+  const handleVoucherTypeChange = (id: string) => {
+    const nextKind = asRpKind(voucherTypes.find((vt) => vt.id === id)?.category);
+    setVoucherTypeId(id);
+    if (nextKind === rpKind) return;
+    setRows((prev) => {
+      const used = prev.filter((r) => r.accountId || rowAmount(r) > 0).map((r) => ({ ...r, billId: "" }));
+      if (nextKind) {
+        const side = counterSideFor(nextKind);
+        const lines = (used.length ? used : [newRow(side)]).map((r) => {
+          const amount = rowAmount(r);
+          return { ...r, type: side, debit: side === "Dr" ? amount : 0, credit: side === "Cr" ? amount : 0 };
+        });
+        return applyTaxes(lines, taxMap);
+      }
+      const next = used.length ? used : [];
+      if (!next.some((r) => r.type === "Dr")) next.push(newRow("Dr"));
+      if (!next.some((r) => r.type === "Cr")) next.push(newRow("Cr"));
+      return next;
+    });
+  };
 
   const ledgerPickerOptions = useMemo(() => {
     const base: LedgerPickerOption[] = (lookups?.ledgers ?? []).map((l) => ({
@@ -294,6 +411,7 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
   const totalCredit = useMemo(() => rows.reduce((sum, r) => sum + (Number(r.credit) || 0), 0), [rows]);
   const difference = Math.abs(totalDebit - totalCredit);
   const isBalanced = difference < 0.01;
+  const rpTotal = round2(totalDebit + totalCredit);
 
   const loadIntoForm = (v: VoucherDetail) => {
     setCurrent(v);
@@ -304,6 +422,10 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
     setVoucherPartyId(v.partyId ?? v.lines.find((l) => l.partyId)?.partyId ?? "");
     setCommonNarration(v.narration ?? "");
     setRows(rowsFromVoucher(v));
+    setBankCashAccountId(v.bankCashAccountId ?? "");
+    setPaymentMethodId(v.paymentMethodId ?? "");
+    setInstrumentNo(v.instrumentNo ?? "");
+    setInstrumentDate(v.instrumentDate ?? "");
   };
 
   const resetForm = () => {
@@ -312,12 +434,21 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
     setReferenceNumber("");
     setVoucherPartyId("");
     setCommonNarration("");
-    setRows(blankRows());
+    setRows(rpKind ? [newRow(counterSideFor(rpKind))] : blankRows());
+    setPaymentMethodId("");
+    setInstrumentNo("");
+    setInstrumentDate("");
     setPreviewNonce((n) => n + 1);
   };
 
   // Row manipulation
   const handleAddRow = () => {
+    if (rpKind) {
+      const row = newRow(counterSideFor(rpKind));
+      row.accountId = partyAccountFor(voucherPartyId, rpKind);
+      setRows((prev) => applyTaxes([...prev, row], taxMap));
+      return;
+    }
     const nextType: "Dr" | "Cr" = totalDebit > totalCredit ? "Cr" : "Dr";
     const row = newRow(nextType);
     if (difference > 0) {
@@ -328,8 +459,13 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
   };
 
   const handleDeleteRow = (key: string) => {
-    if (rows.length <= 2) {
-      notify("A voucher needs at least two lines (one debit and one credit).", "error");
+    if (rpKind ? rows.length <= 1 : rows.length <= 2) {
+      notify(
+        rpKind
+          ? "At least one line item is required."
+          : "A voucher needs at least two lines (one debit and one credit).",
+        "error",
+      );
       return;
     }
     setRows((prev) => applyTaxes(prev.filter((r) => r.key !== key), taxMap));
@@ -352,6 +488,14 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
         if (row.key !== key) return row;
         const updated: JournalRow = { ...row, [field]: value };
         if (field === "accountId" || field === "debit" || field === "credit") updated.taxId = "";
+        if (field === "billId" && value && !rowAmount(row)) {
+          const balance = round2(billOptions.find((b) => b.id === value)?.balance ?? 0);
+          if (balance > 0) {
+            updated.debit = row.type === "Dr" ? balance : 0;
+            updated.credit = row.type === "Cr" ? balance : 0;
+            updated.taxId = "";
+          }
+        }
         if (field === "type") {
           const amount = row.debit || row.credit;
           updated.debit = value === "Dr" ? amount : 0;
@@ -391,6 +535,7 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
       notify(`${voucherType?.voucherTypeName ?? "This voucher type"} uses manual numbering — enter a voucher number.`, "error");
       return null;
     }
+    if (rpKind) return buildReceiptPaymentInput(rpKind);
     const lineIdx = rows.findIndex((r) => !r.accountId);
     if (lineIdx >= 0) {
       notify(`Line ${lineIdx + 1}: select a GL account.`, "error");
@@ -435,6 +580,74 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
     };
   };
 
+  const buildReceiptPaymentInput = (kind: RpKind): VoucherInput | null => {
+    if (!bankId) {
+      notify("Select the cash / bank account.", "error");
+      return null;
+    }
+    const lineIdx = rows.findIndex((r) => !r.accountId);
+    if (lineIdx >= 0) {
+      notify(`Line ${lineIdx + 1}: select an account ledger.`, "error");
+      return null;
+    }
+    const bankLineIdx = rows.findIndex((r) => r.accountId === bankId);
+    if (bankLineIdx >= 0) {
+      notify(`Line ${bankLineIdx + 1}: the cash / bank account cannot also be a line ledger.`, "error");
+      return null;
+    }
+    const zeroIdx = rows.findIndex((r) => !(rowAmount(r) > 0));
+    if (zeroIdx >= 0) {
+      notify(`Line ${zeroIdx + 1}: enter an amount greater than zero.`, "error");
+      return null;
+    }
+    if (paymentMethod?.referenceRequired && !instrumentNo.trim()) {
+      notify(`${paymentMethod.paymentMethodName} requires a reference / instrument number.`, "error");
+      return null;
+    }
+    if (voucherType?.partyRequired && !voucherPartyId) {
+      notify(`${voucherType.voucherTypeName} requires a party.`, "error");
+      return null;
+    }
+    const billAllocations = billsLocked
+      ? []
+      : rows.filter((r) => r.billId).map((r) => ({ billId: r.billId, amount: rowAmount(r) }));
+    if (billAllocations.length && !voucherPartyId) {
+      notify("Select the party to settle bills against.", "error");
+      return null;
+    }
+    return {
+      partyId: voucherPartyId || null,
+      voucherTypeId: typeId,
+      voucherNo: isManualNumbering && !current ? manualVoucherNo.trim() : undefined,
+      voucherDate: transactionDate,
+      referenceNo: referenceNumber.trim(),
+      narration: commonNarration.trim(),
+      bankCashAccountId: bankId,
+      paymentMethodId: paymentMethodId || null,
+      instrumentNo: instrumentNo.trim(),
+      instrumentDate: instrumentDate || null,
+      lines: [
+        {
+          accountId: bankId,
+          entryType: bankSideFor(kind),
+          amount: rpTotal,
+          divisionId: rows[0]?.divisionId || null,
+          chequeNo: instrumentNo.trim(),
+          chequeDate: instrumentDate || null,
+          narration: "",
+        },
+        ...rows.map((r) => ({
+          accountId: r.accountId,
+          entryType: counterSideFor(kind),
+          amount: rowAmount(r),
+          divisionId: r.divisionId || null,
+          narration: r.narration.trim() || taxNote(r),
+        })),
+      ],
+      billAllocations,
+    };
+  };
+
   const afterSave = (saved: VoucherDetail, message: string, thenNew = false) => {
     if (isModal && onSaved) {
       onSaved(saved, message);
@@ -457,7 +670,9 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
       let saved: VoucherDetail;
       if (current) {
         saved = await accVoucherService.update(current.id, input);
-        if (mode === "post" && current.status === "Draft") saved = await accVoucherService.post(current.id);
+        if (mode === "post" && current.status === "Draft") {
+          saved = await accVoucherService.post(current.id, { billAllocations: input.billAllocations });
+        }
       } else {
         saved = await accVoucherService.create({ ...input, status: mode === "post" ? "Posted" : "Draft" });
       }
@@ -529,6 +744,82 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
     }
   };
 
+  const renderLedgerCell = (row: JournalRow) => (
+    <>
+      <button
+        type="button"
+        disabled={!editable}
+        onClick={() => setLedgerPickerRowKey(row.key)}
+        title={ledgerLabel(row.accountId) || "Select ledger"}
+        className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-left text-xs transition hover:border-emerald-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+      >
+        <span className={cn("truncate", row.accountId ? "font-semibold text-slate-900" : "text-slate-400")}>
+          {ledgerLabel(row.accountId) || "Select Ledger..."}
+        </span>
+        <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+      </button>
+      {row.taxId && taxMap.has(row.taxId) && (
+        <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
+          <Percent className="h-2.5 w-2.5" />
+          {taxNote(row)}
+        </span>
+      )}
+    </>
+  );
+
+  const renderAmountInput = (row: JournalRow) => (
+    <TextInput
+      type="number"
+      min={0}
+      step="0.01"
+      value={rowAmount(row) || ""}
+      disabled={!editable}
+      onChange={(e) => handleUpdateRow(row.key, row.type === "Dr" ? "debit" : "credit", parseFloat(e.target.value) || 0)}
+      placeholder="0.00"
+      className="h-8 text-xs text-right font-bold text-slate-900"
+    />
+  );
+
+  const renderDivisionSelect = (row: JournalRow) => (
+    <SelectInput
+      value={row.divisionId}
+      disabled={!editable}
+      onChange={(e) => handleUpdateRow(row.key, "divisionId", e.target.value)}
+      className="h-8 text-xs"
+    >
+      <option value="">General</option>
+      {(lookups?.divisions ?? []).map((d) => (
+        <option key={d.id} value={d.id}>
+          {d.divisionName}
+        </option>
+      ))}
+    </SelectInput>
+  );
+
+  const renderNarrationInput = (row: JournalRow) => (
+    <TextInput
+      value={row.narration}
+      disabled={!editable}
+      maxLength={500}
+      onChange={(e) => handleUpdateRow(row.key, "narration", e.target.value)}
+      placeholder={commonNarration.trim() || "Line narration..."}
+      title={row.narration || undefined}
+      className="h-8 text-xs"
+    />
+  );
+
+  const renderDeleteButton = (row: JournalRow) => (
+    <button
+      type="button"
+      disabled={!editable}
+      onClick={() => handleDeleteRow(row.key)}
+      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors disabled:opacity-40"
+      title="Delete row"
+    >
+      <Trash2 className="h-3.5 w-3.5" />
+    </button>
+  );
+
   const company = companies.data?.[0];
   const voucherTypeName = voucherType?.voucherTypeName ?? current?.voucherTypeName ?? "Journal Voucher";
 
@@ -561,7 +852,7 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
         {/* Section 1 — Transaction Information */}
         <FormSection title="Section 1 — Transaction Information" columns={3} className="mb-4">
           <FormField label="Transaction Type" required>
-            <SelectInput value={typeId} disabled={!!current} onChange={(e) => setVoucherTypeId(e.target.value)}>
+            <SelectInput value={typeId} disabled={!!current} onChange={(e) => handleVoucherTypeChange(e.target.value)}>
               {voucherTypes.length === 0 && <option value="">No voucher types configured</option>}
               {voucherTypes.map((vt) => (
                 <option key={vt.id} value={vt.id}>
@@ -597,6 +888,61 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
             />
           </FormField>
 
+          {rpKind && (
+            <>
+              <FormField label="Cash / Bank Account" required>
+                <SelectInput value={bankId} disabled={!editable} onChange={(e) => setBankCashAccountId(e.target.value)}>
+                  {bankAccounts.length === 0 && <option value="">No bank / cash accounts configured</option>}
+                  {bankAccounts.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.code} - {b.name}
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
+
+              <FormField label={rpKind === "Receipt" ? "Receipt Mode" : "Payment Mode"}>
+                <SelectInput value={paymentMethodId} disabled={!editable} onChange={(e) => setPaymentMethodId(e.target.value)}>
+                  <option value="">— Select mode —</option>
+                  {(lookups?.paymentMethods ?? []).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.paymentMethodName}
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
+
+              <FormField label="Ref / Instrument No" required={paymentMethod?.referenceRequired}>
+                <TextInput
+                  value={instrumentNo}
+                  disabled={!editable}
+                  onChange={(e) => setInstrumentNo(e.target.value)}
+                  placeholder="Cheque #, UTR #, or EDC approval code..."
+                />
+              </FormField>
+
+              <FormField label="Instrument Date">
+                <TextInput
+                  type="date"
+                  value={instrumentDate}
+                  disabled={!editable}
+                  onChange={(e) => setInstrumentDate(e.target.value)}
+                />
+              </FormField>
+
+              <FormField label="Party / Sub-Ledger" required={voucherType?.partyRequired}>
+                <SelectInput value={voucherPartyId} disabled={!editable} onChange={(e) => handlePartyChange(e.target.value)}>
+                  <option value="">— No party (direct {rpKind.toLowerCase()}) —</option>
+                  {(lookups?.parties ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.partyName} ({p.partyCode})
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
+            </>
+          )}
+
           <FormField label="Reference Number">
             <TextInput
               value={referenceNumber}
@@ -606,7 +952,7 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
             />
           </FormField>
 
-          {(voucherType?.partyRequired || voucherPartyId) && (
+          {!rpKind && (voucherType?.partyRequired || voucherPartyId) && (
             <FormField label="Party" required={voucherType?.partyRequired}>
               <SelectInput value={voucherPartyId} disabled={!editable} onChange={(e) => setVoucherPartyId(e.target.value)}>
                 <option value="">Select party...</option>
@@ -657,7 +1003,9 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
                 Section 2 — {voucherTypeName.replace(" Voucher", "")} Entry
               </h2>
               <p className="text-[11px] text-slate-500 font-medium">
-                Enter debit and credit line items for this voucher.
+                {rpKind
+                  ? `Ledgers ${rpKind === "Receipt" ? "credited" : "debited"} against the cash / bank account — the bank line is added automatically.`
+                  : "Enter debit and credit line items for this voucher."}
                 {voucherType?.partyRequired && " A party is required for this voucher type."}
                 {voucherType?.divisionRequired && " A division is required for this voucher type."}
               </p>
@@ -671,10 +1019,102 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
               className="rounded-xl text-xs font-bold bg-white text-emerald-700 border-slate-300 hover:bg-emerald-50"
             >
               <Plus className="h-3.5 w-3.5 mr-1" />
-              Add Row
+              {rpKind ? "Add Line Item" : "Add Row"}
             </Button>
           </div>
 
+          {rpKind ? (
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[960px] text-left text-xs font-sans">
+                <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px] tracking-wider">
+                  <tr>
+                    <th className="px-3 py-2.5 w-10 text-center border-r border-slate-200">#</th>
+                    <th className="px-3.5 py-2.5 min-w-[260px] border-r border-slate-200">Account Ledger</th>
+                    <th className="px-3 py-2.5 min-w-[220px] border-r border-slate-200">Against Bill</th>
+                    <th className="px-3 py-2.5 min-w-[140px] text-right border-r border-slate-200">Amount (₹)</th>
+                    <th className="px-3 py-2.5 min-w-[150px] border-r border-slate-200">Analysis (Division)</th>
+                    <th className="px-3 py-2.5 min-w-[200px] border-r border-slate-200">Narration</th>
+                    <th className="px-3 py-2.5 w-12 text-center">Del</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {rows.map((row, idx) => (
+                    <tr key={row.key} className="hover:bg-amber-50/60 transition-colors">
+                      <td className="p-2 text-center font-bold text-slate-400 border-r border-slate-100">{idx + 1}</td>
+                      <td className="p-2 border-r border-slate-100">{renderLedgerCell(row)}</td>
+                      <td className="p-2 border-r border-slate-100">
+                        <SelectInput
+                          value={row.billId}
+                          disabled={!editable || billsLocked || !voucherPartyId || partyBillsQuery.loading}
+                          onChange={(e) => handleUpdateRow(row.key, "billId", e.target.value)}
+                          className="h-8 text-xs"
+                          title={billsLocked ? "Bill settlements of a posted voucher cannot be changed" : undefined}
+                        >
+                          <option value="">
+                            {!voucherPartyId
+                              ? "Select a party first"
+                              : partyBillsQuery.loading
+                              ? "Loading bills…"
+                              : billOptions.length === 0
+                              ? `No open ${rpKind === "Receipt" ? "AR" : "AP"} bills (on account)`
+                              : "On account (no bill)"}
+                          </option>
+                          {billOptions.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.label}
+                            </option>
+                          ))}
+                        </SelectInput>
+                      </td>
+                      <td className="p-2 border-r border-slate-100">{renderAmountInput(row)}</td>
+                      <td className="p-2 border-r border-slate-100">{renderDivisionSelect(row)}</td>
+                      <td className="p-2 border-r border-slate-100">{renderNarrationInput(row)}</td>
+                      <td className="p-2 text-center">{renderDeleteButton(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr
+                    className={cn(
+                      "border-t border-slate-200 text-xs",
+                      rpKind === "Receipt" ? "bg-emerald-50/70" : "bg-rose-50/70",
+                    )}
+                  >
+                    <td className="p-2 text-center border-r border-slate-100">
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 text-[10px] font-bold",
+                          rpKind === "Receipt" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800",
+                        )}
+                      >
+                        {bankSideFor(rpKind)}
+                      </span>
+                    </td>
+                    <td colSpan={2} className="px-3.5 py-2 border-r border-slate-100">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Cash / Bank ({rpKind === "Receipt" ? "debited" : "credited"})
+                      </span>
+                      <span className="block font-semibold text-slate-900">
+                        {bankAccounts.find((b) => b.id === bankId)?.name ?? "Select cash / bank account"}
+                      </span>
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 py-2 text-right text-sm font-black border-r border-slate-100",
+                        rpKind === "Receipt" ? "text-emerald-800" : "text-rose-800",
+                      )}
+                    >
+                      {formatINR(rpTotal)}
+                    </td>
+                    <td colSpan={3} className="px-3 py-2 text-[11px] text-slate-500">
+                      {paymentMethod?.paymentMethodName ?? `No ${rpKind === "Receipt" ? "receipt" : "payment"} mode`}
+                      {instrumentNo.trim() && ` · ${instrumentNo.trim()}`}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          ) : (
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full min-w-[960px] text-left text-xs font-sans">
               <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px] tracking-wider">
@@ -706,40 +1146,8 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
                         <option value="Cr">Cr</option>
                       </SelectInput>
                     </td>
-                    <td className="p-2 border-r border-slate-100">
-                      <button
-                        type="button"
-                        disabled={!editable}
-                        onClick={() => setLedgerPickerRowKey(row.key)}
-                        title={ledgerLabel(row.accountId) || "Select ledger"}
-                        className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-left text-xs transition hover:border-emerald-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50"
-                      >
-                        <span className={cn("truncate", row.accountId ? "font-semibold text-slate-900" : "text-slate-400")}>
-                          {ledgerLabel(row.accountId) || "Select Ledger..."}
-                        </span>
-                        <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      </button>
-                      {row.taxId && taxMap.has(row.taxId) && (
-                        <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
-                          <Percent className="h-2.5 w-2.5" />
-                          {taxNote(row)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-2 border-r border-slate-100">
-                      <TextInput
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={(row.type === "Dr" ? row.debit : row.credit) || ""}
-                        disabled={!editable}
-                        onChange={(e) =>
-                          handleUpdateRow(row.key, row.type === "Dr" ? "debit" : "credit", parseFloat(e.target.value) || 0)
-                        }
-                        placeholder="0.00"
-                        className="h-8 text-xs text-right font-bold text-slate-900"
-                      />
-                    </td>
+                    <td className="p-2 border-r border-slate-100">{renderLedgerCell(row)}</td>
+                    <td className="p-2 border-r border-slate-100">{renderAmountInput(row)}</td>
                     <td className="p-2 border-r border-slate-100">
                       <TextInput
                         value={row.chequeNo}
@@ -758,64 +1166,46 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
                         className="h-8 text-xs"
                       />
                     </td>
-                    <td className="p-2 border-r border-slate-100">
-                      <SelectInput
-                        value={row.divisionId}
-                        disabled={!editable}
-                        onChange={(e) => handleUpdateRow(row.key, "divisionId", e.target.value)}
-                        className="h-8 text-xs"
-                      >
-                        <option value="">General</option>
-                        {(lookups?.divisions ?? []).map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.divisionName}
-                          </option>
-                        ))}
-                      </SelectInput>
-                    </td>
-                    <td className="p-2 border-r border-slate-100">
-                      <TextInput
-                        value={row.narration}
-                        disabled={!editable}
-                        maxLength={500}
-                        onChange={(e) => handleUpdateRow(row.key, "narration", e.target.value)}
-                        placeholder={commonNarration.trim() || "Line narration..."}
-                        title={row.narration || undefined}
-                        className="h-8 text-xs"
-                      />
-                    </td>
-                    <td className="p-2 text-center">
-                      <button
-                        type="button"
-                        disabled={!editable}
-                        onClick={() => handleDeleteRow(row.key)}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors disabled:opacity-40"
-                        title="Delete row"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
+                    <td className="p-2 border-r border-slate-100">{renderDivisionSelect(row)}</td>
+                    <td className="p-2 border-r border-slate-100">{renderNarrationInput(row)}</td>
+                    <td className="p-2 text-center">{renderDeleteButton(row)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          )}
         </section>
 
         <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur sm:px-5">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-[11px] font-bold">
-              <span className="text-slate-700">
-                Dr <span className="text-emerald-700">{formatINR(totalDebit)}</span>
-              </span>
-              <span className="text-slate-700">
-                Cr <span className="text-rose-700">{formatINR(totalCredit)}</span>
-              </span>
-              <span className={cn("flex items-center gap-1", isBalanced ? "text-emerald-700" : "text-rose-700")}>
-                <Scale className="h-3 w-3" />
-                Diff {formatINR(difference)}
-              </span>
-            </div>
+            {rpKind ? (
+              <div
+                className={cn(
+                  "flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11px] font-bold",
+                  rpKind === "Receipt"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                    : "border-rose-200 bg-rose-50 text-rose-900",
+                )}
+              >
+                {rpKind === "Receipt" ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+                Total {rpKind}
+                <span className="font-mono text-sm font-black">{formatINR(rpTotal)}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-[11px] font-bold">
+                <span className="text-slate-700">
+                  Dr <span className="text-emerald-700">{formatINR(totalDebit)}</span>
+                </span>
+                <span className="text-slate-700">
+                  Cr <span className="text-rose-700">{formatINR(totalCredit)}</span>
+                </span>
+                <span className={cn("flex items-center gap-1", isBalanced ? "text-emerald-700" : "text-rose-700")}>
+                  <Scale className="h-3 w-3" />
+                  Diff {formatINR(difference)}
+                </span>
+              </div>
+            )}
             {current && (
               <Button
                 type="button"
