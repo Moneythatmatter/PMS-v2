@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, Map, Pencil, Table2, Trash2 } from "lucide-react";
+import { Download, LayoutGrid, List, Map, Pencil, Table2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import {
@@ -19,6 +19,7 @@ import { ModuleDataTable } from "./ModuleDataTable";
 import { ModuleSelectionBar } from "./ModuleSelectionBar";
 import { downloadAllTableQrs, TableQrCard } from "./TableQrCard";
 import { ModuleRowDetail } from "./ModuleRowDetail";
+import { TableCardGrid, TableStatusLegend } from "./TableCardGrid";
 
 type ActionKind =
   | "add"
@@ -119,11 +120,14 @@ function downloadCsv(filename: string, columns: ModuleColumn[], rows: ModuleRow[
   URL.revokeObjectURL(url);
 }
 
+const ALL_OUTLETS = "all";
+
 function pickDefaultOutlet(
   outlets: { id: string; name: string }[],
   rows: ModuleRow[],
+  allOutletsOption?: boolean,
 ): string {
-  if (!outlets.length) return "all";
+  if (!outlets.length || allOutletsOption) return ALL_OUTLETS;
   const withRows = outlets.find((o) =>
     rows.some((r) => r.outletId === o.id),
   );
@@ -144,12 +148,16 @@ export function ModuleListPage({
   showExport?: boolean;
 }) {
   const outlets = definition.outlets ?? [];
-  const showOutlet = outlets.length > 0;
-  const [outletId, setOutletId] = useState(() =>
-    pickDefaultOutlet(outlets, definition.rows),
+  const showOutletSelect = outlets.length > 0;
+  const [outletSelection, setOutletSelection] = useState(() =>
+    pickDefaultOutlet(outlets, definition.rows, definition.allOutletsOption),
   );
+  const outletId = outletSelection === ALL_OUTLETS ? "" : outletSelection;
+  const showOutlet = showOutletSelect && !!outletId;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [fieldFilterValues, setFieldFilterValues] = useState<Record<string, string>>({});
+  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
   const [sortBy, setSortBy] = useState(definition.sortOptions?.[0]?.value ?? "");
   const [rows, setRows] = useState<ModuleRow[]>(definition.rows);
   const [preview, setPreview] = useState<ModuleRow | null>(null);
@@ -168,8 +176,11 @@ export function ModuleListPage({
   useEffect(() => {
     setRows(definition.rows);
     setForm(blankForm(definition.columns));
-    setOutletId(pickDefaultOutlet(definition.outlets ?? [], definition.rows));
+    setOutletSelection(
+      pickDefaultOutlet(definition.outlets ?? [], definition.rows, definition.allOutletsOption),
+    );
     setStatusFilter("all");
+    setFieldFilterValues({});
     setSortBy(definition.sortOptions?.[0]?.value ?? "");
     setActionLabel(null);
     setEditingRow(null);
@@ -194,6 +205,9 @@ export function ModuleListPage({
       if (statusFilter !== "all") {
         const matches = filterKeys.some((key) => String(row[key] ?? "") === statusFilter);
         if (!matches) return false;
+      }
+      for (const [key, value] of Object.entries(fieldFilterValues)) {
+        if (value && String(row[key] ?? "") !== value) return false;
       }
       if (!q) return true;
       return Object.values(row).some(
@@ -220,6 +234,7 @@ export function ModuleListPage({
     definition.sortOptions,
     search,
     statusFilter,
+    fieldFilterValues,
     showOutlet,
     outletId,
     sortBy,
@@ -230,6 +245,21 @@ export function ModuleListPage({
     (r) => !showOutlet || !r.outletId || r.outletId === outletId,
   );
   const scopedTotal = scopedRows.length;
+
+  const fieldFilterOptions = (definition.fieldFilters ?? []).map((f) => {
+    const values = Array.from(
+      new Set(
+        scopedRows
+          .map((r) => r[f.key])
+          .filter((v) => v !== undefined && v !== null && String(v) !== "")
+          .map(String),
+      ),
+    ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    return { ...f, values };
+  });
+  const activeFieldFilterCount = Object.values(fieldFilterValues).filter(Boolean).length;
+  const sortChanged =
+    !!definition.sortOptions?.length && sortBy !== definition.sortOptions[0]?.value;
 
   const tableOpsRows = useMemo(() => {
     const inventory = definition.tableInventory;
@@ -296,7 +326,9 @@ export function ModuleListPage({
   const liveStats = useMemo(() => {
     // Recompute common status-style stats for the selected outlet scope
     const byStatus = (status: string) =>
-      scopedRows.filter((r) => String(r.status ?? "") === status).length;
+      scopedRows.filter(
+        (r) => String(r.activeState ?? r.status ?? "") === status,
+      ).length;
 
     return definition.stats.map((stat) => {
       const label = stat.label.toLowerCase();
@@ -311,9 +343,16 @@ export function ModuleListPage({
       if (label === "closed") return { ...stat, value: byStatus("Closed") };
       if (label === "pending") return { ...stat, value: byStatus("Pending") };
       if (label === "active") return { ...stat, value: byStatus("Active") };
+      if (label === "inactive" && scopedRows.some((r) => r.activeState !== undefined)) {
+        return { ...stat, value: byStatus("Inactive") };
+      }
       return stat;
-    });
-  }, [definition.stats, scopedRows, scopedTotal]);
+    }).map((stat) =>
+      stat.sublabel === "Selected outlet" && showOutletSelect
+        ? { ...stat, sublabel: selectedOutlet?.name ?? "All outlets" }
+        : stat,
+    );
+  }, [definition.stats, scopedRows, scopedTotal, showOutletSelect, selectedOutlet]);
 
   const eyebrow =
     definition.eyebrow ??
@@ -775,11 +814,42 @@ export function ModuleListPage({
 
   const tableBlock = (
     <>
-      <p className="mb-3 text-sm text-slate-500">
-        Showing <span className="font-medium text-slate-700">{filtered.length}</span> of {scopedTotal}{" "}
-        records
-        {selectedOutlet ? ` · ${selectedOutlet.name}` : ""}
-      </p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-500">
+          Showing <span className="font-medium text-slate-700">{filtered.length}</span> of {scopedTotal}{" "}
+          records
+          {selectedOutlet ? ` · ${selectedOutlet.name}` : ""}
+        </p>
+        {definition.tableCardView && (
+          <div className="flex flex-wrap items-center gap-3">
+            {viewMode === "cards" && <TableStatusLegend />}
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+              {(
+                [
+                  { id: "cards", icon: LayoutGrid, label: "Cards" },
+                  { id: "list", icon: List, label: "List" },
+                ] as const
+              ).map(({ id, icon: Icon, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setViewMode(id)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition",
+                    viewMode === id ? "bg-white text-emerald-800 shadow-sm" : "text-slate-500 hover:text-slate-700",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      {definition.tableCardView && viewMode === "cards" ? (
+        <TableCardGrid rows={filtered} outlets={outlets} onSelect={setPreview} />
+      ) : (
       <ModuleDataTable
         columns={definition.columns}
         rows={filtered}
@@ -789,6 +859,7 @@ export function ModuleListPage({
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
       />
+      )}
     </>
   );
 
@@ -852,18 +923,46 @@ export function ModuleListPage({
             : undefined
         }
         resultCount={{ shown: filtered.length, total: scopedTotal }}
-        hasActiveAdvancedFilters={
-          !!definition.sortOptions?.length && sortBy !== definition.sortOptions[0]?.value
+        hasActiveAdvancedFilters={sortChanged || activeFieldFilterCount > 0}
+        onClearAdvancedFilters={() => {
+          setSortBy(definition.sortOptions?.[0]?.value ?? "");
+          setFieldFilterValues({});
+        }}
+        advancedFilters={
+          fieldFilterOptions.length ? (
+            <>
+              {fieldFilterOptions.map((f) => (
+                <FormField key={f.key} label={f.label}>
+                  <SelectInput
+                    value={fieldFilterValues[f.key] ?? ""}
+                    onChange={(e) =>
+                      setFieldFilterValues((prev) => ({ ...prev, [f.key]: e.target.value }))
+                    }
+                  >
+                    <option value="">All</option>
+                    {f.values.map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                        {f.suffix ?? ""}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </FormField>
+              ))}
+            </>
+          ) : undefined
         }
-        onClearAdvancedFilters={() => setSortBy(definition.sortOptions?.[0]?.value ?? "")}
         beforeFilters={
-          showOutlet ? (
+          showOutletSelect ? (
             <SelectInput
-              value={outletId}
-              onChange={(e) => setOutletId(e.target.value)}
+              value={outletSelection}
+              onChange={(e) => setOutletSelection(e.target.value)}
               className="h-10 w-full min-w-[10.5rem] shrink-0 sm:w-auto sm:max-w-[14rem]"
               aria-label={definition.outletLabel ?? "Outlet"}
             >
+              {definition.allOutletsOption && (
+                <option value={ALL_OUTLETS}>All {definition.outletLabel ?? "Outlet"}s</option>
+              )}
               {outlets.map((outlet) => (
                 <option key={outlet.id} value={outlet.id}>
                   {outlet.name}

@@ -15,7 +15,6 @@ import {
   formatTaskTypeLabel,
   formatTaskStatusLabel,
   taskStatusTone,
-  isActiveTask,
   isTaskOverdue,
 } from "@/components/housekeeping/taskUtils";
 import { CleaningTaskDetailPanel } from "@/components/housekeeping/CleaningTaskDetailPanel";
@@ -23,8 +22,8 @@ import { StaffAvatarStack } from "@/components/housekeeping/StaffMultiSelect";
 import { taskAssigneeNames } from "@/components/housekeeping/taskUtils";
 import { CreateCleaningTaskForm } from "@/components/housekeeping/CreateCleaningTaskForm";
 import {
-  Clock,
-  CheckCircle2,
+  AlertTriangle,
+  History,
   Sparkles,
   ClipboardList,
   Plus,
@@ -42,15 +41,13 @@ import {
 import { OperationsToolbar } from "@/components/housekeeping/OperationsToolbar";
 
 const STATUS_TABS = [
-  { id: "all", label: "All" },
-  { id: "open", label: "Open" },
-  { id: "pending", label: "Pending" },
-  { id: "guest-requests", label: "Guest Requests" },
+  { id: "all", label: "All Active" },
   { id: "IN_PROGRESS", label: "In Progress" },
-  { id: "PENDING_INSPECTION", label: "Awaiting Inspection" },
-  { id: "APPROVED", label: "Approved" },
-  { id: "CANCELLED", label: "Cancelled" },
+  { id: "awaiting", label: "Awaiting Inspection" },
+  { id: "guest-requests", label: "Guest Requests" },
 ];
+
+const isCurrentTask = (task: HKTask) => task.status !== "APPROVED" && task.status !== "CANCELLED";
 
 function statusPillClass(tone: ReturnType<typeof taskStatusTone>) {
   switch (tone) {
@@ -80,7 +77,7 @@ export default function RoomCleaningOperations() {
   );
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("pending");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const reloadTasks = async () => {
@@ -120,8 +117,10 @@ export default function RoomCleaningOperations() {
     };
   }, []);
 
+  const activeTasks = useMemo(() => tasks.filter(isCurrentTask), [tasks]);
+
   const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
+    return activeTasks.filter((task) => {
       const q = search.toLowerCase();
       const matchSearch =
         !q ||
@@ -131,17 +130,15 @@ export default function RoomCleaningOperations() {
         taskAssigneeNames(task).join(" ").toLowerCase().includes(q);
       
       let matchStatus = true;
-      if (statusFilter === "open") {
-        matchStatus = isActiveTask(task);
-      } else if (statusFilter === "pending") {
-        matchStatus = task.status === "PENDING" || task.status === "ASSIGNED";
+      if (statusFilter === "awaiting") {
+        matchStatus = task.status === "PENDING_INSPECTION" || task.status === "COMPLETED";
       } else if (statusFilter !== "all") {
         matchStatus = task.status === statusFilter;
       }
 
       return matchSearch && matchStatus;
     });
-  }, [tasks, search, statusFilter]);
+  }, [activeTasks, search, statusFilter]);
 
   const linkedRequestIds = useMemo(
     () =>
@@ -176,16 +173,15 @@ export default function RoomCleaningOperations() {
 
   const stats = useMemo(() => {
     return {
-      total: tasks.length,
-      pending: tasks.filter((t) => t.status === "PENDING" || t.status === "ASSIGNED").length,
-      inProgress: tasks.filter((t) => t.status === "IN_PROGRESS").length,
-      awaiting: tasks.filter(
+      active: activeTasks.length,
+      inProgress: activeTasks.filter((t) => t.status === "IN_PROGRESS").length,
+      awaiting: activeTasks.filter(
         (t) => t.status === "PENDING_INSPECTION" || t.status === "COMPLETED",
       ).length,
-      approved: tasks.filter((t) => t.status === "APPROVED").length,
+      overdue: activeTasks.filter(isTaskOverdue).length,
       guestRequests: openCleaningRequests.length,
     };
-  }, [tasks, openCleaningRequests]);
+  }, [activeTasks, openCleaningRequests]);
 
   const selectedTask = useMemo(
     () => tasks.find((t) => t.id === selectedTaskId) ?? null,
@@ -231,6 +227,11 @@ export default function RoomCleaningOperations() {
         }
         action={
           <div className="flex flex-wrap items-center gap-2">
+            <Link href="/housekeeping/operations/all-tasks">
+              <Button variant="outline" className="flex items-center gap-1.5 text-xs">
+                <History className="h-3.5 w-3.5" /> All Tasks
+              </Button>
+            </Link>
             <Link href="/housekeeping/operations/rooms">
               <Button variant="outline" className="flex items-center gap-1.5 text-xs">
                 Room Status <ArrowRight className="h-3.5 w-3.5" />
@@ -246,13 +247,12 @@ export default function RoomCleaningOperations() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatMiniCard label="Total Tasks" value={stats.total} icon={ListTodo} accent="#64748b" />
-        <StatMiniCard label="Pending" value={stats.pending} accent="#94a3b8" icon={Clock} />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatMiniCard label="Active Tasks" value={stats.active} icon={ListTodo} accent="#64748b" />
         <StatMiniCard label="In Progress" value={stats.inProgress} accent="#f59e0b" icon={Sparkles} />
-        <StatMiniCard label="Guest Requests" value={stats.guestRequests} accent="#8b5cf6" icon={MessageSquare} />
         <StatMiniCard label="Awaiting Inspection" value={stats.awaiting} accent="#3b82f6" icon={ClipboardList} />
-        <StatMiniCard label="Approved" value={stats.approved} accent="#10b981" icon={CheckCircle2} />
+        <StatMiniCard label="Overdue" value={stats.overdue} accent="#ef4444" icon={AlertTriangle} />
+        <StatMiniCard label="Guest Requests" value={stats.guestRequests} accent="#8b5cf6" icon={MessageSquare} />
       </div>
 
       <OperationsToolbar
@@ -265,16 +265,6 @@ export default function RoomCleaningOperations() {
         activeStatusTab={statusFilter}
         onStatusTabChange={setStatusFilter}
       />
-
-      <p className="text-[11px] text-slate-500 -mt-2">
-        <strong className="font-semibold text-slate-600">Workflow:</strong> Create task → Assign → Start → Mark complete →{" "}
-        <Link href="/housekeeping/operations/inspection" className="text-emerald-700 hover:underline font-semibold">
-          Cleaning Inspection
-        </Link>{" "}
-        (pass or reject).{" "}
-        <strong className="font-semibold text-slate-600">Pending</strong> = not started ·{" "}
-        <strong className="font-semibold text-slate-600">Awaiting Inspection</strong> = ready for supervisor
-      </p>
 
       {!loading && statusFilter !== "guest-requests" && openCleaningRequests.length > 0 && (
         <div className="rounded-2xl border border-violet-200 bg-violet-50/30 p-4">
@@ -373,9 +363,13 @@ export default function RoomCleaningOperations() {
       ) : filteredTasks.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-10 text-center">
           <Sparkles className="mx-auto h-10 w-10 text-slate-300" />
-          <h3 className="mt-3 text-sm font-bold text-slate-800">No cleaning tasks</h3>
+          <h3 className="mt-3 text-sm font-bold text-slate-800">No active cleaning tasks</h3>
           <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
-            Tasks are created on guest check-out or manually for deep cleans and special work.
+            Approved and cancelled tasks are on{" "}
+            <Link href="/housekeeping/operations/all-tasks" className="font-semibold text-emerald-700 hover:underline">
+              All Tasks
+            </Link>
+            .
           </p>
           <Button
             onClick={() => openCreateDrawer()}

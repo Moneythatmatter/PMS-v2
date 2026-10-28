@@ -69,6 +69,19 @@ function KotTimer({ startedAtMs }: { startedAtMs: number }) {
   );
 }
 
+function FrozenKotTime({ kot }: { kot: FbPosKot }) {
+  const readyMs = kot.readyAt ? new Date(kot.readyAt).getTime() : NaN;
+  if (Number.isNaN(readyMs)) {
+    return <span className="font-mono text-sm font-bold tracking-wide">READY</span>;
+  }
+  const seconds = Math.max(0, Math.floor((readyMs - parseKotStartMs(kot)) / 1000));
+  return (
+    <span className="font-mono text-sm font-bold tracking-wide" title="Preparation time">
+      {formatElapsed(seconds)}
+    </span>
+  );
+}
+
 function KotCard({
   kot,
   busy,
@@ -97,7 +110,11 @@ function KotCard({
       >
         <span className="truncate text-sm uppercase">{tableHeadLabel(kot)}</span>
         <span className="whitespace-nowrap text-xs uppercase">{kotNumberLabel(kot.kotNo)}</span>
-        <KotTimer startedAtMs={parseKotStartMs(kot)} />
+        {showActions ? (
+          <KotTimer startedAtMs={parseKotStartMs(kot)} />
+        ) : (
+          <FrozenKotTime kot={kot} />
+        )}
       </div>
 
       <div className="flex flex-1 flex-col px-3 py-3">

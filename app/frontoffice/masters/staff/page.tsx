@@ -6,7 +6,7 @@ export default function FrontOfficeStaffPage() {
   return (
     <DepartmentStaffView
       eyebrow="Front Office Masters"
-      title="Staff"
+      title="Staff & Shifts"
       description="Front office staff from Human Resources, with role, department, shift, contact, and status."
       department="front-office"
       fallbackNote="No front office department is set in Human Resources."

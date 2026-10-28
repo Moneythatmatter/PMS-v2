@@ -24,6 +24,8 @@ export interface OperationsToolbarProps {
   activeStatusTab?: string;
   onStatusTabChange?: (id: string) => void;
   selectionBar?: React.ReactNode;
+  /** Extra controls shown on the search row, before the Filters button. */
+  toolbarExtras?: React.ReactNode;
   className?: string;
 }
 
@@ -38,6 +40,7 @@ export function OperationsToolbar({
   activeStatusTab,
   onStatusTabChange,
   selectionBar,
+  toolbarExtras,
   className,
 }: OperationsToolbarProps) {
   return (
@@ -60,7 +63,10 @@ export function OperationsToolbar({
             : undefined
         }
         beforeFilters={
-          showFilters ? (
+          toolbarExtras || showFilters ? (
+          <>
+          {toolbarExtras}
+          {showFilters && (
           <Button
             type="button"
             variant="outline"
@@ -78,6 +84,8 @@ export function OperationsToolbar({
               </span>
             )}
           </Button>
+          )}
+          </>
           ) : undefined
         }
         selectionBar={selectionBar}

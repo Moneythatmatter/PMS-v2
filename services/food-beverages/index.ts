@@ -253,6 +253,7 @@ export type FbPosKot = {
   kotStatus: string;
   placedAt: string;
   createdAt: string | null;
+  readyAt?: string | null;
   printedAt: string | null;
   prepMinutes: number | null;
   rejectReason: string | null;

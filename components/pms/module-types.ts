@@ -47,6 +47,13 @@ export interface ModuleFilterOption {
   label: string;
 }
 
+export interface ModuleFieldFilter {
+  key: string;
+  label: string;
+  /** Appended to each option label, e.g. " seats". */
+  suffix?: string;
+}
+
 export interface ModuleSortOption {
   value: string;
   label: string;
@@ -67,6 +74,12 @@ export interface ModuleListDefinition {
   statusStyle?: ModuleStatusStyle;
   outletLabel?: string;
   outlets?: ModuleOutletOption[];
+  /** Adds an "All outlets" choice to the outlet selector and makes it the default. */
+  allOutletsOption?: boolean;
+  /** Show rows as POS-style table tiles grouped by outlet, with a list toggle. */
+  tableCardView?: boolean;
+  /** Column filters shown in the Filters panel; options come from the loaded rows. */
+  fieldFilters?: ModuleFieldFilter[];
   /** Keys used for filter matching beyond status */
   filterKeys?: string[];
   /** Optional API-backed CRUD. When set, Add/Edit/Delete persist via these handlers. */

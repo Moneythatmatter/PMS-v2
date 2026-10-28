@@ -185,7 +185,7 @@ export function ModuleDataTable({
                     >
                       {col.render ? (
                         col.render(row)
-                      ) : (col.key === "status" || col.key === "bookingStatus") &&
+                      ) : (col.key === "status" || col.key === "bookingStatus" || col.key === "activeState") &&
                         row[col.key] ? (
                         <ModuleStatusPill
                           status={String(row[col.key])}

@@ -46,9 +46,9 @@ export function RoomsView() {
 
   const [roomNo, setRoomNo] = useState("");
   const [roomType, setRoomType] = useState<string>("");
-  const [floor, setFloor] = useState("1st Floor");
-  const [maxOccupancy, setMaxOccupancy] = useState("2");
-  const [bedType, setBedType] = useState<string>("Queen");
+  const [floor, setFloor] = useState("");
+  const [maxOccupancy, setMaxOccupancy] = useState("");
+  const [bedType, setBedType] = useState<string>("");
   const [isActive, setIsActive] = useState(true);
   const [qrTokens, setQrTokens] = useState<Record<string, string>>({});
   const [qrDownloading, setQrDownloading] = useState(false);
@@ -147,9 +147,9 @@ export function RoomsView() {
     setEditing(null);
     setRoomNo("");
     setRoomType("");
-    setFloor("1st Floor");
-    setMaxOccupancy("2");
-    setBedType("Queen");
+    setFloor("");
+    setMaxOccupancy("");
+    setBedType("");
     setIsActive(true);
   };
 
@@ -163,8 +163,8 @@ export function RoomsView() {
     setRoomNo(row.roomNo);
     setRoomType(row.roomType ?? "");
     setFloor(row.floor ?? "");
-    setMaxOccupancy(String(row.maxOccupancy ?? 2));
-    setBedType(row.bedType ?? "Queen");
+    setMaxOccupancy(row.maxOccupancy != null ? String(row.maxOccupancy) : "");
+    setBedType(row.bedType ?? "");
     setIsActive(row.isActive !== false);
     setPreview(null);
     setFormOpen(true);
@@ -186,8 +186,8 @@ export function RoomsView() {
         roomNo: roomNo.trim(),
         roomType: roomType.trim(),
         floor: floor.trim(),
-        maxOccupancy: parseInt(maxOccupancy, 10) || 2,
-        bedType,
+        maxOccupancy: parseInt(maxOccupancy, 10) || undefined,
+        bedType: bedType || undefined,
         isActive,
       };
       if (editing) {
@@ -438,7 +438,7 @@ export function RoomsView() {
       >
         <div className="space-y-4">
           <FormField label="Room Number" required>
-            <TextInput value={roomNo} onChange={(e) => setRoomNo(e.target.value)} disabled={!!editing} />
+            <TextInput value={roomNo} onChange={(e) => setRoomNo(e.target.value)} disabled={!!editing} placeholder="e.g. 101" />
           </FormField>
           <FormField label="Room Type" required>
             <SelectInput value={roomType} onChange={(e) => setRoomType(e.target.value)}>
@@ -451,14 +451,15 @@ export function RoomsView() {
             </SelectInput>
           </FormField>
           <FormField label="Floor">
-            <TextInput value={floor} onChange={(e) => setFloor(e.target.value)} />
+            <TextInput value={floor} onChange={(e) => setFloor(e.target.value)} placeholder="e.g. 1st Floor" />
           </FormField>
           <div className="grid grid-cols-2 gap-4">
             <FormField label="Max Occupancy">
-              <TextInput type="number" min={1} value={maxOccupancy} onChange={(e) => setMaxOccupancy(e.target.value)} />
+              <TextInput type="number" min={1} value={maxOccupancy} onChange={(e) => setMaxOccupancy(e.target.value)} placeholder="e.g. 2" />
             </FormField>
             <FormField label="Bed Type">
               <SelectInput value={bedType} onChange={(e) => setBedType(e.target.value)}>
+                <option value="" disabled>Select bed type</option>
                 {BED_TYPES.map((b) => (
                   <option key={b} value={b}>{b}</option>
                 ))}

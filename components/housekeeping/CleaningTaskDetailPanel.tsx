@@ -9,6 +9,7 @@ import {
   BookOpen,
   MessageSquare,
   Users,
+  XCircle,
 } from "lucide-react";
 import { hkTaskService } from "@/services/housekeeping";
 import type { HKTask } from "./HousekeepingTypes";
@@ -55,6 +56,8 @@ export function CleaningTaskDetailPanel({
   const [assignees, setAssignees] = useState<string[]>([]);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
 
   const currentKey = currentAssigneeIds.join("|");
   useEffect(() => {
@@ -241,6 +244,71 @@ export function CleaningTaskDetailPanel({
         </p>
       )}
 
+      {task.status === "CANCELLED" && (
+        <p className="rounded-lg bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-600">
+          This task was closed and is no longer active.
+        </p>
+      )}
+
+      {task.status !== "APPROVED" && task.status !== "CANCELLED" && (
+        closeOpen ? (
+          <div className="space-y-3 rounded-2xl border border-red-200 bg-red-50/40 p-4">
+            <div>
+              <h4 className="text-sm font-semibold text-slate-900">Close this task?</h4>
+              <p className="text-[11px] text-slate-500">
+                The task is cancelled and removed from active tasks. It stays on All Tasks.
+              </p>
+            </div>
+            <textarea
+              value={closeReason}
+              onChange={(e) => setCloseReason(e.target.value)}
+              rows={2}
+              placeholder="Reason (optional) — e.g. guest declined service"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                disabled={actionBusy}
+                onClick={() => {
+                  setCloseOpen(false);
+                  setCloseReason("");
+                }}
+              >
+                Keep Task
+              </Button>
+              <Button
+                className="flex-1 bg-red-600 text-white hover:bg-red-700"
+                disabled={actionBusy}
+                onClick={() =>
+                  void runTaskAction(async () => {
+                    const reason = closeReason.trim();
+                    const notes = reason
+                      ? [task.notes, `Closed: ${reason}`].filter(Boolean).join("\n")
+                      : undefined;
+                    await hkTaskService.cancel(task.id, notes ? { notes } : undefined);
+                    setCloseOpen(false);
+                    setCloseReason("");
+                  })
+                }
+              >
+                {actionBusy ? "Closing…" : "Close Task"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            className="w-full flex items-center justify-center gap-2 border-red-200 text-red-600 hover:bg-red-50"
+            disabled={actionBusy}
+            onClick={() => setCloseOpen(true)}
+          >
+            <XCircle className="h-4 w-4" /> Close Task
+          </Button>
+        )
+      )}
+
       <Link
         href={roomStatusLink}
         className="block text-center text-xs text-emerald-700 hover:underline"
@@ -257,6 +325,7 @@ const STATUS_BADGE: Partial<Record<HKTask["status"], string>> = {
   IN_PROGRESS: "border-sky-200 bg-sky-50 text-sky-700",
   PENDING_INSPECTION: "border-blue-200 bg-blue-50 text-blue-700",
   APPROVED: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  CANCELLED: "border-slate-300 bg-slate-100 text-slate-600",
 };
 
 const PRIORITY_BADGE: Record<string, string> = {

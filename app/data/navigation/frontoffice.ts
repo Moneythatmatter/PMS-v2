@@ -42,8 +42,7 @@ export const frontOfficeNavItems: ModuleNavItem[] = [
       { label: "Tariff Plans", href: "/frontoffice/masters/tariff-plans", icon: "tag" },
       { label: "Companies", href: "/frontoffice/masters/companies", icon: "building-2" },
       { label: "Booking Sources", href: "/frontoffice/masters/booking-sources", icon: "globe" },
-      { label: "Staff", href: "/frontoffice/masters/staff", icon: "users" },
-      { label: "Shifts", href: "/frontoffice/masters/shifts", icon: "clock" },
+      { label: "Staff & Shifts", href: "/frontoffice/masters/staff", icon: "users" },
     ],
   },
   {

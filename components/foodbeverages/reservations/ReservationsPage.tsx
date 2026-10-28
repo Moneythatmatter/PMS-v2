@@ -18,9 +18,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { AlertBanner, FormField, SelectInput } from "@/components/frontoffice/ui";
+import { AlertBanner } from "@/components/frontoffice/ui";
 import { ConfirmModal } from "@/components/frontoffice/ui/Modal";
-import { OperationsFilterDrawer, OperationsToolbar } from "@/components/housekeeping/OperationsToolbar";
+import { OperationsToolbar } from "@/components/housekeeping/OperationsToolbar";
+import { FbOutletSelect } from "@/components/foodbeverages/FbOutletSelect";
 import { usePsList } from "@/hooks/usePsResource";
 import { fbReservationService, reservationSettingsService } from "@/services/food-beverages";
 import { useFbOutlets } from "@/services/food-beverages/useFbOutlets";
@@ -111,13 +112,14 @@ export function ReservationsPage() {
   const [outletId, setOutletId] = useState("");
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [search, setSearch] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; variant: "success" | "error" | "info" } | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [editing, setEditing] = useState<Reservation | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [seating, setSeating] = useState<Reservation | null>(null);
+  const [seatingId, setSeatingId] = useState<string | null>(null);
+  const [seatNotice, setSeatNotice] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -179,6 +181,28 @@ export function ReservationsPage() {
     setFormOpen(true);
   };
 
+  const seatReservation = async (r: Reservation) => {
+    if (!r.tableNos.length) {
+      setSeatNotice(null);
+      setSeating(r);
+      return;
+    }
+    setSeatingId(r.id);
+    try {
+      await fbReservationService.seat(r.id);
+      setToast({
+        message: `${r.guest} seated at ${r.tableNo}. Open Orders to start their KOT.`,
+        variant: "success",
+      });
+      await reload();
+    } catch (e) {
+      setSeatNotice(e instanceof Error ? e.message : "The booked table isn't available.");
+      setSeating(r);
+    } finally {
+      setSeatingId(null);
+    }
+  };
+
   const runPending = async () => {
     if (!pending) return;
     const { kind, reservation: r } = pending;
@@ -233,8 +257,35 @@ export function ReservationsPage() {
       {toast && <AlertBanner variant={toast.variant} message={toast.message} onDismiss={() => setToast(null)} />}
       {reservations.error && <AlertBanner variant="error" message={`Could not load reservations: ${reservations.error}`} />}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center rounded-xl border border-slate-200 bg-white p-0.5 shadow-2xs">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <KpiCard label="Bookings" value={String(kpis.bookings)} sub="Excludes no-shows & cancelled" icon={CalendarCheck} tone="violet" />
+        <KpiCard label="Covers" value={String(kpis.covers)} sub="Guests expected" icon={Users} tone="slate" />
+        <KpiCard
+          label="Next hour"
+          value={String(kpis.nextHour)}
+          sub={`${kpis.nextHourCovers} guests arriving`}
+          icon={Clock}
+          tone="sky"
+        />
+        <KpiCard label="Seated now" value={String(kpis.seated)} icon={UserCheck} tone="emerald" />
+        <KpiCard label="No shows" value={String(kpis.noShows)} icon={UserX} tone="rose" />
+      </div>
+
+      <OperationsToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search guest, phone, booking # or table…"
+        showFilters={false}
+        statusTabs={[
+          { id: "all", label: "All", count: counts.all },
+          ...RESERVATION_STATUSES.map((s) => ({ id: s, label: s, count: counts[s] ?? 0 })),
+        ]}
+        activeStatusTab={statusTab}
+        onStatusTabChange={(id) => setStatusTab(id as StatusTab)}
+        toolbarExtras={
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <FbOutletSelect outlets={outlets} value={outletId} onChange={setOutletId} allowAll />
+        <div className="flex h-10 items-center rounded-xl border border-slate-200 bg-white px-0.5 shadow-2xs">
           <button
             type="button"
             onClick={() => {
@@ -274,46 +325,20 @@ export function ReservationsPage() {
             setAllDates(false);
             setDate(localDateKey());
           }}
-          className={cn("h-8 rounded-xl px-3 text-xs font-bold", isToday && "border-emerald-500 text-emerald-800")}
+          className={cn("h-10 rounded-xl px-3 text-xs font-bold", isToday && "border-emerald-500 text-emerald-800")}
         >
           Today
         </Button>
         <Button
           variant="outline"
           onClick={() => setAllDates((v) => !v)}
-          className={cn("h-8 rounded-xl px-3 text-xs font-bold", allDates && "border-emerald-500 text-emerald-800")}
+          className={cn("h-10 rounded-xl px-3 text-xs font-bold", allDates && "border-emerald-500 text-emerald-800")}
+          title={allDates ? "Showing every date" : formatDateLabel(date)}
         >
           All dates
         </Button>
-        <span className="text-xs font-semibold text-slate-500">{allDates ? "Showing every date" : formatDateLabel(date)}</span>
       </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard label="Bookings" value={String(kpis.bookings)} sub="Excludes no-shows & cancelled" icon={CalendarCheck} tone="violet" />
-        <KpiCard label="Covers" value={String(kpis.covers)} sub="Guests expected" icon={Users} tone="slate" />
-        <KpiCard
-          label="Next hour"
-          value={String(kpis.nextHour)}
-          sub={`${kpis.nextHourCovers} guests arriving`}
-          icon={Clock}
-          tone="sky"
-        />
-        <KpiCard label="Seated now" value={String(kpis.seated)} icon={UserCheck} tone="emerald" />
-        <KpiCard label="No shows" value={String(kpis.noShows)} icon={UserX} tone="rose" />
-      </div>
-
-      <OperationsToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search guest, phone, booking # or table…"
-        activeFilterCount={Number(Boolean(outletId))}
-        onOpenFilters={() => setFiltersOpen(true)}
-        statusTabs={[
-          { id: "all", label: "All", count: counts.all },
-          ...RESERVATION_STATUSES.map((s) => ({ id: s, label: s, count: counts[s] ?? 0 })),
-        ]}
-        activeStatusTab={statusTab}
-        onStatusTabChange={(id) => setStatusTab(id as StatusTab)}
+        }
       />
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
@@ -403,10 +428,11 @@ export function ReservationsPage() {
                       <div className="inline-flex items-center gap-1">
                         {(r.status === "Confirmed" || r.status === "No Show") && (
                           <Button
-                            onClick={() => setSeating(r)}
+                            onClick={() => void seatReservation(r)}
+                            disabled={seatingId === r.id}
                             className="h-7 gap-1 rounded-lg !bg-emerald-700 px-2.5 text-[11px] font-bold text-white hover:!bg-emerald-800"
                           >
-                            <UserCheck className="h-3.5 w-3.5" /> Seat
+                            <UserCheck className="h-3.5 w-3.5" /> {seatingId === r.id ? "Seating…" : "Seat"}
                           </Button>
                         )}
                         {r.status === "Seated" && (
@@ -452,25 +478,6 @@ export function ReservationsPage() {
         </table>
       </div>
 
-      <OperationsFilterDrawer
-        open={filtersOpen}
-        onClose={() => setFiltersOpen(false)}
-        title="Filter Reservations"
-        activeFilterCount={Number(Boolean(outletId))}
-        onReset={() => setOutletId("")}
-      >
-        <FormField label="Outlet">
-          <SelectInput value={outletId} onChange={(e) => setOutletId(e.target.value)} className="block">
-            <option value="">All outlets</option>
-            {outlets.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </SelectInput>
-        </FormField>
-      </OperationsFilterDrawer>
-
       {formOpen && (
         <ReservationFormDrawer
           key={formKey}
@@ -511,6 +518,7 @@ export function ReservationsPage() {
           open
           onClose={() => setSeating(null)}
           reservation={seating}
+          notice={seatNotice}
           onSeated={(result) => {
             setSeating(null);
             setToast({

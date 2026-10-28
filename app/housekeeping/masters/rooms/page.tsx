@@ -1,19 +1,14 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
-import { Bed, Plus, CheckCircle2, ShieldAlert, FolderOpen, Heart, Eye } from "lucide-react";
+import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
-import { TextInput, SelectInput, FormField, TextAreaInput } from "@/components/frontoffice/ui";
+import { SelectInput, FormField } from "@/components/frontoffice/ui";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import { hkRoomService } from "@/services/housekeeping";
-import { roomService, type RoomDto } from "@/services/front-office/rooms";
-import { findRoomByKey, matchesRoomKey, normalizeHkRoom, roomApiId, roomKey } from "@/components/housekeeping/roomUtils";
-
-const ROOM_CATEGORIES = ["Standard", "Deluxe", "Executive Suite", "Presidential Suite"];
-const BED_TYPES = ["King", "Queen", "Twin", "Single"];
+import { findRoomByKey, matchesRoomKey, roomApiId, roomKey } from "@/components/housekeeping/roomUtils";
 
 export default function RoomMasterConfig() {
   const {
@@ -26,43 +21,9 @@ export default function RoomMasterConfig() {
   const [activeTab, setActiveTab] = useState<"floorplan" | "list">("floorplan");
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [foRooms, setFoRooms] = useState<RoomDto[]>([]);
-
-  // Form Fields: New Room — pick FO room ref, not a free-text hardcoded number as id
-  const [newRoomRefId, setNewRoomRefId] = useState("");
-  const [newCategory, setNewCategory] = useState(ROOM_CATEGORIES[0]);
-  const [newBed, setNewBed] = useState(BED_TYPES[0]);
-  const [newFloor, setNewFloor] = useState("1st Floor");
-  const [newWing, setNewWing] = useState("East Wing");
-  const [newOccupancy, setNewOccupancy] = useState("2");
-  const [facilities, setFacilities] = useState("WiFi, TV, Safe");
-  const [remarks, setRemarks] = useState("");
-
   const selectedRoom = useMemo(() => {
     return selectedRoomId ? findRoomByKey(rooms, selectedRoomId) ?? null : null;
   }, [rooms, selectedRoomId]);
-
-  const availableFoRooms = useMemo(() => {
-    const linked = new Set(
-      rooms.map((r) => r.roomId ?? r.roomRefId ?? r.roomNo),
-    );
-    return foRooms.filter((r) => !linked.has(r.id) && !linked.has(r.roomNo));
-  }, [foRooms, rooms]);
-
-  useEffect(() => {
-    roomService
-      .list()
-      .then(setFoRooms)
-      .catch(() => setFoRooms([]));
-  }, []);
-
-  useEffect(() => {
-    if (!newRoomRefId && availableFoRooms[0]?.roomNo) {
-      setNewRoomRefId(availableFoRooms[0].roomNo);
-    }
-  }, [availableFoRooms, newRoomRefId]);
 
   // Group rooms by floor for floorplan view
   const roomsByFloor = useMemo(() => {
@@ -74,46 +35,6 @@ export default function RoomMasterConfig() {
     // Sort floor names
     return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
   }, [rooms]);
-
-  const handleCreateRoom = async () => {
-    const trimmedRoomRef = newRoomRefId.trim();
-    if (!trimmedRoomRef) {
-      setCreateError("Select a Front Office room reference.");
-      return;
-    }
-
-    const duplicate = rooms.find(
-      (r) =>
-        (r.roomId ?? r.roomRefId ?? r.roomNo).trim().toLowerCase() ===
-          trimmedRoomRef.toLowerCase() ||
-        r.roomNo.trim().toLowerCase() === trimmedRoomRef.toLowerCase(),
-    );
-    if (duplicate) {
-      setCreateError(`Room "${trimmedRoomRef}" is already linked in housekeeping.`);
-      return;
-    }
-
-    setCreateError(null);
-
-    const payload = {
-      roomId: trimmedRoomRef,
-      status: "DIRTY" as const,
-      notes: remarks || undefined,
-    };
-
-    try {
-      const saved = normalizeHkRoom(await hkRoomService.create(payload));
-      setRooms((prev) =>
-        [...prev, saved].sort((a, b) => a.roomNo.localeCompare(b.roomNo)),
-      );
-      logAudit("Room Status", "Room Added", `Created HK record for Room ${trimmedRoomRef}.`);
-      setCreateOpen(false);
-      setNewRoomRefId("");
-      setRemarks("");
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create room");
-    }
-  };
 
   const handleToggleDnd = (roomKey: string) => {
     let nextState = false;
@@ -158,20 +79,12 @@ export default function RoomMasterConfig() {
   return (
     <div className="space-y-6">
       {/* Title */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Masters</span>
-          <h1 className="mt-1 text-2xl font-bold text-slate-800">Hotel Room Master</h1>
-          <p className="text-sm text-slate-500 font-normal">
-            Database of physical rooms, categories, facilities, and floorplan occupancy layout controls.
-          </p>
-        </div>
-        <Button
-          onClick={() => setCreateOpen(true)}
-          className="bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1.5 self-start sm:self-auto"
-        >
-          <Plus className="h-4 w-4" /> Add New Room
-        </Button>
+      <div>
+        <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Masters</span>
+        <h1 className="mt-1 text-2xl font-bold text-slate-800">Hotel Room Master</h1>
+        <p className="text-sm text-slate-500 font-normal">
+          Database of physical rooms, categories, facilities, and floorplan occupancy layout controls.
+        </p>
       </div>
 
       {/* Tabs */}
@@ -442,102 +355,6 @@ export default function RoomMasterConfig() {
 
           </div>
         )}
-      </Drawer>
-
-      {/* Drawer: Add New Room */}
-      <Drawer
-        open={createOpen}
-        onClose={() => {
-          setCreateOpen(false);
-          setCreateError(null);
-        }}
-        title="Create New Hotel Room Master"
-      >
-        <div className="space-y-4">
-          {createError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700 flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4 shrink-0" />
-              <span>{createError}</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Front Office Room" required>
-              <SelectInput
-                value={newRoomRefId}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                  setNewRoomRefId(e.target.value);
-                  setCreateError(null);
-                }}
-              >
-                <option value="">Select room…</option>
-                {availableFoRooms.map((room) => (
-                  <option key={room.roomNo} value={room.roomNo}>
-                    {room.roomNo} · {room.roomType} · {room.floor}
-                  </option>
-                ))}
-              </SelectInput>
-            </FormField>
-            <FormField label="Room Category">
-              <SelectInput value={newCategory} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewCategory(e.target.value)}>
-                {ROOM_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </SelectInput>
-            </FormField>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Bed Specification">
-              <SelectInput value={newBed} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewBed(e.target.value)}>
-                {BED_TYPES.map((bed) => (
-                  <option key={bed} value={bed}>
-                    {bed}
-                  </option>
-                ))}
-              </SelectInput>
-            </FormField>
-            <FormField label="Floor Location">
-              <SelectInput value={newFloor} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewFloor(e.target.value)}>
-                <option value="1st Floor">1st Floor</option>
-                <option value="2nd Floor">2nd Floor</option>
-                <option value="3rd Floor">3rd Floor</option>
-                <option value="4th Floor">4th Floor</option>
-                <option value="5th Floor">5th Floor</option>
-              </SelectInput>
-            </FormField>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Hotel Wing">
-              <TextInput placeholder="e.g. East Wing" value={newWing} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewWing(e.target.value)} />
-            </FormField>
-            <FormField label="Max Occupancy (Adults)">
-              <TextInput type="number" value={newOccupancy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewOccupancy(e.target.value)} />
-            </FormField>
-          </div>
-
-          <FormField label="Facilities Installed (comma separated)">
-            <TextInput value={facilities} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFacilities(e.target.value)} />
-          </FormField>
-
-          <FormField label="Configuration Remarks">
-            <TextAreaInput
-              placeholder="Any structural anomalies, proximity notes, or connection doors details."
-              value={remarks}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setRemarks(e.target.value)}
-            />
-          </FormField>
-
-          <Button
-            onClick={handleCreateRoom}
-            className="w-full bg-emerald-700 hover:bg-emerald-800 text-white"
-          >
-            Register Room
-          </Button>
-        </div>
       </Drawer>
     </div>
   );

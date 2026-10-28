@@ -63,6 +63,10 @@ export interface FbPageDefinition {
   searchPlaceholder: string;
   filterOptions?: { id: string; label: string }[];
   filterKeys?: string[];
+  sortOptions?: { value: string; label: string }[];
+  allOutletsOption?: boolean;
+  tableCardView?: boolean;
+  fieldFilters?: { key: string; label: string; suffix?: string }[];
   actionLabel?: string;
   secondaryActions?: string[];
   statusStyle?: "pill" | "live";
@@ -207,20 +211,29 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
     title: "Tables",
     description: "Add and edit tables, and manage table map / QR codes.",
     outletScope: "restaurant",
+    allOutletsOption: true,
+    tableCardView: true,
     actionLabel: "Add Table",
     secondaryActions: ["Table Map", "QR Codes"],
     searchPlaceholder: "Search table…",
+    fieldFilters: [
+      { key: "capacity", label: "Capacity", suffix: " seats" },
+      { key: "shape", label: "Shape" },
+    ],
+    sortOptions: [
+      { value: "tableNo", label: "Table No." },
+      { value: "capacity-desc", label: "Capacity (high → low)" },
+    ],
     filterOptions: [
       { id: "all", label: "All" },
-      { id: "Available", label: "Available" },
-      { id: "Occupied", label: "Occupied" },
-      { id: "Reserved", label: "Reserved" },
+      { id: "Active", label: "Active" },
+      { id: "Inactive", label: "Inactive" },
     ],
+    filterKeys: ["activeState"],
     stats: [
-      { label: "Tables", value: 16, sublabel: "Selected outlet" },
-      { label: "Available", value: 8, accent: "#10b981", sublabel: "Ready to seat" },
-      { label: "Occupied", value: 5, accent: "#ef4444", sublabel: "In service" },
-      { label: "Reserved", value: 3, accent: "#f59e0b", sublabel: "Upcoming" },
+      { label: "Tables", value: 0, sublabel: "Selected outlet" },
+      { label: "Active", value: 0, accent: "#10b981", sublabel: "Shown in POS" },
+      { label: "Inactive", value: 0, accent: "#94a3b8", sublabel: "Hidden from POS" },
     ],
     columns: [
       {
@@ -265,28 +278,15 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
         required: true,
       },
       {
-        key: "qr",
-        header: "QR",
-        inputType: "select",
-        options: [
-          { value: "Pending", label: "Pending" },
-          { value: "Linked", label: "Linked" },
-        ],
-        placeholder: "Select QR status",
-        helperText: "QR code linking status",
-        required: true,
-      },
-      {
-        key: "status",
+        key: "activeState",
         header: "Status",
         inputType: "select",
         options: [
-          { value: "Available", label: "Available" },
-          { value: "Occupied", label: "Occupied" },
-          { value: "Reserved", label: "Reserved" },
+          { value: "Active", label: "Active" },
+          { value: "Inactive", label: "Inactive" },
         ],
         placeholder: "Select status",
-        helperText: "Current table status",
+        helperText: "Inactive tables are hidden from the POS",
         required: true,
       },
     ],

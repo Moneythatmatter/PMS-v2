@@ -18,11 +18,14 @@ export function SeatReservationModal({
   open,
   onClose,
   reservation,
+  notice,
   onSeated,
 }: {
   open: boolean;
   onClose: () => void;
   reservation: Reservation;
+  /** Why the booked table couldn't be used, shown above the table picker. */
+  notice?: string | null;
   onSeated: (result: SeatResult) => void;
 }) {
   const floor = usePsList(() => floorPlanService.list(reservation.outletId), [reservation.outletId]);
@@ -72,6 +75,11 @@ export function SeatReservationModal({
         {reservation.status === "No Show" && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
             This booking was marked No Show. Seating it now will reopen it as Seated.
+          </p>
+        )}
+        {notice && !error && !conflict && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            {notice} Pick another table below.
           </p>
         )}
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}

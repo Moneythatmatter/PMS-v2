@@ -317,6 +317,10 @@ function normalizeRow(path: string, row: Record<string, unknown>): ModuleRow {
     base.type = titleCaseType(base.type);
   }
 
+  if (path.endsWith("/tables")) {
+    base.activeState = row.isActive === false ? "Inactive" : "Active";
+  }
+
   // Outlets: keep operational status separate from booking availability
   if (path.includes("/outlets")) {
     const bookingValues = new Set(["available", "occupied", "booked", "reserved"]);
@@ -364,6 +368,12 @@ function toApiPayload(path: string, row: ModuleRow): Record<string, unknown> {
   if (path.includes("/outlets")) {
     delete payload.sales;
     delete payload.covers;
+  }
+  if (path.endsWith("/tables")) {
+    if (payload.activeState !== undefined) payload.isActive = payload.activeState !== "Inactive";
+    delete payload.activeState;
+    delete payload.status;
+    delete payload.qr;
   }
   return payload;
 }
@@ -468,6 +478,10 @@ function toModuleDefinition(
     searchPlaceholder: definition.searchPlaceholder,
     filterOptions: definition.filterOptions,
     filterKeys: definition.filterKeys,
+    sortOptions: definition.sortOptions,
+    allOutletsOption: definition.allOutletsOption,
+    tableCardView: definition.tableCardView,
+    fieldFilters: definition.fieldFilters,
     actionLabel: definition.actionLabel,
     secondaryActions: definition.secondaryActions,
     statusStyle: definition.statusStyle,
