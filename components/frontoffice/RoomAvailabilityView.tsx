@@ -19,7 +19,6 @@ import {
   Info,
   Layers,
   Lock,
-  Plus,
   SlidersHorizontal,
   Users,
   Wrench,
@@ -38,6 +37,11 @@ import {
   SearchInput,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { ReservationQuickView } from "@/components/frontoffice/reservation/ReservationQuickView";
+import {
+  QuickReservationModal,
+  type QuickReservationDraft,
+} from "@/components/frontoffice/reservation/QuickReservationModal";
 
 type DayStatus = RoomDayStatus;
 /** Days shown before today when the chart opens. */
@@ -271,15 +275,7 @@ interface DetailCell {
   booking?: RoomDayBooking;
 }
 
-interface BookingDraft {
-  room: string;
-  type: string;
-  floor: string;
-  bedType?: string;
-  checkIn: string;
-  checkOut: string;
-  days: string[];
-}
+type BookingDraft = QuickReservationDraft;
 
 export function RoomAvailabilityView() {
   const router = useRouter();
@@ -307,6 +303,8 @@ export function RoomAvailabilityView() {
     setMaxOccupancy("all");
   };
   const [detailCell, setDetailCell] = useState<DetailCell | null>(null);
+  const [quickViewBookingId, setQuickViewBookingId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [bookingDraft, setBookingDraft] = useState<BookingDraft | null>(null);
   const [dragState, setDragState] = useState<{
     room: string;
@@ -385,7 +383,7 @@ export function RoomAvailabilityView() {
     return () => {
       cancelled = true;
     };
-  }, [monthsKey]);
+  }, [monthsKey, reloadKey]);
 
   const openBookingDraft = (draft: BookingDraft) => {
     setDetailCell(null);
@@ -406,6 +404,7 @@ export function RoomAvailabilityView() {
         type: dragState.type,
         floor: dragState.floor,
         bedType: row.bedType,
+        maxOccupancy: row.maxOccupancy,
         checkIn: range.checkIn,
         checkOut: range.checkOut,
         days: range.days,
@@ -417,6 +416,12 @@ export function RoomAvailabilityView() {
 
   const showDetail = (row: RoomAvailabilityRow, day: string, status: DayStatus) => {
     setBookingDraft(null);
+    const booking = row.bookings?.[day];
+    if (booking && (status === "reserved" || status === "occupied")) {
+      setDetailCell(null);
+      setQuickViewBookingId(booking.id);
+      return;
+    }
     setDetailCell({
       room: row.room,
       day,
@@ -462,6 +467,7 @@ export function RoomAvailabilityView() {
       type: row.type,
       floor: row.floor,
       bedType: row.bedType,
+      maxOccupancy: row.maxOccupancy,
       checkIn: firstBookable,
       checkOut: nextDayIso(firstBookable),
       days: [firstBookable],
@@ -481,17 +487,18 @@ export function RoomAvailabilityView() {
     } not available. Drag only vacant or dirty dates.`;
   })();
 
-  const handleConfirmBooking = () => {
-    if (!bookingDraft || bookingConflict) return;
-    const params = new URLSearchParams({
-      room: bookingDraft.room,
-      roomType: bookingDraft.type,
-      checkIn: bookingDraft.checkIn,
-      checkOut: bookingDraft.checkOut,
-    });
-    setBookingDraft(null);
-    router.push(`/frontoffice/reservation/new?${params.toString()}`);
-  };
+  const draftRoomOptions = (() => {
+    if (!bookingDraft) return [];
+    return rows
+      .filter(
+        (r) =>
+          r.type === bookingDraft.type &&
+          bookingDraft.days.every((d) =>
+            isBookableStatus((r.days[d] ?? "available") as DayStatus, d, todayIso),
+          ),
+      )
+      .map((r) => r.room);
+  })();
 
   const handleViewReservation = () => {
     if (!detailCell) return;
@@ -502,7 +509,6 @@ export function RoomAvailabilityView() {
     router.push(`/frontoffice/reservation/all-bookings?${params.toString()}`);
   };
 
-  const bookingNights = bookingDraft?.days.length ?? 0;
   const step = windowSize === 14 ? 7 : 14;
   const currentMonth = todayIso.slice(0, 7);
 
@@ -1132,64 +1138,18 @@ export function RoomAvailabilityView() {
         </div>
       </Modal>
 
-      <Modal
-        open={!!bookingDraft}
+      <QuickReservationModal
+        draft={bookingDraft}
+        conflict={bookingConflict}
+        roomOptions={draftRoomOptions}
+        todayIso={todayIso}
         onClose={() => setBookingDraft(null)}
-        title={bookingDraft ? `Create Booking · Room ${bookingDraft.room}` : ""}
-        description={bookingDraft ? `${bookingDraft.type} · ${bookingDraft.floor}` : undefined}
-        size="sm"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setBookingDraft(null)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-emerald-700 hover:bg-emerald-800"
-              onClick={handleConfirmBooking}
-              disabled={!!bookingConflict || bookingNights === 0}
-            >
-              <Plus className="mr-1.5 h-4 w-4" />
-              Continue to Reservation
-            </Button>
-          </>
-        }
-      >
-        {bookingDraft && (
-          <div className="space-y-4">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-800">Selected stay</p>
-              <p className="mt-2 text-lg font-bold text-slate-900">
-                {formatDayLabel(bookingDraft.checkIn)} → {formatDayLabel(bookingDraft.checkOut)}
-              </p>
-              <p className="mt-1 text-sm text-slate-600">
-                {bookingNights} night{bookingNights !== 1 ? "s" : ""} · Room {bookingDraft.room}
-                {bookingDraft.bedType ? ` · ${bookingDraft.bedType} bed` : ""}
-              </p>
-            </div>
-
-            {bookingNights > 1 && (
-              <div className="flex flex-wrap gap-1.5">
-                {bookingDraft.days.map((d) => (
-                  <span
-                    key={d}
-                    className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800"
-                  >
-                    {formatDayLabel(d)}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {bookingConflict ? (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{bookingConflict}</p>
-            ) : (
-              <p className="text-sm text-slate-600">
-                Drag on the chart to adjust dates, then continue to complete guest details on the reservation form.
-              </p>
-            )}
-          </div>
-        )}
-      </Modal>
+        onCreated={(booking) => {
+          setBookingDraft(null);
+          setReloadKey((k) => k + 1);
+          setQuickViewBookingId(booking.id);
+        }}
+      />
 
       <Modal
         open={!!detailCell}
@@ -1321,6 +1281,8 @@ export function RoomAvailabilityView() {
           </div>
         )}
       </Modal>
+
+      <ReservationQuickView bookingId={quickViewBookingId} onClose={() => setQuickViewBookingId(null)} />
     </div>
   );
 }

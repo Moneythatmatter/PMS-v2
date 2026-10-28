@@ -18,53 +18,243 @@ import {
   isTaskOverdue,
 } from "@/components/housekeeping/taskUtils";
 import { CleaningTaskDetailPanel } from "@/components/housekeeping/CleaningTaskDetailPanel";
+import { CleaningRequestDetailPanel } from "@/components/housekeeping/CleaningRequestDetailPanel";
 import { StaffAvatarStack } from "@/components/housekeeping/StaffMultiSelect";
 import { taskAssigneeNames } from "@/components/housekeeping/taskUtils";
 import { CreateCleaningTaskForm } from "@/components/housekeeping/CreateCleaningTaskForm";
 import {
   AlertTriangle,
+  BedDouble,
   History,
   Sparkles,
   ClipboardList,
   Plus,
   ListTodo,
   ArrowRight,
-  MessageSquare,
+  Search,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
-import {
-  FOPageHeader,
-  StatMiniCard,
-} from "@/components/frontoffice/ui";
-import { OperationsToolbar } from "@/components/housekeeping/OperationsToolbar";
+import { FOPageHeader } from "@/components/frontoffice/ui";
+import { useHousekeeping } from "@/components/housekeeping/HousekeepingContext";
+import { roomKey } from "@/components/housekeeping/roomUtils";
+import { matchesHkStatusFilter } from "@/lib/housekeeping/room-status-colors";
 
-const STATUS_TABS = [
-  { id: "all", label: "All Active" },
-  { id: "IN_PROGRESS", label: "In Progress" },
-  { id: "awaiting", label: "Awaiting Inspection" },
-  { id: "guest-requests", label: "Guest Requests" },
-];
+const TILE_TONES = {
+  slate: { icon: "bg-slate-100 text-slate-600", ring: "border-slate-400 ring-slate-100" },
+  rose: { icon: "bg-rose-50 text-rose-600", ring: "border-rose-400 ring-rose-100" },
+  amber: { icon: "bg-amber-50 text-amber-600", ring: "border-amber-400 ring-amber-100" },
+  blue: { icon: "bg-blue-50 text-blue-600", ring: "border-blue-400 ring-blue-100" },
+  red: { icon: "bg-red-50 text-red-600", ring: "border-red-400 ring-red-100" },
+} as const;
+
+function FilterTile({
+  label,
+  sub,
+  value,
+  icon: Icon,
+  tone,
+  active,
+  onClick,
+}: {
+  label: string;
+  sub: string;
+  value: number;
+  icon: LucideIcon;
+  tone: keyof typeof TILE_TONES;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const t = TILE_TONES[tone];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "flex items-center gap-3 rounded-xl border bg-white p-3.5 text-left transition-all hover:shadow-sm",
+        active ? cn("ring-4", t.ring) : "border-slate-200 hover:border-slate-300",
+      )}
+    >
+      <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", t.icon)}>
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xl font-bold leading-tight text-slate-900">{value}</span>
+        <span className="block truncate text-xs font-semibold text-slate-700">{label}</span>
+        <span className="block truncate text-[10px] text-slate-400">{sub}</span>
+      </span>
+    </button>
+  );
+}
+
+function Pill({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function priorityPillClass(priority: string) {
+  switch (priority.toUpperCase()) {
+    case "URGENT":
+      return "bg-red-600 text-white";
+    case "HIGH":
+      return "bg-orange-500 text-white";
+    case "MEDIUM":
+    case "NORMAL":
+      return "bg-white text-amber-700 ring-1 ring-amber-200";
+    default:
+      return "bg-white text-slate-600 ring-1 ring-slate-200";
+  }
+}
+
+function CreateTaskButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      size="sm"
+      className="h-8 w-full bg-emerald-700 text-[11px] text-white hover:bg-emerald-800"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      <Plus className="mr-1 h-3.5 w-3.5" /> Create Task
+    </Button>
+  );
+}
+
+const CARD_TINTS = {
+  inProgress: { accent: "bg-amber-500", tint: "border-amber-200 bg-amber-50/70" },
+  overdue: { accent: "bg-red-500", tint: "border-red-200 bg-red-50/70" },
+  awaiting: { accent: "bg-blue-500", tint: "border-blue-200 bg-blue-50/70" },
+  task: { accent: "bg-sky-400", tint: "border-slate-200 bg-white" },
+  dirty: { accent: "bg-rose-500", tint: "border-rose-200 bg-rose-50/60" },
+  request: { accent: "bg-violet-500", tint: "border-violet-200 bg-violet-50/60" },
+} as const;
+
+function taskCardTint(task: HKTask) {
+  if (task.status === "IN_PROGRESS") return isTaskOverdue(task) ? CARD_TINTS.overdue : CARD_TINTS.inProgress;
+  if (isTaskOverdue(task)) return CARD_TINTS.overdue;
+  if (task.status === "PENDING_INSPECTION" || task.status === "COMPLETED") return CARD_TINTS.awaiting;
+  return CARD_TINTS.task;
+}
+
+function taskSortRank(task: HKTask) {
+  if (task.status === "IN_PROGRESS") return 0;
+  if (isTaskOverdue(task)) return 1;
+  if (task.status === "PENDING_INSPECTION" || task.status === "COMPLETED") return 2;
+  return 3;
+}
+
+function floorLabel(floor?: string | number | null) {
+  if (floor === undefined || floor === null || floor === "") return null;
+  const s = String(floor);
+  return /floor/i.test(s) ? s : `Floor ${s}`;
+}
+
+function BoardCard({
+  accent,
+  tint,
+  roomNo,
+  subtitle,
+  badges,
+  body,
+  footer,
+  onClick,
+}: {
+  accent: string;
+  tint: string;
+  roomNo: string;
+  subtitle: string;
+  badges: React.ReactNode;
+  body?: React.ReactNode;
+  footer: React.ReactNode;
+  onClick: () => void;
+}) {
+  const content = (
+    <>
+      <span className={cn("absolute inset-y-0 left-0 w-1", accent)} />
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Room</p>
+          <h3 className="text-2xl font-bold leading-none text-slate-900">{roomNo}</h3>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">{badges}</div>
+      </div>
+      <p className="mt-2 truncate text-xs font-medium text-slate-500">{subtitle || "\u00a0"}</p>
+      <div className="mt-2 min-h-[2rem]">{body}</div>
+      <div className="mt-auto border-t border-black/5 pt-3">{footer}</div>
+    </>
+  );
+  const base = cn(
+    "relative flex h-full min-h-[11rem] flex-col overflow-hidden rounded-xl border p-4 pl-5 text-left",
+    tint,
+  );
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={cn(
+        base,
+        "cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300",
+      )}
+    >
+      {content}
+    </div>
+  );
+}
+
+function RoomDetail({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className="mt-0.5 truncate font-semibold text-slate-800">{children}</dd>
+    </div>
+  );
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
 
 const isCurrentTask = (task: HKTask) => task.status !== "APPROVED" && task.status !== "CANCELLED";
 
 function statusPillClass(tone: ReturnType<typeof taskStatusTone>) {
   switch (tone) {
     case "amber":
-      return "bg-amber-50 text-amber-700";
+      return "bg-amber-100 text-amber-800";
     case "blue":
-      return "bg-blue-50 text-blue-700";
+      return "bg-blue-100 text-blue-700";
     case "emerald":
-      return "bg-emerald-50 text-emerald-700";
+      return "bg-emerald-100 text-emerald-700";
     case "red":
-      return "bg-red-50 text-red-700";
+      return "bg-red-100 text-red-700";
     default:
       return "bg-slate-100 text-slate-700";
   }
 }
 
 export default function RoomCleaningOperations() {
+  const { rooms: hkRooms } = useHousekeeping();
   const [tasks, setTasks] = useState<HKTask[]>([]);
   const [guestRequests, setGuestRequests] = useState<GuestRequestDto[]>([]);
   const [foRooms, setFoRooms] = useState<RoomDto[]>([]);
@@ -79,6 +269,8 @@ export default function RoomCleaningOperations() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [selectedDirtyRoomNo, setSelectedDirtyRoomNo] = useState<string | null>(null);
 
   const reloadTasks = async () => {
     const [taskList, requestList] = await Promise.all([
@@ -130,8 +322,12 @@ export default function RoomCleaningOperations() {
         taskAssigneeNames(task).join(" ").toLowerCase().includes(q);
       
       let matchStatus = true;
-      if (statusFilter === "awaiting") {
+      if (statusFilter === "needs-task") {
+        matchStatus = false;
+      } else if (statusFilter === "awaiting") {
         matchStatus = task.status === "PENDING_INSPECTION" || task.status === "COMPLETED";
+      } else if (statusFilter === "overdue") {
+        matchStatus = isTaskOverdue(task);
       } else if (statusFilter !== "all") {
         matchStatus = task.status === statusFilter;
       }
@@ -139,6 +335,11 @@ export default function RoomCleaningOperations() {
       return matchSearch && matchStatus;
     });
   }, [activeTasks, search, statusFilter]);
+
+  const sortedTasks = useMemo(
+    () => [...filteredTasks].sort((a, b) => taskSortRank(a) - taskSortRank(b)),
+    [filteredTasks],
+  );
 
   const linkedRequestIds = useMemo(
     () =>
@@ -171,6 +372,40 @@ export default function RoomCleaningOperations() {
     });
   }, [openCleaningRequests, search]);
 
+  const dirtyRooms = useMemo(() => {
+    const roomsWithTask = new Set(
+      activeTasks.flatMap((t) => [t.roomId, t.roomNo].filter(Boolean) as string[]),
+    );
+    return hkRooms
+      .filter((r) => r.hkStatus === "Dirty" || matchesHkStatusFilter(r.status, "dirty"))
+      .filter(
+        (r) =>
+          ![r.roomNo, r.roomId, r.roomRefId, r.id]
+            .filter(Boolean)
+            .some((k) => roomsWithTask.has(String(k))),
+      )
+      .sort((a, b) => a.roomNo.localeCompare(b.roomNo, undefined, { numeric: true }));
+  }, [hkRooms, activeTasks]);
+
+  const showsNeedsTask = statusFilter === "all" || statusFilter === "needs-task";
+
+  const visibleDirtyRooms = (() => {
+    if (!showsNeedsTask) return [];
+    const q = search.trim().toLowerCase();
+    if (!q) return dirtyRooms;
+    return dirtyRooms.filter((r) =>
+      [r.roomNo, r.category, r.type, r.floor].some((v) => String(v ?? "").toLowerCase().includes(q)),
+    );
+  })();
+
+  const visibleRequests = showsNeedsTask ? filteredGuestRequests : [];
+
+  const openCreateForDirtyRoom = (roomNo: string) => {
+    setSelectedDirtyRoomNo(null);
+    const foRoom = foRooms.find((r) => r.roomNo === roomNo);
+    openCreateDrawer({ roomId: foRoom ? roomKey(foRoom) : roomNo });
+  };
+
   const stats = useMemo(() => {
     return {
       active: activeTasks.length,
@@ -180,8 +415,9 @@ export default function RoomCleaningOperations() {
       ).length,
       overdue: activeTasks.filter(isTaskOverdue).length,
       guestRequests: openCleaningRequests.length,
+      needsTask: openCleaningRequests.length + dirtyRooms.length,
     };
-  }, [activeTasks, openCleaningRequests]);
+  }, [activeTasks, openCleaningRequests, dirtyRooms]);
 
   const selectedTask = useMemo(
     () => tasks.find((t) => t.id === selectedTaskId) ?? null,
@@ -206,8 +442,19 @@ export default function RoomCleaningOperations() {
   };
 
   const openCreateFromRequest = (request: GuestRequestDto) => {
+    setSelectedRequestId(null);
     openCreateDrawer({ guestRequest: request });
   };
+
+  const selectedRequest = useMemo(
+    () => guestRequests.find((r) => r.id === selectedRequestId) ?? null,
+    [guestRequests, selectedRequestId],
+  );
+
+  const selectedDirtyRoom = useMemo(
+    () => hkRooms.find((r) => r.roomNo === selectedDirtyRoomNo) ?? null,
+    [hkRooms, selectedDirtyRoomNo],
+  );
 
   const openTask = (task: HKTask) => {
     setSelectedTaskId(task.id);
@@ -218,13 +465,7 @@ export default function RoomCleaningOperations() {
       <FOPageHeader
         eyebrow="Operations"
         title="Cleaning Tasks"
-        description="Create tasks, assign housekeepers, and mark cleaning complete. Pass/fail inspection is done on Cleaning Inspection."
-        badge={
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-650">
-            <ListTodo className="h-4 w-4 text-emerald-600" />
-            {stats.inProgress} in progress
-          </div>
-        }
+        description="Dirty rooms, guest requests and active cleaning work in one board."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/housekeeping/operations/all-tasks">
@@ -248,122 +489,72 @@ export default function RoomCleaningOperations() {
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <StatMiniCard label="Active Tasks" value={stats.active} icon={ListTodo} accent="#64748b" />
-        <StatMiniCard label="In Progress" value={stats.inProgress} accent="#f59e0b" icon={Sparkles} />
-        <StatMiniCard label="Awaiting Inspection" value={stats.awaiting} accent="#3b82f6" icon={ClipboardList} />
-        <StatMiniCard label="Overdue" value={stats.overdue} accent="#ef4444" icon={AlertTriangle} />
-        <StatMiniCard label="Guest Requests" value={stats.guestRequests} accent="#8b5cf6" icon={MessageSquare} />
+        <FilterTile
+          label="All"
+          sub="Everything open"
+          value={stats.active + stats.needsTask}
+          icon={ListTodo}
+          tone="slate"
+          active={statusFilter === "all"}
+          onClick={() => setStatusFilter("all")}
+        />
+        <FilterTile
+          label="Needs a Task"
+          sub={`${dirtyRooms.length} dirty · ${stats.guestRequests} requests`}
+          value={stats.needsTask}
+          icon={BedDouble}
+          tone="rose"
+          active={statusFilter === "needs-task"}
+          onClick={() => setStatusFilter("needs-task")}
+        />
+        <FilterTile
+          label="In Progress"
+          sub="Being cleaned"
+          value={stats.inProgress}
+          icon={Sparkles}
+          tone="amber"
+          active={statusFilter === "IN_PROGRESS"}
+          onClick={() => setStatusFilter("IN_PROGRESS")}
+        />
+        <FilterTile
+          label="Awaiting Inspection"
+          sub="Ready for supervisor"
+          value={stats.awaiting}
+          icon={ClipboardList}
+          tone="blue"
+          active={statusFilter === "awaiting"}
+          onClick={() => setStatusFilter("awaiting")}
+        />
+        <FilterTile
+          label="Overdue"
+          sub="Past cleaning date"
+          value={stats.overdue}
+          icon={AlertTriangle}
+          tone="red"
+          active={statusFilter === "overdue"}
+          onClick={() => setStatusFilter("overdue")}
+        />
       </div>
 
-      <OperationsToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search task #, room, guest request, staff…"
-        activeFilterCount={0}
-        onOpenFilters={() => {}}
-        statusTabs={STATUS_TABS}
-        activeStatusTab={statusFilter}
-        onStatusTabChange={setStatusFilter}
-      />
-
-      {!loading && statusFilter !== "guest-requests" && openCleaningRequests.length > 0 && (
-        <div className="rounded-2xl border border-violet-200 bg-violet-50/30 p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-bold text-slate-800">Open guest cleaning requests</h3>
-              <p className="text-[11px] text-slate-500">
-                Room-cleaning requests from guests — create a task to assign housekeeping.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              className="text-xs"
-              onClick={() => setStatusFilter("guest-requests")}
-            >
-              View all ({openCleaningRequests.length})
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {openCleaningRequests.slice(0, 3).map((request) => (
-              <div
-                key={request.id}
-                className="rounded-xl border border-violet-100 bg-white p-4 text-left"
-              >
-                <p className="text-xs font-bold text-slate-800">
-                  {request.requestNumber ?? request.id.slice(0, 8)} · Room{" "}
-                  {request.roomNo ?? request.roomId}
-                </p>
-                <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">
-                  {request.description}
-                </p>
-                <Button
-                  size="sm"
-                  className="mt-3 h-8 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px]"
-                  onClick={() => openCreateFromRequest(request)}
-                >
-                  Create task
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search room, task #, guest request or staff…"
+          className="h-10 w-full rounded-full border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+        />
+      </div>
 
       {loading ? (
         <p className="text-center text-sm text-slate-500 py-12">Loading…</p>
-      ) : statusFilter === "guest-requests" ? (
-        filteredGuestRequests.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-10 text-center">
-            <MessageSquare className="mx-auto h-10 w-10 text-slate-300" />
-            <h3 className="mt-3 text-sm font-bold text-slate-800">No open cleaning guest requests</h3>
-            <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
-              Guest room-cleaning requests from in-house bookings appear here until a cleaning task is created.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredGuestRequests.map((request) => (
-              <div
-                key={request.id}
-                className="rounded-xl border border-violet-200 bg-white p-5 text-left ring-1 ring-violet-100/60"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800">
-                      {request.requestNumber ?? request.id.slice(0, 8)}
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium">
-                      Room {request.roomNo ?? request.roomId} ·{" "}
-                      {formatGuestRequestTypeLabel(request.requestType)}
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-700">
-                    {request.status.replace(/_/g, " ")}
-                  </span>
-                </div>
-
-                <p className="mt-3 text-xs text-slate-700 line-clamp-3">{request.description}</p>
-
-                <div className="mt-4 space-y-1 text-[11px] text-slate-500">
-                  {request.guestName && <p>Guest: {request.guestName}</p>}
-                  {request.bookingNo && <p>Booking: {request.bookingNo}</p>}
-                  <p>Priority: {request.priority}</p>
-                </div>
-
-                <Button
-                  className="mt-4 w-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs"
-                  onClick={() => openCreateFromRequest(request)}
-                >
-                  Create cleaning task
-                </Button>
-              </div>
-            ))}
-          </div>
-        )
-      ) : filteredTasks.length === 0 ? (
+      ) : filteredTasks.length + visibleDirtyRooms.length + visibleRequests.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-10 text-center">
           <Sparkles className="mx-auto h-10 w-10 text-slate-300" />
-          <h3 className="mt-3 text-sm font-bold text-slate-800">No active cleaning tasks</h3>
+          <h3 className="mt-3 text-sm font-bold text-slate-800">
+            {search ? "Nothing matches your search" : "All caught up"}
+          </h3>
           <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
             Approved and cancelled tasks are on{" "}
             <Link href="/housekeeping/operations/all-tasks" className="font-semibold text-emerald-700 hover:underline">
@@ -380,66 +571,81 @@ export default function RoomCleaningOperations() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filteredTasks.map((task) => {
+          {sortedTasks.map((task) => {
             const tone = taskStatusTone(task.status);
             const inProgress = task.status === "IN_PROGRESS";
             const overdue = isTaskOverdue(task);
+            const colors = taskCardTint(task);
             return (
-              <button
+              <BoardCard
                 key={task.id}
-                type="button"
                 onClick={() => openTask(task)}
-                className={cn(
-                  "rounded-xl border bg-white p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md",
-                  overdue
-                    ? "border-red-200 ring-2 ring-red-100/60"
-                    : inProgress
-                      ? "border-amber-200 ring-2 ring-amber-100/50"
-                      : "border-slate-200",
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800">
-                      {task.taskNumber ?? task.id.slice(0, 8)}
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium">
-                      Room {task.roomNo ?? task.roomId} · {formatTaskTypeLabel(task.taskType)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide",
-                        statusPillClass(tone),
-                        inProgress && "animate-pulse",
-                      )}
-                    >
+                accent={colors.accent}
+                tint={colors.tint}
+                roomNo={task.roomNo ?? task.roomId}
+                subtitle={`${task.taskNumber ?? task.id.slice(0, 8)} · ${formatTaskTypeLabel(task.taskType)}`}
+                badges={
+                  <>
+                    <Pill className={cn(statusPillClass(tone), inProgress && "animate-pulse")}>
                       {formatTaskStatusLabel(task.status)}
-                    </span>
-                    {overdue && (
-                      <span className="rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-red-700">
-                        Overdue
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                  <div className="flex min-w-0 items-center gap-1">
+                    </Pill>
+                    {overdue && <Pill className="bg-red-100 text-red-700">Overdue</Pill>}
+                  </>
+                }
+                body={
+                  task.notes ? <p className="line-clamp-2 text-xs text-slate-600">{task.notes}</p> : null
+                }
+                footer={
+                  <div className="flex items-center justify-between gap-2">
                     <StaffAvatarStack names={taskAssigneeNames(task)} />
+                    {task.priority ? (
+                      <Pill className={priorityPillClass(task.priority)}>{task.priority}</Pill>
+                    ) : null}
                   </div>
-                  <span className="font-semibold uppercase text-[10px] text-slate-400">
-                    {task.priority}
-                  </span>
-                </div>
-
-                {task.notes ? (
-                  <p className="mt-3 line-clamp-2 text-[11px] text-slate-500">{task.notes}</p>
-                ) : null}
-              </button>
+                }
+              />
             );
           })}
+          {visibleDirtyRooms.map((room) => (
+            <BoardCard
+              key={`dirty-${room.id ?? room.roomNo}`}
+              onClick={() => setSelectedDirtyRoomNo(room.roomNo)}
+              accent={CARD_TINTS.dirty.accent}
+              tint={CARD_TINTS.dirty.tint}
+              roomNo={room.roomNo}
+              subtitle={[room.category || room.type, floorLabel(room.floor)].filter(Boolean).join(" · ")}
+              badges={<Pill className="bg-rose-100 text-rose-700">Dirty</Pill>}
+              body={
+                <p className="text-xs text-slate-500">
+                  No cleaning task yet
+                  {room.foStatus ? <span className="text-slate-400"> · {room.foStatus}</span> : null}
+                </p>
+              }
+              footer={<CreateTaskButton onClick={() => openCreateForDirtyRoom(room.roomNo)} />}
+            />
+          ))}
+          {visibleRequests.map((request) => (
+            <BoardCard
+              key={`request-${request.id}`}
+              onClick={() => setSelectedRequestId(request.id)}
+              accent={CARD_TINTS.request.accent}
+              tint={CARD_TINTS.request.tint}
+              roomNo={request.roomNo ?? request.roomId}
+              subtitle={`${request.requestNumber ?? request.id.slice(0, 8)} · ${formatGuestRequestTypeLabel(request.requestType)}`}
+              badges={<Pill className="bg-violet-100 text-violet-700">Guest Request</Pill>}
+              body={
+                <>
+                  {request.description ? (
+                    <p className="line-clamp-2 text-xs text-slate-600">{request.description}</p>
+                  ) : null}
+                  {request.guestName ? (
+                    <p className="mt-1 truncate text-[11px] text-slate-400">{request.guestName}</p>
+                  ) : null}
+                </>
+              }
+              footer={<CreateTaskButton onClick={() => openCreateFromRequest(request)} />}
+            />
+          ))}
         </div>
       )}
 
@@ -488,6 +694,89 @@ export default function RoomCleaningOperations() {
             task={selectedTask}
             onUpdated={reloadTasks}
           />
+        )}
+      </Drawer>
+
+      {/* Guest Request Detail Drawer */}
+      <Drawer
+        open={!!selectedRequestId}
+        onClose={() => setSelectedRequestId(null)}
+        title={
+          selectedRequest
+            ? `${selectedRequest.requestNumber ?? "Request"} — Room ${selectedRequest.roomNo ?? selectedRequest.roomId}`
+            : "Guest Request"
+        }
+        description="Guest cleaning request"
+      >
+        {selectedRequest && (
+          <CleaningRequestDetailPanel
+            key={selectedRequest.id}
+            request={selectedRequest}
+            onCreateTask={openCreateFromRequest}
+            onClosed={async () => {
+              setSelectedRequestId(null);
+              await reloadTasks();
+            }}
+          />
+        )}
+      </Drawer>
+
+      {/* Dirty Room Detail Drawer */}
+      <Drawer
+        open={!!selectedDirtyRoomNo}
+        onClose={() => setSelectedDirtyRoomNo(null)}
+        title={selectedDirtyRoom ? `Room ${selectedDirtyRoom.roomNo}` : "Room"}
+        description="Dirty room — no cleaning task yet"
+      >
+        {selectedDirtyRoom && (
+          <div className="space-y-5">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex items-start justify-between gap-3 bg-gradient-to-r from-rose-50 to-white px-4 py-3">
+                <div>
+                  <p className="text-lg font-bold leading-tight text-slate-900">
+                    Room {selectedDirtyRoom.roomNo}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {[selectedDirtyRoom.category || selectedDirtyRoom.type, floorLabel(selectedDirtyRoom.floor)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                </div>
+                <Pill className="bg-rose-100 text-rose-700">Dirty</Pill>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-3 text-xs">
+                <RoomDetail label="FO status">{selectedDirtyRoom.foStatus || "—"}</RoomDetail>
+                <RoomDetail label="Bed type">{selectedDirtyRoom.bedType || "—"}</RoomDetail>
+                <RoomDetail label="Last cleaned">{formatDateTime(selectedDirtyRoom.lastCleanedAt)}</RoomDetail>
+                <RoomDetail label="Last inspected">{formatDateTime(selectedDirtyRoom.lastInspectedAt)}</RoomDetail>
+                {selectedDirtyRoom.dnd || selectedDirtyRoom.sleepOut ? (
+                  <RoomDetail label="Flags">
+                    {[selectedDirtyRoom.dnd && "Do not disturb", selectedDirtyRoom.sleepOut && "Sleep out"]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </RoomDetail>
+                ) : null}
+              </dl>
+              {selectedDirtyRoom.remarks ? (
+                <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-2.5 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">Remarks: </span>
+                  {selectedDirtyRoom.remarks}
+                </div>
+              ) : null}
+            </div>
+            <Button
+              className="w-full bg-emerald-700 text-white hover:bg-emerald-800 flex items-center justify-center gap-2"
+              onClick={() => openCreateForDirtyRoom(selectedDirtyRoom.roomNo)}
+            >
+              <Plus className="h-4 w-4" /> Create Cleaning Task
+            </Button>
+            <Link
+              href="/housekeeping/operations/rooms"
+              className="block text-center text-xs text-emerald-700 hover:underline"
+            >
+              View room status board →
+            </Link>
+          </div>
         )}
       </Drawer>
     </div>
