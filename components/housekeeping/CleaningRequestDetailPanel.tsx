@@ -1,29 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { BookOpen, CalendarDays, Plus, User, XCircle } from "lucide-react";
 import { hkGuestRequestService } from "@/services/housekeeping";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { formatGuestRequestTypeLabel, type GuestRequestDto } from "./guestRequestUtils";
+import { DetailItem, formatShortDateTime, priorityBadgeClass } from "./detailParts";
 
 export type CleaningRequestDetailPanelProps = {
   request: GuestRequestDto;
   onCreateTask: (request: GuestRequestDto) => void;
   onClosed?: () => void | Promise<void>;
 };
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString(undefined, {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export function CleaningRequestDetailPanel({
   request,
@@ -79,8 +68,7 @@ export function CleaningRequestDetailPanel({
               <span
                 className={cn(
                   "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase",
-                  PRIORITY_BADGE[request.priority.toUpperCase()] ??
-                    "border-slate-200 bg-slate-50 text-slate-600",
+                  priorityBadgeClass(request.priority),
                 )}
               >
                 {request.priority}
@@ -90,16 +78,16 @@ export function CleaningRequestDetailPanel({
         </div>
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-3 text-xs">
-          <DetailItem icon={User} label="Guest">
+          <DetailItem icon={User} label="Guest" truncate>
             {request.guestName ?? "—"}
           </DetailItem>
-          <DetailItem icon={BookOpen} label="Booking">
+          <DetailItem icon={BookOpen} label="Booking" truncate>
             {request.bookingNo ?? "—"}
           </DetailItem>
-          <DetailItem icon={CalendarDays} label="Requested">
-            {formatDateTime(request.requestedAt ?? request.createdAt)}
+          <DetailItem icon={CalendarDays} label="Requested" truncate>
+            {formatShortDateTime(request.requestedAt ?? request.createdAt)}
           </DetailItem>
-          <DetailItem icon={User} label="Raised by">
+          <DetailItem icon={User} label="Raised by" truncate>
             {request.createdBy ?? "—"}
           </DetailItem>
         </dl>
@@ -172,34 +160,6 @@ export function CleaningRequestDetailPanel({
           <XCircle className="h-4 w-4" /> Close Request
         </Button>
       )}
-    </div>
-  );
-}
-
-const PRIORITY_BADGE: Record<string, string> = {
-  LOW: "border-slate-200 bg-slate-50 text-slate-600",
-  NORMAL: "border-amber-200 bg-amber-50 text-amber-700",
-  MEDIUM: "border-amber-200 bg-amber-50 text-amber-700",
-  HIGH: "border-orange-200 bg-orange-50 text-orange-700",
-  URGENT: "border-red-200 bg-red-600 text-white",
-};
-
-function DetailItem({
-  icon: Icon,
-  label,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-w-0">
-      <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-        <Icon className="h-3 w-3" />
-        {label}
-      </dt>
-      <dd className="mt-0.5 truncate font-semibold text-slate-800">{children}</dd>
     </div>
   );
 }

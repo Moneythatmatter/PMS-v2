@@ -53,9 +53,12 @@ export type QuickReservationDraft = {
 export type QuickReservationModalProps = {
   draft: QuickReservationDraft | null;
   conflict?: string | null;
+  /** Shown while availability for the chosen dates is loading or could not be checked; blocks saving. */
+  availabilityNote?: string | null;
   /** Other rooms of the same type that are free for every night of the draft. */
   roomOptions?: string[];
   todayIso: string;
+  onDatesChange: (checkIn: string, checkOut: string) => void;
   onClose: () => void;
   onCreated: (booking: ReservationBooking) => void;
 };
@@ -72,11 +75,17 @@ function formatShort(iso: string) {
     : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function shiftDate(iso: string, n: number) {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function QuickReservationModal(props: QuickReservationModalProps) {
   if (!props.draft) return null;
   return (
     <QuickReservationDialog
-      key={`${props.draft.room}-${props.draft.checkIn}-${props.draft.checkOut}`}
+      key={props.draft.room}
       {...props}
       draft={props.draft}
     />
@@ -86,8 +95,10 @@ export function QuickReservationModal(props: QuickReservationModalProps) {
 function QuickReservationDialog({
   draft,
   conflict,
+  availabilityNote,
   roomOptions,
   todayIso,
+  onDatesChange,
   onClose,
   onCreated,
 }: QuickReservationModalProps & { draft: QuickReservationDraft }) {
@@ -185,8 +196,23 @@ function QuickReservationDialog({
 
   const maxGuests = draft.maxOccupancy && draft.maxOccupancy > 0 ? draft.maxOccupancy : 6;
   const canCheckIn = draft.checkIn === todayIso;
-  const roomConflict = room === draft.room ? conflict : null;
+  const roomConflict =
+    availabilityNote ??
+    (room === draft.room
+      ? conflict
+      : rooms.includes(room)
+        ? null
+        : `Room ${room} is not free for these dates.`);
   const disabled = Boolean(roomConflict) || nights === 0 || saving !== null;
+
+  const changeCheckIn = (value: string) => {
+    if (!value || value < todayIso) return;
+    onDatesChange(value, shiftDate(value, Math.max(1, nights)));
+  };
+  const changeCheckOut = (value: string) => {
+    if (!value || value <= draft.checkIn) return;
+    onDatesChange(draft.checkIn, value);
+  };
 
   const fullFormHref = (mode?: "group") => {
     const params = new URLSearchParams({
@@ -297,10 +323,17 @@ function QuickReservationDialog({
         <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50 px-5 py-4">
           {/* Row 1: dates · room type · room · price */}
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <p className="flex items-center gap-2 text-xl font-bold text-sky-800">
+            <div className="flex items-center gap-2 text-xl font-bold text-sky-800">
               <CalendarDays className="h-5 w-5 text-slate-500" />
-              {formatShort(draft.checkIn)} – {formatShort(draft.checkOut)}
-            </p>
+              <DatePick label="Check-in date" value={draft.checkIn} min={todayIso} onChange={changeCheckIn} />
+              <span>–</span>
+              <DatePick
+                label="Check-out date"
+                value={draft.checkOut}
+                min={shiftDate(draft.checkIn, 1)}
+                onChange={changeCheckOut}
+              />
+            </div>
             <p className="flex items-center gap-2 text-lg font-semibold text-slate-600">
               <BedDouble className="h-5 w-5 text-slate-500" />
               {draft.type}
@@ -327,7 +360,7 @@ function QuickReservationDialog({
 
           {roomConflict && (
             <p className="rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
-              {roomConflict} {rooms.length > 1 ? "Pick another room above." : ""}
+              {roomConflict} {!availabilityNote && rooms.length > 1 ? "Pick another room above." : ""}
             </p>
           )}
 
@@ -621,6 +654,42 @@ function IconSelect({
       >
         {children}
       </select>
+    </label>
+  );
+}
+
+function DatePick({
+  label,
+  value,
+  min,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  min?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label
+      className="relative cursor-pointer rounded border-b border-dashed border-sky-300 px-0.5 hover:border-sky-600 hover:bg-sky-50"
+      title={`Change ${label.toLowerCase()}`}
+    >
+      {formatShort(value)}
+      <input
+        type="date"
+        value={value}
+        min={min}
+        onChange={(e) => onChange(e.target.value)}
+        onClick={(e) => {
+          try {
+            e.currentTarget.showPicker?.();
+          } catch {
+            /* browser opens its own picker */
+          }
+        }}
+        aria-label={label}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+      />
     </label>
   );
 }

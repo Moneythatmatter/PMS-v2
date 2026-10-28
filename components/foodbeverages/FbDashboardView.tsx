@@ -51,12 +51,6 @@ const quickLinks = [
     hint: "Accept / prep",
   },
   {
-    label: "POS Billing",
-    href: "/food-beverages/pos-billing",
-    icon: Wallet,
-    hint: "Walk-in",
-  },
-  {
     label: "Day Close",
     href: "/food-beverages/restaurants/day-close",
     icon: Clock,

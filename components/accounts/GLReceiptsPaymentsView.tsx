@@ -6,16 +6,17 @@ import {
   TrendingUp,
   TrendingDown,
   Printer,
-  Download,
   Plus,
   Trash2,
-  CheckCircle2,
   Search,
   Loader2,
   FileText,
   Receipt,
   AlertCircle,
   RefreshCw,
+  X,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -26,6 +27,10 @@ import {
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
 import { cn } from "@/lib/utils";
+import { downloadXlsx } from "@/lib/xlsx";
+import { ExportMenu } from "@/components/accounts/ExportMenu";
+import { VoucherEditModal } from "@/components/accounts/VoucherEditModal";
+import { DataGrid } from "@/components/accounts/DataGrid";
 import {
   accPartyBillService,
   accVoucherService,
@@ -77,8 +82,25 @@ function downloadCsv(filename: string, header: string[], rows: (string | number 
 const counterLedger = (v: Voucher) =>
   v.voucherCategory === "Receipt" ? v.creditAccounts : v.debitAccounts;
 
+const EXPORT_HEADER = [
+  "Voucher No",
+  "Date",
+  "Type",
+  "Cash / Bank Account",
+  "Party",
+  "Ledger",
+  "Mode",
+  "Instrument No",
+  "Amount",
+  "Status",
+  "Narration",
+];
+
 export function GLReceiptsPaymentsView() {
   const { lookups, loading: lookupsLoading, error: lookupsError, reload: reloadLookups } = useAccLookups();
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editVoucherId, setEditVoucherId] = useState<string | null>(null);
 
   // Voucher Form State
   const [vouchType, setVouchType] = useState<VoucherKind>("Receipt");
@@ -155,6 +177,15 @@ export function GLReceiptsPaymentsView() {
     ? preview.voucherNo || "—"
     : "…";
 
+  useEffect(() => {
+    if (!formOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isPosting) setFormOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [formOpen, isPosting]);
+
   const totalVoucherAmount = useMemo(
     () => lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
     [lineItems],
@@ -189,9 +220,15 @@ export function GLReceiptsPaymentsView() {
   };
 
   const handleTypeChange = (newType: VoucherKind) => {
+    if (newType === vouchType) return;
     setVouchType(newType);
     setLineItems((prev) => prev.map((l) => ({ ...l, billId: "" })));
     if (partyId) void loadBills(partyId, newType);
+  };
+
+  const openForm = (kind: VoucherKind) => {
+    handleTypeChange(kind);
+    setFormOpen(true);
   };
 
   const handlePartyChange = (id: string) => {
@@ -288,6 +325,7 @@ export function GLReceiptsPaymentsView() {
       setOverallNarration("");
       setBillsByKey({});
       setPreviewNonce((n) => n + 1);
+      setFormOpen(false);
       void history.reload();
       void today.reload();
     } catch (err) {
@@ -307,43 +345,76 @@ export function GLReceiptsPaymentsView() {
     );
   }, [history.data, historySearchQuery]);
 
-  const todayReceiptsTotal = (today.data ?? [])
+  const filteredReceipts = filteredHistory
     .filter((v) => v.voucherCategory === "Receipt")
     .reduce((sum, v) => sum + v.totalAmount, 0);
-  const todayPaymentsTotal = (today.data ?? [])
+  const filteredPayments = filteredHistory
     .filter((v) => v.voucherCategory === "Payment")
     .reduce((sum, v) => sum + v.totalAmount, 0);
+
+  const todayVouchers = today.data ?? [];
+  const todayReceipts = todayVouchers.filter((v) => v.voucherCategory === "Receipt");
+  const todayPayments = todayVouchers.filter((v) => v.voucherCategory === "Payment");
+  const todayReceiptsTotal = todayReceipts.reduce((sum, v) => sum + v.totalAmount, 0);
+  const todayPaymentsTotal = todayPayments.reduce((sum, v) => sum + v.totalAmount, 0);
   const netCashFlow = todayReceiptsTotal - todayPaymentsTotal;
 
-  const handleExport = () => {
+  const exportRows = () =>
+    filteredHistory.map((v) => [
+      v.voucherNo,
+      v.voucherDate,
+      v.voucherCategory,
+      v.bankCashAccountName,
+      v.partyName,
+      counterLedger(v),
+      v.paymentMethodName,
+      v.instrumentNo,
+      v.totalAmount,
+      v.status,
+      v.narration,
+    ]);
+
+  const ensureExportable = () => {
     if (filteredHistory.length === 0) {
       notify("Nothing to export for the selected filters.", "error");
-      return;
+      return false;
     }
-    downloadCsv(
-      `receipts-payments-${historyFrom}-to-${historyTo}.csv`,
-      ["Voucher No", "Date", "Type", "Cash / Bank Account", "Party", "Ledger", "Mode", "Instrument No", "Amount", "Status", "Narration"],
-      filteredHistory.map((v) => [
-        v.voucherNo,
-        v.voucherDate,
-        v.voucherCategory,
-        v.bankCashAccountName,
-        v.partyName,
-        counterLedger(v),
-        v.paymentMethodName,
-        v.instrumentNo,
-        v.totalAmount,
-        v.status,
-        v.narration,
-      ]),
-    );
+    return true;
+  };
+
+  const handleExportCsv = () => {
+    if (!ensureExportable()) return;
+    downloadCsv(`receipts-payments-${historyFrom}-to-${historyTo}.csv`, EXPORT_HEADER, exportRows());
     notify(`Exported ${filteredHistory.length} vouchers to CSV.`);
   };
 
+  const handleExportExcel = () => {
+    if (!ensureExportable()) return;
+    downloadXlsx(`receipts-payments-${historyFrom}-to-${historyTo}.xlsx`, [
+      {
+        name: "Receipts & Payments",
+        title: "GL Receipts / Payments Register",
+        meta: [
+          ["Period", `${formatDate(historyFrom)} to ${formatDate(historyTo)}`],
+          ["Type", historyTypeFilter === "<ALL>" ? "Receipts & Payments" : historyTypeFilter],
+          ...(historySearchQuery.trim() ? [["Search", historySearchQuery.trim()] as [string, string]] : []),
+          ["Total Receipts", filteredReceipts],
+          ["Total Payments", filteredPayments],
+          ["Net", filteredReceipts - filteredPayments],
+          ["Generated", new Date().toLocaleString("en-IN")],
+        ],
+        header: EXPORT_HEADER,
+        rows: exportRows().map((r) => [r[0], formatDate(String(r[1] ?? "")), ...r.slice(2)]),
+      },
+    ]);
+    notify(`Exported ${filteredHistory.length} vouchers to Excel.`);
+  };
+
+  const isReceipt = vouchType === "Receipt";
   const selectClass =
-    "h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 font-semibold focus:border-emerald-500 focus:outline-none";
+    "h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 font-semibold focus:border-emerald-500 focus:outline-none";
   const lineSelectClass =
-    "h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-800 focus:border-emerald-500 focus:outline-none";
+    "h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-800 focus:border-emerald-500 focus:outline-none";
 
   const renderBillSelect = (item: FormLineItem, className: string) => {
     return (
@@ -371,6 +442,17 @@ export function GLReceiptsPaymentsView() {
     );
   };
 
+  const ledgerOptions = (
+    <>
+      <option value="">Select ledger…</option>
+      {(lookups?.ledgers ?? []).map((l) => (
+        <option key={l.id} value={l.id}>
+          {l.code} - {l.name}
+        </option>
+      ))}
+    </>
+  );
+
   return (
     <ModulePageShell
       eyebrow="Accounts & Daily Cashier Transactions"
@@ -380,31 +462,40 @@ export function GLReceiptsPaymentsView() {
       toastVariant={toast?.variant}
       onDismissToast={() => setToast(null)}
       secondaryActions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => window.print()}
-            className="rounded-xl text-xs font-medium bg-white shadow-xs"
+            className="rounded-lg text-xs font-semibold bg-white border-slate-200 text-slate-700 shadow-2xs hidden sm:inline-flex"
           >
             <Printer className="h-3.5 w-3.5 mr-1 text-slate-500" />
             Print
           </Button>
-
+          <ExportMenu
+            onExcel={handleExportExcel}
+            onCsv={handleExportCsv}
+            disabled={filteredHistory.length === 0}
+            excelHint="Register with totals"
+            csvHint="Plain voucher rows"
+            tone="light"
+          />
           <Button
             type="button"
-            variant="outline"
             size="sm"
-            onClick={handleExport}
-            className="rounded-xl text-xs font-medium bg-white shadow-xs"
+            onClick={() => openForm(vouchType)}
+            disabled={!lookups}
+            className="rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-2xs px-3.5"
           >
-            <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
-            Export CSV
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Create Voucher
           </Button>
         </div>
       }
+      wrapChildren={false}
     >
+      <div className="mt-4" />
       {lookupsError ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
           <span className="flex items-center gap-2">
@@ -424,16 +515,16 @@ export function GLReceiptsPaymentsView() {
       {/* KPI Cards Grid */}
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatMiniCard
-          label="Today's Receipts Collected"
+          label="Today's Receipts"
           value={today.loading && !today.data ? "…" : formatINR(todayReceiptsTotal)}
-          sublabel="Posted cash/bank inflow vouchers today"
+          sublabel={`${todayReceipts.length} posted inflow voucher${todayReceipts.length !== 1 ? "s" : ""}`}
           accent="#16a34a"
           icon={TrendingUp}
         />
         <StatMiniCard
-          label="Today's Payments Disbursed"
+          label="Today's Payments"
           value={today.loading && !today.data ? "…" : formatINR(todayPaymentsTotal)}
-          sublabel="Posted vendor & utility disbursements today"
+          sublabel={`${todayPayments.length} posted outflow voucher${todayPayments.length !== 1 ? "s" : ""}`}
           accent="#e11d48"
           icon={TrendingDown}
         />
@@ -446,467 +537,541 @@ export function GLReceiptsPaymentsView() {
         />
       </div>
 
-      {/* Voucher Posting Entry Form Card */}
-      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-          <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-xl font-bold text-white text-xs shadow-2xs transition-all",
-                vouchType === "Receipt" ? "bg-emerald-600" : "bg-rose-600",
-              )}
-            >
-              {vouchType === "Receipt" ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+      {/* Filters: search left, period & type right */}
+      <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full lg:max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={historySearchQuery}
+            onChange={(e) => setHistorySearchQuery(e.target.value)}
+            placeholder="Search voucher #, party, ledger…"
+            className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 focus:border-emerald-500 focus:outline-none"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <FODatePicker value={historyFrom} onChange={setHistoryFrom} className="w-36" />
+            <span className="text-xs font-medium text-slate-400">to</span>
+            <FODatePicker value={historyTo} onChange={setHistoryTo} className="w-36" />
+          </div>
+          <div className="flex h-9 items-center gap-0.5 rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-semibold">
+            {(["<ALL>", "Receipt", "Payment"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setHistoryTypeFilter(t)}
+                className={cn(
+                  "h-full rounded-md px-3 transition-colors cursor-pointer select-none",
+                  historyTypeFilter === t
+                    ? t === "Payment"
+                      ? "bg-rose-600 text-white"
+                      : t === "Receipt"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-slate-900 text-white"
+                    : "text-slate-600 hover:bg-slate-100",
+                )}
+              >
+                {t === "<ALL>" ? "All" : `${t}s`}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Receipts & Payments Register */}
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+              <Receipt className="h-4 w-4" />
             </span>
             <div>
-              <h2 className="text-base font-bold text-slate-900">Post {vouchType} Voucher</h2>
-              <p className="text-[11px] text-slate-500 font-medium">
-                Enter cashier transaction header and sub-ledger allocation details.
+              <h2 className="text-sm font-bold text-slate-900">Receipts &amp; Payments Register</h2>
+              <p className="text-[11px] text-slate-500">
+                {filteredHistory.length} voucher{filteredHistory.length !== 1 ? "s" : ""} ·{" "}
+                {formatDate(historyFrom)} – {formatDate(historyTo)}
               </p>
             </div>
           </div>
-
-          {/* Transaction Type Segmented Pills */}
-          <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 border border-slate-200">
-            <button
-              type="button"
-              onClick={() => handleTypeChange("Receipt")}
-              className={cn(
-                "rounded-lg px-3 py-1 text-xs font-bold transition-all cursor-pointer select-none",
-                vouchType === "Receipt" ? "bg-emerald-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900",
-              )}
-            >
-              ✓ Receipt (Inflow)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTypeChange("Payment")}
-              className={cn(
-                "rounded-lg px-3 py-1 text-xs font-bold transition-all cursor-pointer select-none",
-                vouchType === "Payment" ? "bg-rose-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900",
-              )}
-            >
-              ✓ Payment (Outflow)
-            </button>
+          <div className="flex items-center gap-2 text-[11px] font-semibold">
+            <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-emerald-800">
+              <ArrowDownLeft className="h-3.5 w-3.5" /> In {formatINR(filteredReceipts)}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2.5 py-1 text-rose-800">
+              <ArrowUpRight className="h-3.5 w-3.5" /> Out {formatINR(filteredPayments)}
+            </span>
           </div>
         </div>
 
-        {/* Voucher Header Form Controls Grid */}
-        <form onSubmit={(e) => void handlePostVoucher(e)} className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-xl bg-slate-50/70 p-3.5 border border-slate-200/70">
-            <FormField label="Voucher No (Next)">
-              <TextInput
-                value={vouchNo}
-                readOnly
-                className="h-8 text-xs font-bold bg-white text-emerald-800 border-slate-200"
-              />
-            </FormField>
-
-            <FormField label="Voucher Date" required>
-              <FODatePicker value={vouchDt} onChange={(val) => setVouchDt(val)} />
-            </FormField>
-
-            <FormField label="Cash / Bank Account" required>
-              <select value={bankId} onChange={(e) => setBankCashAccountId(e.target.value)} className={selectClass}>
-                {bankAccounts.length === 0 && <option value="">No bank / cash accounts configured</option>}
-                {bankAccounts.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.code} - {b.name}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <FormField label="Payment Mode">
-              <select value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)} className={selectClass}>
-                <option value="">— Select mode —</option>
-                {(lookups?.paymentMethods ?? []).map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.paymentMethodName}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <FormField label="Ref / Instrument No" required={paymentMethod?.referenceRequired}>
-              <TextInput
-                value={instrumentNo}
-                onChange={(e) => setInstrumentNo(e.target.value)}
-                placeholder="Cheque #, UTR #, or EDC approval code..."
-                className="h-8 text-xs bg-white"
-              />
-            </FormField>
-
-            <FormField label="Instrument Date">
-              <TextInput
-                type="date"
-                value={instrumentDate}
-                onChange={(e) => setInstrumentDate(e.target.value)}
-                className="h-8 text-xs bg-white"
-              />
-            </FormField>
-
-            <FormField label="Party / Sub-Ledger" required={voucherType?.partyRequired} className="sm:col-span-2">
-              <select value={partyId} onChange={(e) => handlePartyChange(e.target.value)} className={selectClass}>
-                <option value="">— No party (direct {vouchType.toLowerCase()}) —</option>
-                {(lookups?.parties ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.partyName} ({p.partyCode})
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <FormField label="Overall Voucher Narration" className="sm:col-span-2">
-              <TextInput
-                value={overallNarration}
-                onChange={(e) => setOverallNarration(e.target.value)}
-                placeholder="Enter complete voucher description..."
-                className="h-8 text-xs bg-white"
-              />
-            </FormField>
-          </div>
-
-          {/* Sub-Ledger Line Items Table */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5 text-emerald-600" />
-                Voucher Allocation Breakdown ({lineItems.length} lines)
-              </h3>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddLineItem}
-                className="rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 cursor-pointer"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" />
-                Add Line Item
+        <div>
+          {history.error ? (
+            <div className="m-4 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+              <span>{history.error}</span>
+              <Button type="button" variant="outline" size="sm" onClick={() => void history.reload()} className="rounded-xl bg-white text-xs">
+                <RefreshCw className="h-3.5 w-3.5 mr-1" /> Retry
               </Button>
             </div>
+          ) : history.loading && !history.data ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-xs font-medium text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin text-emerald-600" /> Loading vouchers…
+            </div>
+          ) : filteredHistory.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-12 text-center">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                <Receipt className="h-5 w-5" />
+              </span>
+              <p className="text-sm font-semibold text-slate-700">No vouchers for these filters</p>
+              <p className="text-xs text-slate-500">Change the dates or post a new receipt / payment.</p>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => openForm(vouchType)}
+                disabled={!lookups}
+                className="mt-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Create Voucher
+              </Button>
+            </div>
+          ) : (
+            <>
+              {/* Desktop Register Table */}
+              <div className="hidden md:block">
+                <DataGrid
+                  rows={filteredHistory}
+                  rowKey={(row) => row.id}
+                  onRowClick={(row) => setEditVoucherId(row.id)}
+                  columns={[
+                    {
+                      id: "voucherNo",
+                      label: "Voucher No",
+                      width: 140,
+                      cell: (row) => row.voucherNo,
+                      cellClass: () => "font-semibold text-slate-900",
+                      footer: `Total (${filteredHistory.length})`,
+                    },
+                    { id: "date", label: "Date", width: 110, cell: (row) => formatDate(row.voucherDate) },
+                    {
+                      id: "type",
+                      label: "Type",
+                      width: 90,
+                      cell: (row) => row.voucherCategory,
+                      cellClass: (row) => (row.voucherCategory === "Receipt" ? "text-emerald-700" : "text-rose-700"),
+                    },
+                    {
+                      id: "bank",
+                      label: "Cash / Bank",
+                      width: 200,
+                      cell: (row) => row.bankCashAccountName ?? "",
+                      title: (row) => row.bankCashAccountName ?? undefined,
+                    },
+                    {
+                      id: "party",
+                      label: "Party",
+                      width: 170,
+                      cell: (row) => row.partyName ?? "",
+                      title: (row) => row.partyName ?? undefined,
+                    },
+                    {
+                      id: "ledger",
+                      label: "Ledger",
+                      width: 220,
+                      cell: (row) => counterLedger(row),
+                      cellClass: () => "text-slate-600",
+                      title: (row) => counterLedger(row) ?? undefined,
+                    },
+                    { id: "mode", label: "Mode", width: 130, cell: (row) => row.paymentMethodName ?? "" },
+                    {
+                      id: "instrument",
+                      label: "Instrument No",
+                      width: 140,
+                      cell: (row) => row.instrumentNo ?? "",
+                      cellClass: () => "text-slate-600",
+                      title: (row) => row.instrumentNo ?? undefined,
+                    },
+                    {
+                      id: "receipt",
+                      label: "Receipt (₹)",
+                      width: 130,
+                      align: "right",
+                      cell: (row) => (row.voucherCategory === "Receipt" ? formatINR(row.totalAmount) : ""),
+                      cellClass: () => "tabular-nums text-emerald-700",
+                      footer: <span className="tabular-nums text-emerald-800">{formatINR(filteredReceipts)}</span>,
+                    },
+                    {
+                      id: "payment",
+                      label: "Payment (₹)",
+                      width: 130,
+                      align: "right",
+                      cell: (row) => (row.voucherCategory === "Payment" ? formatINR(row.totalAmount) : ""),
+                      cellClass: () => "tabular-nums text-rose-700",
+                      footer: <span className="tabular-nums text-rose-800">{formatINR(filteredPayments)}</span>,
+                    },
+                    { id: "status", label: "Status", width: 90, cell: (row) => row.status },
+                  ]}
+                />
+              </div>
 
-            {/* Line Items Table (Desktop) */}
-            <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
-                    <th className="px-3 py-2 w-10 text-center">#</th>
-                    <th className="px-3 py-2 min-w-[220px]">Account Ledger</th>
-                    <th className="px-3 py-2 min-w-[220px]">Against Bill</th>
-                    <th className="px-3 py-2 w-40 text-right">Amount (₹)</th>
-                    <th className="px-3 py-2 w-12 text-center">Del</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+              {/* Mobile Register Cards */}
+              <div className="md:hidden space-y-2.5 p-3">
+                {filteredHistory.map((row) => {
+                  const receipt = row.voucherCategory === "Receipt";
+                  return (
+                    <div
+                      key={row.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setEditVoucherId(row.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setEditVoucherId(row.id);
+                        }
+                      }}
+                      className={cn(
+                        "cursor-pointer rounded-xl border border-slate-200 border-l-4 bg-white p-3 space-y-1.5 active:bg-slate-50",
+                        receipt ? "border-l-emerald-500" : "border-l-rose-500",
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-slate-900">{row.voucherNo}</span>
+                        <TypeBadge receipt={receipt} />
+                      </div>
+                      <p className="text-xs font-semibold text-slate-800">{row.partyName ?? counterLedger(row)}</p>
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                        <span className="text-slate-500 font-medium">
+                          {formatDate(row.voucherDate)} • {row.paymentMethodName ?? "—"}
+                        </span>
+                        <span className={cn("font-bold tabular-nums", receipt ? "text-emerald-700" : "text-rose-700")}>
+                          {formatINR(row.totalAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+
+      {editVoucherId && (
+        <VoucherEditModal
+          voucherId={editVoucherId}
+          onClose={() => setEditVoucherId(null)}
+          onChanged={() => {
+            void history.reload();
+            void today.reload();
+          }}
+        />
+      )}
+
+      {/* Create Voucher Modal */}
+      {formOpen && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center p-0 sm:items-center sm:p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]"
+            onClick={() => !isPosting && setFormOpen(false)}
+            aria-label="Close voucher form"
+          />
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="voucher-form-title"
+            onSubmit={(e) => void handlePostVoucher(e)}
+            className="relative flex max-h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+          >
+            {/* Modal Header */}
+            <div
+              className={cn(
+                "flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 text-white",
+                isReceipt ? "bg-emerald-700" : "bg-rose-700",
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                  {isReceipt ? <ArrowDownLeft className="h-5 w-5" /> : <ArrowUpRight className="h-5 w-5" />}
+                </span>
+                <div>
+                  <h2 id="voucher-form-title" className="text-base font-bold">
+                    New {vouchType} Voucher
+                  </h2>
+                  <p className="text-[11px] text-white/80">
+                    Voucher No <span className="font-semibold text-white">{vouchNo}</span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-0.5 rounded-lg bg-black/15 p-0.5">
+                  {(["Receipt", "Payment"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => handleTypeChange(k)}
+                      className={cn(
+                        "rounded-md px-3 py-1 text-xs font-bold transition-colors cursor-pointer select-none",
+                        vouchType === k ? "bg-white text-slate-900" : "text-white/85 hover:text-white",
+                      )}
+                    >
+                      {k === "Receipt" ? "Receipt (In)" : "Payment (Out)"}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormOpen(false)}
+                  disabled={isPosting}
+                  className="rounded-lg p-1.5 text-white/80 hover:bg-white/10 hover:text-white"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <FormField label="Voucher Date" required>
+                  <FODatePicker value={vouchDt} onChange={(val) => setVouchDt(val)} />
+                </FormField>
+
+                <FormField label="Cash / Bank Account" required>
+                  <select value={bankId} onChange={(e) => setBankCashAccountId(e.target.value)} className={selectClass}>
+                    {bankAccounts.length === 0 && <option value="">No bank / cash accounts configured</option>}
+                    {bankAccounts.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.code} - {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <FormField label="Payment Mode">
+                  <select value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)} className={selectClass}>
+                    <option value="">— Select mode —</option>
+                    {(lookups?.paymentMethods ?? []).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.paymentMethodName}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <FormField label="Party / Sub-Ledger" required={voucherType?.partyRequired}>
+                  <select value={partyId} onChange={(e) => handlePartyChange(e.target.value)} className={selectClass}>
+                    <option value="">— No party (direct {vouchType.toLowerCase()}) —</option>
+                    {(lookups?.parties ?? []).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.partyName} ({p.partyCode})
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <FormField label="Ref / Instrument No" required={paymentMethod?.referenceRequired}>
+                  <TextInput
+                    value={instrumentNo}
+                    onChange={(e) => setInstrumentNo(e.target.value)}
+                    placeholder="Cheque #, UTR # or EDC code"
+                    className="h-9 text-xs bg-white"
+                  />
+                </FormField>
+
+                <FormField label="Instrument Date">
+                  <TextInput
+                    type="date"
+                    value={instrumentDate}
+                    onChange={(e) => setInstrumentDate(e.target.value)}
+                    className="h-9 text-xs bg-white"
+                  />
+                </FormField>
+
+                <FormField label="Narration" className="sm:col-span-2">
+                  <TextInput
+                    value={overallNarration}
+                    onChange={(e) => setOverallNarration(e.target.value)}
+                    placeholder="Describe this voucher…"
+                    className="h-9 text-xs bg-white"
+                  />
+                </FormField>
+              </div>
+
+              {/* Allocation Lines */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">
+                    <FileText className="h-3.5 w-3.5 text-slate-500" />
+                    Allocation ({lineItems.length} line{lineItems.length !== 1 ? "s" : ""})
+                  </h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddLineItem}
+                    className="rounded-lg text-xs font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Add Line
+                  </Button>
+                </div>
+
+                {/* Desktop Lines */}
+                <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                        <th className="px-3 py-2 w-10 text-center">#</th>
+                        <th className="px-3 py-2 min-w-[220px]">Account Ledger</th>
+                        <th className="px-3 py-2 min-w-[220px]">Against Bill</th>
+                        <th className="px-3 py-2 w-40 text-right">Amount (₹)</th>
+                        <th className="px-3 py-2 w-12" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {lineItems.map((item, idx) => (
+                        <tr key={item.key}>
+                          <td className="px-3 py-2 text-center text-slate-400 font-semibold">{idx + 1}</td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={item.accountId}
+                              onChange={(e) => handleUpdateLineItem(item.key, "accountId", e.target.value)}
+                              className={lineSelectClass}
+                            >
+                              {ledgerOptions}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2">{renderBillSelect(item, lineSelectClass)}</td>
+                          <td className="px-3 py-2">
+                            <AmountInput
+                              value={item.amount}
+                              onChange={(v) => handleUpdateLineItem(item.key, "amount", v)}
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveLineItem(item.key)}
+                              className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                              aria-label={`Remove line ${idx + 1}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Lines */}
+                <div className="md:hidden space-y-2">
                   {lineItems.map((item, idx) => (
-                    <tr key={item.key} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 text-center text-slate-400 font-bold">{idx + 1}</td>
-                      <td className="px-3 py-2">
+                    <div key={item.key} className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                        <span className="text-xs font-bold text-slate-700">Line {idx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLineItem(item.key)}
+                          className="flex items-center gap-1 text-xs font-bold text-rose-600"
+                        >
+                          <Trash2 className="h-3 w-3" /> Remove
+                        </button>
+                      </div>
+                      <FormField label="Account Ledger">
                         <select
                           value={item.accountId}
                           onChange={(e) => handleUpdateLineItem(item.key, "accountId", e.target.value)}
                           className={lineSelectClass}
                         >
-                          <option value="">Select ledger…</option>
-                          {(lookups?.ledgers ?? []).map((l) => (
-                            <option key={l.id} value={l.id}>
-                              {l.code} - {l.name}
-                            </option>
-                          ))}
+                          {ledgerOptions}
                         </select>
-                      </td>
-                      <td className="px-3 py-2">{renderBillSelect(item, lineSelectClass)}</td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={item.amount || ""}
-                          onChange={(e) => handleUpdateLineItem(item.key, "amount", parseFloat(e.target.value) || 0)}
-                          placeholder="0.00"
-                          className="h-7 w-full rounded-md border border-slate-200 px-2 text-right text-xs font-bold text-slate-900 focus:border-emerald-500 focus:outline-none"
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveLineItem(item.key)}
-                          className="text-slate-400 hover:text-rose-600 transition-colors p-1"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </td>
-                    </tr>
+                      </FormField>
+                      <FormField label="Against Bill">{renderBillSelect(item, lineSelectClass)}</FormField>
+                      <FormField label="Amount (₹)">
+                        <AmountInput value={item.amount} onChange={(v) => handleUpdateLineItem(item.key, "amount", v)} />
+                      </FormField>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile Line Items Stack */}
-            <div className="md:hidden space-y-2">
-              {lineItems.map((item, idx) => (
-                <div key={item.key} className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-                    <span className="text-xs font-bold text-slate-700">Line Item #{idx + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveLineItem(item.key)}
-                      className="text-rose-600 text-xs font-bold flex items-center gap-1"
-                    >
-                      <Trash2 className="h-3 w-3" /> Remove
-                    </button>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500">Account Ledger:</label>
-                      <select
-                        value={item.accountId}
-                        onChange={(e) => handleUpdateLineItem(item.key, "accountId", e.target.value)}
-                        className={lineSelectClass}
-                      >
-                        <option value="">Select ledger…</option>
-                        {(lookups?.ledgers ?? []).map((l) => (
-                          <option key={l.id} value={l.id}>
-                            {l.code} - {l.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500">Against Bill:</label>
-                      {renderBillSelect(item, lineSelectClass)}
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500">Amount (₹):</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={item.amount || ""}
-                        onChange={(e) => handleUpdateLineItem(item.key, "amount", parseFloat(e.target.value) || 0)}
-                        placeholder="0.00"
-                        className="h-7 w-full rounded-md border border-slate-200 px-2 text-right text-xs font-bold"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Total Voucher Value Banner & Submit */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50/70 p-3.5 border border-emerald-200">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-emerald-700 shrink-0" />
-                <div>
-                  <span className="text-xs text-emerald-900 font-semibold block">Total Voucher Value:</span>
-                  <span className="text-lg font-black text-emerald-950">{formatINR(totalVoucherAmount)}</span>
                 </div>
               </div>
+            </div>
 
+            {/* Modal Footer */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Total {vouchType}</p>
+                <p className={cn("text-xl font-bold tabular-nums", isReceipt ? "text-emerald-700" : "text-rose-700")}>
+                  {formatINR(totalVoucherAmount)}
+                </p>
+              </div>
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={resetLines}
-                  className="rounded-xl text-xs font-semibold bg-white"
+                  disabled={isPosting}
+                  className="rounded-lg text-xs font-semibold bg-white"
                 >
-                  Clear Form
+                  Clear
                 </Button>
-
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFormOpen(false)}
+                  disabled={isPosting}
+                  className="rounded-lg text-xs font-semibold bg-white"
+                >
+                  Cancel
+                </Button>
                 <Button
                   type="submit"
                   size="sm"
                   disabled={isPosting || !voucherType}
                   className={cn(
-                    "rounded-xl font-bold text-xs px-4 shadow-sm text-white cursor-pointer disabled:opacity-75",
-                    vouchType === "Receipt" ? "bg-emerald-700 hover:bg-emerald-800" : "bg-rose-700 hover:bg-rose-800",
+                    "rounded-lg font-bold text-xs px-4 shadow-sm text-white disabled:opacity-75",
+                    isReceipt ? "bg-emerald-700 hover:bg-emerald-800" : "bg-rose-700 hover:bg-rose-800",
                   )}
                 >
                   {isPosting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Receipt className="h-3.5 w-3.5 mr-1" />}
-                  Post {vouchType} Voucher
+                  Post {vouchType}
                 </Button>
               </div>
             </div>
-          </div>
-        </form>
-      </section>
-
-      {/* Receipts & Payments History Table */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Receipt className="h-4 w-4 text-emerald-600" />
-            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-              Receipts &amp; Payments Log ({filteredHistory.length})
-            </h2>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <input
-              type="date"
-              value={historyFrom}
-              onChange={(e) => setHistoryFrom(e.target.value)}
-              className="h-8 rounded-xl border border-slate-200 bg-white px-2 text-xs text-slate-800 focus:border-emerald-500 focus:outline-none"
-              title="From date"
-            />
-            <input
-              type="date"
-              value={historyTo}
-              onChange={(e) => setHistoryTo(e.target.value)}
-              className="h-8 rounded-xl border border-slate-200 bg-white px-2 text-xs text-slate-800 focus:border-emerald-500 focus:outline-none"
-              title="To date"
-            />
-
-            {/* Type Filter Pills */}
-            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs font-semibold">
-              {(["<ALL>", "Receipt", "Payment"] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setHistoryTypeFilter(t)}
-                  className={cn(
-                    "px-2.5 py-1 rounded-md transition-all cursor-pointer select-none",
-                    historyTypeFilter === t ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900",
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-
-            {/* Search Filter */}
-            <div className="relative flex-1 sm:w-56">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={historySearchQuery}
-                onChange={(e) => setHistorySearchQuery(e.target.value)}
-                placeholder="Search voucher # or party..."
-                className="h-8 w-full rounded-xl border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 focus:border-emerald-500 focus:outline-none"
-              />
-            </div>
-          </div>
+          </form>
         </div>
-
-        {history.error ? (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
-            <span>{history.error}</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => void history.reload()} className="rounded-xl bg-white text-xs">
-              <RefreshCw className="h-3.5 w-3.5 mr-1" /> Retry
-            </Button>
-          </div>
-        ) : history.loading && !history.data ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-xs font-medium text-slate-500">
-            <Loader2 className="h-4 w-4 animate-spin text-emerald-600" /> Loading vouchers…
-          </div>
-        ) : filteredHistory.length === 0 ? (
-          <div className="py-8 text-center text-xs font-medium text-slate-400">
-            No receipt or payment vouchers found for the selected filters.
-          </div>
-        ) : (
-          <>
-            {/* Desktop History Table */}
-            <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
-                    <th className="px-3.5 py-2.5">Voucher #</th>
-                    <th className="px-3 py-2.5">Date</th>
-                    <th className="px-3 py-2.5 text-center">Type</th>
-                    <th className="px-3.5 py-2.5">Cash / Bank Account</th>
-                    <th className="px-3.5 py-2.5">Party / Ledger</th>
-                    <th className="px-3 py-2.5">Mode</th>
-                    <th className="px-3.5 py-2.5 text-right">Amount (₹)</th>
-                    <th className="px-3.5 py-2.5 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {filteredHistory.map((row) => (
-                    <tr key={row.id} className="hover:bg-slate-50">
-                      <td className="px-3.5 py-2.5 font-bold text-slate-900">{row.voucherNo}</td>
-                      <td className="px-3 py-2.5 text-slate-600">{formatDate(row.voucherDate)}</td>
-                      <td className="px-3 py-2.5 text-center">
-                        <span
-                          className={cn(
-                            "inline-block px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider",
-                            row.voucherCategory === "Receipt"
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                              : "bg-rose-100 text-rose-800 border-rose-300",
-                          )}
-                        >
-                          {row.voucherCategory}
-                        </span>
-                      </td>
-                      <td className="px-3.5 py-2.5 font-semibold text-slate-800">{row.bankCashAccountName ?? "—"}</td>
-                      <td className="px-3.5 py-2.5 font-semibold text-slate-900">
-                        {row.partyName ?? "General Account Posting"}
-                        <span className="block text-[10px] text-slate-400 font-normal">{counterLedger(row)}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-slate-600">
-                        {row.paymentMethodName ?? "—"}
-                        {row.instrumentNo && <span className="block text-[10px] text-slate-400">{row.instrumentNo}</span>}
-                      </td>
-                      <td
-                        className={cn(
-                          "px-3.5 py-2.5 text-right font-bold text-xs",
-                          row.voucherCategory === "Receipt" ? "text-emerald-700" : "text-rose-700",
-                        )}
-                      >
-                        {formatINR(row.totalAmount)}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-center">
-                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                          {row.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile History Card List */}
-            <div className="md:hidden space-y-2.5">
-              {filteredHistory.map((row) => (
-                <div key={row.id} className="rounded-xl border border-slate-200 bg-white p-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-slate-900">{row.voucherNo}</span>
-                    <span
-                      className={cn(
-                        "px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider",
-                        row.voucherCategory === "Receipt"
-                          ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                          : "bg-rose-100 text-rose-800 border-rose-300",
-                      )}
-                    >
-                      {row.voucherCategory}
-                    </span>
-                  </div>
-
-                  <p className="text-xs font-semibold text-slate-800">{row.partyName ?? counterLedger(row)}</p>
-
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-                    <span className="text-slate-500 font-medium">
-                      {formatDate(row.voucherDate)} • {row.paymentMethodName ?? "—"}
-                    </span>
-                    <span
-                      className={cn("font-bold text-xs", row.voucherCategory === "Receipt" ? "text-emerald-700" : "text-rose-700")}
-                    >
-                      {formatINR(row.totalAmount)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </section>
+      )}
     </ModulePageShell>
+  );
+}
+
+function TypeBadge({ receipt }: { receipt: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+        receipt ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700",
+      )}
+    >
+      {receipt ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
+      {receipt ? "Receipt" : "Payment"}
+    </span>
+  );
+}
+
+function AmountInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <input
+      type="number"
+      min={0}
+      step="0.01"
+      value={value || ""}
+      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+      placeholder="0.00"
+      className="h-8 w-full rounded-md border border-slate-200 px-2 text-right text-xs font-bold tabular-nums text-slate-900 focus:border-emerald-500 focus:outline-none"
+    />
   );
 }

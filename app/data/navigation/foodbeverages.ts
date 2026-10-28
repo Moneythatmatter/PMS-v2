@@ -51,7 +51,6 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
       { label: "Adjustments", href: "/food-beverages/inventory/adjustments", icon: "percent" },
     ],
   },
-  { label: "POS Billing", href: "/food-beverages/pos-billing", icon: "receipt" },
   { label: "Requisitions", href: "/food-beverages/requisitions", icon: "clipboard-list" },
   {
     label: "Reports",

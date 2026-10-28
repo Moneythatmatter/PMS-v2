@@ -16,6 +16,8 @@ export type CashierSession = {
   id: string;
   propertyId: string;
   cashierId: string;
+  cashierName?: string | null;
+  cashierEmail?: string | null;
   shiftName: string;
   openedAt: string;
   openingCash: number;
@@ -27,7 +29,9 @@ export type CashierSession = {
   closingRemarks?: string | null;
   status: "Open" | "Pending Approval" | "Closed" | "Rejected" | string;
   closedBy?: string | null;
+  closedByName?: string | null;
   approvedBy?: string | null;
+  approvedByName?: string | null;
   approvedAt?: string | null;
 };
 
@@ -35,6 +39,7 @@ export type CashierAudit = {
   id: string;
   action: string;
   actorId?: string | null;
+  actorName?: string | null;
   fromStatus?: string | null;
   toStatus?: string | null;
   remarks?: string | null;

@@ -16,14 +16,11 @@ export const frontOfficeNavItems: ModuleNavItem[] = [
   { label: "Extend Stay", href: "/frontoffice/extend-stay", icon: "calendar-plus" },
   {
     label: "Cashier",
-    href: "/frontoffice/cashier/start",
+    href: "/frontoffice/cashier/session",
     icon: "wallet",
     children: [
-      { label: "Start Shift", href: "/frontoffice/cashier/start", icon: "clock" },
-      { label: "Active Session", href: "/frontoffice/cashier/session", icon: "wallet" },
-      { label: "Closing", href: "/frontoffice/cashier/closing", icon: "receipt" },
-      { label: "History", href: "/frontoffice/cashier/history", icon: "history" },
-      { label: "Approvals", href: "/frontoffice/cashier/approvals", icon: "user-check" },
+      { label: "My Shift", href: "/frontoffice/cashier/session", icon: "wallet" },
+      { label: "History & Approvals", href: "/frontoffice/cashier/history", icon: "user-check" },
     ],
   },
   { label: "Day Closing", href: "/frontoffice/day-closing", icon: "calendar-clock" },

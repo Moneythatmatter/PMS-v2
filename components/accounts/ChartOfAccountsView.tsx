@@ -30,6 +30,7 @@ import {
   TextAreaInput,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
+import { SearchSelect, type SearchOption } from "@/components/ui/SearchSelect";
 import {
   accAccountService,
   type Account,
@@ -204,6 +205,17 @@ export function ChartOfAccountsView() {
   const allGroups = useMemo(
     () => flatAccounts.filter((a) => a.accountType === "Group"),
     [flatAccounts]
+  );
+  const parentGroupOptions = useMemo<SearchOption[]>(
+    () =>
+      allGroups.map((g) => ({
+        id: g.id,
+        label: `${g.code} - ${g.name} (${g.nature})`,
+        sublabel: g.name,
+        hint: g.code,
+        data: { nature: g.nature },
+      })),
+    [allGroups]
   );
 
   const categoriesByNature = useMemo(() => {
@@ -380,31 +392,24 @@ export function ChartOfAccountsView() {
   };
 
   const handleOpenCreateModal = () => {
-    const parent =
-      activeNode && activeNode.accountType === "Group"
-        ? activeNode
-        : activeNode?.parentId
-          ? findNode(treeData, activeNode.parentId)
-          : null;
-
     setCreateType("Ledger");
+    setCreateParentId("");
+    setCreateCode("");
     setCreateName("");
+    setCreateNature("Asset");
+    setCreateClassification("Balance Sheet");
+    setCreateCategory("");
     setCreateDescription("");
     setCreateIsBank(false);
     setCreateIsCash(false);
-    if (parent) {
-      applyCreateParent(parent.id, "Ledger");
-    } else {
-      setCreateParentId("");
-      setCreateNature("Asset");
-      setCreateClassification("Balance Sheet");
-      setCreateCategory("");
-      setCreateCode(suggestCode(flatAccounts, null));
-    }
     setShowCreateModal(true);
   };
 
   const handleSaveNewAccount = async () => {
+    if (createType === "Ledger" && !createParentId) {
+      notify("Select a Parent Group for the ledger.", "error");
+      return;
+    }
     if (!createName.trim()) {
       notify("Please enter a valid Account Name.", "error");
       return;
@@ -956,201 +961,263 @@ export function ChartOfAccountsView() {
       )}
 
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl border border-slate-200 space-y-4 font-sans text-xs max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
-              <div className="flex items-center gap-2">
-                <Plus className="h-5 w-5 text-emerald-700" />
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  Create New Account Master
-                </h3>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in-50"
+          onClick={() => setShowCreateModal(false)}
+        >
+          <div
+            className="flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-xs shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              className={cn(
+                "flex items-start justify-between gap-3 px-5 py-4 text-white",
+                createType === "Group" ? "bg-amber-600" : "bg-emerald-700"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                  {createType === "Group" ? <FolderTree className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold">New {createType === "Group" ? "Account Group" : "Ledger Account"}</h3>
+                  <p className="text-[11px] text-white/80">
+                    {createParentId
+                      ? `Under ${allGroups.find((g) => g.id === createParentId)?.name ?? "selected group"}`
+                      : "At the root of the chart of accounts"}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="rounded-lg p-1 text-white/80 hover:bg-white/15 hover:text-white cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Account Type
-              </label>
-              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setCreateType("Group")}
-                  className={cn(
-                    "flex items-center justify-center gap-1.5 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer",
-                    createType === "Group"
-                      ? "bg-white text-slate-900 shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
-                  )}
-                >
-                  <FolderTree className="h-4 w-4 text-amber-600" />
-                  Account Group (Category)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCreateType("Ledger")}
-                  className={cn(
-                    "flex items-center justify-center gap-1.5 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer",
-                    createType === "Ledger"
-                      ? "bg-white text-slate-900 shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
-                  )}
-                >
-                  <FileText className="h-4 w-4 text-emerald-600" />
-                  Ledger (Posting Account)
-                </button>
+            {/* Body */}
+            <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+              {/* Type selector */}
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    { id: "Group", icon: FolderTree, title: "Account Group", note: "A heading that holds ledgers", tone: "amber" },
+                    { id: "Ledger", icon: FileText, title: "Ledger", note: "A posting account for vouchers", tone: "emerald" },
+                  ] as const
+                ).map((t) => {
+                  const active = createType === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setCreateType(t.id)}
+                      className={cn(
+                        "flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all cursor-pointer",
+                        active
+                          ? t.tone === "amber"
+                            ? "border-amber-400 bg-amber-50 ring-1 ring-amber-400"
+                            : "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                          t.tone === "amber" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                        )}
+                      >
+                        <t.icon className="h-4 w-4" />
+                      </span>
+                      <span>
+                        <span className="block text-xs font-bold text-slate-900">{t.title}</span>
+                        <span className="block text-[11px] text-slate-500">{t.note}</span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-            </div>
 
-            <div className="space-y-3 pt-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Identity */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Basic details</p>
                 <FormField label="Parent Group" required={createType === "Ledger"}>
-                  <SelectInput
-                    value={createParentId}
-                    onChange={(e) => applyCreateParent(e.target.value, createType)}
-                  >
-                    <option value="">Root Level (No Parent)</option>
-                    {allGroups.map((grp) => (
-                      <option key={grp.id} value={grp.id}>
-                        {grp.code} - {grp.name} ({grp.nature})
-                      </option>
-                    ))}
-                  </SelectInput>
-                </FormField>
-
-                <FormField label="Account Code" required>
-                  <TextInput
-                    value={createCode}
-                    onChange={(e) => setCreateCode(e.target.value)}
-                    placeholder="Suggested code"
-                    className="font-mono font-bold"
+                  <SearchSelect
+                    options={parentGroupOptions}
+                    selectedId={createParentId || null}
+                    onSelect={(opt) => applyCreateParent(opt.id, createType)}
+                    onClear={() => applyCreateParent("", createType)}
+                    placeholder="Root level (no parent) — search by code or name…"
+                    inputClassName="h-9 text-xs"
+                    renderOption={(opt) => (
+                      <span className="flex w-full items-center gap-2 text-xs">
+                        <span className="w-12 shrink-0 font-mono text-slate-400">{opt.hint}</span>
+                        <span className="flex-1 truncate font-medium">{opt.sublabel}</span>
+                        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                          {(opt.data as { nature: string }).nature}
+                        </span>
+                      </span>
+                    )}
                   />
                 </FormField>
-              </div>
 
-              <FormField label="Account Title / Name" required>
-                <TextInput
-                  value={createName}
-                  onChange={(e) => setCreateName(e.target.value)}
-                  placeholder="e.g. Axis Bank Operating A/c, Guest Linen Expense..."
-                  className="font-bold text-slate-900"
-                />
-              </FormField>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <FormField
-                  label="Nature"
-                  required
-                  helperText={createParentId ? "Inherited from the parent group." : undefined}
-                >
-                  <SelectInput
-                    value={createNature}
-                    disabled={!!createParentId}
-                    onChange={(e) => {
-                      const nat = e.target.value as AccountNature;
-                      setCreateNature(nat);
-                      setCreateClassification(defaultClassification(nat));
-                    }}
-                    className={cn(createParentId && "bg-slate-50 cursor-not-allowed text-slate-600")}
-                  >
-                    <option value="Asset">Asset</option>
-                    <option value="Liability">Liability</option>
-                    <option value="Income">Income</option>
-                    <option value="Expense">Expense</option>
-                  </SelectInput>
-                </FormField>
-
-                <FormField label="Category">
-                  <TextInput
-                    value={createCategory}
-                    list="coa-create-categories"
-                    onChange={(e) => setCreateCategory(e.target.value)}
-                    placeholder="e.g. Cash & Bank"
-                  />
-                  <datalist id="coa-create-categories">
-                    {categoriesByNature[createNature].map((cat) => (
-                      <option key={cat} value={cat} />
-                    ))}
-                  </datalist>
-                </FormField>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <FormField label="Classification">
-                  <SelectInput
-                    value={createClassification}
-                    onChange={(e) => setCreateClassification(e.target.value)}
-                  >
-                    {CLASSIFICATIONS.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </SelectInput>
-                </FormField>
-
-                {createType === "Ledger" && (
-                  <FormField label="Ledger Flags">
-                    <div className="flex items-center gap-4 pt-2">
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 select-none">
-                        <input
-                          type="checkbox"
-                          checked={createIsBank}
-                          onChange={(e) => setCreateIsBank(e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
-                        />
-                        <span>Bank A/c</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 select-none">
-                        <input
-                          type="checkbox"
-                          checked={createIsCash}
-                          onChange={(e) => setCreateIsCash(e.target.checked)}
-                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
-                        />
-                        <span>Cash A/c</span>
-                      </label>
-                    </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr]">
+                  <FormField label="Code" required>
+                    <TextInput
+                      value={createCode}
+                      onChange={(e) => setCreateCode(e.target.value)}
+                      placeholder="Suggested"
+                      className="font-mono font-bold"
+                    />
                   </FormField>
-                )}
+                  <FormField label={createType === "Group" ? "Group Name" : "Ledger Name"} required>
+                    <TextInput
+                      value={createName}
+                      onChange={(e) => setCreateName(e.target.value)}
+                      placeholder={createType === "Group" ? "e.g. Current Assets" : "e.g. Axis Bank Operating A/c"}
+                      className="font-semibold text-slate-900"
+                      autoFocus
+                    />
+                  </FormField>
+                </div>
               </div>
+
+              {/* Classification */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Classification</p>
+                  {createParentId && (
+                    <span className="flex items-center gap-1 text-[10px] font-medium text-slate-400">
+                      <Lock className="h-3 w-3" /> Nature inherited from parent
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(["Asset", "Liability", "Income", "Expense"] as AccountNature[]).map((nat) => {
+                    const active = createNature === nat;
+                    return (
+                      <button
+                        key={nat}
+                        type="button"
+                        disabled={!!createParentId}
+                        onClick={() => {
+                          setCreateNature(nat);
+                          setCreateClassification(defaultClassification(nat));
+                        }}
+                        className={cn(
+                          "h-8 rounded-lg border text-[11px] font-semibold transition-colors",
+                          active
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-200 bg-white text-slate-600 enabled:hover:border-slate-300 enabled:cursor-pointer",
+                          createParentId && !active && "opacity-40"
+                        )}
+                      >
+                        {nat}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <FormField label="Category">
+                    <TextInput
+                      value={createCategory}
+                      list="coa-create-categories"
+                      onChange={(e) => setCreateCategory(e.target.value)}
+                      placeholder="e.g. Cash & Bank"
+                    />
+                    <datalist id="coa-create-categories">
+                      {categoriesByNature[createNature].map((cat) => (
+                        <option key={cat} value={cat} />
+                      ))}
+                    </datalist>
+                  </FormField>
+                  <FormField label="Report Classification">
+                    <SelectInput value={createClassification} onChange={(e) => setCreateClassification(e.target.value)}>
+                      {CLASSIFICATIONS.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </FormField>
+                </div>
+              </div>
+
+              {/* Ledger flags */}
+              {createType === "Ledger" && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Ledger behaviour</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: "Bank account", note: "Shows in bank lists & reconciliation", checked: createIsBank, set: setCreateIsBank },
+                      { label: "Cash account", note: "Shows in cash book & cashier screens", checked: createIsCash, set: setCreateIsCash },
+                    ].map((f) => (
+                      <label
+                        key={f.label}
+                        className={cn(
+                          "flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors select-none",
+                          f.checked ? "border-emerald-400 bg-emerald-50/70" : "border-slate-200 hover:border-slate-300"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={f.checked}
+                          onChange={(e) => f.set(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span>
+                          <span className="block text-xs font-semibold text-slate-900">{f.label}</span>
+                          <span className="block text-[11px] text-slate-500">{f.note}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <FormField label="Description">
                 <TextAreaInput
                   rows={2}
                   value={createDescription}
                   onChange={(e) => setCreateDescription(e.target.value)}
-                  placeholder="Optional account notes and operational policies..."
+                  placeholder="Optional notes about how this account is used"
                 />
               </FormField>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowCreateModal(false)}
-                className="px-4 h-8 text-xs font-semibold text-slate-600 bg-white cursor-pointer"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void handleSaveNewAccount()}
-                disabled={saving}
-                className="px-5 h-8 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
-              >
-                {saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-                Create {createType}
-              </Button>
+            {/* Footer */}
+            <div className="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <p className="truncate text-[11px] text-slate-500">
+                {createCode || "—"} · {createName || "Untitled"} · {createNature}
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCreateModal(false)}
+                  className="h-8 px-4 text-xs font-semibold text-slate-600 bg-white cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void handleSaveNewAccount()}
+                  disabled={saving}
+                  className={cn(
+                    "h-8 px-5 text-white font-bold text-xs shadow-xs cursor-pointer",
+                    createType === "Group" ? "bg-amber-600 hover:bg-amber-700" : "bg-emerald-700 hover:bg-emerald-800"
+                  )}
+                >
+                  {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                  Create {createType === "Group" ? "Group" : "Ledger"}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

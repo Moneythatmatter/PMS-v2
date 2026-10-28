@@ -3,23 +3,16 @@
 import React, { useState, useMemo } from "react";
 import {
   Building2,
-  Search,
-  Plus,
   Save,
-  X,
   Phone,
   MapPin,
   FileCheck2,
   RefreshCw,
   Info,
-  ChevronRight,
   Upload,
   Calendar,
   ShieldCheck,
-  Ban,
-  CheckCircle2,
   Coins,
-  Trash2,
   Loader2,
   AlertTriangle,
 } from "lucide-react";
@@ -136,35 +129,29 @@ function toCompanyBody(f: CompanyForm): Partial<Company> {
 }
 
 export function CompanyCreationView() {
-  // Master Company List & Active Selection State
   const { data, loading, error, reload } = useAccQuery(() => accCompanyService.list(), []);
   const companies = useMemo(() => data ?? [], [data]);
   const { lookups } = useAccLookups();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Search & Filter State
-  const [searchQuery, setSearchQuery] = useState("");
-
-  // Unsaved edits (null = show the selected record as stored)
+  // Unsaved edits (null = show the stored record)
   const [draft, setDraft] = useState<CompanyForm | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const isDraftNew = draft !== null && draft.id === null;
+  // Accounts data is property-scoped: this property has (at most) one company record.
   const activeCompany = useMemo(
-    () => (isDraftNew ? undefined : companies.find((c) => c.id === selectedId) || companies[0]),
-    [companies, selectedId, isDraftNew]
+    () => companies.find((c) => c.status === "Active") ?? companies[0],
+    [companies]
   );
 
   const baseCurrencyDefault = lookups?.currencies.find((c) => c.isBaseCurrency)?.id ?? "";
   const formData: CompanyForm =
     draft ?? (activeCompany ? toCompanyForm(activeCompany) : emptyCompanyForm(suggestCompanyCode(companies), baseCurrencyDefault));
   const isNew = formData.id === null;
+  const isDirty = draft !== null;
   const currentFiscalYear = lookups?.fiscalYears.find((fy) => fy.isCurrent);
 
-  // Sectional Tab State (3 Core Identity Tabs Only)
   const [formTab, setFormTab] = useState<"general" | "address" | "registration">("general");
 
-  // Notification Toast State
   const [toastMessage, setToastMessageRaw] = useState<string | null>(null);
   const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
   const setToastMessage = (msg: string | null, variant: "success" | "error" = "success") => {
@@ -172,74 +159,24 @@ export function CompanyCreationView() {
     setToastMessageRaw(msg);
   };
 
-  // Filtered Companies List
-  const filteredCompanies = useMemo(() => {
-    return companies.filter((c) => {
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return (
-          (c.tradeName || "").toLowerCase().includes(q) ||
-          (c.legalName || "").toLowerCase().includes(q) ||
-          (c.companyCode || "").toLowerCase().includes(q) ||
-          (c.gstNumber || "").toLowerCase().includes(q) ||
-          (c.panNumber || "").toLowerCase().includes(q) ||
-          (c.state || "").toLowerCase().includes(q) ||
-          (c.status || "").toLowerCase().includes(q)
-        );
-      }
-      return true;
-    });
-  }, [companies, searchQuery]);
-
-  // Form Field Change Handler
   const handleFormChange = <K extends keyof CompanyForm>(field: K, value: CompanyForm[K]) => {
     setDraft((prev) => ({ ...(prev ?? formData), [field]: value }));
   };
 
-  const handleSelectCompany = (id: string) => {
-    setSelectedId(id);
-    setDraft(null);
-  };
-
-  const startNewCompany = (list: Company[]) => {
-    const newRecord = emptyCompanyForm(suggestCompanyCode(list), baseCurrencyDefault);
-    setDraft(newRecord);
-    setFormTab("general");
-    return newRecord;
-  };
-
-  // Handlers for Top Action Buttons
-  const handleNewCompany = () => {
-    const newRecord = startNewCompany(companies);
-    setToastMessage(`Prepared new Company Creation record (${newRecord.companyCode}).`);
-  };
-
-  // Validation & Save Handler
-  const handleSaveCompany = async (andNew = false) => {
+  const handleSaveCompany = async () => {
     if (!formData.companyCode.trim()) {
       setToastMessage("Please enter the Company Code.", "error");
       setFormTab("general");
       return;
     }
-
     if (!formData.tradeName.trim()) {
       setToastMessage("Please enter the Company Trade Name.", "error");
       setFormTab("general");
       return;
     }
-
     if (!formData.legalName.trim()) {
       setToastMessage("Please enter the Legal Registered Name.", "error");
       setFormTab("general");
-      return;
-    }
-
-    // Duplicate Company Code check (for newly edited or altered codes)
-    const isDuplicateCode = companies.some(
-      (c) => c.id !== formData.id && c.companyCode.toUpperCase() === formData.companyCode.trim().toUpperCase()
-    );
-    if (isDuplicateCode) {
-      setToastMessage(`Company Code '${formData.companyCode}' is already in use by another entity.`, "error");
       return;
     }
 
@@ -250,39 +187,9 @@ export function CompanyCreationView() {
         ? await accCompanyService.update(formData.id, body)
         : await accCompanyService.create(body);
       invalidateAccLookups();
-      const fresh = await reload();
-      setToastMessage(`Saved Legal Company Record for '${saved.tradeName}'.`);
-      if (andNew) {
-        startNewCompany(fresh ?? companies);
-      } else {
-        setSelectedId(saved.id);
-        setDraft(null);
-      }
-    } catch (e) {
-      setToastMessage(accErrorMessage(e), "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Non-destructive Deactivation / Activation Handler
-  const handleToggleDeactivate = async () => {
-    const nextStatus: Company["status"] = formData.status === "Active" ? "Inactive" : "Active";
-    if (!formData.id) {
-      handleFormChange("status", nextStatus);
-      return;
-    }
-    setSaving(true);
-    try {
-      await accCompanyService.update(formData.id, { status: nextStatus });
-      invalidateAccLookups();
       await reload();
-      setDraft((prev) => (prev ? { ...prev, status: nextStatus } : null));
-      setToastMessage(
-        nextStatus === "Inactive"
-          ? `Deactivated company '${formData.tradeName}'. Transactions will be protected.`
-          : `Activated company '${formData.tradeName}'.`
-      );
+      setDraft(null);
+      setToastMessage(`Saved property details for '${saved.tradeName}'.`);
     } catch (e) {
       setToastMessage(accErrorMessage(e), "error");
     } finally {
@@ -290,302 +197,93 @@ export function CompanyCreationView() {
     }
   };
 
-  const handleDeleteCompany = async () => {
-    if (!formData.id) {
-      setDraft(null);
-      return;
-    }
-    if (!window.confirm(`Delete company '${formData.tradeName || formData.companyCode}'? This cannot be undone.`)) return;
-    setSaving(true);
-    try {
-      await accCompanyService.remove(formData.id);
-      invalidateAccLookups();
-      setSelectedId(null);
-      setDraft(null);
-      await reload();
-      setToastMessage(`Deleted company '${formData.tradeName || formData.companyCode}'.`);
-    } catch (e) {
-      setToastMessage(accErrorMessage(e), "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Refresh / Reset Edits Handler
-  const handleRefresh = async () => {
+  const handleDiscard = async () => {
     setDraft(null);
     await reload();
-    setToastMessage("Reloaded company records and discarded unsaved changes.");
+    setToastMessage("Reloaded property details and discarded unsaved changes.");
   };
 
   return (
     <ModulePageShell
       eyebrow="Accounts & Masters"
-      title="Company Creation"
-      description="Create and maintain the primary business legal identity and statutory company registration."
+      title="Property Details"
+      description="Legal identity and statutory registration of the current property."
       breadcrumbs={[
         { label: "Accounts", href: "/accounts/dashboard" },
         { label: "Masters", href: "/accounts/masters" },
-        { label: "Company Creation" },
+        { label: "Property Details" },
       ]}
       toast={toastMessage}
       toastVariant={toastVariant}
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex flex-wrap items-center gap-2">
+          {isDirty && (
+            <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800 border border-amber-200">
+              Unsaved changes
+            </span>
+          )}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleNewCompany}
-            className="rounded-xl text-xs font-bold bg-white text-slate-800 border-slate-300 hover:bg-slate-50 cursor-pointer"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-            New Company
-          </Button>
-
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void handleSaveCompany(false)}
-            disabled={saving || loading}
-            className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
-          >
-            {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
-            Save
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void handleSaveCompany(true)}
-            disabled={saving || loading}
-            className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
-          >
-            Save & New
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void handleDeleteCompany()}
-            disabled={saving || loading}
-            className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-rose-50 text-rose-700 cursor-pointer"
-          >
-            <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
-            {isNew ? "Discard" : "Delete"}
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={saving || loading}
-            onClick={() => void handleToggleDeactivate()}
-            className={cn(
-              "rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 cursor-pointer",
-              formData.status === "Active" ? "text-amber-700 hover:text-amber-800" : "text-emerald-700 hover:text-emerald-800"
-            )}
-          >
-            {formData.status === "Active" ? (
-              <>
-                <Ban className="h-3.5 w-3.5 mr-1 text-amber-600" />
-                Deactivate
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-                Activate
-              </>
-            )}
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void handleRefresh()}
+            onClick={() => void handleDiscard()}
             disabled={saving}
             className="rounded-xl text-xs font-semibold bg-white border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
           >
             <RefreshCw className={cn("h-3.5 w-3.5 mr-1 text-slate-500", loading && "animate-spin")} />
-            Refresh
+            {isDirty ? "Discard" : "Refresh"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void handleSaveCompany()}
+            disabled={saving || loading || (!isDirty && !isNew)}
+            className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs cursor-pointer"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+            Save Changes
           </Button>
         </div>
       }
     >
-      {/* Informational Scope Notice */}
       <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 flex items-start gap-2.5 text-xs text-slate-700">
         <Info className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
-        <div>
-          <span className="font-bold text-emerald-950">Company Legal Identity Master:</span>{" "}
-          <span>
-            This master defines the legal entity operating the PMS. Detailed accounting behavior, fiscal year calendar, tax slabs, and operational posting rules are managed under their respective master pages (Company Settings, Fiscal Year, and Tax Master).
-          </span>
-        </div>
+        <span>
+          These are the legal and statutory details of the property you are working in. They appear on invoices,
+          vouchers and reports. Fiscal year, tax slabs and posting rules are managed in their own master pages.
+        </span>
       </div>
 
-      {/* Main 2-Column Split Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
-        {/* LEFT COLUMN: Registered Companies List (4 cols) */}
-        <div className="md:col-span-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col min-h-[620px]">
-          <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5">
-            <div className="flex items-center gap-2">
-              <Building2 className="h-4.5 w-4.5 text-emerald-600" />
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
-                Registered Entities
-              </h3>
-            </div>
-            <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-              {companies.length} {companies.length === 1 ? "Entity" : "Entities"}
-            </span>
-          </div>
-
-          {/* Search Box */}
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search companies..."
-              className="h-8 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-8 text-xs font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Company Cards List */}
-          <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[540px]">
-            {loading && !data && (
-              <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
-                Loading companies…
-              </div>
-            )}
-
-            {error && !data && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 space-y-2">
-                <div className="flex items-center gap-1.5 font-bold">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Could not load companies
-                </div>
-                <p>{error}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void reload()}
-                  className="h-7 text-xs font-semibold bg-white"
-                >
-                  Retry
-                </Button>
-              </div>
-            )}
-
-            {isNew && (
-              <div className="p-3 rounded-xl border border-emerald-600 bg-emerald-50/80 shadow-xs ring-1 ring-emerald-600/30">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                    {formData.companyCode || "NEW"}
-                  </span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase bg-amber-100 text-amber-800">
-                    Unsaved
-                  </span>
-                </div>
-                <h4 className="text-xs font-bold text-slate-900 line-clamp-1 mt-0.5">
-                  {formData.tradeName || "New Company"}
-                </h4>
-              </div>
-            )}
-
-            {filteredCompanies.map((c) => {
-              const isSelected = c.id === formData.id;
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => handleSelectCompany(c.id)}
-                  className={cn(
-                    "p-3 rounded-xl border transition-all cursor-pointer select-none",
-                    isSelected
-                      ? "border-emerald-600 bg-emerald-50/80 shadow-xs ring-1 ring-emerald-600/30"
-                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/70 bg-white"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                          {c.companyCode}
-                        </span>
-                        <span
-                          className={cn(
-                            "text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase",
-                            c.status === "Active"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-slate-200 text-slate-700"
-                          )}
-                        >
-                          {c.status}
-                        </span>
-                      </div>
-                      <h4 className="text-xs font-bold text-slate-900 line-clamp-1">
-                        {c.tradeName || c.legalName || "Untitled Company"}
-                      </h4>
-                      {c.legalName && c.legalName !== c.tradeName && (
-                        <p className="text-[11px] text-slate-500 line-clamp-1 font-medium">
-                          {c.legalName}
-                        </p>
-                      )}
-                    </div>
-                    <ChevronRight
-                      className={cn(
-                        "h-4 w-4 shrink-0 transition-transform mt-1",
-                        isSelected ? "text-emerald-700 translate-x-0.5" : "text-slate-400"
-                      )}
-                    />
-                  </div>
-
-                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-medium text-slate-500">
-                    <span>{c.companyType}</span>
-                    <span>{c.state || c.country || "—"}</span>
-                  </div>
-                </div>
-              );
-            })}
-
-            {data && filteredCompanies.length === 0 && (
-              <div className="text-center py-8 text-xs text-slate-400">
-                {companies.length === 0
-                  ? "No companies registered yet. Fill in the form to create the first entity."
-                  : "No registered entities match your search."}
-              </div>
-            )}
-          </div>
+      {loading && !data ? (
+        <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white py-16 text-xs text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+          Loading property details…
         </div>
-
-        {/* RIGHT COLUMN: 3-Tab Company Identity Form (8 cols) */}
-        <div className="md:col-span-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+      ) : error && !data ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
+          <span className="flex items-center gap-1.5 font-semibold">
+            <AlertTriangle className="h-4 w-4" />
+            Could not load property details: {error}
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={() => void reload()} className="h-7 bg-white text-xs">
+            Retry
+          </Button>
+        </div>
+      ) : (
+      <div className="mb-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
           {/* Header Bar */}
           <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
             <div>
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-emerald-600" />
                 <h3 className="text-base font-bold text-slate-900 uppercase tracking-wider">
-                  {formData.tradeName || formData.legalName || "New Company"}
+                  {formData.tradeName || formData.legalName || "Property details not set up"}
                 </h3>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Entity ID: <strong className="font-mono text-slate-700">{formData.companyCode}</strong>
+                Company Code: <strong className="font-mono text-slate-700">{formData.companyCode}</strong>
                 {formData.legalName && (
                   <span> • Registered: <em>{formData.legalName}</em></span>
                 )}
@@ -730,16 +428,6 @@ export function CompanyCreationView() {
                       />
                     </FormField>
 
-                    <FormField label="System Status">
-                      <SelectInput
-                        value={formData.status || "Active"}
-                        onChange={(e) => handleFormChange("status", e.target.value as Company["status"])}
-                        className="bg-white font-bold h-9 text-slate-900"
-                      >
-                        <option value="Active">Active</option>
-                        <option value="Inactive">Inactive</option>
-                      </SelectInput>
-                    </FormField>
                   </div>
 
                   {/* Reference Indicators Box (Cross-Master References) */}
@@ -1052,6 +740,7 @@ export function CompanyCreationView() {
           </div>
         </div>
       </div>
+      )}
     </ModulePageShell>
   );
 }

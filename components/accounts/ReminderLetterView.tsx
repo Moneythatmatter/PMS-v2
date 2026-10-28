@@ -72,10 +72,10 @@ export function CompanyLetterhead({ company, loading, error }: { company: Compan
       <div className="text-center space-y-1 border-b border-slate-300 pb-3">
         <p className="text-[11px] font-semibold text-amber-700">
           {loading
-            ? "Loading company details..."
+            ? "Loading property details..."
             : error
               ? `Company details unavailable: ${error}`
-              : "No company profile found. Create one under Accounts → Company Creation to print the letterhead."}
+              : "No property profile found. Fill it in under Accounts → Property Details to print the letterhead."}
         </p>
       </div>
     );

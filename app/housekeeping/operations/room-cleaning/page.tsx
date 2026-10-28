@@ -19,6 +19,7 @@ import {
 } from "@/components/housekeeping/taskUtils";
 import { CleaningTaskDetailPanel } from "@/components/housekeeping/CleaningTaskDetailPanel";
 import { CleaningRequestDetailPanel } from "@/components/housekeeping/CleaningRequestDetailPanel";
+import { formatShortDateTime } from "@/components/housekeeping/detailParts";
 import { StaffAvatarStack } from "@/components/housekeeping/StaffMultiSelect";
 import { taskAssigneeNames } from "@/components/housekeeping/taskUtils";
 import { CreateCleaningTaskForm } from "@/components/housekeeping/CreateCleaningTaskForm";
@@ -227,13 +228,6 @@ function RoomDetail({ label, children }: { label: string; children: React.ReactN
       <dd className="mt-0.5 truncate font-semibold text-slate-800">{children}</dd>
     </div>
   );
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 const isCurrentTask = (task: HKTask) => task.status !== "APPROVED" && task.status !== "CANCELLED";
@@ -747,8 +741,8 @@ export default function RoomCleaningOperations() {
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-3 text-xs">
                 <RoomDetail label="FO status">{selectedDirtyRoom.foStatus || "—"}</RoomDetail>
                 <RoomDetail label="Bed type">{selectedDirtyRoom.bedType || "—"}</RoomDetail>
-                <RoomDetail label="Last cleaned">{formatDateTime(selectedDirtyRoom.lastCleanedAt)}</RoomDetail>
-                <RoomDetail label="Last inspected">{formatDateTime(selectedDirtyRoom.lastInspectedAt)}</RoomDetail>
+                <RoomDetail label="Last cleaned">{formatShortDateTime(selectedDirtyRoom.lastCleanedAt)}</RoomDetail>
+                <RoomDetail label="Last inspected">{formatShortDateTime(selectedDirtyRoom.lastInspectedAt)}</RoomDetail>
                 {selectedDirtyRoom.dnd || selectedDirtyRoom.sleepOut ? (
                   <RoomDetail label="Flags">
                     {[selectedDirtyRoom.dnd && "Do not disturb", selectedDirtyRoom.sleepOut && "Sleep out"]

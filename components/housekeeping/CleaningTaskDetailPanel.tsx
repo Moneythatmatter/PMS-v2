@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Play,
@@ -21,6 +21,7 @@ import {
   formatTaskTypeLabel,
   isTaskOverdue,
 } from "./taskUtils";
+import { DetailItem, priorityBadgeClass } from "./detailParts";
 import { formatScheduleDate } from "@/lib/hk-task-schedule";
 import { Button } from "@/components/ui/Button";
 
@@ -112,7 +113,7 @@ export function CleaningTaskDetailPanel({
             <span
               className={cn(
                 "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase",
-                PRIORITY_BADGE[task.priority] ?? "border-slate-200 bg-slate-50 text-slate-600",
+                priorityBadgeClass(task.priority),
               )}
             >
               {task.priority}
@@ -327,30 +328,3 @@ const STATUS_BADGE: Partial<Record<HKTask["status"], string>> = {
   APPROVED: "border-emerald-200 bg-emerald-50 text-emerald-700",
   CANCELLED: "border-slate-300 bg-slate-100 text-slate-600",
 };
-
-const PRIORITY_BADGE: Record<string, string> = {
-  LOW: "border-slate-200 bg-slate-50 text-slate-600",
-  MEDIUM: "border-amber-200 bg-amber-50 text-amber-700",
-  HIGH: "border-orange-200 bg-orange-50 text-orange-700",
-  URGENT: "border-red-200 bg-red-600 text-white",
-};
-
-function DetailItem({
-  icon: Icon,
-  label,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-w-0">
-      <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-        <Icon className="h-3 w-3" />
-        {label}
-      </dt>
-      <dd className="mt-0.5 font-semibold text-slate-800">{children}</dd>
-    </div>
-  );
-}

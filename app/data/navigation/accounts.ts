@@ -18,7 +18,7 @@ export const accountsNavItems: ModuleNavItem[] = [
     href: "/accounts/masters/chart-of-accounts",
     icon: "database",
     children: [
-      { label: "Company Creation", href: "/accounts/masters/company-creation", icon: "building-2" },
+      { label: "Property Details", href: "/accounts/masters/company-creation", icon: "building-2" },
       { label: "Company Settings", href: "/accounts/masters/company-settings", icon: "settings" },
       { label: "Fiscal Year", href: "/accounts/masters/fiscal-year", icon: "calendar" },
       { label: "Currency", href: "/accounts/masters/currency", icon: "coins" },

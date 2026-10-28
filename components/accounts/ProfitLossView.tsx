@@ -6,7 +6,6 @@ import {
   TrendingUp,
   TrendingDown,
   Printer,
-  Download,
   Search,
   Maximize2,
   Minimize2,
@@ -22,8 +21,9 @@ import {
   ChevronRight,
   Receipt,
   BookOpen,
+  Scale,
 } from "lucide-react";
-import { Button, Card } from "@/components/ui";
+import { Button } from "@/components/ui";
 import {
   FormField,
   Drawer,
@@ -31,9 +31,12 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
-import { accCompanyService, accReportService, type PnlSection } from "@/services/accounts";
+import { accReportService, type PnlSection } from "@/services/accounts";
 import { useAccLookups, useAccQuery, fyStartIso, todayIso, formatDate } from "@/components/accounts/accountsApi";
 import { cn } from "@/lib/utils";
+import { downloadXlsx, type XlsxCell } from "@/lib/xlsx";
+import { ExportMenu } from "@/components/accounts/ExportMenu";
+import { KpiCard } from "@/components/accounts/KpiCard";
 
 type SectionName = PnlSection["section"];
 const SECTION_NAMES: SectionName[] = ["Direct Income", "Indirect Income", "Direct Expenses", "Indirect Expenses"];
@@ -56,8 +59,6 @@ export function ProfitLossView() {
   // View Checkboxes
   const [displayLedger, setDisplayLedger] = useState(true);
   const [showComparison, setShowComparison] = useState(false);
-  const [showCompanyHeading, setShowCompanyHeading] = useState(true);
-
   // Filter & Search Controls
   const fyStart = fyStartIso();
   const [fromDate, setFromDate] = useState(fyStart);
@@ -68,7 +69,6 @@ export function ProfitLossView() {
   const [sortOn, setSortOn] = useState<"seqNo" | "acId">("seqNo");
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
   const router = useRouter();
   const openLedger = (accountId: string) => {
     const params = new URLSearchParams({ accountId, from: appliedFromDate, to: appliedToDate });
@@ -89,12 +89,6 @@ export function ProfitLossView() {
     () => accReportService.profitLoss({ from: appliedFromDate, to: appliedToDate }),
     [appliedFromDate, appliedToDate]
   );
-
-  const companyQuery = useAccQuery(
-    () => (showCompanyHeading ? accCompanyService.list() : Promise.resolve([])),
-    [showCompanyHeading]
-  );
-  const company = companyQuery.data?.find((c) => c.status === "Active") ?? companyQuery.data?.[0] ?? null;
 
   // Expanded sub-items state (sections are expanded unless collapsed)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
@@ -175,9 +169,86 @@ export function ProfitLossView() {
 
   const hasData = SECTION_NAMES.some((n) => sec(n).accounts.length > 0);
 
-  // ─────────────────────────────────────────────────────────────
-  // CLEAN EXCEL-READY CSV EXPORT
-  // ─────────────────────────────────────────────────────────────
+  const periodLabel = (
+    <div className="text-right text-xs font-medium text-slate-500">
+      <p>
+        For the Period:{" "}
+        <span className="font-semibold text-slate-700">{formatDate(report.data?.from ?? appliedFromDate)}</span> to{" "}
+        <span className="font-semibold text-slate-700">{formatDate(report.data?.to ?? appliedToDate)}</span>
+      </p>
+      {showComparison && report.data && (
+        <p className="text-[11px] text-slate-400">
+          Compared with {formatDate(report.data.compareFrom)} to {formatDate(report.data.compareTo)}
+        </p>
+      )}
+    </div>
+  );
+
+  const previousGrossProfit = sec("Direct Income").previousTotal - sec("Direct Expenses").previousTotal;
+  const exportFileBase = `PMS_Profit_Loss_Statement_${appliedFromDate}_to_${appliedToDate}`;
+
+  const ledgerExportRows = (): (string | number)[][] => {
+    const rows: (string | number)[][] = [];
+    for (const name of SECTION_NAMES) {
+      const s = sec(name);
+      for (const a of s.accounts) {
+        rows.push([name.toUpperCase(), a.code, a.name, a.amount, a.previousAmount]);
+      }
+      rows.push([name.toUpperCase(), "", `TOTAL ${name.toUpperCase()}`, s.total, s.previousTotal]);
+    }
+    rows.push(["SUMMARY", "", "GROSS PROFIT", grossProfit, previousGrossProfit]);
+    rows.push(["SUMMARY", "", "TOTAL REVENUE", totalRevenue, ""]);
+    rows.push(["SUMMARY", "", "TOTAL EXPENSES", totalExpenses, ""]);
+    rows.push(["SUMMARY", "", "NET PROFIT", netProfit, summary?.previousNetProfit ?? ""]);
+    return rows;
+  };
+  const LEDGER_EXPORT_HEADER = ["SECTION", "ACCOUNT CODE", "LINE ITEM", "CURRENT PERIOD (INR)", "PREVIOUS PERIOD (INR)"];
+
+  const handleExportExcel = () => {
+    if (!report.data) {
+      setToastMessage("Nothing to export yet — load the report first.");
+      return;
+    }
+    const data = report.data;
+    const statement: XlsxCell[][] = [];
+    const addSection = (heading: string, name: SectionName) => {
+      const s = sec(name);
+      statement.push([heading, "", s.total, s.previousTotal]);
+      for (const a of s.accounts) statement.push([`      ${a.name}`, a.code, a.amount, a.previousAmount]);
+    };
+    addSection("1. OPERATING REVENUE & INCOME", "Direct Income");
+    addSection("2. DIRECT COSTS & OPERATING EXPENSES", "Direct Expenses");
+    statement.push([`3. GROSS ${grossProfit >= 0 ? "PROFIT" : "LOSS"} (1 - 2)`, "", grossProfit, previousGrossProfit]);
+    statement.push([]);
+    addSection("4. INDIRECT EXPENSES", "Indirect Expenses");
+    addSection("5. INDIRECT INCOME", "Indirect Income");
+    statement.push([]);
+    statement.push([`NET ${netProfit >= 0 ? "PROFIT" : "LOSS"} (3 - 4 + 5)`, "", netProfit, summary?.previousNetProfit ?? ""]);
+    statement.push(["Gross Margin %", "", Number((summary?.grossMargin ?? 0).toFixed(2)), ""]);
+    statement.push(["Net Margin %", "", Number((summary?.netMargin ?? 0).toFixed(2)), ""]);
+
+    downloadXlsx(`${exportFileBase}.xlsx`, [
+      {
+        name: "Profit & Loss",
+        title: "Profit & Loss Statement",
+        meta: [
+          ["Period", `${formatDate(data.from)} to ${formatDate(data.to)}`],
+          ["Previous Period", `${formatDate(data.compareFrom)} to ${formatDate(data.compareTo)}`],
+          ["Generated", new Date().toLocaleString("en-IN")],
+        ],
+        header: ["Particulars", "Account Code", "Current Period (INR)", "Previous Period (INR)"],
+        rows: statement,
+      },
+      {
+        name: "Ledger Detail",
+        title: "Profit & Loss — Ledger Detail",
+        meta: [["Period", `${formatDate(data.from)} to ${formatDate(data.to)}`]],
+        header: LEDGER_EXPORT_HEADER,
+        rows: ledgerExportRows(),
+      },
+    ]);
+  };
+
   const handleExportCSV = () => {
     if (!report.data) {
       setToastMessage("Nothing to export yet — load the report first.");
@@ -192,20 +263,8 @@ export function ProfitLossView() {
       return `"${str}"`;
     };
 
-    const headers = ["SECTION", "ACCOUNT CODE", "LINE ITEM", "CURRENT PERIOD (INR)", "PREVIOUS PERIOD (INR)"];
-
-    const rows: (string | number)[][] = [];
-    for (const name of SECTION_NAMES) {
-      const s = sec(name);
-      for (const a of s.accounts) {
-        rows.push([name.toUpperCase(), a.code, a.name, a.amount, a.previousAmount]);
-      }
-      rows.push([name.toUpperCase(), "", `TOTAL ${name.toUpperCase()}`, s.total, s.previousTotal]);
-    }
-    rows.push(["SUMMARY", "", "GROSS PROFIT", grossProfit, ""]);
-    rows.push(["SUMMARY", "", "TOTAL REVENUE", totalRevenue, ""]);
-    rows.push(["SUMMARY", "", "TOTAL EXPENSES", totalExpenses, ""]);
-    rows.push(["SUMMARY", "", "NET PROFIT", netProfit, summary?.previousNetProfit ?? ""]);
+    const headers = LEDGER_EXPORT_HEADER;
+    const rows = ledgerExportRows();
 
     const csvContent =
       "\uFEFF" +
@@ -217,7 +276,7 @@ export function ProfitLossView() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `PMS_Profit_Loss_Statement_${appliedFromDate}_to_${appliedToDate}.csv`);
+    link.setAttribute("download", `${exportFileBase}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -246,7 +305,7 @@ export function ProfitLossView() {
                 <span className="truncate group-hover:underline underline-offset-2">{a.name.toUpperCase()}</span>
                 <BookOpen className="h-3 w-3 shrink-0 text-emerald-600 opacity-0 transition-opacity group-hover:opacity-100" />
               </span>
-              <span className="font-mono shrink-0">
+              <span className="tabular-nums shrink-0">
                 {formatINR(a.amount)}
                 {showComparison && (
                   <span className="ml-2 text-[10px] text-slate-400">PY {formatINR(a.previousAmount)}</span>
@@ -276,7 +335,7 @@ export function ProfitLossView() {
             ))}
           {label}
         </span>
-        <span className="font-mono">
+        <span className="tabular-nums">
           {formatINR(s.total)}
           {showComparison && (
             <span className="ml-2 text-[10px] font-semibold text-slate-400">PY {formatINR(s.previousTotal)}</span>
@@ -347,16 +406,6 @@ export function ProfitLossView() {
               className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
             />
             <span>Prev. Year</span>
-          </label>
-
-          <label className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 border border-slate-200 cursor-pointer hover:border-emerald-300 col-span-2">
-            <input
-              type="checkbox"
-              checked={showCompanyHeading}
-              onChange={(e) => setShowCompanyHeading(e.target.checked)}
-              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <span>Company Heading</span>
           </label>
         </div>
       </div>
@@ -463,27 +512,25 @@ export function ProfitLossView() {
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={expandAll}
-            className="rounded-lg text-xs font-semibold bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs hidden sm:inline-flex cursor-pointer"
-          >
-            <Maximize2 className="h-3.5 w-3.5 mr-1 text-slate-500" />
-            Expand All
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={collapseAll}
-            className="rounded-lg text-xs font-semibold bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs hidden sm:inline-flex cursor-pointer"
-          >
-            <Minimize2 className="h-3.5 w-3.5 mr-1 text-slate-500" />
-            Collapse
-          </Button>
+          <div className="hidden sm:inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs">
+            <button
+              type="button"
+              onClick={expandAll}
+              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+            >
+              <Maximize2 className="h-3.5 w-3.5 text-slate-500" />
+              Expand
+            </button>
+            <span className="h-4 w-px bg-slate-200" />
+            <button
+              type="button"
+              onClick={collapseAll}
+              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+            >
+              <Minimize2 className="h-3.5 w-3.5 text-slate-500" />
+              Collapse
+            </button>
+          </div>
 
           <Button
             type="button"
@@ -496,20 +543,51 @@ export function ProfitLossView() {
             Print
           </Button>
 
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleExportCSV}
+          <ExportMenu
+            onExcel={handleExportExcel}
+            onCsv={handleExportCSV}
             disabled={!report.data}
-            className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-2xs cursor-pointer px-3.5"
-          >
-            <Download className="h-3.5 w-3.5 mr-1" />
-            Export CSV
-          </Button>
+            excelHint="Formatted statement + ledger detail"
+            csvHint="Plain ledger rows"
+          />
         </div>
       }
       wrapChildren={false}
     >
+      {report.data && !report.error && (
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <KpiCard
+            label="Total Revenue"
+            value={formatINR(totalRevenue)}
+            icon={TrendingUp}
+            tone="sky"
+            note={`Direct ${formatINR(directIncome)} · Indirect ${formatINR(indirectIncome)}`}
+          />
+          <KpiCard
+            label="Total Cost & Expenses"
+            value={formatINR(totalExpenses)}
+            icon={TrendingDown}
+            tone="rose"
+            note={`Direct ${formatINR(directExpenses)} · Indirect ${formatINR(indirectExpenses)}`}
+          />
+          <KpiCard
+            label={grossProfit >= 0 ? "Gross Profit" : "Gross Loss"}
+            value={formatINR(grossProfit)}
+            icon={Scale}
+            tone={grossProfit >= 0 ? "amber" : "rose"}
+            note={`Gross Margin ${(summary?.grossMargin ?? 0).toFixed(1)}% · PY ${formatINR(previousGrossProfit)}`}
+          />
+          <KpiCard
+            label={netProfit >= 0 ? "Net Profit" : "Net Loss"}
+            value={formatINR(netProfit)}
+            icon={netProfit >= 0 ? CheckCircle2 : AlertCircle}
+            tone={netProfit >= 0 ? "emerald" : "rose"}
+            note={`Net Margin ${(summary?.netMargin ?? 0).toFixed(1)}% · PY ${formatINR(summary?.previousNetProfit ?? 0)}`}
+            strong
+          />
+        </div>
+      )}
+
       {/* Top Controls Toolbar Bar */}
       <div className="mt-4 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
         <div className="flex items-center gap-2">
@@ -645,104 +723,6 @@ export function ProfitLossView() {
         </div>
       ) : (
         <>
-          {/* Standard Vertical KPI Cards Grid (F&B / Front Office Style) */}
-          <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {/* Card 1: Total Operating Revenue */}
-            <Card className="h-full min-w-0 p-3 sm:p-5">
-              <div className="flex items-start justify-between gap-2">
-                <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
-                  Total Operating Revenue
-                </p>
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 sm:h-8 sm:w-8">
-                  <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </span>
-              </div>
-              <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
-                {formatINR(totalRevenue)}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
-                Direct {formatINR(directIncome)} · Indirect {formatINR(indirectIncome)}
-              </p>
-            </Card>
-
-            {/* Card 2: Total Cost & Expenses */}
-            <Card className="h-full min-w-0 p-3 sm:p-5">
-              <div className="flex items-start justify-between gap-2">
-                <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
-                  Total Cost &amp; Expenses
-                </p>
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-700 sm:h-8 sm:w-8">
-                  <TrendingDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </span>
-              </div>
-              <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
-                {formatINR(totalExpenses)}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
-                Direct Costs + Indirect Operating Expenses
-              </p>
-            </Card>
-
-            {/* Card 3: Net Operating Profit */}
-            <Card className="h-full min-w-0 p-3 sm:p-5">
-              <div className="flex items-start justify-between gap-2">
-                <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
-                  {netProfit >= 0 ? "Net Operating Profit" : "Net Operating Loss"}
-                </p>
-                <span
-                  className={cn(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:h-8 sm:w-8",
-                    netProfit >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
-                  )}
-                >
-                  {netProfit >= 0 ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  ) : (
-                    <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  )}
-                </span>
-              </div>
-              <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
-                {formatINR(netProfit)}
-              </p>
-              <p
-                className={cn(
-                  "mt-0.5 text-[11px] font-semibold sm:text-xs truncate",
-                  netProfit >= 0 ? "text-emerald-700" : "text-rose-700"
-                )}
-              >
-                Net Margin: {(summary?.netMargin ?? 0).toFixed(1)}% · PY {formatINR(summary?.previousNetProfit ?? 0)}
-              </p>
-            </Card>
-          </div>
-
-          {/* Official Company Heading Block */}
-          {showCompanyHeading && (
-            <div className="mb-4 rounded-xl border border-slate-200 bg-white p-5 text-center shadow-2xs">
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 uppercase">
-                {company ? company.legalName || company.tradeName : companyQuery.loading ? "Loading company…" : "Company not configured"}
-              </h1>
-              {company && (
-                <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  {[company.addressLine1, company.city, company.state].filter(Boolean).join(", ")}
-                  {company.gstNumber ? ` • GSTIN: ${company.gstNumber}` : ""}
-                </p>
-              )}
-              <div className="my-2.5 border-t border-slate-100 max-w-xs mx-auto" />
-              <h2 className="text-xs font-bold tracking-widest text-emerald-800 uppercase">
-                PROFIT &amp; LOSS STATEMENT
-              </h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                For the Period: <span className="font-semibold text-slate-700">{formatDate(report.data?.from ?? appliedFromDate)}</span> to <span className="font-semibold text-slate-700">{formatDate(report.data?.to ?? appliedToDate)}</span>
-              </p>
-              {showComparison && report.data && (
-                <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-                  Compared with {formatDate(report.data.compareFrom)} to {formatDate(report.data.compareTo)}
-                </p>
-              )}
-            </div>
-          )}
-
           {!hasData && (
             <div className="mb-4 py-10 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50">
               <Receipt className="mx-auto h-8 w-8 text-slate-400 mb-2" />
@@ -763,7 +743,7 @@ export function ProfitLossView() {
                     <span className="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-bold">1</span>
                     Trading &amp; Operating Gross Profit Account
                   </h2>
-                  <span className="text-[11px] text-slate-500 font-semibold">T-Account Format</span>
+                  {periodLabel}
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -786,7 +766,7 @@ export function ProfitLossView() {
                         {grossProfit >= 0 && (
                           <div className="flex justify-between px-4 py-2.5 font-bold text-emerald-800 bg-emerald-50/70 border-t border-emerald-200">
                             <span>GROSS PROFIT C/O</span>
-                            <span className="text-emerald-900 font-mono font-bold">{formatINR(grossProfit)}</span>
+                            <span className="text-emerald-900 tabular-nums font-bold">{formatINR(grossProfit)}</span>
                           </div>
                         )}
                       </div>
@@ -794,7 +774,7 @@ export function ProfitLossView() {
 
                     <div className="flex justify-between px-4 py-2.5 font-bold text-xs uppercase bg-slate-100 text-slate-900 border-t-2 border-slate-300">
                       <span>TOTAL EXPENDITURE</span>
-                      <span className="font-mono">{formatINR(tradingTotal)}</span>
+                      <span className="tabular-nums">{formatINR(tradingTotal)}</span>
                     </div>
                   </div>
 
@@ -817,7 +797,7 @@ export function ProfitLossView() {
                         {grossProfit < 0 && (
                           <div className="flex justify-between px-4 py-2.5 font-bold text-rose-800 bg-rose-50/70 border-t border-rose-200">
                             <span>GROSS LOSS C/O</span>
-                            <span className="text-rose-900 font-mono font-bold">{formatINR(-grossProfit)}</span>
+                            <span className="text-rose-900 tabular-nums font-bold">{formatINR(-grossProfit)}</span>
                           </div>
                         )}
                       </div>
@@ -825,7 +805,7 @@ export function ProfitLossView() {
 
                     <div className="flex justify-between px-4 py-2.5 font-bold text-xs uppercase bg-slate-100 text-slate-900 border-t-2 border-slate-300">
                       <span>TOTAL INCOME</span>
-                      <span className="font-mono">{formatINR(tradingTotal)}</span>
+                      <span className="tabular-nums">{formatINR(tradingTotal)}</span>
                     </div>
                   </div>
                 </div>
@@ -853,7 +833,7 @@ export function ProfitLossView() {
                         {grossProfit < 0 && (
                           <div className="flex justify-between px-4 py-2.5 font-semibold text-slate-800 hover:bg-slate-50">
                             <span>GROSS LOSS B/F</span>
-                            <span className="font-mono">{formatINR(-grossProfit)}</span>
+                            <span className="tabular-nums">{formatINR(-grossProfit)}</span>
                           </div>
                         )}
 
@@ -869,7 +849,7 @@ export function ProfitLossView() {
                         {netProfit >= 0 && (
                           <div className="flex justify-between px-4 py-2.5 font-bold text-emerald-800 bg-emerald-50/70 border-t border-emerald-200">
                             <span className="uppercase">NET PROFIT</span>
-                            <span className="text-emerald-900 font-mono font-bold text-sm">{formatINR(netProfit)}</span>
+                            <span className="text-emerald-900 tabular-nums font-bold text-sm">{formatINR(netProfit)}</span>
                           </div>
                         )}
                       </div>
@@ -877,7 +857,7 @@ export function ProfitLossView() {
 
                     <div className="flex justify-between px-4 py-2.5 font-bold text-xs uppercase bg-slate-100 text-slate-900 border-t-2 border-slate-300">
                       <span>TOTAL EXPENDITURE</span>
-                      <span className="font-mono">{formatINR(netLeftTotal)}</span>
+                      <span className="tabular-nums">{formatINR(netLeftTotal)}</span>
                     </div>
                   </div>
 
@@ -892,7 +872,7 @@ export function ProfitLossView() {
                         {grossProfit >= 0 && (
                           <div className="flex justify-between px-4 py-2.5 font-semibold text-slate-800 hover:bg-slate-50">
                             <span>GROSS PROFIT B/F</span>
-                            <span className="font-mono">{formatINR(grossProfit)}</span>
+                            <span className="tabular-nums">{formatINR(grossProfit)}</span>
                           </div>
                         )}
 
@@ -907,7 +887,7 @@ export function ProfitLossView() {
                         {netProfit < 0 && (
                           <div className="flex justify-between px-4 py-2.5 font-bold text-rose-800 bg-rose-50/70 border-t border-rose-200">
                             <span className="uppercase">NET LOSS</span>
-                            <span className="text-rose-900 font-mono font-bold text-sm">{formatINR(-netProfit)}</span>
+                            <span className="text-rose-900 tabular-nums font-bold text-sm">{formatINR(-netProfit)}</span>
                           </div>
                         )}
                       </div>
@@ -916,7 +896,7 @@ export function ProfitLossView() {
                     <div className="border-t border-slate-200 divide-y divide-slate-100 text-xs">
                       <div className="flex justify-between px-4 py-2.5 font-bold text-xs uppercase bg-slate-100 text-slate-900 border-t-2 border-slate-300">
                         <span>TOTAL INCOME</span>
-                        <span className="font-mono">{formatINR(netRightTotal)}</span>
+                        <span className="tabular-nums">{formatINR(netRightTotal)}</span>
                       </div>
                     </div>
                   </div>
@@ -930,7 +910,7 @@ export function ProfitLossView() {
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900">
                   Vertical Statement Format
                 </h2>
-                <span className="text-xs font-semibold text-slate-600">Financial Period Summary</span>
+                {periodLabel}
               </div>
 
               <div className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden text-xs shadow-2xs">
@@ -938,7 +918,7 @@ export function ProfitLossView() {
                 <div className="p-3.5 bg-emerald-50/40">
                   <div className="flex justify-between font-bold text-slate-900 uppercase">
                     <span>1. Operating Revenue &amp; Income</span>
-                    <span className="font-mono">{formatINR(directIncome)}</span>
+                    <span className="tabular-nums">{formatINR(directIncome)}</span>
                   </div>
                   {renderLedgerLines("Direct Income", "pl-4 pt-2 space-y-1.5 text-slate-700 font-medium")}
                 </div>
@@ -947,7 +927,7 @@ export function ProfitLossView() {
                 <div className="p-3.5 bg-slate-50/70">
                   <div className="flex justify-between font-bold text-slate-900 uppercase">
                     <span>2. Direct Costs &amp; Operating Expenses</span>
-                    <span className="font-mono">{formatINR(directExpenses)}</span>
+                    <span className="tabular-nums">{formatINR(directExpenses)}</span>
                   </div>
                   {renderLedgerLines("Direct Expenses", "pl-4 pt-2 space-y-1.5 text-slate-700 font-medium")}
                 </div>
@@ -962,7 +942,7 @@ export function ProfitLossView() {
                   )}
                 >
                   <span>3. Gross Operating {grossProfit >= 0 ? "Profit" : "Loss"} (1 - 2)</span>
-                  <span className={cn("font-mono font-bold", grossProfit >= 0 ? "text-emerald-900" : "text-rose-900")}>
+                  <span className={cn("tabular-nums font-bold", grossProfit >= 0 ? "text-emerald-900" : "text-rose-900")}>
                     {formatINR(grossProfit)}
                   </span>
                 </div>
@@ -971,7 +951,7 @@ export function ProfitLossView() {
                 <div className="p-3.5 bg-slate-50/70">
                   <div className="flex justify-between font-bold text-slate-900 uppercase">
                     <span>4. Indirect Expenses</span>
-                    <span className="font-mono">{formatINR(indirectExpenses)}</span>
+                    <span className="tabular-nums">{formatINR(indirectExpenses)}</span>
                   </div>
                   {renderLedgerLines("Indirect Expenses", "pl-4 pt-2 space-y-1.5 text-slate-700 font-medium")}
                 </div>
@@ -980,7 +960,7 @@ export function ProfitLossView() {
                 <div className="p-3.5 bg-white">
                   <div className="flex justify-between font-bold text-slate-900 uppercase">
                     <span>5. Indirect Income</span>
-                    <span className="font-mono">{formatINR(indirectIncome)}</span>
+                    <span className="tabular-nums">{formatINR(indirectIncome)}</span>
                   </div>
                   {renderLedgerLines("Indirect Income", "pl-4 pt-2 space-y-1.5 text-slate-700 font-medium")}
                 </div>
@@ -988,7 +968,7 @@ export function ProfitLossView() {
                 {/* 6. Net Profit Final */}
                 <div className="p-4 bg-slate-900 text-white flex justify-between font-bold text-base uppercase">
                   <span>Net {netProfit >= 0 ? "Profit" : "Loss"} (3 - 4 + 5)</span>
-                  <span className={cn("font-mono font-bold", netProfit >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                  <span className={cn("tabular-nums font-bold", netProfit >= 0 ? "text-emerald-400" : "text-rose-400")}>
                     {formatINR(netProfit)}
                   </span>
                 </div>

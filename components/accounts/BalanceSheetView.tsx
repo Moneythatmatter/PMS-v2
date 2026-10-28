@@ -3,49 +3,36 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Building2,
   CheckCircle2,
   Printer,
-  Download,
   Scale,
   Columns,
   ListFilter,
   TrendingUp,
-  DollarSign,
   Building,
   Loader2,
   AlertCircle,
   BookOpen,
+  Landmark,
+  RefreshCw,
 } from "lucide-react";
-import { Button, Card } from "@/components/ui";
-import {
-  FODatePicker,
-  formatINR,
-} from "@/components/frontoffice/ui";
+import { Button } from "@/components/ui";
+import { FODatePicker, formatINR } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
 import { accReportService, type BalanceSheetSection } from "@/services/accounts";
 import { useAccLookups, useAccQuery, todayIso, fyStartIso, formatDate } from "@/components/accounts/accountsApi";
 import { cn } from "@/lib/utils";
+import { downloadXlsx } from "@/lib/xlsx";
+import { ExportMenu } from "@/components/accounts/ExportMenu";
+import { KpiCard } from "@/components/accounts/KpiCard";
+
+const EXPORT_HEADER = ["Side", "Section", "Code", "Particulars", "Current (₹)", "Previous Year (₹)"];
 
 export function BalanceSheetView() {
-  // As On Date Filter State
-  const [asOnDate, setAsOnDate] = useState(todayIso());
   const [appliedAsOn, setAppliedAsOn] = useState(todayIso());
-
-  // Format Switcher State ('horizontal' | 'vertical')
-  const [reportFormat, setReportFormat] = useState<"horizontal" | "vertical">(
-    "horizontal"
-  );
-
-  // Detail Level State ('summary' | 'detailed')
-  const [detailLevel, setDetailLevel] = useState<"summary" | "detailed">(
-    "detailed"
-  );
-
-  // Show Previous Year Comparison State
+  const [reportFormat, setReportFormat] = useState<"horizontal" | "vertical">("horizontal");
+  const [detailLevel, setDetailLevel] = useState<"summary" | "detailed">("detailed");
   const [showPrevYear, setShowPrevYear] = useState(true);
-
-  // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const { lookups } = useAccLookups();
@@ -56,560 +43,354 @@ export function BalanceSheetView() {
     const params = new URLSearchParams({ accountId, from, to: appliedAsOn });
     router.push(`/accounts/reports/general-ledger?${params.toString()}`);
   };
-  const company =
-    lookups?.companies.find((c) => c.status === "Active") ?? lookups?.companies[0] ?? null;
 
-  const report = useAccQuery(
-    () => accReportService.balanceSheet({ asOn: appliedAsOn }),
-    [appliedAsOn]
-  );
+  const report = useAccQuery(() => accReportService.balanceSheet({ asOn: appliedAsOn }), [appliedAsOn]);
   const data = report.data;
   const totals = data?.totals;
   const equity = data?.liabilities.find((s) => s.section === "Capital & Reserves")?.total ?? 0;
   const currentRatio = data?.ratios.currentRatio ?? null;
 
-  const handleGenerate = () => {
-    if (!asOnDate) {
-      setToastMessage("Select an 'As On' date.");
-      return;
-    }
-    if (asOnDate === appliedAsOn) void report.reload();
-    else setAppliedAsOn(asOnDate);
-  };
-
-  // ─────────────────────────────────────────────────────────────
-  // CLEAN EXCEL-READY CSV EXPORT
-  // ─────────────────────────────────────────────────────────────
-  const handleExportCSV = () => {
-    if (!data) {
-      setToastMessage("Nothing to export yet — generate the report first.");
-      return;
-    }
-    const escapeCSV = (val: string | number | null | undefined): string => {
-      if (val === null || val === undefined) return '""';
-      const str = String(val);
-      if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
-        return `"${str.replace(/"/g, '""')}"`;
+  const exportRows = (side: string, sections: BalanceSheetSection[]) =>
+    sections.flatMap((section) => {
+      const rows: (string | number)[][] = [[side, section.section, "", section.section, section.total, section.previousTotal]];
+      if (detailLevel === "detailed") {
+        for (const group of section.groups) {
+          rows.push([side, section.section, "", `  ${group.groupName}`, group.total, group.previousTotal]);
+          for (const acc of group.accounts) {
+            rows.push([side, section.section, acc.code, `    ${acc.name}`, acc.amount, acc.previousAmount]);
+          }
+        }
       }
-      return `"${str}"`;
-    };
+      return rows;
+    });
 
-    const headers = [
-      "CATEGORY",
-      "SUB SECTION",
-      "ACCOUNT CODE",
-      "ACCOUNT NAME",
-      "CURRENT AMOUNT (INR)",
-      "PREVIOUS YEAR AMOUNT (INR)",
+  const allExportRows = () => {
+    if (!data) return [];
+    return [
+      ...exportRows("Capital & Liabilities", data.liabilities),
+      ["Capital & Liabilities", "", "", "Total Capital & Liabilities", data.totals.totalLiabilities, data.totals.previousTotalLiabilities],
+      ...exportRows("Assets", data.assets),
+      ["Assets", "", "", "Total Assets", data.totals.totalAssets, data.totals.previousTotalAssets],
     ];
-
-    const sectionRows = (category: string, sections: BalanceSheetSection[]) =>
-      sections.flatMap((section) => {
-        const rows: (string | number)[][] = [
-          [category, section.section, "", section.section, section.total, section.previousTotal],
-        ];
-        section.groups.forEach((group) => {
-          rows.push([category, section.section, "", group.groupName, group.total, group.previousTotal]);
-          group.accounts.forEach((acc) => {
-            rows.push([category, section.section, acc.code, acc.name, acc.amount, acc.previousAmount]);
-          });
-        });
-        return rows;
-      });
-
-    const summaryRows: (string | number)[][] = [
-      ["TOTALS", "CAPITAL & LIABILITIES", "", "TOTAL LIABILITIES & CAPITAL", data.totals.totalLiabilities, data.totals.previousTotalLiabilities],
-      ["TOTALS", "PROPERTY ASSETS", "", "TOTAL PROPERTY ASSETS", data.totals.totalAssets, data.totals.previousTotalAssets],
-    ];
-
-    const csvContent =
-      "\uFEFF" +
-      [headers, ...sectionRows("CAPITAL & LIABILITIES", data.liabilities), ...sectionRows("PROPERTY ASSETS", data.assets), ...summaryRows]
-        .map((row) => row.map(escapeCSV).join(","))
-        .join("\r\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `PMS_Balance_Sheet_AsOn_${data.asOn}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setToastMessage("Balance Sheet exported to Excel-ready CSV.");
   };
 
-  // Horizontal panel section list
-  const renderHorizontalSections = (sections: BalanceSheetSection[]) => (
-    <div className="space-y-3">
-      {sections.map((section) => (
-        <div key={section.section} className="space-y-1.5">
-          {/* Level 1 Section Header */}
-          <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg font-bold text-slate-900 border border-slate-200">
-            <span>{section.section}</span>
-            <div className="flex items-center gap-3 font-mono">
-              {showPrevYear && (
-                <span className="text-slate-500 text-[11px] font-normal">
-                  PY: {formatINR(section.previousTotal)}
-                </span>
-              )}
-              <span className="text-emerald-800 font-bold">{formatINR(section.total)}</span>
-            </div>
-          </div>
+  const handleExportExcel = () => {
+    if (!data) {
+      setToastMessage("Nothing to export yet — wait for the report to load.");
+      return;
+    }
+    downloadXlsx(`balance-sheet-${data.asOn}.xlsx`, [
+      {
+        name: "Balance Sheet",
+        title: "Balance Sheet",
+        meta: [
+          ["As on", formatDate(data.asOn)],
+          ["Previous year as on", formatDate(data.compareAsOn)],
+          ["Detail level", detailLevel === "detailed" ? "Groups & ledgers" : "Sections only"],
+          ["Total Assets", data.totals.totalAssets],
+          ["Total Capital & Liabilities", data.totals.totalLiabilities],
+          ["Status", data.totals.balanced ? "Balanced" : `Difference ${data.totals.difference}`],
+          ["Generated", new Date().toLocaleString("en-IN")],
+        ],
+        header: EXPORT_HEADER,
+        rows: allExportRows(),
+      },
+    ]);
+    setToastMessage("Balance Sheet exported to Excel.");
+  };
 
-          {/* Level 2 Groups & Ledgers */}
-          {detailLevel === "detailed" && (
-            <div className="pl-3 pr-1 space-y-1">
-              {section.groups.length === 0 && (
-                <div className="p-2 text-slate-400 italic">No balances</div>
-              )}
-              {section.groups.map((group) => (
-                <div key={`${section.section}-${group.groupId ?? group.groupName}`} className="space-y-0.5">
-                  <div className="flex items-center justify-between p-2 rounded-lg font-semibold text-slate-900">
-                    <span>{group.groupName}</span>
-                    <div className="flex items-center gap-3 font-mono">
-                      {showPrevYear && (
-                        <span className="text-slate-400 text-[10px]">
-                          {formatINR(group.previousTotal)}
-                        </span>
-                      )}
-                      <span className="font-bold text-slate-900">{formatINR(group.total)}</span>
-                    </div>
-                  </div>
+  const handleExportCsv = () => {
+    if (!data) {
+      setToastMessage("Nothing to export yet — wait for the report to load.");
+      return;
+    }
+    const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = "\uFEFF" + [EXPORT_HEADER, ...allExportRows()].map((r) => r.map(esc).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `balance-sheet-${data.asOn}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
-                  {group.accounts.map((acc) => (
-                    <div
-                      key={acc.accountId}
-                      onClick={() => openLedger(acc.accountId)}
-                      title={`Open ${acc.name} ledger transactions`}
-                      className="group flex items-center justify-between p-2 pl-5 rounded-lg hover:bg-emerald-50/60 cursor-pointer border border-transparent hover:border-emerald-200 transition-all font-medium text-slate-800"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <span className="text-slate-400 font-mono text-[10px]">{acc.code}</span>
-                        <span className="group-hover:text-emerald-800 group-hover:underline underline-offset-2">{acc.name}</span>
-                        <BookOpen className="h-3 w-3 shrink-0 text-emerald-600 opacity-0 transition-opacity group-hover:opacity-100" />
-                      </span>
+  const th = "border-b border-slate-200 bg-slate-100 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600";
+  const td = "border-b border-slate-100 px-3 py-1.5";
 
-                      <div className="flex items-center gap-3 font-mono">
-                        {showPrevYear && (
-                          <span className="text-slate-400 text-[10px]">
-                            {formatINR(acc.previousAmount)}
-                          </span>
-                        )}
-                        <span className="font-medium text-slate-900">{formatINR(acc.amount)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
+  const renderSectionRows = (sections: BalanceSheetSection[]) =>
+    sections.map((section) => (
+      <React.Fragment key={section.section}>
+        <tr className="bg-slate-50 font-bold text-slate-900">
+          <td className={cn(td, "py-2")}>{section.section}</td>
+          {showPrevYear && (
+            <td className={cn(td, "py-2 text-right tabular-nums font-medium text-slate-500")}>
+              {formatINR(section.previousTotal)}
+            </td>
           )}
-        </div>
-      ))}
-    </div>
-  );
-
-  // Vertical (Schedule III) section list
-  const renderVerticalSections = (sections: BalanceSheetSection[]) => (
-    <div className="space-y-3">
-      {sections.map((section) => (
-        <div key={section.section} className="space-y-1">
-          <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg font-bold text-slate-900 border border-slate-200">
-            <span>{section.section}</span>
-            <div className="flex items-center gap-3 font-mono">
-              {showPrevYear && (
-                <span className="text-slate-500 text-[11px] font-normal">PY: {formatINR(section.previousTotal)}</span>
-              )}
-              <span className="text-emerald-800 font-bold">{formatINR(section.total)}</span>
-            </div>
-          </div>
-
-          {detailLevel === "detailed" &&
+          <td className={cn(td, "py-2 text-right tabular-nums text-emerald-800")}>{formatINR(section.total)}</td>
+        </tr>
+        {detailLevel === "detailed" &&
+          (section.groups.length === 0 ? (
+            <tr>
+              <td className={cn(td, "pl-6 italic text-slate-400")} colSpan={showPrevYear ? 3 : 2}>
+                No balances
+              </td>
+            </tr>
+          ) : (
             section.groups.map((group) => (
               <React.Fragment key={`${section.section}-${group.groupId ?? group.groupName}`}>
-                <div className="flex items-center justify-between p-2 pl-6 font-semibold text-slate-900 border-b border-slate-100">
-                  <span>{group.groupName}</span>
-                  <span className="font-mono font-bold">{formatINR(group.total)}</span>
-                </div>
+                <tr className="font-semibold text-slate-800">
+                  <td className={cn(td, "pl-6")}>{group.groupName}</td>
+                  {showPrevYear && (
+                    <td className={cn(td, "text-right tabular-nums font-normal text-slate-400")}>
+                      {formatINR(group.previousTotal)}
+                    </td>
+                  )}
+                  <td className={cn(td, "text-right tabular-nums")}>{formatINR(group.total)}</td>
+                </tr>
                 {group.accounts.map((acc) => (
-                  <div
+                  <tr
                     key={acc.accountId}
                     onClick={() => openLedger(acc.accountId)}
-                    title={`Open ${acc.name} ledger transactions`}
-                    className="group flex items-center justify-between p-2 pl-10 rounded-lg hover:bg-emerald-50/60 cursor-pointer font-medium text-slate-700 border-b border-slate-100"
+                    title={`Open ${acc.name} in General Ledger`}
+                    className="group cursor-pointer text-slate-700 hover:bg-emerald-50/70"
                   >
-                    <span className="flex items-center gap-1.5">
-                      <span className="group-hover:text-emerald-800 group-hover:underline underline-offset-2">{acc.name}</span>
-                      <BookOpen className="h-3 w-3 shrink-0 text-emerald-600 opacity-0 transition-opacity group-hover:opacity-100" />
-                    </span>
-                    <span className="font-mono">{formatINR(acc.amount)}</span>
-                  </div>
+                    <td className={cn(td, "pl-10")}>
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-mono text-[10px] text-slate-400">{acc.code}</span>
+                        <span className="group-hover:text-emerald-800 group-hover:underline underline-offset-2">
+                          {acc.name}
+                        </span>
+                        <BookOpen className="h-3 w-3 shrink-0 text-emerald-600 opacity-0 group-hover:opacity-100" />
+                      </span>
+                    </td>
+                    {showPrevYear && (
+                      <td className={cn(td, "text-right tabular-nums text-slate-400")}>{formatINR(acc.previousAmount)}</td>
+                    )}
+                    <td className={cn(td, "text-right tabular-nums")}>{formatINR(acc.amount)}</td>
+                  </tr>
                 ))}
               </React.Fragment>
-            ))}
-        </div>
-      ))}
-    </div>
+            ))
+          ))}
+      </React.Fragment>
+    ));
+
+  const statementTable = (
+    sections: BalanceSheetSection[],
+    totalLabel: string,
+    total: number,
+    previousTotal: number,
+    heading?: string
+  ) => (
+    <table className="w-full border-collapse text-xs">
+      <thead>
+        <tr>
+          <th className={cn(th, "text-left")}>{heading ?? "Particulars"}</th>
+          {showPrevYear && <th className={cn(th, "w-32 text-right")}>PY {data ? formatDate(data.compareAsOn) : ""}</th>}
+          <th className={cn(th, "w-36 text-right")}>As on {data ? formatDate(data.asOn) : ""}</th>
+        </tr>
+      </thead>
+      <tbody>{renderSectionRows(sections)}</tbody>
+      <tfoot>
+        <tr className="bg-slate-900 font-bold text-white">
+          <td className="px-3 py-2.5 uppercase tracking-wider">{totalLabel}</td>
+          {showPrevYear && <td className="px-3 py-2.5 text-right tabular-nums text-slate-300">{formatINR(previousTotal)}</td>}
+          <td className="px-3 py-2.5 text-right tabular-nums text-emerald-300">{formatINR(total)}</td>
+        </tr>
+      </tfoot>
+    </table>
   );
+
+  const segmentBtn = (active: boolean) =>
+    cn(
+      "inline-flex h-full items-center gap-1 rounded-md px-2.5 text-[11px] font-semibold transition-colors cursor-pointer select-none",
+      active ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500 hover:text-slate-800"
+    );
 
   return (
     <ModulePageShell
       eyebrow="Accounts &amp; Reports"
       title="Balance Sheet"
-      description="Statement of Financial Position: Assets, Liabilities, Equity Reserves, and Net Worth as on date."
+      description="Statement of financial position: assets, liabilities, equity and net worth as on a date."
       toast={toastMessage}
       onDismissToast={() => setToastMessage(null)}
       secondaryActions={
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            size="sm"
-            onClick={handleGenerate}
-            disabled={report.loading}
-            className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shadow-2xs cursor-pointer px-3.5"
-          >
-            {report.loading ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-            ) : (
-              <Scale className="h-3.5 w-3.5 mr-1" />
-            )}
-            Generate Report
-          </Button>
-
-          <Button
-            type="button"
             variant="outline"
             size="sm"
             onClick={() => window.print()}
-            className="rounded-lg text-xs font-semibold bg-white border-slate-200 hover:bg-slate-50 text-slate-700 shadow-2xs cursor-pointer"
+            className="rounded-lg text-xs font-semibold bg-white border-slate-200 text-slate-700 shadow-2xs hidden sm:inline-flex"
           >
             <Printer className="h-3.5 w-3.5 mr-1 text-slate-500" />
             Print
           </Button>
-
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleExportCSV}
+          <ExportMenu
+            onExcel={handleExportExcel}
+            onCsv={handleExportCsv}
             disabled={!data}
-            className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-2xs cursor-pointer px-3.5"
-          >
-            <Download className="h-3.5 w-3.5 mr-1" />
-            Export CSV
-          </Button>
+            excelHint="Statement with PY comparison"
+            csvHint="Plain rows"
+          />
         </div>
       }
       wrapChildren={false}
     >
-      {/* Top Active Target Entity & Date Selector Bar */}
-      <div className="mt-4 mb-4 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1 min-w-[280px]">
-            <Building2 className="h-5 w-5 text-emerald-600 shrink-0" />
-            <div className="flex-1 max-w-sm">
-              <span className="font-bold text-[11px] uppercase tracking-wider text-slate-600 block mb-1">Company Entity:</span>
-              <div className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-900 flex items-center truncate">
-                {company ? `${company.legalName || company.tradeName} (${company.companyCode})` : "—"}
-              </div>
-            </div>
+      {totals && data && (
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard
+            label="Total Assets"
+            value={formatINR(totals.totalAssets)}
+            note={totals.balanced ? "Balanced with liabilities ✓" : `Difference ${formatINR(Math.abs(totals.difference))}`}
+            icon={Scale}
+            tone={totals.balanced ? "emerald" : "rose"}
+            strong={!totals.balanced}
+          />
+          <KpiCard
+            label="Capital & Liabilities"
+            value={formatINR(totals.totalLiabilities)}
+            note={`PY ${formatINR(totals.previousTotalLiabilities)}`}
+            icon={Building}
+            tone="sky"
+          />
+          <KpiCard
+            label="Equity & Reserves"
+            value={formatINR(equity)}
+            note="Net worth / owner capital"
+            icon={Landmark}
+            tone="slate"
+          />
+          <KpiCard
+            label="Current Ratio"
+            value={currentRatio === null ? "—" : `${currentRatio.toFixed(2)} : 1`}
+            note={`Working capital ${formatINR(data.ratios.workingCapital)}`}
+            icon={TrendingUp}
+            tone="amber"
+          />
+        </div>
+      )}
 
-            <div className="w-44">
-              <span className="font-bold text-[11px] uppercase tracking-wider text-slate-600 block mb-1">As On Date:</span>
-              <FODatePicker value={asOnDate} onChange={setAsOnDate} placeholder="DD/MM/YYYY" />
-            </div>
+      {/* Controls bar */}
+      <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">As on</span>
+          <div className="w-36">
+            <FODatePicker
+              value={appliedAsOn}
+              onChange={(v) => v && setAppliedAsOn(v)}
+              placeholder="DD/MM/YYYY"
+              className="h-9"
+            />
           </div>
-
-          {data && totals && (
-            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-              {totals.balanced ? (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-emerald-800 border border-emerald-200 font-bold">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
-                  Equilibrium Balanced ✓
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-3 py-1.5 text-rose-800 border border-rose-200 font-bold">
-                  <AlertCircle className="h-3.5 w-3.5 text-rose-700" />
-                  Difference {formatINR(Math.abs(totals.difference))}
-                </span>
-              )}
-
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-slate-700 border border-slate-200 font-mono">
-                <Scale className="h-3.5 w-3.5 text-slate-600" />
-                Total: {formatINR(totals.totalAssets)}
-              </span>
-            </div>
-          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void report.reload()}
+            disabled={report.loading}
+            title="Reload balance sheet"
+            className="h-9 w-9 rounded-lg border-slate-200 bg-white p-0 text-slate-600"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", report.loading && "animate-spin")} />
+          </Button>
         </div>
 
-        {/* Filter Controls Row */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-100 text-xs">
-          {/* Format Switcher */}
-          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-100/80 p-0.5">
-            <button
-              type="button"
-              onClick={() => setReportFormat("horizontal")}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer select-none",
-                reportFormat === "horizontal"
-                  ? "bg-white text-slate-900 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              )}
-            >
-              <Columns className="h-3.5 w-3.5 inline mr-1" />
-              Horizontal (Side-by-Side)
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="flex h-9 items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+            <button type="button" onClick={() => setReportFormat("horizontal")} className={segmentBtn(reportFormat === "horizontal")}>
+              <Columns className="h-3.5 w-3.5" /> Side by side
             </button>
-            <button
-              type="button"
-              onClick={() => setReportFormat("vertical")}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer select-none",
-                reportFormat === "vertical"
-                  ? "bg-white text-slate-900 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900"
-              )}
-            >
-              <ListFilter className="h-3.5 w-3.5 inline mr-1" />
-              Vertical (Schedule III)
+            <button type="button" onClick={() => setReportFormat("vertical")} className={segmentBtn(reportFormat === "vertical")}>
+              <ListFilter className="h-3.5 w-3.5" /> Schedule III
             </button>
           </div>
-
-          {/* Options */}
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-[11px] uppercase tracking-wider text-slate-600">Detail Level:</span>
-              <select
-                value={detailLevel}
-                onChange={(e) => setDetailLevel(e.target.value as typeof detailLevel)}
-                className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
-              >
-                <option value="detailed">Detailed (Sub-Groups &amp; Ledgers)</option>
-                <option value="summary">Summary (Major Account Groups)</option>
-              </select>
-            </div>
-
-            <label className="flex items-center gap-2 cursor-pointer font-semibold text-xs text-slate-800">
-              <input
-                type="checkbox"
-                checked={showPrevYear}
-                onChange={(e) => setShowPrevYear(e.target.checked)}
-                className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 h-4 w-4"
-              />
-              <span>
-                Show Previous Year Comparison
-                {data && showPrevYear && (
-                  <span className="text-slate-400 font-normal"> (as on {formatDate(data.compareAsOn)})</span>
-                )}
-              </span>
-            </label>
+          <div className="flex h-9 items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+            <button type="button" onClick={() => setDetailLevel("detailed")} className={segmentBtn(detailLevel === "detailed")}>
+              Detailed
+            </button>
+            <button type="button" onClick={() => setDetailLevel("summary")} className={segmentBtn(detailLevel === "summary")}>
+              Summary
+            </button>
           </div>
+          <button
+            type="button"
+            aria-pressed={showPrevYear}
+            onClick={() => setShowPrevYear((v) => !v)}
+            className={cn(
+              "inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-semibold transition-colors cursor-pointer select-none",
+              showPrevYear
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+            )}
+          >
+            <CheckCircle2 className={cn("h-3.5 w-3.5", showPrevYear ? "text-emerald-600" : "text-slate-300")} />
+            Previous year
+          </button>
         </div>
       </div>
 
       {report.loading && !data ? (
-        <div className="py-16 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 bg-white text-xs text-slate-500">
-          <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-          Loading balance sheet…
+        <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white py-16 text-xs font-medium text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin text-emerald-600" /> Loading balance sheet…
         </div>
       ) : report.error || !data || !totals ? (
-        <div className="py-16 text-center rounded-xl border border-dashed border-rose-200 bg-rose-50/40">
-          <AlertCircle className="mx-auto h-8 w-8 text-rose-500 mb-2" />
+        <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50/40 py-14 text-center">
+          <AlertCircle className="mx-auto mb-2 h-8 w-8 text-rose-500" />
           <p className="text-sm font-semibold text-slate-700">Could not load balance sheet</p>
-          <p className="text-xs text-slate-500 mt-1">{report.error ?? "No data returned."}</p>
+          <p className="mt-1 text-xs text-slate-500">{report.error ?? "No data returned."}</p>
           <Button type="button" variant="outline" size="sm" onClick={() => void report.reload()} className="mt-3">
             Retry
           </Button>
         </div>
+      ) : reportFormat === "horizontal" ? (
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+            <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
+                <Building className="h-4 w-4" />
+              </span>
+              <h2 className="text-sm font-bold text-slate-900">Capital &amp; Liabilities</h2>
+            </div>
+            {statementTable(
+              data.liabilities,
+              "Total Capital & Liabilities",
+              totals.totalLiabilities,
+              totals.previousTotalLiabilities
+            )}
+          </section>
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+            <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                <Scale className="h-4 w-4" />
+              </span>
+              <h2 className="text-sm font-bold text-slate-900">Assets</h2>
+            </div>
+            {statementTable(data.assets, "Total Assets", totals.totalAssets, totals.previousTotalAssets)}
+          </section>
+        </div>
       ) : (
-        <>
-          {/* Standard Vertical KPI Cards Grid (F&B / Front Office Style) */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            {/* Card 1: Total Liabilities & Capital */}
-            <Card className="h-full min-w-0 p-3 sm:p-5">
-              <div className="flex items-start justify-between gap-2">
-                <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
-                  Total Liabilities &amp; Capital
-                </p>
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 sm:h-8 sm:w-8">
-                  <Building className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </span>
-              </div>
-              <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
-                {formatINR(totals.totalLiabilities)}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
-                Capital, Reserves &amp; Liabilities
-              </p>
-            </Card>
-
-            {/* Card 2: Total Property Assets */}
-            <Card className="h-full min-w-0 p-3 sm:p-5">
-              <div className="flex items-start justify-between gap-2">
-                <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
-                  Total Property Assets
-                </p>
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:h-8 sm:w-8">
-                  <Scale className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </span>
-              </div>
-              <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
-                {formatINR(totals.totalAssets)}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
-                Fixed &amp; Current Assets
-              </p>
-            </Card>
-
-            {/* Card 3: Equity & Retained Reserves */}
-            <Card className="h-full min-w-0 p-3 sm:p-5">
-              <div className="flex items-start justify-between gap-2">
-                <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
-                  Equity &amp; Retained Reserves
-                </p>
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-700 sm:h-8 sm:w-8">
-                  <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </span>
-              </div>
-              <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
-                {formatINR(equity)}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs truncate">
-                Net Worth / Owner Capital
-              </p>
-            </Card>
-
-            {/* Card 4: Current Liquidity Ratio */}
-            <Card className="h-full min-w-0 p-3 sm:p-5">
-              <div className="flex items-start justify-between gap-2">
-                <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
-                  Current Liquidity Ratio
-                </p>
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 sm:h-8 sm:w-8">
-                  <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </span>
-              </div>
-              <p className="mt-2 text-lg font-bold text-slate-900 sm:text-2xl truncate font-mono">
-                {currentRatio === null ? "—" : `${currentRatio.toFixed(2)} : 1`}
-              </p>
-              <p className="mt-0.5 text-[11px] text-emerald-700 font-semibold sm:text-xs truncate">
-                Working Capital {formatINR(data.ratios.workingCapital)}
-              </p>
-            </Card>
+        <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+          <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+              <ListFilter className="h-4 w-4" />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Balance Sheet (Schedule III)</h2>
+              <p className="text-[11px] text-slate-500">As on {formatDate(data.asOn)}</p>
+            </div>
           </div>
-
-          {/* HORIZONTAL MODE: Side-by-Side Dual Panel */}
-          {reportFormat === "horizontal" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 font-sans text-xs">
-              {/* LEFT PANEL: CAPITAL & LIABILITIES */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs flex flex-col justify-between space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                    <h3 className="font-bold text-xs uppercase tracking-wider text-slate-900 flex items-center gap-2">
-                      <Building className="h-4 w-4 text-emerald-600" />
-                      CAPITAL &amp; LIABILITIES
-                    </h3>
-                    <span className="font-mono text-xs font-semibold text-slate-500">As On {formatDate(data.asOn)}</span>
-                  </div>
-
-                  {renderHorizontalSections(data.liabilities)}
-                </div>
-
-                {/* Total Liabilities Footer */}
-                <div className="p-3 bg-slate-900 text-white rounded-lg flex items-center justify-between font-mono font-bold text-xs shadow-2xs">
-                  <span>TOTAL CAPITAL &amp; LIABILITIES</span>
-                  <span className="text-emerald-400">{formatINR(totals.totalLiabilities)}</span>
-                </div>
-              </div>
-
-              {/* RIGHT PANEL: ASSETS & APPLICABLE INVESTMENTS */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs flex flex-col justify-between space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                    <h3 className="font-bold text-xs uppercase tracking-wider text-slate-900 flex items-center gap-2">
-                      <Scale className="h-4 w-4 text-emerald-600" />
-                      PROPERTY ASSETS &amp; INVESTMENTS
-                    </h3>
-                    <span className="font-mono text-xs font-semibold text-slate-500">As On {formatDate(data.asOn)}</span>
-                  </div>
-
-                  {renderHorizontalSections(data.assets)}
-                </div>
-
-                {/* Total Assets Footer */}
-                <div className="p-3 bg-slate-900 text-white rounded-lg flex items-center justify-between font-mono font-bold text-xs shadow-2xs">
-                  <span>TOTAL PROPERTY ASSETS</span>
-                  <span className="text-emerald-400">{formatINR(totals.totalAssets)}</span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* VERTICAL MODE: Schedule III Format */
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs font-sans text-xs space-y-6 mb-4">
-              {/* SECTION I: EQUITY AND LIABILITIES */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                  <h3 className="font-bold text-xs uppercase tracking-wider text-slate-900">
-                    I. EQUITY AND LIABILITIES
-                  </h3>
-                  <span className="font-mono text-xs text-slate-500 font-semibold">Schedule III Format</span>
-                </div>
-
-                {renderVerticalSections(data.liabilities)}
-
-                <div className="p-3 bg-slate-100 rounded-lg flex items-center justify-between font-mono font-bold text-xs text-slate-900 border border-slate-300">
-                  <span>TOTAL EQUITY AND LIABILITIES</span>
-                  <span className="text-emerald-800">{formatINR(totals.totalLiabilities)}</span>
-                </div>
-              </div>
-
-              {/* SECTION II: ASSETS */}
-              <div className="space-y-3 pt-4 border-t border-slate-100">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                  <h3 className="font-bold text-xs uppercase tracking-wider text-slate-900">
-                    II. ASSETS
-                  </h3>
-                  <span className="font-mono text-xs text-slate-500 font-semibold">Schedule III Format</span>
-                </div>
-
-                {renderVerticalSections(data.assets)}
-
-                <div className="p-3 bg-slate-100 rounded-lg flex items-center justify-between font-mono font-bold text-xs text-slate-900 border border-slate-300">
-                  <span>TOTAL ASSETS</span>
-                  <span className="text-emerald-800">{formatINR(totals.totalAssets)}</span>
-                </div>
-              </div>
-            </div>
+          {statementTable(
+            data.liabilities,
+            "Total Equity & Liabilities",
+            totals.totalLiabilities,
+            totals.previousTotalLiabilities,
+            "I. Equity and Liabilities"
           )}
-
-          {/* EQUILIBRIUM MATCH BANNER */}
-          {totals.balanced ? (
-            <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 font-mono font-bold text-xs flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                <span className="uppercase tracking-wider">
-                  BALANCE SHEET EQUILIBRIUM MATCHED (TOTAL LIABILITIES = TOTAL ASSETS)
-                </span>
-              </div>
-              <div className="text-xs bg-white px-3 py-1 rounded-lg border border-emerald-200 text-emerald-800 font-bold">
-                {formatINR(totals.totalAssets)}
-              </div>
-            </div>
-          ) : (
-            <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-900 font-mono font-bold text-xs flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-rose-600" />
-                <span className="uppercase tracking-wider">
-                  BALANCE SHEET OUT OF BALANCE (ASSETS − LIABILITIES)
-                </span>
-              </div>
-              <div className="text-xs bg-white px-3 py-1 rounded-lg border border-rose-200 text-rose-800 font-bold">
-                {formatINR(totals.difference)}
-              </div>
-            </div>
-          )}
-        </>
+          {statementTable(data.assets, "Total Assets", totals.totalAssets, totals.previousTotalAssets, "II. Assets")}
+        </section>
       )}
-
     </ModulePageShell>
   );
 }

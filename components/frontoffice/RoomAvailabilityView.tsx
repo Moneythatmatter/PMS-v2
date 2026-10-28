@@ -141,6 +141,12 @@ function nextDayIso(iso: string): string {
   return shiftIso(iso, 1);
 }
 
+function stayDays(checkIn: string, checkOut: string): string[] {
+  const days: string[] = [];
+  for (let d = checkIn; d < checkOut && days.length < 366; d = nextDayIso(d)) days.push(d);
+  return days;
+}
+
 function formatBlockRange(start: string, end: string): string {
   if (start === end) return formatDayLabel(start);
   return `${formatDayLabel(start)} – ${formatDayLabel(end)}`;
@@ -306,6 +312,8 @@ export function RoomAvailabilityView() {
   const [quickViewBookingId, setQuickViewBookingId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [bookingDraft, setBookingDraft] = useState<BookingDraft | null>(null);
+  /** Availability for months outside the visible grid, fetched when a draft's dates reach them (null = failed). */
+  const [extraAvailability, setExtraAvailability] = useState<Record<string, RoomAvailabilityRow[] | null>>({});
   const [dragState, setDragState] = useState<{
     room: string;
     type: string;
@@ -474,31 +482,72 @@ export function RoomAvailabilityView() {
     });
   };
 
+  const loadedMonths = monthsKey.split("|");
+  const missingDraftMonths = bookingDraft
+    ? [...new Set(bookingDraft.days.map(monthStartIso))].filter(
+        (m) => !loadedMonths.includes(m) && !(m in extraAvailability),
+      )
+    : [];
+  const missingDraftKey = missingDraftMonths.join("|");
+
+  useEffect(() => {
+    if (!missingDraftKey) return;
+    let cancelled = false;
+    const months = missingDraftKey.split("|");
+    Promise.all(months.map((m) => roomService.availability(m).then((res) => [m, res.rows] as const)))
+      .then((entries) => {
+        if (!cancelled) setExtraAvailability((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setExtraAvailability((prev) => ({ ...prev, ...Object.fromEntries(months.map((m) => [m, null])) }));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [missingDraftKey]);
+
+  const draftDayStatus = (room: string, day: string): DayStatus | null => {
+    const month = monthStartIso(day);
+    const source = loadedMonths.includes(month) ? rows : extraAvailability[month];
+    if (!source) return null;
+    return (source.find((r) => r.room === room)?.days[day] ?? "available") as DayStatus;
+  };
+  const isDraftDayBookable = (room: string, day: string) => {
+    const status = draftDayStatus(room, day);
+    return status !== null && isBookableStatus(status, day, todayIso);
+  };
+
+  const draftAvailabilityNote = !bookingDraft
+    ? null
+    : missingDraftKey
+      ? "Checking availability for the selected dates…"
+      : bookingDraft.days.some((d) => extraAvailability[monthStartIso(d)] === null)
+        ? "Could not check availability for these dates. Try different dates."
+        : null;
+
   const bookingConflict = (() => {
-    if (!bookingDraft) return null;
-    const row = rows.find((r) => r.room === bookingDraft.room);
-    if (!row) return null;
-    const bad = bookingDraft.days.filter(
-      (d) => !isBookableStatus((row.days[d] ?? "available") as DayStatus, d, todayIso),
-    );
+    if (!bookingDraft || draftAvailabilityNote) return null;
+    const bad = bookingDraft.days.filter((d) => !isDraftDayBookable(bookingDraft.room, d));
     if (bad.length === 0) return null;
     return `${bad.length} night${bad.length !== 1 ? "s" : ""} in your selection ${
       bad.length !== 1 ? "are" : "is"
-    } not available. Drag only vacant or dirty dates.`;
+    } not available. Choose vacant or dirty dates only.`;
   })();
 
   const draftRoomOptions = (() => {
-    if (!bookingDraft) return [];
+    if (!bookingDraft || draftAvailabilityNote) return [];
     return rows
       .filter(
-        (r) =>
-          r.type === bookingDraft.type &&
-          bookingDraft.days.every((d) =>
-            isBookableStatus((r.days[d] ?? "available") as DayStatus, d, todayIso),
-          ),
+        (r) => r.type === bookingDraft.type && bookingDraft.days.every((d) => isDraftDayBookable(r.room, d)),
       )
       .map((r) => r.room);
   })();
+
+  const changeDraftDates = (checkIn: string, checkOut: string) => {
+    setBookingDraft((d) => (d ? { ...d, checkIn, checkOut, days: stayDays(checkIn, checkOut) } : d));
+  };
 
   const handleViewReservation = () => {
     if (!detailCell) return;
@@ -1141,11 +1190,14 @@ export function RoomAvailabilityView() {
       <QuickReservationModal
         draft={bookingDraft}
         conflict={bookingConflict}
+        availabilityNote={draftAvailabilityNote}
         roomOptions={draftRoomOptions}
         todayIso={todayIso}
+        onDatesChange={changeDraftDates}
         onClose={() => setBookingDraft(null)}
         onCreated={(booking) => {
           setBookingDraft(null);
+          setExtraAvailability({});
           setReloadKey((k) => k + 1);
           setQuickViewBookingId(booking.id);
         }}
