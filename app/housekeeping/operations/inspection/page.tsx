@@ -111,15 +111,11 @@ export default function RoomInspection() {
   const [remarks, setRemarks] = useState("");
   const [inspectionNotes, setInspectionNotes] = useState("");
   const [signatureName, setSignatureName] = useState("");
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSignature, setHasSignature] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Validation States
   const [remarksError, setRemarksError] = useState<string | null>(null);
-  const [signatureNameError, setSignatureNameError] = useState<string | null>(null);
-  const [signatureCanvasError, setSignatureCanvasError] = useState<string | null>(null);
 
   // Checklist items state
   const [checklistItems, setChecklistItems] = useState<ChecklistItemState[]>([]);
@@ -133,13 +129,10 @@ export default function RoomInspection() {
         remarks: string;
         inspectionNotes: string;
         signatureName: string;
-        hasSignature: boolean;
-        signatureDataUrl: string | null;
       }
     >
   >({});
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const initialCheckRef = useRef(false);
 
   const queueItems = useMemo(
@@ -361,8 +354,6 @@ export default function RoomInspection() {
 
     // Reset validations
     setRemarksError(null);
-    setSignatureNameError(null);
-    setSignatureCanvasError(null);
 
     if (drafts[selectedRoomNo]) {
       const draft = drafts[selectedRoomNo];
@@ -370,7 +361,6 @@ export default function RoomInspection() {
       setRemarks(draft.remarks);
       setInspectionNotes(draft.inspectionNotes);
       setSignatureName(draft.signatureName);
-      setHasSignature(draft.hasSignature);
     } else {
       const latestHistory = selectedRoom?.inspectionHistory?.[0];
       const isPassedRoom =
@@ -395,126 +385,11 @@ export default function RoomInspection() {
       setSignatureName(
         latestHistory?.supervisor ||
         latestHistory?.inspector ||
-        (isPassedRoom ? "Supervisor" : currentUsername || "")
+        (isPassedRoom ? "Supervisor" : currentUsername || "Supervisor")
       );
-      setHasSignature(Boolean(latestHistory?.signature || isPassedRoom));
     }
     setShowHistory(false);
   }, [selectedRoomNo, selectedRoom, selectedQueueItem, currentUsername]);
-
-  // Digital Signature Canvas drawing configurations
-  useEffect(() => {
-    if (!selectedRoomNo || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width || 340;
-    canvas.height = rect.height || 112;
-
-    ctx.strokeStyle = "#1e3a8a";
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    if (drafts[selectedRoomNo]?.signatureDataUrl) {
-      const img = new Image();
-      img.src = drafts[selectedRoomNo].signatureDataUrl || "";
-      img.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-      };
-      setHasSignature(true);
-    } else {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const isPassed =
-        selectedQueueItem?.queueStatus === "passed" ||
-        selectedRoom?.hkStatus === "Inspected";
-      if (isPassed && signatureName) {
-        ctx.font = "italic 24px 'Brush Script MT', 'Dancing Script', 'Caveat', cursive, sans-serif";
-        ctx.fillStyle = "#1e3a8a";
-        ctx.fillText(signatureName, 30, 65);
-        setHasSignature(true);
-      } else {
-        setHasSignature(false);
-      }
-    }
-  }, [selectedRoomNo, drafts, selectedQueueItem, selectedRoom, signatureName]);
-
-  // Coordinates helper for responsive digital signatures
-  const getCanvasMousePos = (
-    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
-    canvas: HTMLCanvasElement
-  ) => {
-    let clientX, clientY;
-    if ("touches" in e) {
-      if (e.touches.length === 0) return null;
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (clientX - rect.left) * (canvas.width / rect.width),
-      y: (clientY - rect.top) * (canvas.height / rect.height),
-    };
-  };
-
-  const startDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const pos = getCanvasMousePos(e, canvas);
-    if (!pos) return;
-
-    ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y);
-    setIsDrawing(true);
-    setSignatureCanvasError(null);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const pos = getCanvasMousePos(e, canvas);
-    if (!pos) return;
-
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-    setHasSignature(true);
-  };
-
-  const stopDraw = () => {
-    setIsDrawing(false);
-  };
-
-  const clearCanvas = () => {
-    if (!canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
-
-    if (selectedRoomNo && drafts[selectedRoomNo]) {
-      setDrafts((prev) => ({
-        ...prev,
-        [selectedRoomNo]: {
-          ...prev[selectedRoomNo],
-          hasSignature: false,
-          signatureDataUrl: null,
-        },
-      }));
-    }
-  };
 
   const toggleItemRemarks = (index: number) => {
     setChecklistItems((prev) =>
@@ -583,43 +458,18 @@ export default function RoomInspection() {
     if (selectedQueueItem?.queueStatus !== "awaiting") {
       return "Complete and mark the cleaning task on Cleaning Tasks before inspecting.";
     }
-    if (!hasSignature) return "Draw your supervisor signature.";
-    if (!signatureName.trim()) return "Enter your printed name.";
     return null;
-  }, [
-    selectedQueueItem,
-    hasSignature,
-    signatureName,
-  ]);
+  }, [selectedQueueItem]);
 
-  const canPassInspection =
-    selectedQueueItem?.queueStatus === "awaiting" &&
-    hasSignature &&
-    signatureName.trim().length > 0;
+  const canPassInspection = selectedQueueItem?.queueStatus === "awaiting";
 
   const handlePass = async () => {
     if (!selectedRoomNo || submitting) return;
     const roomNo = selectedRoomNo;
 
-    let hasErrors = false;
-
-    if (!hasSignature) {
-      setSignatureCanvasError("Supervisor signature drawing is required.");
-      hasErrors = true;
-    }
-    if (!signatureName.trim()) {
-      setSignatureNameError("Supervisor printed name is required.");
-      hasErrors = true;
-    }
-
-    if (hasErrors) {
-      setToast({ message: "Please resolve validation errors before passing inspection.", variant: "error" });
-      return;
-    }
-
     setSubmitting(true);
     try {
-      await inspectRoom(roomNo, true, signatureName, remarks || "", qualityScore);
+      await inspectRoom(roomNo, true, signatureName.trim() || "Supervisor", remarks || "", qualityScore);
     } catch (e) {
       setSubmitting(false);
       await reloadInspectionData();
@@ -657,7 +507,7 @@ export default function RoomInspection() {
 
     setSubmitting(true);
     try {
-      await inspectRoom(roomNo, false, signatureName, remarks, qualityScore);
+      await inspectRoom(roomNo, false, signatureName.trim() || "Supervisor", remarks, qualityScore);
     } catch (e) {
       setSubmitting(false);
       await reloadInspectionData();
@@ -684,9 +534,6 @@ export default function RoomInspection() {
 
   const handleSaveDraft = () => {
     if (!selectedRoomNo) return;
-    const canvas = canvasRef.current;
-    const signatureDataUrl = canvas && hasSignature ? canvas.toDataURL() : null;
-
     setDrafts((prev) => ({
       ...prev,
       [selectedRoomNo]: {
@@ -694,8 +541,6 @@ export default function RoomInspection() {
         remarks,
         inspectionNotes,
         signatureName,
-        hasSignature,
-        signatureDataUrl,
       },
     }));
 
@@ -1226,7 +1071,7 @@ export default function RoomInspection() {
               </div>
 
               {/* Card 2: Quality Score Bar */}
-              {/* Card 4: Inspector Remarks & Signature canvas */}
+              {/* Card 4: Inspector Remarks */}
               <div className="rounded-xl border border-slate-100 bg-white p-4 space-y-3 shadow-sm">
                 <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
                   Supervisor Remarks
@@ -1260,95 +1105,6 @@ export default function RoomInspection() {
                     <span className="text-red-505 font-bold">{remarksError}</span>
                   )}
                   {!isReadOnly && <span className="ml-auto">{remarks.length} / 250 characters</span>}
-                </div>
-              </div>
-
-              {/* Card 5: Digital Signature pad */}
-              <div className="rounded-xl border border-slate-100 bg-white p-4 space-y-3 shadow-sm">
-                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
-                  Digital Signature Sign-off {!isReadOnly && <span className="text-red-500">*</span>}
-                  {isReadOnly && <span className="text-[10px] text-emerald-600 font-semibold ml-2 lowercase font-normal">(read-only)</span>}
-                </label>
-                <div
-                  className={cn(
-                    "relative rounded-xl border bg-slate-50 overflow-hidden",
-                    isReadOnly ? "border-slate-200" : signatureCanvasError ? "border-red-500" : "border-slate-200"
-                  )}
-                >
-                  <canvas
-                    ref={canvasRef}
-                    onMouseDown={!isReadOnly ? startDraw : undefined}
-                    onMouseMove={!isReadOnly ? draw : undefined}
-                    onMouseUp={!isReadOnly ? stopDraw : undefined}
-                    onMouseLeave={!isReadOnly ? stopDraw : undefined}
-                    onTouchStart={!isReadOnly ? startDraw : undefined}
-                    onTouchMove={!isReadOnly ? draw : undefined}
-                    onTouchEnd={!isReadOnly ? stopDraw : undefined}
-                    className={cn(
-                      "w-full block h-28 bg-white",
-                      isReadOnly ? "cursor-default pointer-events-none" : "cursor-crosshair"
-                    )}
-                  />
-                  {!isReadOnly && (
-                    <button
-                      type="button"
-                      onClick={clearCanvas}
-                      className="absolute right-2.5 bottom-2.5 text-[9px] font-extrabold text-red-650 hover:text-red-750 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm"
-                    >
-                      Clear Signature
-                    </button>
-                  )}
-                </div>
-                {!isReadOnly && signatureCanvasError && (
-                  <span className="text-red-500 text-[10px] font-bold block">{signatureCanvasError}</span>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-semibold text-slate-655">
-                  <div>
-                    <label className="text-[10px] text-slate-400 font-bold block mb-1">Printed Name {!isReadOnly && "*"}</label>
-                    <input
-                      type="text"
-                      value={signatureName}
-                      readOnly={isReadOnly}
-                      disabled={isReadOnly}
-                      onChange={(e) => {
-                        if (isReadOnly) return;
-                        setSignatureName(e.target.value);
-                        if (e.target.value.trim()) setSignatureNameError(null);
-                      }}
-                      placeholder="Printed Name"
-                      className={cn(
-                        "w-full text-xs border rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1",
-                        isReadOnly && "bg-slate-50 text-slate-600 cursor-not-allowed border-slate-200",
-                        !isReadOnly && signatureNameError
-                          ? "border-red-500 focus:ring-red-500"
-                          : "border-slate-200 focus:ring-emerald-500"
-                      )}
-                    />
-                    {!isReadOnly && signatureNameError && (
-                      <span className="text-red-500 text-[9px] font-bold block mt-0.5">
-                        {signatureNameError}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-col justify-end text-[10px] text-slate-500 space-y-1 sm:pl-2">
-                    <div>
-                      <strong>Date:</strong>{" "}
-                      {new Date().toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </div>
-                    <div>
-                      <strong>Time:</strong>{" "}
-                      {new Date().toLocaleTimeString("en-IN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: true,
-                      })}
-                    </div>
-                  </div>
                 </div>
               </div>
 

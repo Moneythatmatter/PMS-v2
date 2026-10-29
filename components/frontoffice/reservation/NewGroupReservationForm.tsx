@@ -55,6 +55,7 @@ const inputClass = "rounded-xl";
 
 type RoomLineDraft = {
   roomType: string;
+  roomNo: string;
   adults: string;
   children: string;
   tariffPlan: string;
@@ -108,6 +109,7 @@ const PRESET_OWNER_PAYS_ALL: BillingRulesMap = {
 
 const EMPTY_LINE: RoomLineDraft = {
   roomType: "",
+  roomNo: "",
   adults: "",
   children: "",
   tariffPlan: "",
@@ -281,6 +283,32 @@ export function NewGroupReservationForm() {
     availabilityBlocks,
   ]);
 
+  const freeRoomsByType = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const [type, roomNos] of Object.entries(roomsByType)) {
+      map[type] =
+        arrivalDate && departureDate
+          ? filterRoomsForStay(roomNos, reservations, arrivalDate, departureDate, availabilityBlocks)
+          : roomNos;
+    }
+    return map;
+  }, [roomsByType, reservations, arrivalDate, departureDate, availabilityBlocks]);
+
+  function roomNoOptions(idx: number) {
+    const line = lines[idx];
+    if (!line?.roomType) return [];
+    const takenElsewhere = new Set(
+      lines.filter((l, i) => i !== idx && l.roomNo).map((l) => l.roomNo),
+    );
+    return (freeRoomsByType[line.roomType] ?? [])
+      .filter((no) => !takenElsewhere.has(no))
+      .map((no) => ({ id: no, label: `Room ${no}` }));
+  }
+
+  function setLineRoomNo(idx: number, roomNo: string) {
+    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, roomNo } : l)));
+  }
+
   const roomTypeSelectOptions = useMemo(
     () =>
       roomTypes.map((rt) => ({
@@ -404,6 +432,7 @@ export function NewGroupReservationForm() {
           ? {
               ...l,
               roomType,
+              roomNo: l.roomType === roomType ? l.roomNo : "",
               adults: l.adults || "1",
               children: l.children || "0",
               tariffPlan: preferred?.id ?? "",
@@ -469,6 +498,13 @@ export function NewGroupReservationForm() {
       }
     }
 
+    for (const line of filled) {
+      if (line.roomNo && !(freeRoomsByType[line.roomType] ?? []).includes(line.roomNo)) {
+        next.rooms = `Room ${line.roomNo} is not free for these dates — pick another room or leave it unassigned`;
+        break;
+      }
+    }
+
     const demand: Record<string, number> = {};
     for (const line of filled) {
       demand[line.roomType] = (demand[line.roomType] ?? 0) + 1;
@@ -524,6 +560,7 @@ export function NewGroupReservationForm() {
             mealPlan: plan?.mealPlan,
             adults: Math.max(0, Number(l.adults) || 0),
             children: Math.max(0, Number(l.children) || 0),
+            roomNo: l.roomNo || undefined,
           };
         });
 
@@ -867,7 +904,7 @@ export function NewGroupReservationForm() {
                         key={idx}
                         className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3"
                       >
-                        <div className="grid gap-2 sm:grid-cols-[1.3fr_0.45fr_0.45fr_1.2fr_auto]">
+                        <div className="grid gap-2 sm:grid-cols-[1.2fr_0.9fr_0.45fr_0.45fr_1.2fr_auto]">
                           <FormField label="Room type">
                             <SearchSelect
                               options={roomTypeSelectOptions}
@@ -888,6 +925,17 @@ export function NewGroupReservationForm() {
                                   count={Number(opt.hint ?? 0)}
                                 />
                               )}
+                            />
+                          </FormField>
+                          <FormField label="Room no.">
+                            <SearchSelect
+                              options={roomNoOptions(idx)}
+                              selectedId={line.roomNo || null}
+                              placeholder={line.roomType ? "Assign at check-in" : "Pick type first"}
+                              lockInputWhenSelected
+                              disabled={!line.roomType}
+                              onSelect={(opt) => setLineRoomNo(idx, opt.id)}
+                              onClear={() => setLineRoomNo(idx, "")}
                             />
                           </FormField>
                           <FormField label="Adult">
@@ -983,6 +1031,7 @@ export function NewGroupReservationForm() {
                               ? ` · ${formatINR(rate)}/night`
                               : ""}
                             {over ? ` — too many ${line.roomType} lines` : ""}
+                            {line.roomNo ? ` · Room ${line.roomNo} assigned` : " · room assigned at check-in"}
                           </p>
                         ) : null}
                       </div>

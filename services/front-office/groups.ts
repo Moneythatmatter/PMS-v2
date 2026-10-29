@@ -43,6 +43,7 @@ export type CreateGroupPayload = {
     mealPlan?: string;
     adults?: number;
     children?: number;
+    roomNo?: string;
   }>;
   billingRules?: Array<{
     chargeCategory: string;

@@ -1008,6 +1008,10 @@ export function CheckInForm() {
     if (Object.keys(companionFieldErrors).length) {
       missingLabels.push("Additional guest details");
     }
+    if (!String(roomForApi ?? "").trim()) {
+      newErrors.room = "Assign a room before check-in.";
+      missingLabels.push("Assigned room number");
+    }
 
     setIdentityErrors({
       ...Object.fromEntries(missingIdentity.map(([key]) => [key, true])),
