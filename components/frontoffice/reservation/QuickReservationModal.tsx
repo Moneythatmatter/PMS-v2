@@ -257,9 +257,10 @@ function QuickReservationDialog({
         guestId = created.id;
       }
       const status: ReservationStatus = action === "temp" ? "Reserved" : "Confirmed";
+      const roomRefId = roomCards.find((r) => r.roomNo === room)?.id ?? room;
       const booking = await reservationService.create({
         guestId,
-        roomRefId: roomCards.find((r) => r.roomNo === room)?.id ?? room,
+        roomRefId,
         checkIn: draft.checkIn,
         checkOut: draft.checkOut,
         nights,
@@ -278,7 +279,13 @@ function QuickReservationDialog({
         bookedBy: currentUser.name,
       });
       if (action === "checkin") {
-        router.push(checkInHref(booking));
+        try {
+          const checkedIn = await reservationService.checkIn(booking.id, { roomRefId, guestId });
+          onCreated(checkedIn ?? booking);
+        } catch {
+          // The booking exists; let the desk finish the check-in instead of leaving it half done.
+          router.push(checkInHref(booking));
+        }
         return;
       }
       onCreated(booking);
@@ -604,7 +611,7 @@ function QuickReservationDialog({
             disabled={disabled || !canCheckIn}
             loading={saving === "checkin"}
             className="border border-sky-300 bg-white text-sky-700 hover:bg-sky-50"
-            title={canCheckIn ? "Confirm and go to check-in" : "Check-in is only possible for today's arrivals"}
+            title={canCheckIn ? "Create the booking and check the guest in now" : "Check-in is only possible for today's arrivals"}
           >
             Check-In / Walk-In
           </FooterButton>

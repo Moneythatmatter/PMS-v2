@@ -187,7 +187,7 @@ export function FbOrdersView() {
     setEntryOrderType(activeTab);
     setOrderOutletId("");
     setReservationOverride(null);
-    setToast("Done");
+    setToast((current) => current ?? "Done");
   };
 
   const openTableEntry = (

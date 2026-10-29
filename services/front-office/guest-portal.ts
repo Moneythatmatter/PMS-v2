@@ -6,6 +6,16 @@ export type GuestPortalRecent = {
   label: string;
   status: string;
   at: string;
+  /** True while staff have not accepted the request yet. */
+  editable: boolean;
+  edit?: {
+    lines?: { menuItemId: string; qty: number }[];
+    instructions?: string;
+    preferredTime?: string;
+    serviceType?: string;
+    urgency?: string;
+    notes?: string;
+  };
 };
 
 export type GuestPortalContext = {
@@ -71,6 +81,9 @@ const roomPath = (roomId: string, suffix = "") => `/rooms/${encodeURIComponent(r
 const tokenQuery = (token: string) => `?t=${encodeURIComponent(token)}`;
 const post = <T>(path: string, token: string, body: unknown) =>
   portalRequest<T>(`${path}${tokenQuery(token)}`, { method: "POST", body: JSON.stringify(body) });
+const put = <T>(path: string, token: string, body: unknown) =>
+  portalRequest<T>(`${path}${tokenQuery(token)}`, { method: "PUT", body: JSON.stringify(body) });
+const itemPath = (roomId: string, kind: string, id: string) => roomPath(roomId, `/${kind}/${encodeURIComponent(id)}`);
 
 export const GuestPortalApi = {
   context: (roomId: string, token: string) =>
@@ -89,6 +102,25 @@ export const GuestPortalApi = {
     token: string,
     body: { serviceType?: string; urgency?: string; notes?: string },
   ) => post<{ requestId: string; requestNumber: string }>(roomPath(roomId, "/laundry"), token, body),
+
+  updateFood: (
+    roomId: string,
+    token: string,
+    requestId: string,
+    body: { lines: { menuItemId: string; qty: number }[]; instructions?: string },
+  ) => put<{ id: string; requestNo: string; subtotal: number }>(itemPath(roomId, "food-orders", requestId), token, body),
+  updateCleaning: (
+    roomId: string,
+    token: string,
+    requestId: string,
+    body: { preferredTime?: string; notes?: string },
+  ) => put<{ requestId: string; requestNumber: string }>(itemPath(roomId, "cleaning", requestId), token, body),
+  updateLaundry: (
+    roomId: string,
+    token: string,
+    requestId: string,
+    body: { serviceType?: string; urgency?: string; notes?: string },
+  ) => put<{ requestId: string; requestNumber: string }>(itemPath(roomId, "laundry", requestId), token, body),
 
   /** Staff only: signed tokens for printing room QR codes. */
   qrTokens: () => api.get<RoomQrToken[]>(foPath("/rooms/guest-qr")),

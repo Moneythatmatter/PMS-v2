@@ -12,6 +12,7 @@ import {
   CreditCard,
   Crown,
   KeyRound,
+  Loader2,
   Phone,
   Search,
   User,
@@ -868,7 +869,18 @@ export function CheckInForm() {
     ? String(booking?.guestName || "").trim() || "Group owner"
     : "";
 
+  const [checkingIn, setCheckingIn] = useState(false);
   const handleCompleteCheckIn = async () => {
+    if (checkingIn) return;
+    setCheckingIn(true);
+    try {
+      await runCompleteCheckIn();
+    } finally {
+      setCheckingIn(false);
+    }
+  };
+
+  const runCompleteCheckIn = async () => {
     const stayingGuestName = formatRoomGuestName({
       firstName: guestDetails.firstName,
       lastName: guestDetails.lastName,
@@ -1993,10 +2005,19 @@ export function CheckInForm() {
 
                 <div className="flex justify-end border-t border-slate-200 pt-4">
                   <Button
-                    onClick={handleCompleteCheckIn}
+                    onClick={() => void handleCompleteCheckIn()}
+                    disabled={checkingIn}
+                    aria-busy={checkingIn}
                     className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] rounded-xl px-8 py-3 text-sm font-bold text-white shadow-md"
                   >
-                    Complete Check-In Process
+                    {checkingIn ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Checking in…
+                      </>
+                    ) : (
+                      "Complete Check-In Process"
+                    )}
                   </Button>
                 </div>
               </>
@@ -2194,10 +2215,19 @@ export function CheckInForm() {
 
           <div className="flex justify-end border-t border-slate-200 pt-4">
             <Button
-              onClick={handleCompleteCheckIn}
+              onClick={() => void handleCompleteCheckIn()}
+                    disabled={checkingIn}
+                    aria-busy={checkingIn}
               className="!bg-[#0F8A5F] hover:!bg-[#0d7d56] rounded-xl px-8 py-3 text-sm font-bold text-white shadow-md"
             >
-              Complete Check-In Process
+              {checkingIn ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Checking in…
+                      </>
+                    ) : (
+                      "Complete Check-In Process"
+                    )}
             </Button>
           </div>
         </>

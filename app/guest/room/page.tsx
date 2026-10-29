@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BedDouble, CheckCircle2, Shirt, Sparkles, UtensilsCrossed } from "lucide-react";
+import { BedDouble, CheckCircle2, Pencil, Shirt, Sparkles, UtensilsCrossed } from "lucide-react";
 import {
   GuestPortalApi,
   type GuestMenu,
@@ -64,6 +64,7 @@ function GuestRoomPortal() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [menu, setMenu] = useState<GuestMenu | null>(null);
   const [menuLoading, setMenuLoading] = useState(false);
@@ -111,6 +112,42 @@ function GuestRoomPortal() {
     setView(next);
   };
 
+  const resetForms = () => {
+    setCart({});
+    setInstructions("");
+    setCleaningTime(CLEANING_TIMES[0]);
+    setCleaningNotes("");
+    setLaundryService(LAUNDRY_SERVICES[0]);
+    setLaundryExpress(false);
+    setLaundryNotes("");
+  };
+
+  const backHome = () => {
+    if (editingId) {
+      setEditingId(null);
+      resetForms();
+    }
+    go("home");
+  };
+
+  const startEdit = (r: GuestPortalRecent) => {
+    const edit = r.edit ?? {};
+    resetForms();
+    if (r.kind === "food") {
+      setCart(Object.fromEntries((edit.lines ?? []).map((l) => [l.menuItemId, l.qty])));
+      setInstructions(edit.instructions ?? "");
+    } else if (r.kind === "cleaning") {
+      setCleaningTime(edit.preferredTime ?? CLEANING_TIMES[0]);
+      setCleaningNotes(edit.notes ?? "");
+    } else {
+      setLaundryService(edit.serviceType ?? LAUNDRY_SERVICES[0]);
+      setLaundryExpress(edit.urgency === "Express");
+      setLaundryNotes(edit.notes ?? "");
+    }
+    openView(r.kind);
+    setEditingId(r.id);
+  };
+
   const openView = (next: View) => {
     go(next);
     if (next !== "food" || menu || menuLoading) return;
@@ -127,6 +164,7 @@ function GuestRoomPortal() {
     try {
       const message = await action();
       setSuccess(message);
+      setEditingId(null);
       setView("home");
       void loadContext();
     } catch (e) {
@@ -138,34 +176,41 @@ function GuestRoomPortal() {
 
   const placeFoodOrder = () =>
     submit(async () => {
-      const res = await GuestPortalApi.orderFood(roomId, token, {
-        lines: cartInfo.lines,
-        instructions: instructions.trim() || undefined,
-      });
+      const body = { lines: cartInfo.lines, instructions: instructions.trim() || undefined };
+      const res = editingId
+        ? await GuestPortalApi.updateFood(roomId, token, editingId, body)
+        : await GuestPortalApi.orderFood(roomId, token, body);
       setCart({});
       setInstructions("");
-      return `Your order request ${res.requestNo} (${money(res.subtotal)}) has been sent. Our staff will confirm it shortly.`;
+      return editingId
+        ? `Your order request ${res.requestNo} has been updated (${money(res.subtotal)}).`
+        : `Your order request ${res.requestNo} (${money(res.subtotal)}) has been sent. Our staff will confirm it shortly.`;
     });
 
   const requestCleaning = () =>
     submit(async () => {
-      await GuestPortalApi.requestCleaning(roomId, token, {
-        preferredTime: cleaningTime,
-        notes: cleaningNotes.trim() || undefined,
-      });
-      setCleaningNotes("");
-      return "Your cleaning request has been sent. Housekeeping will confirm it shortly.";
+      const body = { preferredTime: cleaningTime, notes: cleaningNotes.trim() || undefined };
+      if (editingId) await GuestPortalApi.updateCleaning(roomId, token, editingId, body);
+      else await GuestPortalApi.requestCleaning(roomId, token, body);
+      resetForms();
+      return editingId
+        ? "Your cleaning request has been updated."
+        : "Your cleaning request has been sent. Housekeeping will confirm it shortly.";
     });
 
   const requestLaundry = () =>
     submit(async () => {
-      await GuestPortalApi.requestLaundry(roomId, token, {
+      const body = {
         serviceType: laundryService,
         urgency: laundryExpress ? "Express" : "Normal",
         notes: laundryNotes.trim() || undefined,
-      });
-      setLaundryNotes("");
-      return "Your laundry pickup request has been sent. Housekeeping will confirm it shortly.";
+      };
+      if (editingId) await GuestPortalApi.updateLaundry(roomId, token, editingId, body);
+      else await GuestPortalApi.requestLaundry(roomId, token, body);
+      resetForms();
+      return editingId
+        ? "Your laundry request has been updated."
+        : "Your laundry pickup request has been sent. Housekeeping will confirm it shortly.";
     });
 
   if (linkIncomplete) {
@@ -186,7 +231,7 @@ function GuestRoomPortal() {
   if (view === "food") {
     return (
       <Shell>
-        <BackHeader title="In-Room Dining" onBack={() => go("home")} />
+        <BackHeader title={editingId ? "Edit Food Order" : "In-Room Dining"} onBack={backHome} />
         {errorBanner}
         <GuestMenuPicker menu={menu} loading={menuLoading} cart={cart} onCartChange={setCart} />
         {cartInfo.count > 0 && (
@@ -208,7 +253,7 @@ function GuestRoomPortal() {
           count={cartInfo.count}
           total={cartInfo.total}
           caption={`Room ${ctx.roomNo}`}
-          actionLabel="Send order"
+          actionLabel={editingId ? "Update order" : "Send order"}
           busy={busy}
           onAction={placeFoodOrder}
         />
@@ -219,7 +264,7 @@ function GuestRoomPortal() {
   if (view === "cleaning") {
     return (
       <Shell>
-        <BackHeader title="Room Cleaning" onBack={() => go("home")} />
+        <BackHeader title={editingId ? "Edit Cleaning Request" : "Room Cleaning"} onBack={backHome} />
         {errorBanner}
         <div className="space-y-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
           <div>
@@ -244,7 +289,7 @@ function GuestRoomPortal() {
             />
           </div>
           <PrimaryButton busy={busy} onClick={requestCleaning}>
-            Request cleaning for Room {ctx.roomNo}
+            {editingId ? "Update cleaning request" : `Request cleaning for Room ${ctx.roomNo}`}
           </PrimaryButton>
         </div>
       </Shell>
@@ -254,7 +299,7 @@ function GuestRoomPortal() {
   if (view === "laundry") {
     return (
       <Shell>
-        <BackHeader title="Laundry" onBack={() => go("home")} />
+        <BackHeader title={editingId ? "Edit Laundry Request" : "Laundry"} onBack={backHome} />
         {errorBanner}
         <div className="space-y-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
           <div>
@@ -293,7 +338,7 @@ function GuestRoomPortal() {
             Our staff will collect the items from your room, count them, and charges will be added to your room bill.
           </p>
           <PrimaryButton busy={busy} onClick={requestLaundry}>
-            Request laundry pickup
+            {editingId ? "Update laundry request" : "Request laundry pickup"}
           </PrimaryButton>
         </div>
       </Shell>
@@ -386,9 +431,21 @@ function GuestRoomPortal() {
                     <p className="truncate text-sm font-medium">{r.label}</p>
                     <p className="text-[11px] text-slate-400">{formatTime(r.at)}</p>
                   </div>
-                  <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusTone(r.status)}`}>
-                    {prettyStatus(r.status)}
-                  </span>
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusTone(r.status)}`}>
+                      {prettyStatus(r.status)}
+                    </span>
+                    {r.editable && ctx.occupied && (
+                      <button
+                        type="button"
+                        onClick={() => startEdit(r)}
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        Edit
+                      </button>
+                    )}
+                  </div>
                 </li>
               );
             })}

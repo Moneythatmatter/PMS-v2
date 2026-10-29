@@ -19,6 +19,7 @@ import {
 import { formatINR } from "@/app/data/foodbeverages/ops";
 import { currentUser } from "@/app/data";
 import {
+  fbOrderService,
   modifierGroupService,
   posService,
   type LiveTable,
@@ -726,31 +727,7 @@ export function FbOrderEntryPanel({
     });
   };
 
-  const handleManageSave = async () => {
-    if (isAnyActionRunning) return;
-    if (!activeOutletId) {
-      setFormError("Select an outlet first.");
-      return;
-    }
-    try {
-      setIsSaveLoading(true);
-      setFormError(null);
-      if (formLines.length) {
-        await sendNewItemsAsKot();
-        setFormLines([]);
-        setOrderInstruction("");
-        onToast(`KOT sent · ${formatINR(formTotal)}`);
-      }
-      onTablesRefresh?.();
-      onOrderCreated();
-    } catch (e) {
-      setFormError(e instanceof Error ? e.message : "Failed to save");
-    } finally {
-      setIsSaveLoading(false);
-    }
-  };
-
-  const handleSaveAndPrintBill = async () => {
+  const generateBill = async ({ print }: { print: boolean }) => {
     if (isAnyActionRunning) return;
     if (!activeOutletId) {
       setFormError("Select an outlet first.");
@@ -760,8 +737,9 @@ export function FbOrderEntryPanel({
       setFormError("No items on this order.");
       return;
     }
+    const setLoading = print ? setIsBillLoading : setIsSaveLoading;
     try {
-      setIsBillLoading(true);
+      setLoading(true);
       setFormError(null);
       let orderId = activeOrderId;
       let linesForPrint = allDisplayLines;
@@ -774,6 +752,14 @@ export function FbOrderEntryPanel({
         setFormError("No open order to bill.");
         return;
       }
+      const guestName = guestDetails.name.trim();
+      const paxCount = Math.max(0, Number(pax.trim()) || 0);
+      if (guestName || paxCount > 0) {
+        await fbOrderService.update(orderId, {
+          ...(guestName ? { guest: guestName } : {}),
+          ...(paxCount > 0 ? { pax: paxCount } : {}),
+        });
+      }
       const loaded = await loadOrderDetails(orderId);
       if (loaded) {
         linesForPrint = loaded.items;
@@ -781,35 +767,40 @@ export function FbOrderEntryPanel({
       }
       const bill = await posService.printBillForOrder(orderId);
       const billNo = String(bill.billNo ?? bill.id ?? "Bill");
-      const billId = String(bill.id ?? billNo);
-      const orderNoForPrint = loaded
-        ? String(loaded.order.orderNo ?? loaded.order.id ?? orderId)
-        : loadedOrderNo || orderId;
-      saveBillSlip({
-        billNo,
-        billId,
-        orderNo: orderNoForPrint,
-        orderType: formType,
-        outletName: outletLabel(activeOutletId) || "Outlet",
-        tableRef: formRef,
-        guest: guestDetails.name.trim() || "Walk-in",
-        server: currentUser.name,
-        lines: linesForPrint.map((line) => ({
-          name: line.modifiers.length
-            ? `${line.name} (${modifierSummary(line.modifiers)})`
-            : line.name,
-          qty: line.qty,
-          price: line.price,
-        })),
-        total: totalForPrint,
-      });
+      if (print) {
+        const orderNoForPrint = loaded
+          ? String(loaded.order.orderNo ?? loaded.order.id ?? orderId)
+          : loadedOrderNo || orderId;
+        saveBillSlip({
+          billNo,
+          billId: String(bill.id ?? billNo),
+          orderNo: orderNoForPrint,
+          orderType: formType,
+          outletName: outletLabel(activeOutletId) || "Outlet",
+          tableRef: formRef,
+          guest: guestName || "Walk-in",
+          server: currentUser.name,
+          lines: linesForPrint.map((line) => ({
+            name: line.modifiers.length
+              ? `${line.name} (${modifierSummary(line.modifiers)})`
+              : line.name,
+            qty: line.qty,
+            price: line.price,
+          })),
+          total: totalForPrint,
+        });
+      }
       setFormLines([]);
-      onToast(`${billNo} saved · ${formatINR(totalForPrint)} · bill slip downloaded`);
+      setOrderInstruction("");
+      onToast(
+        `${billNo} generated · ${formatINR(totalForPrint)}${print ? " · bill slip downloaded" : ""}`,
+      );
+      onTablesRefresh?.();
       onOrderCreated();
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : "Failed to print bill");
+      setFormError(e instanceof Error ? e.message : "Failed to generate bill");
     } finally {
-      setIsBillLoading(false);
+      setLoading(false);
     }
   };
 
@@ -1259,14 +1250,14 @@ export function FbOrderEntryPanel({
                 />
               )}
             </FormField>
-            <FormField label="Pax">
+            <FormField label="Pax" className="flex flex-col">
               <TextInput
                 type="number"
                 min={1}
                 value={pax}
                 onChange={(e) => setPax(e.target.value)}
                 placeholder="Covers"
-                className="w-full sm:w-20"
+                className="w-full sm:w-24"
               />
             </FormField>
           </div>
@@ -1438,7 +1429,7 @@ export function FbOrderEntryPanel({
                   type="button"
                   className="flex-1 bg-emerald-700 hover:bg-emerald-800 cursor-pointer"
                   disabled={isAnyActionRunning || (!activeOrderId && !formLines.length)}
-                  onClick={() => void handleManageSave()}
+                  onClick={() => void generateBill({ print: false })}
                 >
                   {isSaveLoading ? "Saving…" : "Save"}
                 </Button>
@@ -1446,7 +1437,7 @@ export function FbOrderEntryPanel({
                   type="button"
                   className="flex-1 bg-slate-800 hover:bg-slate-900 cursor-pointer"
                   disabled={isAnyActionRunning || (!activeOrderId && !formLines.length)}
-                  onClick={() => void handleSaveAndPrintBill()}
+                  onClick={() => void generateBill({ print: true })}
                 >
                   {isBillLoading ? "Printing…" : "Save and Print Bill"}
                 </Button>
