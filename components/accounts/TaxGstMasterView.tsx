@@ -14,6 +14,7 @@ import {
   Info,
   ShieldCheck,
   Loader2,
+  Waypoints,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -37,6 +38,7 @@ import {
   MasterActivationDialog,
   MasterDeleteProtectionDialog,
 } from "@/components/accounts/MasterComponents";
+import { TaxBillingPointsPanel } from "@/components/accounts/TaxBillingPointsPanel";
 import {
   accErrorMessage,
   formatDate,
@@ -49,12 +51,36 @@ import {
 import { cn } from "@/lib/utils";
 
 const TAX_TYPES = ["GST", "CGST", "SGST", "IGST", "Cess", "TDS", "Other"] as const;
-const APPLICABILITY_TYPES = [
-  { value: "Revenue Category", label: "Revenue Category" },
-  { value: "Department", label: "Department / Division" },
-  { value: "Amount Slab", label: "Amount Slab Only" },
-  { value: "Service", label: "Service" },
-] as const;
+
+type AmountCondition = "any" | "upto" | "above" | "between";
+
+const AMOUNT_CONDITIONS: { value: AmountCondition; label: string }[] = [
+  { value: "any", label: "Any amount" },
+  { value: "upto", label: "Up to ₹" },
+  { value: "above", label: "Above ₹" },
+  { value: "between", label: "Between" },
+];
+
+function conditionOf(min: number | null, max: number | null): AmountCondition {
+  const hasMin = min != null && min > 0;
+  if (!hasMin && max == null) return "any";
+  if (!hasMin) return "upto";
+  if (max == null) return "above";
+  return "between";
+}
+
+function slabText(min: number | null, max: number | null): string {
+  switch (conditionOf(min, max)) {
+    case "any":
+      return "any amount";
+    case "upto":
+      return `up to ${formatINR(max ?? 0)}`;
+    case "above":
+      return `above ${formatINR(min ?? 0)}`;
+    default:
+      return `${formatINR(min ?? 0)} – ${formatINR(max ?? 0)}`;
+  }
+}
 
 type TaxDefForm = Pick<
   TaxDefinition,
@@ -144,8 +170,7 @@ function formatRate(rate: number, calculationType: TaxDefinition["calculationTyp
 }
 
 export function TaxGstMasterView() {
-  // Tab Navigation ('definitions' | 'rules' | 'audit')
-  const [activeTab, setActiveTab] = useState<"definitions" | "rules" | "audit">("definitions");
+  const [activeTab, setActiveTab] = useState<"definitions" | "rules" | "billing" | "audit">("definitions");
 
   const taxQuery = useAccQuery(() => accTaxDefinitionService.list(), []);
   const ruleQuery = useAccQuery(() => accTaxRuleService.list(), []);
@@ -166,6 +191,7 @@ export function TaxGstMasterView() {
   const [isEditingRule, setIsEditingRule] = useState(false);
   const [isCreatingRule, setIsCreatingRule] = useState(false);
   const [ruleFormData, setRuleFormData] = useState<TaxRuleForm | null>(null);
+  const [amountCondition, setAmountCondition] = useState<AmountCondition | null>(null);
 
   const [saving, setSaving] = useState(false);
 
@@ -218,9 +244,6 @@ export function TaxGstMasterView() {
     () => (lookups?.ledgers ?? []).filter((a) => a.nature === "Liability"),
     [lookups]
   );
-  const revenueCategories = lookups?.revenueCategories ?? [];
-  const divisions = lookups?.divisions ?? [];
-
   const taxTypeOptions = useMemo(() => {
     const extra = allTaxDefinitions
       .map((t) => t.taxType)
@@ -393,26 +416,41 @@ export function TaxGstMasterView() {
     setRuleFormData((prev) => (prev ? { ...prev, [field]: value } : prev));
   };
 
+  const ruleCondition: AmountCondition = ruleFormData
+    ? amountCondition ?? conditionOf(ruleFormData.minimumAmount, ruleFormData.maximumAmount)
+    : "any";
+
+  const changeRuleCondition = (next: AmountCondition) => {
+    setAmountCondition(next);
+    setRuleFormData((prev) => {
+      if (!prev) return prev;
+      if (next === "any") return { ...prev, minimumAmount: 0, maximumAmount: null };
+      if (next === "upto") return { ...prev, minimumAmount: 0 };
+      if (next === "above") return { ...prev, maximumAmount: null };
+      return prev;
+    });
+  };
+
   const closeRuleEditor = () => {
     setIsEditingRule(false);
     setIsCreatingRule(false);
     setRuleFormData(null);
+    setAmountCondition(null);
   };
 
   const handleNewTaxRule = () => {
-    const firstActiveTax = taxDefinitions.find((t) => t.status === "Active");
-    const maxPriority = taxRules.reduce((m, r) => Math.max(m, r.priority), 0);
+    setAmountCondition(null);
     setRuleFormData({
       taxRuleCode: "",
       taxRuleName: "",
-      taxId: firstActiveTax?.id ?? "",
+      taxId: "",
       applicabilityType: "Revenue Category",
       serviceType: "",
       revenueCategoryId: null,
       divisionId: null,
       minimumAmount: 0,
       maximumAmount: null,
-      priority: maxPriority + 1,
+      priority: 1,
       effectiveFrom: todayIso(),
       effectiveTo: null,
       description: "",
@@ -423,69 +461,73 @@ export function TaxGstMasterView() {
     setIsCreatingRule(true);
     setIsEditingRule(true);
     setActiveTab("rules");
-    notify("Configure the new rule parameters and click Save.");
   };
 
   const handleSaveTaxRule = async () => {
     if (!ruleFormData) return;
-    if (!ruleFormData.taxRuleCode.trim()) {
-      notify("Rule Code is required.", "error");
+    const form = ruleFormData;
+    const tax = allTaxDefinitions.find((t) => t.id === form.taxId);
+    if (!tax) {
+      notify("Choose the tax to apply.", "error");
       return;
     }
-    if (!ruleFormData.taxRuleName.trim()) {
-      notify("Rule Name is required.", "error");
+    const min = ruleCondition === "above" || ruleCondition === "between" ? form.minimumAmount : 0;
+    const max = ruleCondition === "upto" || ruleCondition === "between" ? form.maximumAmount : null;
+    if ((ruleCondition === "above" || ruleCondition === "between") && !(min != null && min > 0)) {
+      notify("Enter the starting amount.", "error");
       return;
     }
-    if (!ruleFormData.taxId) {
-      notify("Applicable Tax Definition is required.", "error");
+    if ((ruleCondition === "upto" || ruleCondition === "between") && !(max != null && max > 0)) {
+      notify("Enter the upper amount.", "error");
       return;
     }
-    if (ruleFormData.minimumAmount !== null && ruleFormData.minimumAmount < 0) {
-      notify("Minimum Amount cannot be negative.", "error");
+    if (min != null && max != null && max < min) {
+      notify("The upper amount must be more than the starting amount.", "error");
       return;
     }
-    if (
-      ruleFormData.minimumAmount !== null &&
-      ruleFormData.maximumAmount !== null &&
-      ruleFormData.maximumAmount < ruleFormData.minimumAmount
-    ) {
-      notify("Maximum Amount must be greater than the Minimum Amount.", "error");
-      return;
-    }
-    if (!ruleFormData.effectiveFrom) {
+    if (!form.effectiveFrom) {
       notify("Effective From date is required.", "error");
       return;
     }
-    if (ruleFormData.effectiveTo && ruleFormData.effectiveTo < ruleFormData.effectiveFrom) {
+    if (form.effectiveTo && form.effectiveTo < form.effectiveFrom) {
       notify("Effective To must be on or after Effective From.", "error");
       return;
     }
-
-    // Overlap Slab Check Warning
-    const overlapping = allTaxRules.filter(
+    const duplicate = allTaxRules.find(
       (r) =>
         r.id !== selectedRuleId &&
         r.status === "Active" &&
-        r.revenueCategoryId === ruleFormData.revenueCategoryId &&
-        r.divisionId === ruleFormData.divisionId &&
-        r.applicabilityType === ruleFormData.applicabilityType
+        r.taxId === tax.id &&
+        (r.minimumAmount ?? 0) === (min ?? 0) &&
+        (r.maximumAmount ?? null) === (max ?? null)
     );
-    const minA = ruleFormData.minimumAmount ?? 0;
-    const maxA = ruleFormData.maximumAmount ?? Infinity;
-    const overlapWarning = overlapping.some((other) => {
-      const minB = other.minimumAmount ?? 0;
-      const maxB = other.maximumAmount ?? Infinity;
-      return minA <= maxB && maxA >= minB;
-    });
+    if (duplicate) {
+      notify(`${duplicate.taxRuleCode} already applies ${tax.taxCode} for ${slabText(min, max)}.`, "error");
+      return;
+    }
+
+    const typedName = form.taxRuleName.trim();
+    const wasAutoNamed = /^[A-Z0-9-]+ – (any amount|up to ₹|above ₹|₹)/.test(typedName);
+    const name = typedName && !wasAutoNamed ? typedName : `${tax.taxCode} – ${slabText(min, max)}`;
+    let code = form.taxRuleCode.trim().toUpperCase();
+    if (!code) {
+      const base = `TR-${tax.taxCode}`.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+      const used = new Set(allTaxRules.map((r) => r.taxRuleCode.toUpperCase()));
+      code = base;
+      for (let i = 2; used.has(code); i++) code = `${base}-${i}`;
+    }
 
     setSaving(true);
     try {
       const payload: Partial<TaxRule> = {
-        ...ruleFormData,
-        taxRuleCode: ruleFormData.taxRuleCode.trim().toUpperCase(),
-        taxRuleName: ruleFormData.taxRuleName.trim(),
-        serviceType: ruleFormData.serviceType.trim(),
-        companyId: ruleFormData.companyId || selectedCompanyId || null,
+        ...form,
+        taxRuleCode: code,
+        taxRuleName: name,
+        serviceType: form.serviceType.trim(),
+        minimumAmount: min,
+        maximumAmount: max,
+        priority: 1,
+        companyId: form.companyId || selectedCompanyId || null,
       };
       const saved =
         isCreatingRule || !selectedRuleId
@@ -494,11 +536,7 @@ export function TaxGstMasterView() {
       await reloadAll();
       setSelectedRuleId(saved.id);
       closeRuleEditor();
-      notify(
-        overlapWarning
-          ? `Saved Rule '${saved.taxRuleName}'. Notice: Slabs overlap with an existing active rule for this scope.`
-          : `Saved Tax Rule '${saved.taxRuleName}' successfully.`
-      );
+      notify(`Saved: ${tax.taxCode} applies for ${slabText(min, max)}. Pick it on the Billing Points tab.`);
     } catch (e) {
       notify(accErrorMessage(e), "error");
     } finally {
@@ -526,16 +564,10 @@ export function TaxGstMasterView() {
     }
   };
 
-  const ruleTaxOptions = taxDefinitions.filter(
-    (t) => t.status === "Active" || t.id === ruleFormData?.taxId
-  );
-  const applicabilityOptions: { value: string; label: string }[] = [...APPLICABILITY_TYPES];
-  if (
-    ruleFormData?.applicabilityType &&
-    !applicabilityOptions.some((o) => o.value === ruleFormData.applicabilityType)
-  ) {
-    applicabilityOptions.push({ value: ruleFormData.applicabilityType, label: ruleFormData.applicabilityType });
-  }
+  const ruleTaxOptions = taxDefinitions
+    .filter((t) => t.status === "Active" || t.id === ruleFormData?.taxId)
+    .sort((a, b) => a.taxCode.localeCompare(b.taxCode));
+  const ruleTax = allTaxDefinitions.find((t) => t.id === ruleFormData?.taxId) ?? null;
 
   const renderLoadState = (
     query: { data: unknown; loading: boolean; error: string | null; reload: () => Promise<unknown> },
@@ -728,7 +760,7 @@ export function TaxGstMasterView() {
         </div>
       </div>
 
-      {/* 3 Main Tabs */}
+      {/* Main Tabs */}
       <div className="mb-4 flex border-b border-slate-200">
         <button
           type="button"
@@ -768,6 +800,25 @@ export function TaxGstMasterView() {
         <button
           type="button"
           onClick={() => {
+            setActiveTab("billing");
+            closeRuleEditor();
+            setIsCreatingDef(false);
+            setDefDraft(null);
+          }}
+          className={cn(
+            "flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold transition-colors cursor-pointer",
+            activeTab === "billing"
+              ? "border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-xl"
+              : "border-transparent text-slate-600 hover:text-slate-900"
+          )}
+        >
+          <Waypoints className="h-3.5 w-3.5" />
+          3. Billing Points
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
             setActiveTab("audit");
             closeRuleEditor();
             setIsCreatingDef(false);
@@ -781,7 +832,7 @@ export function TaxGstMasterView() {
           )}
         >
           <ShieldCheck className="h-3.5 w-3.5" />
-          3. Audit & System
+          4. Audit & System
         </button>
       </div>
 
@@ -1193,10 +1244,8 @@ export function TaxGstMasterView() {
                     <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                       <th className="py-2.5 px-3">Rule Code</th>
                       <th className="py-2.5 px-3">Rule Name</th>
-                      <th className="py-2.5 px-3">Scope</th>
-                      <th className="py-2.5 px-3">Amount Slab</th>
-                      <th className="py-2.5 px-3">Applicable Tax</th>
-                      <th className="py-2.5 px-3">Priority</th>
+                      <th className="py-2.5 px-3">Tax</th>
+                      <th className="py-2.5 px-3">Applies When Amount Is</th>
                       <th className="py-2.5 px-3">Effective</th>
                       <th className="py-2.5 px-3">Status</th>
                       <th className="py-2.5 px-3 text-right">Actions</th>
@@ -1205,7 +1254,7 @@ export function TaxGstMasterView() {
                   <tbody className="divide-y divide-slate-100 text-xs font-medium">
                     {filteredTaxRules.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="py-8 text-center text-slate-400 font-medium">
+                        <td colSpan={7} className="py-8 text-center text-slate-400 font-medium">
                           {taxRules.length === 0
                             ? "No tax rules yet. Click “New Tax Rule” to create one."
                             : "No tax rules match your search or filter."}
@@ -1229,28 +1278,13 @@ export function TaxGstMasterView() {
                             {rule.taxRuleName}
                           </td>
                           <td className="py-2.5 px-3">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium text-[11px]">
-                              {rule.revenueCategoryName ||
-                                rule.divisionName ||
-                                rule.serviceType ||
-                                rule.applicabilityType}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-emerald-950 font-bold">
-                            {formatINR(rule.minimumAmount ?? 0, { decimals: 0 })}
-                            {" — "}
-                            {rule.maximumAmount !== null
-                              ? formatINR(rule.maximumAmount, { decimals: 0 })
-                              : "No Limit"}
-                          </td>
-                          <td className="py-2.5 px-3">
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold font-mono text-[11px]">
                               {rule.taxCode ?? "—"} (
                               {formatRate(rule.taxRate ?? 0, calcTypeByTaxId.get(rule.taxId) ?? "Percentage")})
                             </span>
                           </td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-slate-600">
-                            #{rule.priority}
+                          <td className="py-2.5 px-3 font-semibold text-slate-800">
+                            {slabText(rule.minimumAmount, rule.maximumAmount)}
                           </td>
                           <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">
                             {formatDate(rule.effectiveFrom)}
@@ -1276,6 +1310,7 @@ export function TaxGstMasterView() {
                               onClick={() => {
                                 setSelectedRuleId(rule.id);
                                 setRuleFormData(toRuleForm(rule));
+                                setAmountCondition(null);
                                 setIsCreatingRule(false);
                                 setIsEditingRule(true);
                               }}
@@ -1343,143 +1378,68 @@ export function TaxGstMasterView() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <FormField label="Rule ID">
-                  <TextInput
-                    value={isCreatingRule ? "Auto-generated on save" : selectedRuleId ?? ""}
-                    readOnly
-                    className="bg-slate-50 font-mono font-bold text-slate-700 cursor-not-allowed"
-                  />
-                </FormField>
-
-                <FormField label="Rule Code" required helperText="e.g. ROOM-LOW, ROOM-HIGH, FNB-STD">
-                  <TextInput
-                    value={ruleFormData.taxRuleCode}
-                    onChange={(e) =>
-                      handleRuleFormChange("taxRuleCode", e.target.value.toUpperCase())
-                    }
-                    placeholder="e.g. ROOM-LOW"
-                    className="font-mono font-bold text-slate-900"
-                  />
-                </FormField>
-
-                <FormField label="Rule Name" required>
-                  <TextInput
-                    value={ruleFormData.taxRuleName}
-                    onChange={(e) => handleRuleFormChange("taxRuleName", e.target.value)}
-                    placeholder="e.g. Room Tariff Base Slab"
-                    className="font-bold text-slate-900"
-                  />
-                </FormField>
-
-                <FormField label="Applicability Scope" required>
-                  <SelectInput
-                    value={ruleFormData.applicabilityType}
-                    onChange={(e) => handleRuleFormChange("applicabilityType", e.target.value)}
-                  >
-                    {applicabilityOptions.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </SelectInput>
-                </FormField>
-
-                <FormField label="Revenue Category" helperText="Leave blank to apply to all categories">
-                  <SelectInput
-                    value={ruleFormData.revenueCategoryId ?? ""}
-                    onChange={(e) =>
-                      handleRuleFormChange("revenueCategoryId", e.target.value || null)
-                    }
-                  >
-                    <option value="">-- All Categories --</option>
-                    {revenueCategories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.revenueCategoryName} ({cat.revenueCategoryCode})
-                      </option>
-                    ))}
-                  </SelectInput>
-                </FormField>
-
-                <FormField label="Division / Department" helperText="Leave blank to apply to all divisions">
-                  <SelectInput
-                    value={ruleFormData.divisionId ?? ""}
-                    onChange={(e) => handleRuleFormChange("divisionId", e.target.value || null)}
-                  >
-                    <option value="">-- All Divisions --</option>
-                    {divisions.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.divisionName} ({d.divisionCode})
-                      </option>
-                    ))}
-                  </SelectInput>
-                </FormField>
-
-                <FormField label="Service Type" helperText="Optional service identifier (e.g. Room Stay, Laundry)">
-                  <TextInput
-                    value={ruleFormData.serviceType}
-                    onChange={(e) => handleRuleFormChange("serviceType", e.target.value)}
-                    placeholder="e.g. Room Stay"
-                  />
-                </FormField>
-
-                <FormField label="Applicable Tax" required helperText="Selected from active Tax Definitions">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField label="Tax to apply" required helperText="From this property's Tax Definitions">
                   <SelectInput
                     value={ruleFormData.taxId}
                     onChange={(e) => handleRuleFormChange("taxId", e.target.value)}
                   >
-                    {!ruleFormData.taxId && <option value="">-- Select tax --</option>}
+                    <option value="">-- Select tax --</option>
                     {ruleTaxOptions.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.taxName} ({t.taxCode} - {formatRate(t.rate, t.calculationType)})
+                        {t.taxCode} – {formatRate(t.rate, t.calculationType)} ({t.taxName})
                       </option>
                     ))}
                   </SelectInput>
                 </FormField>
+              </div>
 
-                <FormField label="Minimum Amount (₹)" helperText="Lower threshold for slab evaluation">
-                  <TextInput
-                    type="number"
-                    min="0"
-                    placeholder="No lower limit"
-                    value={ruleFormData.minimumAmount ?? ""}
-                    onChange={(e) =>
-                      handleRuleFormChange(
-                        "minimumAmount",
-                        e.target.value ? parseFloat(e.target.value) : null
-                      )
-                    }
-                    className="font-mono font-bold"
-                  />
-                </FormField>
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold text-slate-700">When the amount is</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {AMOUNT_CONDITIONS.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => changeRuleCondition(c.value)}
+                      className={cn(
+                        "rounded-lg border px-3 py-1.5 text-[11px] font-semibold",
+                        ruleCondition === c.value
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                      )}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                  {(ruleCondition === "above" || ruleCondition === "between") && (
+                    <TextInput
+                      type="number"
+                      min="0"
+                      placeholder={ruleCondition === "between" ? "From ₹" : "₹ amount"}
+                      value={ruleFormData.minimumAmount || ""}
+                      onChange={(e) => handleRuleFormChange("minimumAmount", e.target.value ? parseFloat(e.target.value) : null)}
+                      className="w-36 font-mono font-bold"
+                    />
+                  )}
+                  {ruleCondition === "between" && <span className="text-[11px] text-slate-500">and</span>}
+                  {(ruleCondition === "upto" || ruleCondition === "between") && (
+                    <TextInput
+                      type="number"
+                      min="0"
+                      placeholder={ruleCondition === "between" ? "To ₹" : "₹ amount"}
+                      value={ruleFormData.maximumAmount ?? ""}
+                      onChange={(e) => handleRuleFormChange("maximumAmount", e.target.value ? parseFloat(e.target.value) : null)}
+                      className="w-36 font-mono font-bold"
+                    />
+                  )}
+                </div>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  For room tariff this is the per-night rate. &ldquo;Up to ₹7,500&rdquo; includes ₹7,500; &ldquo;Above ₹7,500&rdquo; starts after it.
+                </p>
+              </div>
 
-                <FormField label="Maximum Amount (₹)" helperText="Leave empty for no upper ceiling (≥ Min)">
-                  <TextInput
-                    type="number"
-                    min="0"
-                    placeholder="No upper limit"
-                    value={ruleFormData.maximumAmount ?? ""}
-                    onChange={(e) =>
-                      handleRuleFormChange(
-                        "maximumAmount",
-                        e.target.value ? parseFloat(e.target.value) : null
-                      )
-                    }
-                    className="font-mono font-bold"
-                  />
-                </FormField>
-
-                <FormField label="Evaluation Priority" helperText="Rules are evaluated in ascending order (1, 2, 3...)">
-                  <TextInput
-                    type="number"
-                    value={ruleFormData.priority}
-                    onChange={(e) =>
-                      handleRuleFormChange("priority", parseInt(e.target.value, 10) || 1)
-                    }
-                    className="font-mono font-bold"
-                  />
-                </FormField>
-
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <FormField label="Effective From" required>
                   <TextInput
                     type="date"
@@ -1489,7 +1449,7 @@ export function TaxGstMasterView() {
                   />
                 </FormField>
 
-                <FormField label="Effective To (Optional)">
+                <FormField label="Effective To (Optional)" helperText="Leave empty for no end date">
                   <TextInput
                     type="date"
                     value={ruleFormData.effectiveTo ?? ""}
@@ -1508,14 +1468,32 @@ export function TaxGstMasterView() {
                   </SelectInput>
                 </FormField>
 
-                <FormField label="Rule Description" className="sm:col-span-3">
-                  <TextAreaInput
-                    rows={2}
-                    value={ruleFormData.description || ""}
-                    onChange={(e) => handleRuleFormChange("description", e.target.value)}
-                    placeholder="Business rationale and slab description..."
+                <FormField label="Rule name (optional)" className="sm:col-span-3" helperText="Leave empty to name it automatically">
+                  <TextInput
+                    value={ruleFormData.taxRuleName}
+                    onChange={(e) => handleRuleFormChange("taxRuleName", e.target.value)}
+                    placeholder="e.g. Room tariff above ₹7,500"
                   />
                 </FormField>
+              </div>
+
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-[11px] text-slate-700">
+                <p>
+                  <b>{ruleTax ? `${ruleTax.taxCode} (${formatRate(ruleTax.rate, ruleTax.calculationType)})` : "Selected tax"}</b>{" "}
+                  applies when the amount is{" "}
+                  <b>
+                    {slabText(
+                      ruleCondition === "above" || ruleCondition === "between" ? ruleFormData.minimumAmount : 0,
+                      ruleCondition === "upto" || ruleCondition === "between" ? ruleFormData.maximumAmount : null
+                    )}
+                  </b>
+                  {ruleFormData.effectiveFrom ? `, from ${formatDate(ruleFormData.effectiveFrom)}` : ""}
+                  {ruleFormData.effectiveTo ? ` to ${formatDate(ruleFormData.effectiveTo)}` : ""}.
+                </p>
+                <p className="mt-1 text-slate-500">Choose which bills use this rule on the Billing Points tab.</p>
+                {!isCreatingRule && (
+                  <p className="mt-1.5 font-mono text-[10px] text-slate-400">Rule code: {ruleFormData.taxRuleCode}</p>
+                )}
               </div>
             </div>
           )}
@@ -1523,6 +1501,8 @@ export function TaxGstMasterView() {
       )}
 
       {/* TAB 3: AUDIT & SYSTEM */}
+      {activeTab === "billing" && <TaxBillingPointsPanel taxRules={taxRules} notify={notify} />}
+
       {activeTab === "audit" && (
         <div className="space-y-4 mb-6 font-sans text-xs">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

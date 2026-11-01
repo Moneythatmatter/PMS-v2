@@ -12,6 +12,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { isPlatformAdmin } from "@/lib/auth";
 import { MODULE_ROUTES } from "@/lib/module-access";
 import {
+  ACTIVE_PROPERTY_KEY,
   clearActiveProperty,
   getActiveProperty,
   getCachedPermissions,
@@ -94,6 +95,18 @@ export function PropertyProvider({ children }: { children: React.ReactNode }) {
     setLoaded((prev) => (p && prev?.propertyId === p.id ? prev : null));
     if (!p) setCachedPermissions(null);
   }, []);
+
+  // API calls read the property from localStorage, so a switch in another tab would
+  // silently send this tab's (stale) screens to a different property.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== ACTIVE_PROPERTY_KEY) return;
+      const nextId = getActiveProperty()?.id ?? null;
+      if (nextId && nextId !== propertyId) window.location.reload();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [propertyId]);
 
   const signedOut = !authLoading && !user;
   const [wasSignedOut, setWasSignedOut] = useState(false);

@@ -10,6 +10,7 @@ import {
   amountInWords,
   buildCheckoutInvoiceLineItems,
   CHECKOUT_INVOICE_HOTEL,
+  checkoutInvoiceTaxRows,
   downloadCheckoutInvoice,
   formatCheckoutRoomLabel,
   printCheckoutInvoice,
@@ -45,9 +46,7 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
     : computeCheckoutTotals(folio, discount);
   const lineItems = buildCheckoutInvoiceLineItems(folio, bill);
   const taxableAmount = bill?.charges ?? totals.charges;
-  const billGst = bill?.gst ?? folio.gst;
-  const cgst = Math.round(billGst / 2);
-  const sgst = Math.round(billGst / 2);
+  const taxRows = checkoutInvoiceTaxRows(folio, bill);
   const advancePaid = bill?.advance ?? folio.advancePaid;
   const billDiscount = bill?.discount ?? discount;
   const roomLabel = formatCheckoutRoomLabel(folio);
@@ -202,14 +201,12 @@ export function CheckoutInvoiceDrawer({ open, onClose, data }: CheckoutInvoiceDr
                     <span>Taxable Amount</span>
                     <span className="font-medium text-slate-900">{formatINR(taxableAmount)}</span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>CGST @ 9%</span>
-                    <span>{formatINR(cgst)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>SGST @ 9%</span>
-                    <span>{formatINR(sgst)}</span>
-                  </div>
+                  {taxRows.map((t) => (
+                    <div key={t.label} className="flex justify-between text-slate-600">
+                      <span>{t.label}</span>
+                      <span>{formatINR(t.amount)}</span>
+                    </div>
+                  ))}
                   <div className="flex justify-between border-t border-slate-200 pt-2 font-medium text-slate-800">
                     <span>Subtotal (incl. tax)</span>
                     <span>{formatINR(totals.subtotalWithTax)}</span>

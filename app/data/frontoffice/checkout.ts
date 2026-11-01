@@ -18,6 +18,8 @@ export interface CheckoutFolio {
   extraBed: number;
   otherCharges: number;
   gst: number;
+  /** Tax per GST code from the folio charges (e.g. "CGST9 @ 9%"); empty for older bookings. */
+  taxLines?: { label: string; amount: number }[];
   discount: number;
   advancePaid: number;
   isVip?: boolean;

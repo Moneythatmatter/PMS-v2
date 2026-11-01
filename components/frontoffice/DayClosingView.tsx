@@ -117,7 +117,7 @@ export function DayClosingView() {
       setConfirmOpen(false);
       setLastRun(record);
       setToast(
-        `Day closing complete. Business date moved to ${formatDay(record.nextBusinessDate)}.`,
+        `Day closing for ${formatDay(record.businessDate)} saved. Run Night Audit to move to the next business date.`,
       );
       await load();
     } catch (e) {
@@ -189,7 +189,7 @@ export function DayClosingView() {
       <FOPageHeader
         eyebrow="Front Office"
         title="Day Closing"
-        description="Check every department, then close the business date and roll it forward."
+        description="Check every department and save the day's figures. Night Audit then rolls the business date forward."
         badge={
           <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 shadow-sm">
             <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />
@@ -227,11 +227,26 @@ export function DayClosingView() {
           message={`Business date ${formatDay(status.businessDate)} is behind today (${formatDay(status.calendarDate)}). Close each pending day to catch up.`}
         />
       )}
-      {alreadyClosed && (
-        <AlertBanner
-          variant="info"
-          message={`${formatDay(status.businessDate)} can't be closed right now — it is either already closed or ahead of today's date.`}
-        />
+      {status.nightAuditPending ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50 p-4">
+          <p className="text-xs font-semibold text-sky-900">
+            {formatDay(status.businessDate)} is closed. Run Night Audit to post room charges and move to the next
+            business date.
+          </p>
+          <Link
+            href="/frontoffice/night-audit"
+            className="inline-flex items-center gap-1 text-xs font-bold text-sky-900 hover:underline"
+          >
+            Go to Night Audit <ExternalLink className="h-3 w-3" />
+          </Link>
+        </div>
+      ) : (
+        alreadyClosed && (
+          <AlertBanner
+            variant="info"
+            message={`${formatDay(status.businessDate)} can't be closed yet — it is ahead of today's date.`}
+          />
+        )
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -284,7 +299,11 @@ export function DayClosingView() {
                 {formatDay(lastRun.businessDate)} closed by {lastRun.closedBy}
               </p>
               <p className="text-xs text-emerald-800">
-                Business date is now {formatDay(lastRun.nextBusinessDate)}.
+                Next: run{" "}
+                <Link href="/frontoffice/night-audit" className="font-bold underline">
+                  Night Audit
+                </Link>{" "}
+                to post room charges and move to {formatDay(lastRun.nextBusinessDate)}.
               </p>
             </div>
           </div>
@@ -511,7 +530,7 @@ export function DayClosingView() {
         onConfirm={() => void runClosing()}
         loading={running}
         title={`Close ${formatDay(status.businessDate)}?`}
-        message={`This saves the day's figures and moves the business date to the next day. It can't be undone.${
+        message={`This saves the day's figures. Night Audit then posts room charges and moves the business date forward. It can't be undone.${
           advisories.length ? `\n\n${advisories.length} advisory item(s) are still open.` : ""
         }`}
         confirmLabel="Run Day Closing"

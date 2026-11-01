@@ -113,7 +113,7 @@ const quickLinks = [
   },
   {
     label: "Night Audit",
-    href: "/frontoffice/reports/night-audit",
+    href: "/frontoffice/night-audit",
     icon: Moon,
     hint: "Finalize audit",
   },

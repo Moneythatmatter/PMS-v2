@@ -21,9 +21,9 @@ import {
 } from "lucide-react";
 import { computeCheckoutTotals, computeCheckoutBills } from "@/app/data";
 import type { CheckoutFolio, SplittableChargeKey } from "@/app/data/frontoffice/checkout";
-import type { FolioListItem } from "@/app/data/types/billing";
+import type { FolioCharge, FolioListItem } from "@/app/data/types/billing";
 import { paymentModes, reservationPaymentModesNeedingExternalRef } from "@/app/data/frontoffice/constants";
-import { billingFolioService, reservationService } from "@/services/front-office";
+import { billingFolioService, folioChargeService, reservationService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -143,6 +143,19 @@ function mapInHouseToFolio(
     isVip: g.isVip,
     departingToday: isDepartingToday({ checkOut: g.checkOut }),
   };
+}
+
+/** Sum charged tax per GST code + rate, e.g. "CGST9 @ 9%". */
+function taxLinesFromCharges(charges: FolioCharge[]): { label: string; amount: number }[] {
+  const byLabel = new Map<string, number>();
+  for (const c of charges) {
+    for (const d of c.taxDetails ?? []) {
+      const rate = d.calculationType === "Fixed" ? formatINR(d.rate) : `${Number(d.rate)}%`;
+      const label = `${d.taxCode} @ ${rate}`;
+      byLabel.set(label, (byLabel.get(label) ?? 0) + Number(d.amount ?? 0));
+    }
+  }
+  return [...byLabel.entries()].map(([label, amount]) => ({ label, amount: Math.round(amount * 100) / 100 }));
 }
 
 function getInitials(name?: string) {
@@ -274,6 +287,40 @@ export function CheckOutView() {
     setSplitBilling(false);
     setSeparateBillItems([]);
     setShowInvoice(false);
+
+    const applyTaxLines = () =>
+      folioChargeService
+        .list(folio.id)
+        .then((charges) => {
+          const taxLines = taxLinesFromCharges(charges);
+          setFolios((prev) => prev.map((f) => (f.id === folio.id ? { ...f, taxLines } : f)));
+          setSelected((prev) => (prev && prev.id === folio.id ? { ...prev, taxLines } : prev));
+        })
+        .catch(() => undefined);
+
+    reservationService
+      .postPendingRoomNights(folio.id)
+      .finally(() => void applyTaxLines())
+      .then((res) => {
+        if (!res.posted) return;
+        const update = (f: CheckoutFolio) =>
+          f.id === folio.id
+            ? { ...f, roomCharges: f.roomCharges + res.amount, gst: f.gst + res.tax }
+            : f;
+        setFolios((prev) => prev.map(update));
+        setSelected((prev) => {
+          if (!prev || prev.id !== folio.id) return prev;
+          const next = update(prev);
+          setAmountReceived(computeCheckoutTotals(next).pending);
+          return next;
+        });
+        setToast(
+          `${res.posted} room night${res.posted !== 1 ? "s" : ""} posted to the folio (${formatINR(res.amount + res.tax)} incl. tax).`,
+        );
+      })
+      .catch((e) => {
+        setLookupError(e instanceof Error ? e.message : "Could not post pending room nights");
+      });
   }, []);
 
   useEffect(() => {

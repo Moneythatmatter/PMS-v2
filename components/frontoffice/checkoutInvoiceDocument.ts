@@ -34,12 +34,23 @@ export interface CheckoutInvoiceLineItem {
 
 export interface CheckoutInvoiceTotals {
   taxableAmount: number;
-  cgst: number;
-  sgst: number;
+  taxRows: CheckoutInvoiceTaxRow[];
   subtotalWithTax: number;
   billDiscount: number;
   advancePaid: number;
   pending: number;
+}
+
+export type CheckoutInvoiceTaxRow = { label: string; amount: number };
+
+/** Tax rows as actually charged (per GST code); split bills and older folios show one GST line. */
+export function checkoutInvoiceTaxRows(folio: CheckoutFolio, bill?: CheckoutBillGroup): CheckoutInvoiceTaxRow[] {
+  const total = Math.round((bill?.gst ?? folio.gst) * 100) / 100;
+  if (!(total > 0)) return [];
+  const lines = bill ? [] : folio.taxLines ?? [];
+  const rest = Math.round((total - lines.reduce((s, l) => s + l.amount, 0)) * 100) / 100;
+  if (!lines.length || rest < 0) return [{ label: "GST", amount: total }];
+  return rest >= 0.01 ? [...lines, { label: "Other GST", amount: rest }] : lines;
 }
 
 function escapeHtml(value: string): string {
@@ -205,9 +216,7 @@ export function buildCheckoutInvoiceHtml(
   const { invoiceNo, invoiceDate, folio, discount, paymentMode, bill, billTitle } = data;
   const lineItems = buildCheckoutInvoiceLineItems(folio, bill);
   const taxableAmount = bill?.charges ?? folio.roomCharges + folio.restaurantCharges + folio.laundry + folio.miniBar + folio.extraBed + folio.otherCharges;
-  const billGst = bill?.gst ?? folio.gst;
-  const cgst = Math.round(billGst / 2);
-  const sgst = Math.round(billGst / 2);
+  const taxRows = checkoutInvoiceTaxRows(folio, bill);
   const subtotalWithTax = bill ? bill.charges + bill.gst : taxableAmount + folio.gst;
   const billDiscount = bill?.discount ?? discount;
   const advancePaid = bill?.advance ?? folio.advancePaid;
@@ -440,8 +449,7 @@ export function buildCheckoutInvoiceHtml(
         </div>
         <div class="totals-card">
           <div class="total-row"><span>Taxable Amount</span><span>${escapeHtml(formatInrPlain(taxableAmount))}</span></div>
-          <div class="total-row"><span>CGST @ 9%</span><span>${escapeHtml(formatInrPlain(cgst))}</span></div>
-          <div class="total-row"><span>SGST @ 9%</span><span>${escapeHtml(formatInrPlain(sgst))}</span></div>
+          ${taxRows.map((t) => `<div class="total-row"><span>${escapeHtml(t.label)}</span><span>${escapeHtml(formatInrPlain(t.amount))}</span></div>`).join("")}
           <div class="total-row"><span>Subtotal (incl. tax)</span><span>${escapeHtml(formatInrPlain(subtotalWithTax))}</span></div>
           ${discountRow}
           <div class="total-row"><span>Advance Paid</span><span class="positive">− ${escapeHtml(formatInrPlain(advancePaid))}</span></div>
@@ -495,9 +503,7 @@ export function generateCheckoutInvoicePdf(
     folio.miniBar +
     folio.extraBed +
     folio.otherCharges;
-  const billGst = bill?.gst ?? folio.gst;
-  const cgst = Math.round(billGst / 2);
-  const sgst = Math.round(billGst / 2);
+  const taxRows = checkoutInvoiceTaxRows(folio, bill);
   const subtotalWithTax = bill ? bill.charges + bill.gst : taxableAmount + folio.gst;
   const billDiscount = bill?.discount ?? discount;
   const advancePaid = bill?.advance ?? folio.advancePaid;
@@ -677,8 +683,7 @@ export function generateCheckoutInvoicePdf(
 
   const totalsRows: { label: string; value: string }[] = [
     { label: "Taxable Amount", value: formatPdfInr(taxableAmount) },
-    { label: "CGST @ 9%", value: formatPdfInr(cgst) },
-    { label: "SGST @ 9%", value: formatPdfInr(sgst) },
+    ...taxRows.map((t) => ({ label: t.label, value: formatPdfInr(t.amount) })),
     { label: "Subtotal (incl. tax)", value: formatPdfInr(subtotalWithTax) },
   ];
   if (billDiscount > 0) {

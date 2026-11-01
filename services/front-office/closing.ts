@@ -50,6 +50,8 @@ export type DayClosingStatus = {
   calendarDate: string;
   isBehind: boolean;
   canCloseDate: boolean;
+  /** Closed but not rolled forward yet — Night Audit advances the business date. */
+  nightAuditPending?: boolean;
   lastClosing: DayClosingRecord | null;
   checks: DayClosingCheck[];
   blockers: number;
@@ -106,6 +108,55 @@ export const dayClosingService = {
   run: () => api.post<DayClosingRecord>(foPath("/day-closing/run")),
   history: (limit = 30) =>
     api.get<DayClosingRecord[]>(foPath(`/day-closing/history?limit=${limit}`)),
+};
+
+export type NightAuditRecord = {
+  id: string;
+  businessDate: string;
+  nextBusinessDate: string;
+  status: "RUNNING" | "COMPLETED" | "FAILED";
+  attempts: number;
+  roomNightsPosted: number;
+  roomRevenue: number;
+  roomTax: number;
+  error: string | null;
+  runByName: string | null;
+  startedAt: string;
+  completedAt: string | null;
+};
+
+export type NightAuditPreviewRow = {
+  reservationId: string;
+  bookingNo: string;
+  guestName: string;
+  roomNo: string;
+  tariff: number;
+  nights: string[];
+  amount: number;
+  tax: number;
+  issue: string | null;
+};
+
+export type NightAuditStatus = {
+  businessDate: string;
+  nextBusinessDate: string;
+  calendarDate: string;
+  dayClosing: DayClosingRecord | null;
+  audit: NightAuditRecord | null;
+  lastAudit: NightAuditRecord | null;
+  canRun: boolean;
+  blockers: { id: string; message: string; href?: string }[];
+  inHouse: number;
+  legacyCount: number;
+  groupCount: number;
+  preview: { rows: NightAuditPreviewRow[]; nights: number; amount: number; tax: number };
+};
+
+export const nightAuditService = {
+  status: () => api.get<NightAuditStatus>(foPath("/night-audit/status")),
+  run: () => api.post<NightAuditRecord>(foPath("/night-audit/run")),
+  history: (limit = 30) =>
+    api.get<NightAuditRecord[]>(foPath(`/night-audit/history?limit=${limit}`)),
 };
 
 export type ReportResponse = {

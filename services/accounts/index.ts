@@ -37,6 +37,8 @@ import type {
   RevenueCategory,
   TaxDefinition,
   TaxRule,
+  TaxApplication,
+  TaxBillingPoint,
   TrialBalanceReport,
   Voucher,
   VoucherDetail,
@@ -91,6 +93,10 @@ export const accVoucherTypeService = crud<VoucherType>("/masters/voucher-types")
 export const accRevenueCategoryService = crud<RevenueCategory>("/masters/revenue-categories");
 export const accTaxDefinitionService = crud<TaxDefinition>("/masters/tax-definitions");
 export const accTaxRuleService = crud<TaxRule>("/masters/tax-rules");
+export const accTaxApplicationService = {
+  ...crud<TaxApplication>("/masters/tax-applications"),
+  billingPoints: () => api.get<TaxBillingPoint[]>(accPath("/masters/tax-billing-points")),
+};
 export const accBudgetService = crud<Budget>("/masters/budgets");
 
 export const accCompanySettingsService = {

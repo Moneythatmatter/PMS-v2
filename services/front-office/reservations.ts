@@ -56,6 +56,11 @@ export const reservationService = {
     api.post<ReservationBooking>(foPath(`/reservations/${id}/check-in`), body ?? {}),
   checkOut: (id: string, body?: Record<string, unknown>) =>
     api.post<ReservationBooking>(foPath(`/reservations/${id}/check-out`), body ?? {}),
+  postPendingRoomNights: (id: string) =>
+    api.post<{ posted: number; amount: number; tax: number; nights: string[] }>(
+      foPath(`/reservations/${id}/room-nights/post-pending`),
+      {},
+    ),
   guests: (id: string) =>
     api.get<ReservationGuestLinkDto[]>(foPath(`/reservations/${id}/guests`)),
   extendStay: (

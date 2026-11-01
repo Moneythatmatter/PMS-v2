@@ -1,5 +1,5 @@
-import { NightAuditReportView } from "@/components/frontoffice/ReportsViews";
+import { redirect } from "next/navigation";
 
-export default function NightAuditReportPage() {
-  return <NightAuditReportView />;
+export default function NightAuditReportRedirect() {
+  redirect("/frontoffice/night-audit");
 }

@@ -41,6 +41,8 @@ export interface FolioCharge {
   quantity?: number;
   unitPrice?: number;
   amount: number;
+  taxAmount?: number | null;
+  taxDetails?: { taxCode: string; rate: number; calculationType: string; amount: number }[] | null;
   responsibility?: string | null;
   sourceModule?: string | null;
   sourceType?: string | null;

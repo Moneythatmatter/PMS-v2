@@ -371,6 +371,43 @@ export type TaxRule = Audit & {
   status: Status;
 };
 
+export type TaxBillingPoint = {
+  code: string;
+  module: string;
+  label: string;
+  /** Category used when the point has no mapping; null = no tax until mapped. */
+  defaultCategoryCode: string | null;
+};
+
+export type TaxApplication = Audit & {
+  id: string;
+  companyId: string | null;
+  billingPoint: string;
+  module: string;
+  billingPointLabel: string;
+  revenueCategoryId: string;
+  revenueCategoryName: string | null;
+  revenueCategoryCode: string | null;
+  priceIncludesTax: boolean;
+  /** Empty: the category's Tax Rules decide. Set: exactly these rules apply, each in its own amount range. */
+  taxRuleIds: string[];
+  rules: {
+    id: string;
+    taxRuleCode: string;
+    taxRuleName: string;
+    taxCode: string;
+    rate: number;
+    calculationType: string;
+    minimumAmount: number | null;
+    maximumAmount: number | null;
+    status: string;
+  }[];
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  description: string;
+  status: Status;
+};
+
 export type Budget = {
   id: string;
   fiscalYearId: string;

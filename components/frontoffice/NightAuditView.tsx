@@ -1,864 +1,416 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  AlertTriangle,
-  ArrowRight,
+  BedDouble,
+  CalendarClock,
   CheckCircle2,
-  ClipboardCheck,
-  Clock,
   Download,
-  FileText,
+  ExternalLink,
+  History,
   IndianRupee,
   Loader2,
   Lock,
-  RotateCcw,
-  ShieldCheck,
+  Moon,
+  Receipt,
+  RefreshCw,
+  XCircle,
 } from "lucide-react";
-import { currentUser } from "@/app/data";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
   ConfirmModal,
   FOPageHeader,
-  FOSearchToolbar,
   StatMiniCard,
   SummaryRow,
   formatINR,
 } from "@/components/frontoffice/ui";
-import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { cn } from "@/lib/utils";
 import { downloadXlsx } from "@/lib/xlsx";
 import {
-  createInitialNightAuditState,
-  fetchLiveNightAuditItems,
-  formatBusinessDate,
-  type DayClosingSessionState,
-  type NightAuditItem,
-  type NightAuditSessionState,
-} from "@/lib/day-closing-session";
+  nightAuditService,
+  type NightAuditRecord,
+  type NightAuditStatus,
+} from "@/services/front-office/closing";
 
-const AUDIT_STEPS = [
-  "Locking room and rate inventory…",
-  "Re-posting verified room charges…",
-  "Applying no-show / exception decisions…",
-  "Rebuilding trial balance…",
-  "Writing night-audit journal…",
-  "Publishing flash & manager pack…",
-];
-
-function statusPill(status: NightAuditItem["status"]) {
-  switch (status) {
-    case "Posted":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-    case "Resolved":
-      return "bg-emerald-50 text-emerald-800 ring-emerald-200";
-    case "Pending":
-      return "bg-amber-50 text-amber-700 ring-amber-200";
-    case "Exception":
-      return "bg-red-50 text-red-700 ring-red-200";
-    default:
-      return "bg-slate-100 text-slate-600 ring-slate-200";
-  }
+function formatDay(iso: string | null | undefined) {
+  if (!iso) return "—";
+  return new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
+function formatStamp(value: string | null | undefined) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function errorText(e: unknown) {
+  return e instanceof Error ? e.message : "Something went wrong";
+}
+
+async function fetchAll() {
+  const [status, history] = await Promise.all([
+    nightAuditService.status(),
+    nightAuditService.history(15).catch(() => [] as NightAuditRecord[]),
+  ]);
+  return { status, history };
+}
+
+const STATUS_TONE: Record<NightAuditRecord["status"], string> = {
+  COMPLETED: "bg-emerald-50 text-emerald-700",
+  FAILED: "bg-red-50 text-red-700",
+  RUNNING: "bg-amber-50 text-amber-700",
+};
+
 export function NightAuditView() {
-  const [dayClose, setDayClose] = useState<DayClosingSessionState | null>(null);
-  const [audit, setAudit] = useState<NightAuditSessionState>(createInitialNightAuditState);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [status, setStatus] = useState<NightAuditStatus | null>(null);
+  const [history, setHistory] = useState<NightAuditRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [running, setRunning] = useState(false);
-  const [stepIndex, setStepIndex] = useState(-1);
-  const [resolveOpen, setResolveOpen] = useState(false);
-  const [focusItemId, setFocusItemId] = useState<string | null>(null);
+
+  const apply = useCallback((data: Awaited<ReturnType<typeof fetchAll>>) => {
+    setStatus(data.status);
+    setHistory(data.history);
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      apply(await fetchAll());
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [apply]);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const items = await fetchLiveNightAuditItems();
-        if (cancelled) return;
-        setAudit((prev) => ({ ...prev, items }));
-      } catch {
-        /* keep initial in-memory state */
-      }
-    })();
+    fetchAll()
+      .then((data) => !cancelled && apply(data))
+      .catch((e) => !cancelled && setError(errorText(e)))
+      .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [apply]);
 
-  const unlocked = !!dayClose?.completed;
-  const auditDate = dayClose?.report?.previousBusinessDate ?? dayClose?.summary.businessDate;
-  const nextBusinessDate =
-    dayClose?.report?.nextBusinessDate ?? dayClose?.summary.businessDate;
-
-  const openItems = useMemo(
-    () => audit.items.filter((i) => i.status === "Pending" || i.status === "Exception"),
-    [audit.items],
-  );
-
-  const drawerItems = useMemo(() => {
-    if (focusItemId) {
-      const focused = audit.items.find((i) => i.id === focusItemId);
-      if (focused && (focused.status === "Pending" || focused.status === "Exception")) {
-        return [focused];
-      }
-    }
-    return openItems;
-  }, [audit.items, focusItemId, openItems]);
-
-  const postedTotal = useMemo(
-    () =>
-      audit.items
-        .filter((i) => i.status === "Posted" || i.status === "Resolved")
-        .reduce((sum, i) => sum + (i.posted || i.roomRate + i.extras), 0),
-    [audit.items],
-  );
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return audit.items.filter((item) => {
-      if (statusFilter !== "all" && item.status !== statusFilter) return false;
-      if (!q) return true;
-      return (
-        item.roomNo.toLowerCase().includes(q) ||
-        item.guestName.toLowerCase().includes(q) ||
-        (item.note ?? "").toLowerCase().includes(q) ||
-        item.id.toLowerCase().includes(q)
-      );
-    });
-  }, [audit.items, search, statusFilter]);
-
-  const canRunAudit =
-    unlocked && !audit.completed && !running && openItems.length === 0;
-
-  const openResolveDrawer = (itemId?: string) => {
-    setFocusItemId(itemId ?? null);
-    setResolveOpen(true);
-  };
-
-  const closeResolveDrawer = () => {
-    setResolveOpen(false);
-    setFocusItemId(null);
-  };
-
-  const resolveException = (id: string, action: "no-show" | "waive") => {
-    setAudit((prev) => ({
-      ...prev,
-      items: prev.items.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: "Resolved",
-              posted: 0,
-              auditTime: new Date().toLocaleTimeString("en-IN", {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              note:
-                action === "no-show"
-                  ? "Marked no-show — room released, no charge posted"
-                  : "Exception waived by night auditor",
-            }
-          : item,
-      ),
-      auditLog: [
-        `${action === "no-show" ? "No-show" : "Waive"} applied on ${id}`,
-        ...prev.auditLog,
-      ],
-    }));
-    setToast(
-      action === "no-show"
-        ? "No-show recorded and room released."
-        : "Exception waived for this audit.",
-    );
-  };
-
-  const forcePost = (id: string) => {
-    setAudit((prev) => ({
-      ...prev,
-      items: prev.items.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: "Posted",
-              posted: item.roomRate + item.extras,
-              auditTime: new Date().toLocaleTimeString("en-IN", {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              note: "Force-posted during night audit",
-            }
-          : item,
-      ),
-      auditLog: [`Force-posted charges for ${id}`, ...prev.auditLog],
-    }));
-    setToast("Room charges force-posted to folio.");
-  };
-
-  const holdOvernight = (id: string) => {
-    setAudit((prev) => ({
-      ...prev,
-      items: prev.items.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: "Resolved",
-              posted: 0,
-              auditTime: "—",
-              note: "Held overnight — will post next business date",
-            }
-          : item,
-      ),
-      auditLog: [`Held overnight: ${id}`, ...prev.auditLog],
-    }));
-    setToast("Item held — excluded from tonight’s posting.");
-  };
-
-  const runNightAudit = async () => {
-    setConfirmOpen(false);
+  const runAudit = async () => {
     setRunning(true);
-    setStepIndex(0);
-
-    for (let i = 0; i < AUDIT_STEPS.length; i++) {
-      setStepIndex(i);
-      await new Promise((r) => setTimeout(r, 420));
+    setError(null);
+    try {
+      const record = await nightAuditService.run();
+      setConfirmOpen(false);
+      setToast(
+        `Night audit for ${formatDay(record.businessDate)} complete — ${record.roomNightsPosted} room night(s) posted. Business date is now ${formatDay(record.nextBusinessDate)}.`,
+      );
+    } catch (e) {
+      setConfirmOpen(false);
+      setError(errorText(e));
+    } finally {
+      setRunning(false);
+      await load();
     }
-
-    const completedAt = new Date().toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    setAudit((prev) => ({
-      ...prev,
-      completed: true,
-      completedAt,
-      completedBy: currentUser.name,
-      auditLog: ["Night audit completed", ...prev.auditLog],
-    }));
-
-    setDayClose((prev) => (prev ? { ...prev, nightAuditCompleted: true } : prev));
-
-    setRunning(false);
-    setStepIndex(-1);
-    setToast("Night audit completed. Flash report pack is ready.");
   };
 
-  const exportPack = () => {
-    downloadXlsx(`night-audit-${auditDate ?? "pack"}`, [
+  const exportRecord = (record: NightAuditRecord) => {
+    downloadXlsx(`night-audit-${record.businessDate}`, [
       {
         name: "Night Audit",
-        title: "Night Audit Pack",
+        title: "Night Audit Report",
         meta: [
-          ["Auditor", audit.completedBy ?? currentUser.name],
-          ["Completed at", audit.completedAt ?? "—"],
-          ["Audit date", auditDate ? formatBusinessDate(auditDate) : "—"],
-          ["Next business date", nextBusinessDate ? formatBusinessDate(nextBusinessDate) : "—"],
-          ["Posted total", postedTotal],
+          ["Business date", formatDay(record.businessDate)],
+          ["Rolled to", formatDay(record.nextBusinessDate)],
+          ["Status", record.status],
+          ["Run by", record.runByName ?? "—"],
+          ["Completed at", formatStamp(record.completedAt)],
         ],
-        header: ["Room", "Guest", "Rate", "Extras", "Posted", "Status", "Note"],
-        rows: audit.items.map((i) => [
-          i.roomNo,
-          i.guestName,
-          i.roomRate,
-          i.extras,
-          i.posted,
-          i.status,
-          i.note ?? "",
-        ]),
-      },
-      {
-        name: "Audit Log",
-        header: ["Audit log"],
-        rows: audit.auditLog.map((entry) => [entry]),
+        header: ["Metric", "Value"],
+        rows: [
+          ["Room nights posted", Number(record.roomNightsPosted)],
+          ["Room revenue", Number(record.roomRevenue)],
+          ["Room tax", Number(record.roomTax)],
+          ["Attempts", Number(record.attempts)],
+        ],
       },
     ]);
-    setToast("Night audit pack exported to Excel.");
   };
 
-  const resetDemo = () => {
-    setDayClose(null);
-    setAudit(createInitialNightAuditState());
-    closeResolveDrawer();
-    setToast("Closing & night-audit demo reset. Start again from Day Closing.");
-  };
+  if (loading && !status) {
+    return (
+      <div className="flex h-64 items-center justify-center gap-2 text-sm text-slate-500">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading night audit…
+      </div>
+    );
+  }
 
-  // Auto-close drawer when everything is resolved
-  useEffect(() => {
-    if (resolveOpen && openItems.length === 0) {
-      closeResolveDrawer();
-    }
-  }, [openItems.length, resolveOpen]);
+  if (!status) {
+    return (
+      <div className="space-y-4">
+        <AlertBanner variant="error" message={error ?? "Could not load night audit"} />
+        <Button size="sm" variant="outline" onClick={() => void load()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  const { preview, audit } = status;
+  const needsClosing = !status.dayClosing;
+  const failed = audit?.status === "FAILED";
 
   return (
-    <div className="space-y-5">
-      {toast && (
-        <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />
-      )}
+    <div className="space-y-4">
+      {toast && <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />}
+      {error && <AlertBanner variant="error" message={error} onDismiss={() => setError(null)} />}
 
       <FOPageHeader
-        eyebrow="Front Office · Operations"
+        eyebrow="Front Office"
         title="Night Audit"
-        description="Resolve exceptions, post remaining charges, and finalize the night-audit pack."
+        description="Post tonight's room charges and roll the business date forward. Runs after Day Closing."
         badge={
-          <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <Clock className="h-3.5 w-3.5 text-emerald-600" />
-            {unlocked
-              ? `Audit date: ${auditDate ? formatBusinessDate(auditDate) : "—"}`
-              : "Waiting for day closing"}
-            {audit.completed && (
-              <span className="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                Complete
-              </span>
-            )}
+          <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 shadow-sm">
+            <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />
+            Business Date: {formatDay(status.businessDate)}
           </div>
         }
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={resetDemo}>
-              <RotateCcw className="h-3.5 w-3.5" />
-              Reset demo
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1 text-xs font-semibold"
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
+              Refresh
             </Button>
-            {audit.completed ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={exportPack}
-              >
-                <Download className="h-3.5 w-3.5" />
-                Export Excel
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                className="bg-emerald-700 hover:bg-emerald-800"
-                disabled={!canRunAudit}
-                onClick={() => setConfirmOpen(true)}
-              >
-                Run Night Audit
-              </Button>
-            )}
+            <Button
+              size="sm"
+              className="gap-1 bg-emerald-700 text-xs font-semibold hover:bg-emerald-800"
+              onClick={() => setConfirmOpen(true)}
+              disabled={!status.canRun || running}
+            >
+              {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Moon className="h-3 w-3" />}
+              {failed ? "Retry Night Audit" : "Run Night Audit"}
+            </Button>
           </div>
         }
       />
 
-      {!unlocked && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                <Lock className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-amber-950">
-                  Day Closing must finish first
-                </p>
-                <p className="mt-1 text-sm text-amber-800">
-                  Night Audit unlocks after the business date is closed and rolled forward.
-                </p>
-              </div>
+      {needsClosing ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-center gap-3">
+            <Lock className="h-6 w-6 text-amber-600" />
+            <div>
+              <p className="text-sm font-bold text-amber-900">
+                Day Closing for {formatDay(status.businessDate)} must finish first
+              </p>
+              <p className="text-xs text-amber-800">
+                Night Audit unlocks once the day&apos;s collections are reconciled and closed.
+              </p>
             </div>
-            <Link href="/frontoffice/day-closing">
-              <Button size="sm" className="gap-1.5 bg-emerald-700 hover:bg-emerald-800">
-                Go to Day Closing
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </Link>
           </div>
+          <Link
+            href="/frontoffice/day-closing"
+            className="inline-flex items-center gap-1 text-xs font-bold text-amber-900 hover:underline"
+          >
+            Go to Day Closing <ExternalLink className="h-3 w-3" />
+          </Link>
         </div>
-      )}
-
-      {unlocked && (
-        <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatMiniCard
-              label="Audit Date"
-              value={auditDate ? formatBusinessDate(auditDate) : "—"}
-              sublabel={
-                nextBusinessDate
-                  ? `Next: ${formatBusinessDate(nextBusinessDate)}`
-                  : "Business date"
-              }
-              icon={Clock}
-            />
-            <StatMiniCard
-              label="Charges Posted"
-              value={formatINR(postedTotal)}
-              accent="#15803d"
-              icon={IndianRupee}
-              sublabel={`${audit.items.filter((i) => i.status === "Posted" || i.status === "Resolved").length} rooms finalized`}
-            />
-            <button
-              type="button"
-              onClick={() => openItems.length > 0 && openResolveDrawer()}
-              className={cn(
-                "text-left transition",
-                openItems.length > 0 && "rounded-2xl ring-2 ring-transparent hover:ring-amber-200",
-              )}
-            >
-              <StatMiniCard
-                label="Open Items"
-                value={openItems.length}
-                accent={openItems.length ? "#f59e0b" : "#10b981"}
-                icon={AlertTriangle}
-                sublabel={openItems.length ? "Click to resolve" : "Clear to run"}
-              />
-            </button>
-            <StatMiniCard
-              label="Audit Status"
-              value={audit.completed ? "Finalized" : openItems.length ? "Blocked" : "Ready"}
-              accent={audit.completed || openItems.length === 0 ? "#10b981" : "#f59e0b"}
-              icon={ShieldCheck}
-              sublabel={
-                audit.completed
-                  ? "Pack available"
-                  : dayClose?.report
-                    ? `Closed by ${dayClose.report.closedBy}`
-                    : "After day close"
-              }
-            />
-          </div>
-
-          {running && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
-              <div className="flex items-center gap-3">
-                <Loader2 className="h-5 w-5 animate-spin text-emerald-700" />
-                <div>
-                  <p className="text-sm font-semibold text-emerald-900">Running night audit…</p>
-                  <p className="text-xs text-emerald-700">
-                    {AUDIT_STEPS[Math.max(0, stepIndex)]}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-emerald-100">
-                <div
-                  className="h-full rounded-full bg-emerald-600 transition-all duration-300"
-                  style={{
-                    width: `${((Math.max(stepIndex, 0) + 1) / AUDIT_STEPS.length) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {audit.completed ? (
-            <div className="grid gap-5 lg:grid-cols-2">
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-8 text-center lg:col-span-2">
-                <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-500" />
-                <p className="mt-4 text-lg font-bold text-emerald-900">Night Audit Complete</p>
-                <p className="mt-1 text-sm text-emerald-700">
-                  Finalized by {audit.completedBy} at {audit.completedAt}. Business date{" "}
-                  {nextBusinessDate ? formatBusinessDate(nextBusinessDate) : "—"} is now open for
-                  new postings.
-                </p>
-                <div className="mt-5 flex flex-wrap justify-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 bg-white"
-                    onClick={exportPack}
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    Export audit pack (Excel)
-                  </Button>
-                  <Link href="/frontoffice/day-closing">
-                    <Button size="sm" variant="outline" className="gap-1.5 bg-white">
-                      Back to Day Closing
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  <FileText className="h-4 w-4 text-emerald-700" />
-                  Flash summary
-                </h2>
-                <div className="divide-y divide-slate-100">
-                  <SummaryRow
-                    label="Audit date"
-                    value={auditDate ? formatBusinessDate(auditDate) : "—"}
-                  />
-                  <SummaryRow
-                    label="Next business date"
-                    value={nextBusinessDate ? formatBusinessDate(nextBusinessDate) : "—"}
-                    highlight
-                  />
-                  <SummaryRow label="Posted charges" value={formatINR(postedTotal)} />
-                  <SummaryRow label="Rooms audited" value={String(audit.items.length)} />
-                  <SummaryRow
-                    label="Exceptions cleared"
-                    value={String(audit.items.filter((i) => i.status === "Resolved").length)}
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  <ClipboardCheck className="h-4 w-4 text-emerald-700" />
-                  Audit trail
-                </h2>
-                <ul className="space-y-2">
-                  {audit.auditLog.length === 0 ? (
-                    <li className="text-sm text-slate-500">No log entries.</li>
-                  ) : (
-                    audit.auditLog.map((entry, idx) => (
-                      <li
-                        key={`${entry}-${idx}`}
-                        className="rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2 text-xs text-slate-700"
-                      >
-                        {entry}
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Compact status strip */}
-              <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900">
-                    {openItems.length > 0
-                      ? `${openItems.length} item${openItems.length === 1 ? "" : "s"} blocking finalize`
-                      : "All clear — ready to run Night Audit"}
-                  </p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    Day close by {dayClose?.report?.closedBy ?? "—"} ·{" "}
-                    {dayClose?.report?.closedAt ?? "—"}
-                    {dayClose?.report
-                      ? ` · Revenue ${formatINR(dayClose.report.totalRevenue)}`
-                      : ""}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  <Link href="/frontoffice/day-closing">
-                    <Button type="button" variant="outline" size="sm">
-                      Day Closing
-                    </Button>
-                  </Link>
-                  {openItems.length > 0 ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="gap-1.5 bg-amber-600 hover:bg-amber-700"
-                      onClick={() => openResolveDrawer()}
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      Resolve open items
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="bg-emerald-700 hover:bg-emerald-800"
-                      disabled={!canRunAudit}
-                      onClick={() => setConfirmOpen(true)}
-                    >
-                      Run Night Audit
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {/* Main table */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-                <FOSearchToolbar
-                  search={search}
-                  onSearchChange={setSearch}
-                  searchPlaceholder="Search room, guest, or audit note…"
-                  filterPills={{
-                    active: statusFilter,
-                    onChange: setStatusFilter,
-                    options: [
-                      { id: "all", label: `All ${audit.items.length}` },
-                      {
-                        id: "Posted",
-                        label: `Posted ${audit.items.filter((i) => i.status === "Posted").length}`,
-                      },
-                      {
-                        id: "Pending",
-                        label: `Pending ${audit.items.filter((i) => i.status === "Pending").length}`,
-                      },
-                      {
-                        id: "Exception",
-                        label: `Exception ${audit.items.filter((i) => i.status === "Exception").length}`,
-                      },
-                      {
-                        id: "Resolved",
-                        label: `Resolved ${audit.items.filter((i) => i.status === "Resolved").length}`,
-                      },
-                    ],
-                  }}
-                />
-
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[780px] text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-100 bg-slate-50/80">
-                        <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Room
-                        </th>
-                        <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Guest
-                        </th>
-                        <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Rate
-                        </th>
-                        <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Extras
-                        </th>
-                        <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Posted
-                        </th>
-                        <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Status
-                        </th>
-                        <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Note
-                        </th>
-                        <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {filtered.map((item) => {
-                        const needsAction =
-                          item.status === "Pending" || item.status === "Exception";
-                        return (
-                          <tr
-                            key={item.id}
-                            className={cn(
-                              "transition-colors",
-                              needsAction
-                                ? "cursor-pointer bg-amber-50/30 hover:bg-amber-50/60"
-                                : "hover:bg-emerald-50/20",
-                            )}
-                            onClick={() => needsAction && openResolveDrawer(item.id)}
-                          >
-                            <td className="px-3 py-3 font-medium text-slate-900">
-                              {item.roomNo}
-                            </td>
-                            <td className="px-3 py-3 text-slate-700">{item.guestName}</td>
-                            <td className="px-3 py-3 text-slate-700">
-                              {formatINR(item.roomRate)}
-                            </td>
-                            <td className="px-3 py-3 text-slate-700">
-                              {formatINR(item.extras)}
-                            </td>
-                            <td className="px-3 py-3 font-medium text-slate-900">
-                              {formatINR(item.posted)}
-                            </td>
-                            <td className="px-3 py-3">
-                              <span
-                                className={cn(
-                                  "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
-                                  statusPill(item.status),
-                                )}
-                              >
-                                {item.status}
-                              </span>
-                            </td>
-                            <td className="max-w-[200px] truncate px-3 py-3 text-xs text-slate-500">
-                              {item.note ?? "—"}
-                            </td>
-                            <td className="px-3 py-3 text-right">
-                              {needsAction ? (
-                                <button
-                                  type="button"
-                                  className="text-xs font-semibold text-amber-700 hover:underline"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openResolveDrawer(item.id);
-                                  }}
-                                >
-                                  Resolve
-                                </button>
-                              ) : (
-                                <span className="text-xs text-slate-400">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      <Drawer
-        open={resolveOpen}
-        onClose={closeResolveDrawer}
-        title="Resolve open items"
-        description={
-          focusItemId
-            ? "Decide this blocking item, then continue."
-            : `${openItems.length} item${openItems.length === 1 ? "" : "s"} must be cleared before Night Audit can run.`
-        }
-        width="lg"
-        footer={
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-slate-500">
-              {openItems.length === 0
-                ? "Nothing left to resolve"
-                : `${openItems.length} remaining`}
+      ) : (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+          <div>
+            <p className="text-sm font-bold text-emerald-900">
+              {formatDay(status.businessDate)} closed by {status.dayClosing?.closedBy ?? "—"}
             </p>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={closeResolveDrawer}>
-                Close
-              </Button>
-              {openItems.length === 0 && (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="bg-emerald-700 hover:bg-emerald-800"
-                  onClick={() => {
-                    closeResolveDrawer();
-                    setConfirmOpen(true);
-                  }}
-                >
-                  Run Night Audit
-                </Button>
-              )}
+            <p className="text-xs text-emerald-800">
+              Day Closing finished {formatStamp(status.dayClosing?.closedAt)}. Running the audit moves the
+              business date to {formatDay(status.nextBusinessDate)}.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {failed && audit?.error && (
+        <AlertBanner
+          variant="error"
+          message={`Last attempt failed (business date not advanced): ${audit.error}`}
+        />
+      )}
+
+      {status.blockers
+        .filter((b) => b.id !== "day-closing")
+        .map((b) => (
+          <AlertBanner key={b.id + b.message} variant="error" message={b.message} />
+        ))}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatMiniCard
+          label="Room nights to post"
+          value={preview.nights}
+          sublabel={`${preview.rows.length} nightly-billed stay(s)`}
+          icon={BedDouble}
+        />
+        <StatMiniCard
+          label="Room revenue"
+          value={formatINR(preview.amount)}
+          sublabel="Before tax"
+          icon={IndianRupee}
+        />
+        <StatMiniCard label="Room tax" value={formatINR(preview.tax)} sublabel="Per Accounts tax rules" icon={Receipt} />
+        <StatMiniCard
+          label="In-house"
+          value={status.inHouse}
+          sublabel={`${status.legacyCount} pre-billed · ${status.groupCount} group`}
+          icon={Moon}
+        />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-5">
+        <div className="xl:col-span-3">
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                Room charges for {formatDay(status.businessDate)}
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                One charge per stay per night. Already-posted nights are skipped, so a retry never double-charges.
+              </p>
+            </div>
+            {preview.rows.length === 0 ? (
+              <p className="px-4 py-8 text-center text-xs text-slate-400">
+                No nightly-billed guests in house. Stays booked before nightly billing started, and group stays, are
+                already billed for the full stay.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th className="px-4 py-2">Room</th>
+                      <th className="px-4 py-2">Guest</th>
+                      <th className="px-4 py-2 text-right">Tariff</th>
+                      <th className="px-4 py-2 text-right">Nights</th>
+                      <th className="px-4 py-2 text-right">Tax</th>
+                      <th className="px-4 py-2 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {preview.rows.map((r) => (
+                      <tr key={r.reservationId} className={cn(r.issue && "bg-red-50/50")}>
+                        <td className="px-4 py-2 font-semibold text-slate-800">{r.roomNo || "—"}</td>
+                        <td className="px-4 py-2">
+                          <p className="font-semibold text-slate-800">{r.guestName}</p>
+                          <p className="text-[10px] text-slate-500">{r.bookingNo}</p>
+                          {r.issue && (
+                            <p className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold text-red-600">
+                              <XCircle className="h-3 w-3" /> {r.issue}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right">{formatINR(r.tariff)}</td>
+                        <td className="px-4 py-2 text-right" title={r.nights.join(", ")}>
+                          {r.nights.length || <span className="text-slate-400">Posted</span>}
+                        </td>
+                        <td className="px-4 py-2 text-right">{formatINR(r.tax)}</td>
+                        <td className="px-4 py-2 text-right font-semibold text-slate-900">
+                          {formatINR(r.amount + r.tax)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4 xl:col-span-2">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-1 border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">
+              Tonight&apos;s audit
+            </h3>
+            <div className="divide-y divide-slate-100 text-[11px] font-semibold text-slate-700">
+              <SummaryRow label="Business date" value={formatDay(status.businessDate)} />
+              <SummaryRow label="Rolls to" value={formatDay(status.nextBusinessDate)} />
+              <SummaryRow label="Day Closing" value={status.dayClosing ? "Done" : "Pending"} />
+              <SummaryRow label="Room revenue + tax" value={formatINR(preview.amount + preview.tax)} highlight />
+              <SummaryRow
+                label="Last completed audit"
+                value={status.lastAudit ? formatDay(status.lastAudit.businessDate) : "None yet"}
+              />
             </div>
           </div>
-        }
-      >
-        <div className="space-y-4">
-          {drawerItems.length === 0 ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-              <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600" />
-              <p className="mt-3 text-sm font-semibold text-emerald-900">All items resolved</p>
-              <p className="mt-1 text-xs text-emerald-700">You can run Night Audit now.</p>
-            </div>
-          ) : (
-            drawerItems.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-slate-900">
-                        Room {item.roomNo} · {item.guestName}
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-1 flex items-center gap-1.5 border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">
+              <History className="h-3.5 w-3.5 text-slate-400" /> Audit history
+            </h3>
+            {history.length === 0 ? (
+              <p className="py-3 text-center text-[11px] text-slate-400">No night audits yet.</p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {history.map((h) => (
+                  <div key={h.id} className="flex items-center justify-between gap-2 py-2">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+                        {formatDay(h.businessDate)}
+                        <span className={cn("rounded px-1.5 py-0.5 text-[9px] font-bold uppercase", STATUS_TONE[h.status])}>
+                          {h.status}
+                        </span>
                       </p>
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
-                          statusPill(item.status),
-                        )}
-                      >
-                        {item.status}
-                      </span>
+                      <p className="truncate text-[10px] text-slate-500">
+                        {h.runByName ?? "—"} · {formatStamp(h.completedAt ?? h.startedAt)} · {h.roomNightsPosted} night(s)
+                      </p>
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">{item.note}</p>
-                  </div>
-                  <p className="text-xs font-medium text-slate-600">{item.id}</p>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-3 text-xs">
-                  <div>
-                    <p className="text-slate-500">Room rate</p>
-                    <p className="font-semibold text-slate-900">{formatINR(item.roomRate)}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Extras</p>
-                    <p className="font-semibold text-slate-900">{formatINR(item.extras)}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Posted so far</p>
-                    <p className="font-semibold text-slate-900">{formatINR(item.posted)}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Would post</p>
-                    <p className="font-semibold text-slate-900">
-                      {formatINR(item.roomRate + item.extras)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {item.status === "Exception" && (
-                    <>
-                      <Button
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-700">
+                        {formatINR(Number(h.roomRevenue) + Number(h.roomTax))}
+                      </span>
+                      <button
                         type="button"
-                        size="sm"
-                        className="bg-emerald-700 hover:bg-emerald-800"
-                        onClick={() => resolveException(item.id, "no-show")}
+                        title="Export"
+                        onClick={() => exportRecord(h)}
+                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                       >
-                        Mark no-show
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => resolveException(item.id, "waive")}
-                      >
-                        Waive
-                      </Button>
-                    </>
-                  )}
-                  {item.status === "Pending" && (
-                    <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="bg-emerald-700 hover:bg-emerald-800"
-                        onClick={() => forcePost(item.id)}
-                      >
-                        Force post
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => holdOvernight(item.id)}
-                      >
-                        Hold overnight
-                      </Button>
-                    </>
-                  )}
-                </div>
+                        <Download className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))
-          )}
-
-          {focusItemId && openItems.length > 1 && (
-            <button
-              type="button"
-              className="text-xs font-medium text-emerald-700 hover:underline"
-              onClick={() => setFocusItemId(null)}
-            >
-              Show all {openItems.length} open items
-            </button>
-          )}
+            )}
+          </div>
         </div>
-      </Drawer>
+      </div>
 
       <ConfirmModal
         open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        onConfirm={runNightAudit}
-        title="Run Night Audit?"
-        message="This will finalize postings for the closed business date, write the audit journal, and publish the flash report pack. You can reset the demo afterward."
+        onClose={() => !running && setConfirmOpen(false)}
+        onConfirm={() => void runAudit()}
+        loading={running}
+        title={`Run night audit for ${formatDay(status.businessDate)}?`}
+        message={`This posts ${preview.nights} room night(s) (${formatINR(preview.amount + preview.tax)} incl. tax) to guest folios and moves the business date to ${formatDay(status.nextBusinessDate)}. It can't be undone.`}
         confirmLabel="Run Night Audit"
       />
     </div>
