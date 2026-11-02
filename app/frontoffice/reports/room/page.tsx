@@ -1,5 +1,5 @@
-import { RoomReportView } from "@/components/frontoffice/ReportsViews";
+import { redirect } from "next/navigation";
 
-export default function RoomReportPage() {
-  return <RoomReportView />;
+export default function RoomReportRedirect() {
+  redirect("/frontoffice/reports?type=room");
 }

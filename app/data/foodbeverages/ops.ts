@@ -372,6 +372,17 @@ export function formatINR(amount: number) {
   }).format(amount);
 }
 
+/** Like formatINR, but keeps paise when the amount has them (tax lines, round off). */
+export function formatINRExact(amount: number) {
+  const hasPaise = Math.abs(Math.round(amount * 100) % 100) > 0;
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: hasPaise ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 export function getRestaurantOutletOptions(): FbOutlet[] {
   return restaurantOutlets;
 }

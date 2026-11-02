@@ -40,10 +40,5 @@ export const housekeepingNavItems: ModuleNavItem[] = [
     href: "/housekeeping/reports",
     icon: "bar-chart",
   },
-  {
-    label: "Settings",
-    href: "/housekeeping/settings",
-    icon: "settings",
-  },
 ];
 

@@ -214,19 +214,23 @@ export function FbKitchenOrdersView() {
   const [toast, setToast] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const loadKots = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await posService.listKots(outletId || undefined);
-      setKots(data);
-      setError(null);
-    } catch (e) {
-      setKots([]);
-      setError(e instanceof Error ? e.message : "Failed to load KOTs");
-    } finally {
-      setLoading(false);
-    }
-  }, [outletId]);
+  /** Background refreshes stay silent: keep the current list on screen and ignore transient errors. */
+  const loadKots = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      try {
+        const data = await posService.listKots(outletId || undefined);
+        setKots(data);
+        setError(null);
+      } catch (e) {
+        if (silent) return;
+        setKots([]);
+        setError(e instanceof Error ? e.message : "Failed to load KOTs");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [outletId],
+  );
 
   useEffect(() => {
     if (outletsLoading) return;
@@ -235,7 +239,7 @@ export function FbKitchenOrdersView() {
 
   useEffect(() => {
     if (outletsLoading) return;
-    const id = window.setInterval(() => void loadKots(), 15000);
+    const id = window.setInterval(() => void loadKots({ silent: true }), 15000);
     return () => window.clearInterval(id);
   }, [loadKots, outletsLoading]);
 
@@ -333,8 +337,8 @@ export function FbKitchenOrdersView() {
   return (
     <div className="min-h-full bg-slate-100">
       <div className="border-b border-slate-300 bg-white px-4 py-3 shadow-sm">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
-          <div className="flex w-full min-w-0 items-center gap-4 sm:gap-6">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-4 sm:gap-6">
             <button
               type="button"
               onClick={() => setTab("kot")}
@@ -365,7 +369,7 @@ export function FbKitchenOrdersView() {
             value={outletId}
             onChange={setOutletId}
             allowAll
-            className="h-9 w-full min-w-0 sm:min-w-[11rem] sm:w-auto"
+            className="h-9 w-40 shrink-0 sm:w-48"
           />
         </div>
       </div>

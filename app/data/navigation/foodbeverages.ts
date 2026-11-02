@@ -1,5 +1,18 @@
 import type { ModuleNavItem } from "../types";
 
+/** Top quick-nav strip across F&B pages (daily-use screens only). */
+export const fbQuickNavItems = [
+  { label: "Dashboard", href: "/food-beverages/dashboard", icon: "layout-grid" },
+  { label: "Orders", href: "/food-beverages/restaurants/orders", icon: "clipboard-list" },
+  { label: "Kitchen", href: "/food-beverages/kitchen/orders", icon: "chef-hat" },
+  { label: "Guest Requests", href: "/food-beverages/restaurants/guest-requests", icon: "bell" },
+  { label: "Reservations", href: "/food-beverages/restaurants/reservations", icon: "calendar-check" },
+  { label: "Bills", href: "/food-beverages/restaurants/bills", icon: "receipt" },
+  { label: "All Orders", href: "/food-beverages/restaurants/all-orders", icon: "history" },
+  { label: "Cashier", href: "/food-beverages/restaurants/cashier", icon: "wallet" },
+  { label: "Day Close", href: "/food-beverages/restaurants/day-close", icon: "calendar-clock" },
+] as const;
+
 export const foodBeveragesNavItems: ModuleNavItem[] = [
   { label: "Dashboard", href: "/food-beverages/dashboard", icon: "layout-grid" },
   {
@@ -26,7 +39,6 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
     icon: "database",
     children: [
       { label: "Units", href: "/food-beverages/masters/units", icon: "ruler" },
-      { label: "Tax Groups", href: "/food-beverages/masters/tax-groups", icon: "percent" },
       { label: "Outlet Types", href: "/food-beverages/masters/outlet-types", icon: "building-2" },
       { label: "Staff", href: "/food-beverages/masters/staff", icon: "users" },
     ],
@@ -57,18 +69,5 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
     label: "Reports",
     href: "/food-beverages/reports",
     icon: "bar-chart",
-    children: [
-      { label: "Daily Sales", href: "/food-beverages/reports/daily-sales", icon: "trending-up" },
-      { label: "Item Sales", href: "/food-beverages/reports/item-sales", icon: "utensils" },
-      { label: "Category Sales", href: "/food-beverages/reports/category-sales", icon: "pie-chart" },
-      { label: "Outlet Sales", href: "/food-beverages/reports/outlet-sales", icon: "building-2" },
-      { label: "Cashier", href: "/food-beverages/reports/cashier", icon: "wallet" },
-      { label: "Table Turnover", href: "/food-beverages/reports/table-turnover", icon: "layout-grid" },
-      { label: "Food Cost", href: "/food-beverages/reports/food-cost", icon: "percent" },
-      { label: "Inventory", href: "/food-beverages/reports/inventory", icon: "package-search" },
-      { label: "Kitchen Performance", href: "/food-beverages/reports/kitchen-performance", icon: "chef-hat" },
-      { label: "Cancelled Bills", href: "/food-beverages/reports/cancelled-bills", icon: "alert-triangle" },
-      { label: "Discount Report", href: "/food-beverages/reports/discount", icon: "tag" },
-    ],
   },
 ];

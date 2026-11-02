@@ -1,5 +1,5 @@
-import { GuestReportView } from "@/components/frontoffice/ReportsViews";
+import { redirect } from "next/navigation";
 
-export default function GuestReportPage() {
-  return <GuestReportView />;
+export default function GuestReportRedirect() {
+  redirect("/frontoffice/reports?type=guest");
 }

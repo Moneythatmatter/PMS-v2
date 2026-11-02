@@ -1,5 +1,5 @@
-import { RevenueReportView } from "@/components/frontoffice/ReportsViews";
+import { redirect } from "next/navigation";
 
-export default function RevenueReportPage() {
-  return <RevenueReportView />;
+export default function RevenueReportRedirect() {
+  redirect("/frontoffice/reports?type=revenue");
 }

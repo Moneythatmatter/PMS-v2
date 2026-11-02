@@ -5,12 +5,10 @@ import {
   ArrowLeft,
   MessageSquare,
   Minus,
-  Pause,
   Plus,
   Receipt,
   Search,
   SlidersHorizontal,
-  SplitSquareHorizontal,
   Trash2,
   Truck,
   User,
@@ -57,7 +55,9 @@ import {
   FbSettleBillPanel,
   ROOM_CHARGE_MODE,
   type BillBreakdown,
+  type SplitPart,
 } from "@/components/foodbeverages/FbSettleBillPanel";
+import { Bone, FbOrderLinesSkeleton, FbSettleSkeleton } from "@/components/foodbeverages/FbSkeletons";
 
 const ORDER_TABS = ["Dine In", "Takeaway", "Room Service"] as const;
 export type OrderTab = (typeof ORDER_TABS)[number];
@@ -232,7 +232,9 @@ export function FbOrderEntryPanel({
   const [loadedOrderNo, setLoadedOrderNo] = useState("");
   const [runningKots, setRunningKots] = useState<RunningKot[]>([]);
   const [savedLines, setSavedLines] = useState<CartLine[]>([]);
-  const [loadingOrder, setLoadingOrder] = useState(false);
+  const [loadingOrder, setLoadingOrder] = useState(
+    () => (entryMode === "manage" || entryMode === "settle") && Boolean(openOrderId),
+  );
   const [paymentMode, setPaymentMode] = useState<string>("Cash");
   const [amountPaid, setAmountPaid] = useState("");
   const [billBreakdown, setBillBreakdown] = useState<BillBreakdown>({
@@ -263,12 +265,12 @@ export function FbOrderEntryPanel({
   const [formLines, setFormLines] = useState<CartLine[]>([]);
   const [orderInstruction, setOrderInstruction] = useState("");
   const [showInstruction, setShowInstruction] = useState(false);
-  const [isHeld, setIsHeld] = useState(false);
   const [isKotLoading, setIsKotLoading] = useState(false);
   const [isKotPrintLoading, setIsKotPrintLoading] = useState(false);
   const [isSaveLoading, setIsSaveLoading] = useState(false);
   const [isBillLoading, setIsBillLoading] = useState(false);
   const [isSettleLoading, setIsSettleLoading] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const modifierGroups = usePsList(() => modifierGroupService.list(), []);
   const [modifierTarget, setModifierTarget] = useState<FbPosMenuItem | null>(null);
@@ -358,9 +360,12 @@ export function FbOrderEntryPanel({
         discount = Number(bill.discount ?? 0);
         total = Number(bill.total ?? subtotal + tax - discount);
       }
-      setBillBreakdown({ subtotal, tax, discount, total });
-      setAmountPaid(String(total));
-      return { items, total, order: data.order, bill };
+      const paid = Number(data.paidAmount ?? 0);
+      const taxLines = data.taxSummary?.lines ?? [];
+      const taxIncluded = Boolean(data.taxSummary?.included);
+      setBillBreakdown({ subtotal, tax, discount, total, taxLines, taxIncluded, paid });
+      setAmountPaid(String(Math.max(0, Math.round((total - paid) * 100) / 100)));
+      return { items, total, subtotal, discount, taxLines, taxIncluded, order: data.order, bill };
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Failed to load order");
       setRunningKots([]);
@@ -376,6 +381,36 @@ export function FbOrderEntryPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openOrderId, entryMode]);
+
+  const kitchenPendingKots = runningKots.filter(
+    (kot) => kot.status === "PENDING" || kot.status === "PREPARING",
+  );
+  const kitchenPending = kitchenPendingKots.length > 0;
+  const foodReady = runningKots.length > 0 && !kitchenPending;
+  const billBlockedReason = kitchenPending
+    ? `Waiting for kitchen (${kitchenPendingKots
+        .map((kot) => formatKotNumber(kot.kotNo))
+        .join(", ")}). Billing unlocks once the food is ready.`
+    : formLines.length > 0
+      ? "Send the new items as KOT first. Bill after the kitchen marks them ready."
+      : null;
+
+  useEffect(() => {
+    if (!activeOrderId || !kitchenPending) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      posService
+        .getOrderDetails(activeOrderId)
+        .then((data) => {
+          if (!cancelled) setRunningKots(parseRunningKots(data.kots));
+        })
+        .catch(() => undefined);
+    }, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeOrderId, kitchenPending]);
 
   useEffect(() => {
     if (formType !== "Room Service") {
@@ -523,8 +558,14 @@ export function FbOrderEntryPanel({
     setFormRef("");
     setOrderInstruction("");
     setShowInstruction(false);
-    setIsHeld(false);
     setFormError(null);
+  };
+
+  /** Takeaway refs carry the pickup name so the KOT/bill slip reads "Pickup: <name>". */
+  const defaultOrderRef = () => {
+    if (formRef.trim()) return formRef.trim();
+    if (formType === "Takeaway") return guestDetails.name.trim() || "Counter";
+    return formType === "Dine In" ? "Walk-in" : "Delivery";
   };
 
   const placeOrder = async (options?: { print?: boolean }) => {
@@ -553,21 +594,14 @@ export function FbOrderEntryPanel({
     try {
       const paxRaw = pax.trim();
       const paxCount = paxRaw ? Math.max(1, Number(paxRaw) || 0) : undefined;
-      const tableRef =
-        formRef.trim() ||
-        (formType === "Dine In"
-          ? "Walk-in"
-          : formType === "Takeaway"
-            ? "Counter"
-            : "Delivery");
+      const tableRef = defaultOrderRef();
       const kotLines = [...formLines];
       const kotTotal = formTotal;
       const kotInstruction = orderInstruction.trim();
       const kotPrintLines: KotPrintLine[] = kotLines.map((l, index) => {
-        const holdPrefix = isHeld ? "[HOLD] " : "";
         const instruction =
-          index === 0 && (kotInstruction || isHeld)
-            ? `${holdPrefix}${kotInstruction}`.trim()
+          index === 0 && kotInstruction
+            ? kotInstruction
             : "";
         const note = [
           l.modifiers.length ? `+ ${modifierSummary(l.modifiers)}` : "",
@@ -618,10 +652,9 @@ export function FbOrderEntryPanel({
         ...(paxCount ? { pax: paxCount } : {}),
         server: currentUser.name,
         lines: kotLines.map((l, index) => {
-          const holdPrefix = isHeld ? "[HOLD] " : "";
           const note =
-            index === 0 && (kotInstruction || isHeld)
-              ? `${holdPrefix}${kotInstruction}`.trim()
+            index === 0 && kotInstruction
+              ? kotInstruction
               : undefined;
           return {
             menuItemId: l.id,
@@ -645,8 +678,7 @@ export function FbOrderEntryPanel({
       setFormLines([]);
       setOrderInstruction("");
       setShowInstruction(false);
-      setIsHeld(false);
-
+  
       const kotRecord = created.kot as Record<string, unknown> | undefined;
       const kotNo = String(
         kotRecord?.kotNumber ?? kotRecord?.kot_number ?? kotRecord?.id ?? "KOT",
@@ -666,17 +698,14 @@ export function FbOrderEntryPanel({
         onToast(
           `${formatKotNumber(kotNo)} sent · ${formatINR(kotTotal)} · KOT slip downloaded`,
         );
-        if (!isSettle) {
-          onOrderCreated();
-        }
       } else {
         onTablesRefresh?.();
         onToast(
           `${formatKotNumber(kotNo)} sent · ${formatINR(kotTotal)} · ${created.order?.orderNo ?? "Order"}`,
         );
-        if (isManage) {
-          onOrderCreated();
-        }
+      }
+      if (!isSettle) {
+        onOrderCreated();
       }
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Failed to send KOT");
@@ -691,13 +720,7 @@ export function FbOrderEntryPanel({
 
   const sendNewItemsAsKot = async () => {
     if (!formLines.length) return null;
-    const tableRef =
-      formRef.trim() ||
-      (formType === "Dine In"
-        ? "Walk-in"
-        : formType === "Takeaway"
-          ? "Counter"
-          : "Delivery");
+    const tableRef = defaultOrderRef();
     const guestName = guestDetails.name.trim() || "Walk-in";
     const kotInstruction = orderInstruction.trim();
     return posService.sendKot({
@@ -710,10 +733,9 @@ export function FbOrderEntryPanel({
       guest: guestName,
       server: currentUser.name,
       lines: formLines.map((l, index) => {
-        const holdPrefix = isHeld ? "[HOLD] " : "";
         const note =
-          index === 0 && (kotInstruction || isHeld)
-            ? `${holdPrefix}${kotInstruction}`.trim()
+          index === 0 && kotInstruction
+            ? kotInstruction
             : undefined;
         return {
           menuItemId: l.id,
@@ -735,6 +757,10 @@ export function FbOrderEntryPanel({
     }
     if (!activeOrderId && !formLines.length) {
       setFormError("No items on this order.");
+      return;
+    }
+    if (billBlockedReason) {
+      setFormError(billBlockedReason);
       return;
     }
     const setLoading = print ? setIsBillLoading : setIsSaveLoading;
@@ -788,6 +814,14 @@ export function FbOrderEntryPanel({
             price: line.price,
           })),
           total: totalForPrint,
+          ...(loaded
+            ? {
+                subtotal: loaded.subtotal,
+                discount: loaded.discount,
+                taxLines: loaded.taxLines,
+                taxIncluded: loaded.taxIncluded,
+              }
+            : {}),
         });
       }
       setFormLines([]);
@@ -811,7 +845,10 @@ export function FbOrderEntryPanel({
       return;
     }
     const isRoomCharge = paymentMode === ROOM_CHARGE_MODE;
-    const grandTotal = billBreakdown.total > 0 ? billBreakdown.total : orderTotal;
+    const grandTotal = Math.max(
+      0,
+      (billBreakdown.total > 0 ? billBreakdown.total : orderTotal) - (billBreakdown.paid ?? 0),
+    );
     const amount = isRoomCharge ? grandTotal : Number(amountPaid);
     if (!isRoomCharge && (!Number.isFinite(amount) || amount <= 0)) {
       setFormError("Enter a valid amount paid.");
@@ -837,6 +874,45 @@ export function FbOrderEntryPanel({
       onOrderCreated();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Settlement failed");
+    } finally {
+      setIsSettleLoading(false);
+    }
+  };
+
+  const handleSplitSettle = async (parts: SplitPart[]) => {
+    if (isAnyActionRunning) return;
+    if (!activeBillId) {
+      setFormError("No bill found for this order.");
+      return;
+    }
+    let done = 0;
+    try {
+      setIsSettleLoading(true);
+      setFormError(null);
+      for (const [idx, part] of parts.entries()) {
+        const last = idx === parts.length - 1;
+        await posService.payBill(activeBillId, {
+          amount: part.amount,
+          paymentMode: part.mode,
+          fullPay: last,
+        });
+        done += 1;
+      }
+      onToast(
+        `Settled in ${parts.length} parts · ${parts
+          .map((p) => `${formatINR(p.amount)} ${p.mode}`)
+          .join(" + ")}`,
+      );
+      setSplitOpen(false);
+      onOrderCreated();
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : "Settlement failed";
+      setFormError(
+        done > 0
+          ? `${done} of ${parts.length} parts collected, then: ${reason}. Settle the remaining balance.`
+          : reason,
+      );
+      if (done > 0 && activeOrderId) await loadOrderDetails(activeOrderId);
     } finally {
       setIsSettleLoading(false);
     }
@@ -918,7 +994,7 @@ export function FbOrderEntryPanel({
         {isSettle ? (
           <div className="flex flex-1 flex-col overflow-y-auto p-4 sm:p-6">
             {loadingOrder ? (
-              <p className="text-center text-sm text-slate-500">Loading order…</p>
+              <FbSettleSkeleton />
             ) : (
               <>
                 {allDisplayLines.length > 0 && (
@@ -945,6 +1021,7 @@ export function FbOrderEntryPanel({
                   </div>
                 )}
                 <FbSettleBillPanel
+                  key={`${activeBillId}-${billBreakdown.total}-${billBreakdown.paid ?? 0}`}
                   orderLabel={loadedOrderNo ? `Order ${loadedOrderNo}` : undefined}
                   tableRef={formRef}
                   outletLabel={outletLabel(activeOutletId)}
@@ -965,6 +1042,9 @@ export function FbOrderEntryPanel({
                   amountPaid={amountPaid}
                   onAmountPaidChange={setAmountPaid}
                   onConfirm={() => void handleSettle()}
+                  splitOpen={splitOpen}
+                  onSplitOpenChange={setSplitOpen}
+                  onConfirmSplit={(parts) => void handleSplitSettle(parts)}
                   loading={isSettleLoading}
                   disabled={isAnyActionRunning || !activeBillId}
                 />
@@ -1087,17 +1167,6 @@ export function FbOrderEntryPanel({
                 icon={User}
                 label="Guest"
               />
-              <HeaderAction
-                active={isHeld}
-                onClick={() => setIsHeld((v) => !v)}
-                icon={Pause}
-                label="Hold"
-              />
-              <HeaderAction
-                onClick={() => onToast("Split bill — coming soon")}
-                icon={SplitSquareHorizontal}
-                label="Split"
-              />
             </div>
             {itemCount > 0 && (
               <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
@@ -1173,11 +1242,6 @@ export function FbOrderEntryPanel({
               )}
             </div>
           )}
-          {isHeld && (
-            <p className="border-t border-amber-100 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-800">
-              Order marked on hold — will be sent to kitchen when placed
-            </p>
-          )}
         </div>
 
         <div className="space-y-3 border-b border-slate-100 px-3 py-3">
@@ -1196,6 +1260,28 @@ export function FbOrderEntryPanel({
                 className="h-9 w-full"
               />
             </FormField>
+            {formType === "Takeaway" ? (
+              <>
+                <FormField label="Customer">
+                  <TextInput
+                    value={guestDetails.name}
+                    onChange={(e) => updateGuestField("name", e.target.value)}
+                    placeholder="Name for pickup"
+                  />
+                </FormField>
+                <FormField label="Phone" className="flex flex-col">
+                  <TextInput
+                    type="tel"
+                    inputMode="tel"
+                    value={guestDetails.phone}
+                    onChange={(e) => updateGuestField("phone", e.target.value)}
+                    placeholder="Mobile"
+                    className="w-full sm:w-32"
+                  />
+                </FormField>
+              </>
+            ) : (
+            <>
             <FormField
               label={
                 formType === "Dine In"
@@ -1240,13 +1326,7 @@ export function FbOrderEntryPanel({
                   value={formRef}
                   onChange={(e) => setFormRef(e.target.value)}
                   readOnly={lockTable && formType === "Dine In"}
-                  placeholder={
-                    formType === "Takeaway"
-                      ? "Counter"
-                      : formType === "Dine In"
-                        ? "Table"
-                        : "501"
-                  }
+                  placeholder={formType === "Dine In" ? "Table" : "501"}
                 />
               )}
             </FormField>
@@ -1260,14 +1340,18 @@ export function FbOrderEntryPanel({
                 className="w-full sm:w-24"
               />
             </FormField>
+            </>
+            )}
           </div>
           {formType === "Takeaway" && (
             <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
               <Truck className="h-3.5 w-3.5" />
-              Pickup order
+              Pickup order — the order number is the customer&apos;s token
             </p>
           )}
         </div>
+
+        {(isManage || isSettle) && loadingOrder && !loadedOrderNo && <FbOrderLinesSkeleton />}
 
         {(isManage || isSettle) && loadedOrderNo && (
           <div className="border-b border-emerald-100 bg-emerald-50 px-3 py-2">
@@ -1281,13 +1365,21 @@ export function FbOrderEntryPanel({
                 {runningKots.map((kot) => formatKotNumber(kot.kotNo)).join(", ")}
               </p>
             )}
-            {loadingOrder && (
-              <p className="text-[11px] text-slate-500">Loading items…</p>
+            {isManage && kitchenPending && (
+              <p className="mt-1 text-[11px] font-semibold text-amber-700">
+                Kitchen is preparing the food
+              </p>
+            )}
+            {isManage && foodReady && (
+              <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                <UtensilsCrossed className="h-3.5 w-3.5" />
+                Food is ready
+              </p>
             )}
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto">
+        <div className={cn("flex-1 overflow-y-auto", loadingOrder && !loadedOrderNo && "hidden")}>
           <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 border-b border-slate-100 bg-slate-50/80 px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600">
             <span>Item</span>
             <span className="text-center w-16">Qty</span>
@@ -1389,9 +1481,13 @@ export function FbOrderEntryPanel({
             <span className="text-[15px] font-bold text-slate-700">
               {isManage ? "Bill total" : "Total"}
             </span>
+            {loadingOrder ? (
+              <Bone className="h-7 w-24" />
+            ) : (
             <span className="text-2xl font-black text-emerald-800 font-mono">
               {formatINR(isManage ? orderTotal : formTotal)}
             </span>
+            )}
           </div>
           {isManage ? (
             <div className="space-y-2">
@@ -1424,11 +1520,16 @@ export function FbOrderEntryPanel({
                   </Button>
                 </div>
               )}
+              {billBlockedReason && (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-800">
+                  {billBlockedReason}
+                </p>
+              )}
               <div className="flex gap-2">
                 <Button
                   type="button"
                   className="flex-1 bg-emerald-700 hover:bg-emerald-800 cursor-pointer"
-                  disabled={isAnyActionRunning || (!activeOrderId && !formLines.length)}
+                  disabled={isAnyActionRunning || loadingOrder || !activeOrderId || Boolean(billBlockedReason)}
                   onClick={() => void generateBill({ print: false })}
                 >
                   {isSaveLoading ? "Saving…" : "Save"}
@@ -1436,7 +1537,7 @@ export function FbOrderEntryPanel({
                 <Button
                   type="button"
                   className="flex-1 bg-slate-800 hover:bg-slate-900 cursor-pointer"
-                  disabled={isAnyActionRunning || (!activeOrderId && !formLines.length)}
+                  disabled={isAnyActionRunning || loadingOrder || !activeOrderId || Boolean(billBlockedReason)}
                   onClick={() => void generateBill({ print: true })}
                 >
                   {isBillLoading ? "Printing…" : "Save and Print Bill"}

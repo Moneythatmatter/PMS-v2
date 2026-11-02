@@ -41,7 +41,7 @@ export function FbCashierView({ mode = "session" }: { mode?: "session" | "histor
               { href: "/food-beverages/restaurants/cashier/history", label: "History & Approvals", modes: ["history", "approvals"] },
             ],
             historyHref: "/food-beverages/restaurants/cashier/history",
-            headerSlot: <FbOutletSelect outlets={outlets} value={outletId} onChange={setOutletId} className="h-8 min-w-[10rem] text-xs" />,
+            headerSlot: <FbOutletSelect outlets={outlets} value={outletId} onChange={setOutletId} className="h-8 min-w-[10rem] [&_select]:text-xs" />,
           }
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setOutletId is recreated each render but only writes state

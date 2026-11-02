@@ -41,7 +41,7 @@ export function BalanceSheetView() {
     const fy = lookups?.fiscalYears.find((f) => f.startDate <= appliedAsOn && f.endDate >= appliedAsOn);
     const from = fy?.startDate.slice(0, 10) ?? fyStartIso();
     const params = new URLSearchParams({ accountId, from, to: appliedAsOn });
-    router.push(`/accounts/reports/general-ledger?${params.toString()}`);
+    router.push(`/accounts/reports?type=general-ledger&${params.toString()}`);
   };
 
   const report = useAccQuery(() => accReportService.balanceSheet({ asOn: appliedAsOn }), [appliedAsOn]);

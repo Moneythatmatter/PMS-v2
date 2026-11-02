@@ -56,7 +56,7 @@ import { cn } from "@/lib/utils";
 type AccountType = Account["accountType"];
 
 const ledgerHref = (accountId: string) =>
-  `/accounts/reports/general-ledger?accountId=${encodeURIComponent(accountId)}`;
+  `/accounts/reports?type=general-ledger&accountId=${encodeURIComponent(accountId)}`;
 
 type AccountForm = {
   parentId: string | null;

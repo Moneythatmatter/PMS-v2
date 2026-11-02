@@ -59,12 +59,32 @@ export type LiveTable = {
   openBillId?: string | null;
   housekeeping?: string;
   reservationId?: string | null;
+  /** Set on Room Service / Takeaway order tiles. */
+  orderNo?: string;
   kotCount?: number;
+  /** A KOT on the open order is still Pending/Preparing in the kitchen. */
+  kitchenPending?: boolean;
+  /** Every KOT on the open order is marked ready (or served) by the kitchen. */
+  foodReady?: boolean;
   /** Booking relevant to this table right now; separate from the physical status. */
   reservation?: TableReservationOverlay | null;
 };
 
 export type PosEntryMode = "new" | "manage" | "settle";
+
+export type FbBillTaxLine = {
+  code: string;
+  name: string;
+  type: string;
+  rate: number;
+  fixed: boolean;
+  amount: number;
+};
+
+/** `included`: menu prices already contain the tax (it is carved out, not added on top). */
+export type FbBillTaxSummary = { included: boolean; lines: FbBillTaxLine[] };
+
+export type FbBillPayment = { id: string; method: string; amount: number; at: string };
 
 export type FbOrder = {
   id: string;
@@ -161,6 +181,12 @@ export const floorPlanService = {
         `/floor-plan/room-service${outletId ? `?outletId=${encodeURIComponent(outletId)}` : ""}`,
       ),
     ),
+  listTakeawayOpen: (outletId?: string) =>
+    api.get<LiveTable[]>(
+      fbPath(
+        `/floor-plan/takeaway${outletId ? `?outletId=${encodeURIComponent(outletId)}` : ""}`,
+      ),
+    ),
   get: (tableId: string) => api.get<LiveTable>(fbPath(`/floor-plan/${tableId}`)),
   getOpenOrder: (tableId: string) =>
     api.get<{
@@ -217,6 +243,9 @@ export const posService = {
       items: unknown[];
       kots: unknown[];
       bills: unknown[];
+      taxSummary?: FbBillTaxSummary;
+      payments?: FbBillPayment[];
+      paidAmount?: number;
     }>(fbPath(`/pos/orders/${orderId}/details`)),
   listBills: (outletId?: string) =>
     api.get<FbPosBill[]>(

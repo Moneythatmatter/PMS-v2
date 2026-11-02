@@ -1,28 +1,22 @@
 "use client";
 
 import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  BarChart3,
-  CalendarRange,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
+  ArrowUpRight,
   FileSpreadsheet,
   FileText,
-  Hash,
   RotateCcw,
-  Search,
   Sheet,
-  Table2,
+  ShoppingBag,
+  ShoppingCart,
+  SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
-import type { ReportChartConfig } from "@/app/data/frontoffice/reports";
-import { ReportCharts } from "@/components/frontoffice/ReportCharts";
-import { FODatePicker, FOPageHeader, SelectInput, StatMiniCard } from "@/components/frontoffice/ui";
+import type { ReportChartConfig, ReportColumn as GridColumn, ReportRow } from "@/app/data/frontoffice/reports";
+import { SelectInput } from "@/components/frontoffice/ui";
+import { ReportWorkspace, type WorkspaceReportOption } from "@/components/reports/ReportWorkspace";
 import { ExportMenu } from "@/components/shared/ExportMenu";
 import { exportTableAsCsv, exportTableAsExcel, exportTableAsPdf } from "@/lib/exportUtils";
 import { cn } from "@/lib/utils";
@@ -230,7 +224,7 @@ export function ReportFilterSelect({
       aria-label={label}
       value={value}
       onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)}
-      className={cn("!h-10 !w-auto min-w-[9.5rem] shrink-0", value !== "all" && "border-emerald-400 bg-emerald-50/60 text-emerald-900")}
+      className={cn("!h-9 !w-auto min-w-[8.5rem] shrink-0", value !== "all" && "border-emerald-400 bg-emerald-50/60 text-emerald-900")}
     >
       <option value="all">{allLabel ?? `All ${label.toLowerCase()}`}</option>
       {opts.map((o) => (
@@ -295,18 +289,40 @@ interface PsReportViewProps<T extends { id: string }> {
   rowClassName?: (row: T) => string | undefined;
 }
 
-function formatCell(value: string | number, format?: ReportColumn<unknown>["format"]) {
-  if (format === "currency") return formatMoney(Number(value));
-  if (format === "number") return formatQty(Number(value));
-  if (format === "date") return formatReportDate(String(value));
-  return value === "" || value === null || value === undefined ? "—" : String(value);
-}
-
 function exportCell(value: string | number, format?: ReportColumn<unknown>["format"]) {
   if (format === "currency") return (Number(value) || 0).toFixed(2);
   if (format === "date") return formatReportDate(String(value));
   return value ?? "";
 }
+
+function gridCell(value: string | number, format?: ReportColumn<unknown>["format"]) {
+  if (format === "date") return value ? formatReportDate(String(value)) : "";
+  if (format === "currency" || format === "number") return Number(value) || 0;
+  return value === null || value === undefined ? "" : value;
+}
+
+const PS_REPORTS: WorkspaceReportOption[] = [
+  { id: "stock-register", label: "Stock Register", icon: FileText },
+  { id: "par-stock", label: "Par Stock", icon: SlidersHorizontal },
+  { id: "spoilage", label: "Spoilage & Write-offs", icon: AlertTriangle },
+  { id: "issues", label: "Issue Register", icon: ArrowUpRight },
+  { id: "purchases", label: "Purchase Register", icon: ShoppingBag },
+  { id: "orders", label: "Purchase Order Status", icon: ShoppingCart },
+  { id: "returns", label: "Vendor Returns", icon: RotateCcw },
+];
+
+export const PS_REPORT_IDS = PS_REPORTS.map((r) => r.id);
+export const PS_DEFAULT_REPORT = "stock-register";
+
+const PERIOD_CHIPS: { id: ReportPeriodId; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "7d", label: "7D" },
+  { id: "mtd", label: "MTD" },
+  { id: "last-month", label: "Last month" },
+  { id: "90d", label: "90D" },
+  { id: "fy", label: "FY" },
+  { id: "all", label: "All" },
+];
 
 export function PsReportView<T extends { id: string }>({
   title,
@@ -324,44 +340,50 @@ export function PsReportView<T extends { id: string }>({
   onResetFilters,
   searchPlaceholder = "Search this report…",
   defaultSort,
-  emptyMessage = "No records match the selected period and filters.",
-  pageSize = 25,
-  rowClassName,
 }: PsReportViewProps<T>) {
+  const router = useRouter();
+  const activeType = useSearchParams().get("type") ?? PS_DEFAULT_REPORT;
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"register" | "analytics">("register");
-  const [sort, setSort] = useState(defaultSort ?? null);
-  const [page, setPage] = useState(0);
   const columns = useMemo(() => allColumns.filter((c) => !c.hidden), [allColumns]);
 
   const searched = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
-    return rows.filter((row) => columns.some((c) => String(c.value(row) ?? "").toLowerCase().includes(q)));
-  }, [rows, columns, search]);
+    return rows.filter((row) => allColumns.some((c) => String(c.value(row) ?? "").toLowerCase().includes(q)));
+  }, [rows, allColumns, search]);
 
   const sorted = useMemo(() => {
-    if (!sort) return searched;
-    const col = columns.find((c) => c.key === sort.key);
+    if (!defaultSort) return searched;
+    const col = allColumns.find((c) => c.key === defaultSort.key);
     if (!col) return searched;
-    const dir = sort.dir === "asc" ? 1 : -1;
+    const dir = defaultSort.dir === "asc" ? 1 : -1;
     return [...searched].sort((a, b) => {
       const av = col.value(a);
       const bv = col.value(b);
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
       return String(av ?? "").localeCompare(String(bv ?? ""), undefined, { numeric: true }) * dir;
     });
-  }, [searched, sort, columns]);
+  }, [searched, defaultSort, allColumns]);
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageRows = sorted.slice(safePage * pageSize, safePage * pageSize + pageSize);
-  const hasTotals = columns.some((c) => c.total);
+  const gridColumns = useMemo<GridColumn[]>(
+    () =>
+      columns.map((c) => ({
+        key: c.key,
+        header: c.header,
+        format: c.format === "currency" ? "currency" : undefined,
+      })),
+    [columns],
+  );
 
-  const toggleSort = (key: string) => {
-    setPage(0);
-    setSort((s) => (s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }));
-  };
+  const gridRows = useMemo<ReportRow[]>(
+    () =>
+      sorted.map((row) => {
+        const out: ReportRow = { id: row.id };
+        for (const c of columns) out[c.key] = gridCell(c.value(row), c.format);
+        return out;
+      }),
+    [sorted, columns],
+  );
 
   const periodLabel = period
     ? period.from || period.to
@@ -382,292 +404,54 @@ export function PsReportView<T extends { id: string }>({
   };
 
   return (
-    <div className="space-y-5">
-      <FOPageHeader
-        eyebrow="Purchase & Stores · Reports"
-        title={title}
-        description={description}
-        breadcrumbs={[{ label: "Reports", href: "/purchase-stores/reports" }, { label: title }]}
-        action={
-          <ExportMenu
-            disabled={loading || sorted.length === 0}
-            options={[
-              { id: "csv", label: "CSV", description: "Comma-separated values", icon: <FileText className="h-3.5 w-3.5 text-slate-500" /> },
-              { id: "excel", label: "Excel", description: "Opens in Excel / Sheets", icon: <Sheet className="h-3.5 w-3.5 text-emerald-600" /> },
-              { id: "pdf", label: "PDF", description: "Printable A4 report", icon: <FileSpreadsheet className="h-3.5 w-3.5 text-red-500" /> },
-            ]}
-            onExport={handleExport}
-          />
-        }
-      />
-
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-500">
-        <span className="inline-flex items-center gap-1.5">
-          <CalendarRange className="h-3.5 w-3.5 text-slate-400" />
-          {period ? "Period" : "Snapshot"} <strong className="font-semibold text-slate-800">{periodLabel}</strong>
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <Hash className="h-3.5 w-3.5 text-slate-400" />
-          Records <strong className="font-semibold text-slate-800">{loading ? "…" : rows.length}</strong>
-        </span>
-        <span className="inline-flex items-center gap-1.5" suppressHydrationWarning>
-          <Clock className="h-3.5 w-3.5 text-slate-400" />
-          Generated{" "}
-          <strong className="font-semibold text-slate-800" suppressHydrationWarning>
-            {new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-          </strong>
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        {stats.map((s) => (
-          <StatMiniCard
-            key={s.label}
-            label={s.label}
-            value={loading ? "…" : s.value}
-            sublabel={s.sublabel}
-            icon={s.icon}
-            accent={s.accent}
-          />
-        ))}
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[14rem] flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(0);
-              }}
-              placeholder={searchPlaceholder}
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-            />
-          </div>
-
-          {period && (
-            <>
-              <SelectInput
-                aria-label="Report period"
-                value={period.period}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => period.setPeriod(e.target.value as ReportPeriodId)}
-                className="!h-10 !w-auto min-w-[10.5rem] shrink-0"
-              >
-                {REPORT_PERIOD_OPTIONS.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </SelectInput>
-              <div className="w-[9.25rem] shrink-0">
-                <FODatePicker value={period.from} placeholder="From" className="!h-10" onChange={period.setFrom} />
-              </div>
-              <span className="text-xs text-slate-400">to</span>
-              <div className="w-[9.25rem] shrink-0">
-                <FODatePicker value={period.to} placeholder="To" className="!h-10" onChange={period.setTo} />
-              </div>
-            </>
-          )}
-
-          {filters}
-
-          {activeFilterCount > 0 && onResetFilters && (
-            <button
-              type="button"
-              onClick={onResetFilters}
-              className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Reset ({activeFilterCount})
-            </button>
-          )}
-
-          <div className="ml-auto inline-flex shrink-0 rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="tablist" aria-label="Report view">
-            {(
-              [
-                { id: "register", label: "Register", icon: Table2 },
-                { id: "analytics", label: "Analytics", icon: BarChart3 },
-              ] as const
-            ).map((opt) => {
-              const Icon = opt.icon;
-              const active = view === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setView(opt.id)}
-                  className={cn(
-                    "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors",
-                    active ? "bg-emerald-700 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-900",
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {error && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>Couldn&apos;t load report data: {error}</span>
-        </div>
-      )}
-
-      {view === "analytics" ? (
-        loading ? (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-16 text-center text-sm text-slate-500">Loading analytics…</div>
-        ) : charts.some((c) => c.data.length > 0) ? (
-          <ReportCharts charts={charts.filter((c) => c.data.length > 0)} />
-        ) : (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-16 text-center">
-            <BarChart3 className="mx-auto h-6 w-6 text-slate-300" />
-            <p className="mt-2 text-sm font-medium text-slate-700">No chart data</p>
-            <p className="text-xs text-slate-500">Widen the period or clear filters to see analytics.</p>
-          </div>
-        )
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="max-h-[68vh] overflow-auto">
-            <table className="w-full min-w-max border-separate border-spacing-0 text-left text-sm">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
-                  {columns.map((c) => {
-                    const active = sort?.key === c.key;
-                    const SortIcon = active ? (sort?.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
-                    return (
-                      <th
-                        key={c.key}
-                        scope="col"
-                        className={cn(
-                          "whitespace-nowrap border-b border-slate-200 bg-slate-50 px-4 py-2.5 font-medium",
-                          c.align === "right" && "text-right",
-                          c.align === "center" && "text-center",
-                        )}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => toggleSort(c.key)}
-                          className={cn(
-                            "group inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-slate-900",
-                            active && "text-slate-900",
-                            c.align === "right" && "flex-row-reverse",
-                          )}
-                        >
-                          {c.header}
-                          <SortIcon className={cn("h-3 w-3", active ? "opacity-100" : "opacity-0 group-hover:opacity-60")} />
-                        </button>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <tr key={`sk-${i}`}>
-                      {columns.map((c) => (
-                        <td key={c.key} className="border-b border-slate-100 px-4 py-3">
-                          <div className="h-3.5 w-full max-w-[8rem] animate-pulse rounded bg-slate-100" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : pageRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={columns.length} className="px-4 py-16 text-center">
-                      <Table2 className="mx-auto h-6 w-6 text-slate-300" />
-                      <p className="mt-2 text-sm font-medium text-slate-700">No records</p>
-                      <p className="text-xs text-slate-500">{search ? "Nothing matches your search." : emptyMessage}</p>
-                    </td>
-                  </tr>
-                ) : (
-                  pageRows.map((row) => (
-                    <tr key={row.id} className={cn("transition-colors hover:bg-slate-50/80", rowClassName?.(row))}>
-                      {columns.map((c) => (
-                        <td
-                          key={c.key}
-                          className={cn(
-                            "whitespace-nowrap border-b border-slate-100 px-4 py-2.5 text-slate-700",
-                            c.align === "right" && "text-right tabular-nums",
-                            c.align === "center" && "text-center",
-                            c.className,
-                          )}
-                        >
-                          {c.render ? c.render(row) : formatCell(c.value(row), c.format)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              {hasTotals && !loading && sorted.length > 0 && (
-                <tfoot className="sticky bottom-0 z-10">
-                  <tr className="bg-slate-50 text-sm font-semibold text-slate-900">
-                    {columns.map((c, idx) => (
-                      <td
-                        key={c.key}
-                        className={cn(
-                          "whitespace-nowrap border-t border-slate-200 bg-slate-50 px-4 py-2.5",
-                          c.align === "right" && "text-right tabular-nums",
-                        )}
-                      >
-                        {c.total
-                          ? formatCell(sumBy(sorted, (r) => Number(c.value(r))), c.format ?? "number")
-                          : idx === 0
-                            ? `Total · ${sorted.length}`
-                            : ""}
-                      </td>
-                    ))}
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-
-          {!loading && sorted.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-2.5 text-xs text-slate-500">
-              <span>
-                Showing <strong className="text-slate-800">{safePage * pageSize + 1}</strong>–
-                <strong className="text-slate-800">{Math.min(sorted.length, (safePage + 1) * pageSize)}</strong> of{" "}
-                <strong className="text-slate-800">{sorted.length}</strong>
-                {sorted.length !== rows.length && ` (filtered from ${rows.length})`}
-              </span>
-              {pageCount > 1 && (
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={safePage === 0}
-                    onClick={() => setPage(safePage - 1)}
-                    className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-2.5 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" /> Prev
-                  </button>
-                  <span className="px-2">
-                    Page {safePage + 1} of {pageCount}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={safePage >= pageCount - 1}
-                    onClick={() => setPage(safePage + 1)}
-                    className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-2.5 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-                  >
-                    Next <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    <ReportWorkspace
+      eyebrow="Purchase & Stores · Reports"
+      title={title}
+      description={description}
+      reportOptions={PS_REPORTS}
+      activeReport={activeType}
+      onReportChange={(id) => router.replace(`/purchase-stores/reports?type=${id}`, { scroll: false })}
+      periodLabel={periodLabel}
+      loading={loading}
+      error={error ? `Couldn't load report data: ${error}` : null}
+      exportSlot={
+        <ExportMenu
+          label="Export"
+          disabled={loading || sorted.length === 0}
+          buttonClassName="!h-8"
+          options={[
+            { id: "excel", label: "Excel", description: "Opens in Excel / Sheets", icon: <Sheet className="h-3.5 w-3.5 text-emerald-600" /> },
+            { id: "csv", label: "CSV", description: "Comma-separated values", icon: <FileText className="h-3.5 w-3.5 text-slate-500" /> },
+            { id: "pdf", label: "PDF", description: "Printable A4 report", icon: <FileSpreadsheet className="h-3.5 w-3.5 text-red-500" /> },
+          ]}
+          onExport={handleExport}
+        />
+      }
+      kpis={stats.map((s) => ({ label: s.label, value: s.value, hint: s.sublabel, icon: s.icon }))}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder={searchPlaceholder}
+      dateRange={
+        period
+          ? {
+              quick: PERIOD_CHIPS,
+              active: period.period,
+              onQuick: (id) => period.setPeriod(id as ReportPeriodId),
+              from: period.from,
+              to: period.to,
+              onFrom: period.setFrom,
+              onTo: period.setTo,
+            }
+          : undefined
+      }
+      filters={filters}
+      filtersActive={activeFilterCount > 0}
+      onClearFilters={onResetFilters}
+      columns={gridColumns}
+      rows={gridRows}
+      totalRows={rows.length}
+      charts={charts}
+      sheetTabs={false}
+    />
   );
 }

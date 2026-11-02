@@ -8,7 +8,6 @@ import {
   ShoppingCart,
   Award,
   BarChart3,
-  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +19,6 @@ export function PurchaseStoresMobileBottomNav() {
     { label: "Purchases", href: "/purchase-stores/procurement/requisitions", icon: ShoppingCart },
     { label: "Contracts", href: "/purchase-stores/procurement/contracts", icon: Award },
     { label: "Reports", href: "/purchase-stores/reports", icon: BarChart3 },
-    { label: "Settings", href: "/purchase-stores/settings", icon: Settings },
   ];
 
   return (

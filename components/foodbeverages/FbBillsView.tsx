@@ -12,6 +12,7 @@ import { useFbOutlets } from "@/services/food-beverages/useFbOutlets";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
 import { FbOutletSelect } from "@/components/foodbeverages/FbOutletSelect";
+import { FbBillDetailDrawer } from "@/components/foodbeverages/FbBillDetailDrawer";
 import { saveBillSlip } from "@/lib/food-beverages/print-slips";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +39,7 @@ function formatBillDate(value: string | null) {
 function paymentBadge(status: string) {
   const normalized = status.toUpperCase();
   if (normalized === "PAID") return "bg-emerald-100 text-emerald-800";
-  if (normalized === "PARTIAL") return "bg-amber-100 text-amber-800";
+  if (normalized === "PARTIAL" || normalized === "PARTIALLY_PAID") return "bg-amber-100 text-amber-800";
   return "bg-slate-100 text-slate-700";
 }
 
@@ -58,6 +59,7 @@ export function FbBillsView() {
   const [paymentTab, setPaymentTab] = useState<PaymentTab>("all");
   const [toast, setToast] = useState<string | null>(null);
   const [reprintingId, setReprintingId] = useState<string | null>(null);
+  const [selectedBill, setSelectedBill] = useState<FbPosBill | null>(null);
 
   const outletNameById = useMemo(
     () => new Map(outlets.map((o) => [o.id, o.name])),
@@ -134,6 +136,9 @@ export function FbBillsView() {
         qty: Number(row.quantity ?? 1),
         price: Number(row.unitPrice ?? 0),
       }));
+      const billRow = (details.bills as Record<string, unknown>[]).find(
+        (b) => String(b.id) === bill.id,
+      );
       saveBillSlip({
         billNo: bill.billNo,
         billId: bill.id,
@@ -145,6 +150,14 @@ export function FbBillsView() {
         server: bill.server,
         lines: items,
         total: bill.total,
+        ...(billRow
+          ? {
+              subtotal: Number(billRow.subtotal ?? 0),
+              discount: Number(billRow.discount ?? 0),
+            }
+          : {}),
+        taxLines: details.taxSummary?.lines ?? [],
+        taxIncluded: Boolean(details.taxSummary?.included),
       });
       setToast(`${bill.billNo} reprinted`);
     } catch (e) {
@@ -248,13 +261,15 @@ export function FbBillsView() {
           filteredBills.map((bill) => (
             <article
               key={bill.id}
-              className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"
+              onClick={() => setSelectedBill(bill)}
+              className="cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-2xs transition hover:border-emerald-300"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-semibold text-slate-900">{bill.billNo}</p>
                   <Link
                     href={orderDetailHref(bill.orderId)}
+                    onClick={(e) => e.stopPropagation()}
                     className="text-xs font-medium text-emerald-700 hover:underline"
                   >
                     {bill.orderNo}
@@ -311,11 +326,19 @@ export function FbBillsView() {
                 </tr>
               ) : (
                 filteredBills.map((bill) => (
-                  <tr key={bill.id} className="border-b border-slate-100 last:border-0">
+                  <tr
+                    key={bill.id}
+                    onClick={() => setSelectedBill(bill)}
+                    className={cn(
+                      "cursor-pointer border-b border-slate-100 transition-colors last:border-0 hover:bg-emerald-50/40",
+                      selectedBill?.id === bill.id && "bg-emerald-50/60",
+                    )}
+                  >
                     <td className="px-4 py-3 font-medium text-slate-900">{bill.billNo}</td>
                     <td className="px-4 py-3 text-slate-600">
                       <Link
                         href={orderDetailHref(bill.orderId)}
+                        onClick={(e) => e.stopPropagation()}
                         className="font-medium text-emerald-700 hover:text-emerald-800 hover:underline"
                       >
                         {bill.orderNo}
@@ -354,7 +377,10 @@ export function FbBillsView() {
                         variant="outline"
                         size="sm"
                         disabled={reprintingId === bill.id}
-                        onClick={() => void reprintBillSlip(bill)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void reprintBillSlip(bill);
+                        }}
                         className="gap-1.5"
                       >
                         <Printer className="h-3.5 w-3.5" />
@@ -368,6 +394,18 @@ export function FbBillsView() {
           </table>
         </div>
       </section>
+
+      {selectedBill && (
+        <FbBillDetailDrawer
+          key={selectedBill.id}
+          bill={selectedBill}
+          outletName={(outletNameById.get(selectedBill.outletId) ?? selectedBill.outletId) || "—"}
+          orderHref={orderDetailHref(selectedBill.orderId)}
+          onClose={() => setSelectedBill(null)}
+          onReprint={() => void reprintBillSlip(selectedBill)}
+          reprinting={reprintingId === selectedBill.id}
+        />
+      )}
     </ModulePageShell>
   );
 }

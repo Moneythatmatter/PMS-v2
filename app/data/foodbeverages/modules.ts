@@ -1225,6 +1225,35 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
     ],
   }),
 
+  "/food-beverages/reports/gst": page({
+    title: "GST Report",
+    description: "Output GST on F&B bills — taxable value with CGST, SGST and IGST per bill.",
+    outletScope: "restaurant",
+    searchPlaceholder: "Search bill, outlet or order type…",
+    filterOptions: [{ id: "all", label: "All" }],
+    stats: [
+      { label: "Taxable Value", value: "—", sublabel: "Selected period" },
+      { label: "CGST", value: "—", accent: "#0ea5e9", sublabel: "Central tax" },
+      { label: "SGST", value: "—", accent: "#8b5cf6", sublabel: "State tax" },
+      { label: "Total GST", value: "—", accent: "#15803d", sublabel: "Output tax" },
+    ],
+    columns: [
+      { key: "billNo", header: "Bill" },
+      { key: "date", header: "Date" },
+      { key: "outlet", header: "Outlet" },
+      { key: "orderType", header: "Order Type" },
+      { key: "rate", header: "GST Rate" },
+      { key: "taxable", header: "Taxable" },
+      { key: "cgst", header: "CGST" },
+      { key: "sgst", header: "SGST" },
+      { key: "igst", header: "IGST / Other" },
+      { key: "totalTax", header: "Total GST" },
+      { key: "total", header: "Bill Total" },
+      { key: "status", header: "Payment" },
+    ],
+    rows: [],
+  }),
+
   "/food-beverages/reports/discount": page({
     title: "Discount Report",
     description: "Discounts, comps, and promotional reductions.",

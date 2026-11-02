@@ -72,7 +72,7 @@ export function ProfitLossView() {
   const router = useRouter();
   const openLedger = (accountId: string) => {
     const params = new URLSearchParams({ accountId, from: appliedFromDate, to: appliedToDate });
-    router.push(`/accounts/reports/general-ledger?${params.toString()}`);
+    router.push(`/accounts/reports?type=general-ledger&${params.toString()}`);
   };
 
   const { lookups } = useAccLookups();

@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import { formatINR } from "@/app/data/foodbeverages/ops";
+import { formatINR, formatINRExact } from "@/app/data/foodbeverages/ops";
 
 function escapeHtml(value: string) {
   return value
@@ -21,7 +21,7 @@ function slipDateTimeLabel() {
 
 function tableLabel(orderType: string, tableRef: string) {
   if (orderType === "Room Service") return `Room No: ${tableRef}`;
-  if (orderType === "Takeaway") return `Ref: ${tableRef}`;
+  if (orderType === "Takeaway") return `Pickup: ${tableRef}`;
   return `Table No: ${tableRef.replace(/^T-?/i, "")}`;
 }
 
@@ -110,7 +110,51 @@ export type BillSlipParams = {
   server: string;
   lines: BillPrintLine[];
   total: number;
+  subtotal?: number;
+  discount?: number;
+  taxLines?: BillTaxPrintLine[];
+  /** Menu prices already include the tax shown. */
+  taxIncluded?: boolean;
 };
+
+export type BillTaxPrintLine = {
+  name: string;
+  type?: string;
+  rate: number;
+  fixed?: boolean;
+  amount: number;
+};
+
+/** "CGST @ 2.5%" — tax names often already carry the combined rate (e.g. "CGST 5%"). */
+export function taxLineLabel(line: BillTaxPrintLine) {
+  if (line.fixed || !(line.rate > 0)) return line.name;
+  return `${line.type?.trim() || line.name} @ ${line.rate}%`;
+}
+
+/** Paise added or dropped when the bill total was rounded to the rupee (0 when none). */
+export function billRoundOff(subtotal: number, discount: number, tax: number, total: number) {
+  const diff = Math.round((total - (subtotal - discount + tax)) * 100) / 100;
+  return Math.abs(diff) >= 0.01 && Math.abs(diff) < 1 ? diff : 0;
+}
+
+function billSummaryRows(params: BillSlipParams) {
+  const rows: { label: string; amount: number }[] = [];
+  const taxLines = params.taxLines ?? [];
+  if (params.subtotal == null && !taxLines.length) return rows;
+  if (params.subtotal != null) {
+    rows.push({ label: params.taxIncluded ? "Taxable value" : "Subtotal", amount: params.subtotal });
+  }
+  if (params.discount && params.discount > 0) rows.push({ label: "Discount", amount: -params.discount });
+  taxLines.forEach((line) =>
+    rows.push({ label: `${taxLineLabel(line)}${params.taxIncluded ? " (incl.)" : ""}`, amount: line.amount }),
+  );
+  if (params.subtotal != null) {
+    const tax = taxLines.reduce((s, l) => s + l.amount, 0);
+    const roundOff = billRoundOff(params.subtotal, params.discount ?? 0, tax, params.total);
+    if (roundOff) rows.push({ label: "Round off", amount: roundOff });
+  }
+  return rows;
+}
 
 export function buildKotSlipHtml(params: KotSlipParams) {
   const itemRows = params.lines
@@ -162,6 +206,17 @@ export function buildBillSlipHtml(params: BillSlipParams) {
 
   const barcodeValue = params.billId.replace(/[^A-Za-z0-9]/g, "").slice(-12) || params.billNo;
   const billLabel = formatSlipNumber(params.billNo, "Bill");
+  const summary = billSummaryRows(params);
+  const summaryHtml = summary.length
+    ? `<div class="divider"></div><table>${summary
+        .map(
+          (row) =>
+            `<tr class="item-row"><td class="item-name">${escapeHtml(row.label)}</td><td class="item-amt">${escapeHtml(
+              row.amount < 0 ? `− ${formatINRExact(-row.amount)}` : formatINRExact(row.amount),
+            )}</td></tr>`,
+        )
+        .join("")}</table>`
+    : "";
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${escapeHtml(billLabel)}</title>
@@ -181,6 +236,7 @@ export function buildBillSlipHtml(params: BillSlipParams) {
     </tr>
     ${itemRows}
   </table>
+  ${summaryHtml}
   <div class="total-row">Total: ${escapeHtml(formatINR(params.total))}</div>
   <div class="center scan">Thank you</div>
   <div class="barcode-wrap">${simpleBarcodeSvg(barcodeValue)}<div class="barcode-no">${escapeHtml(barcodeValue.slice(-3).padStart(3, "0"))}</div></div>
@@ -197,8 +253,9 @@ function formatPdfCurrency(amount: number): string {
 
 export function generateBillSlipPdf(params: BillSlipParams): jsPDF {
   // 80mm thermal paper width, dynamic height
+  const summary = billSummaryRows(params);
   const baseHeight = 90;
-  const itemHeight = params.lines.length * 6.5;
+  const itemHeight = params.lines.length * 6.5 + (summary.length ? summary.length * 4.5 + 6 : 0);
   const totalHeight = Math.max(120, baseHeight + itemHeight);
 
   const doc = new jsPDF({
@@ -287,6 +344,20 @@ export function generateBillSlipPdf(params: BillSlipParams): jsPDF {
   y += 4;
   doc.setFont("courier", "normal");
   doc.text("--------------------------------------------------", centerX, y, { align: "center" });
+
+  if (summary.length) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    summary.forEach((row) => {
+      y += 4.5;
+      doc.text(row.label, leftMargin, y);
+      const amount = formatPdfCurrency(Math.abs(row.amount));
+      doc.text(row.amount < 0 ? `- ${amount}` : amount, rightMargin, y, { align: "right" });
+    });
+    y += 3;
+    doc.setFont("courier", "normal");
+    doc.text("--------------------------------------------------", centerX, y, { align: "center" });
+  }
 
   // Total
   y += 5;

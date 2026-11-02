@@ -1,96 +1,61 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   AlertTriangle,
   Banknote,
-  BarChart3,
   BedDouble,
   CalendarCheck,
   CheckCircle2,
   Clock,
-  CreditCard,
   DoorOpen,
-  Download,
   Globe,
   LogOut,
   Percent,
   Receipt,
   RotateCcw,
-  Search,
   Star,
-  Table2,
   TrendingUp,
   UserCheck,
   Users,
-  UtensilsCrossed,
   Wallet,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
 import type {
   ReportChartConfig,
-  ReportDefinition,
   ReportId,
   ReportRow,
 } from "@/app/data/frontoffice/reports";
-import { reportDefinitions, reportStatusClass } from "@/app/data/frontoffice/reports";
+import { reportDefinitions } from "@/app/data/frontoffice/reports";
 import { reportService } from "@/services/front-office";
-import { ReportCharts } from "@/components/frontoffice/ReportCharts";
-import { downloadXlsx, slugifyFilename } from "@/lib/xlsx";
+import {
+  ReportWorkspace,
+  WorkspaceFilterSelect,
+  exportReportXlsx,
+  useQuickDateRange,
+} from "@/components/reports/ReportWorkspace";
 import { NightAuditView } from "@/components/frontoffice/NightAuditView";
-import { SelectInput, FODatePicker, formatINR } from "@/components/frontoffice/ui";
-import { ModuleDataTable, ModulePageShell } from "@/components/pms";
-import { Button } from "@/components/ui/Button";
-import { cn } from "@/lib/utils";
+import { formatINR } from "@/components/frontoffice/ui";
 
-type ViewMode = "table" | "graph";
-type RangeId = "today" | "7d" | "30d" | "mtd" | "custom";
+type ListReportId = Exclude<ReportId, "night-audit">;
 
-const RANGE_OPTIONS: { id: RangeId; label: string }[] = [
-  { id: "today", label: "Today" },
-  { id: "7d", label: "Last 7 days" },
-  { id: "30d", label: "Last 30 days" },
-  { id: "mtd", label: "Month to date" },
-  { id: "custom", label: "Custom range" },
+export const REPORT_TYPE_OPTIONS: { id: ListReportId; label: string }[] = [
+  { id: "arrival", label: "Daily Arrival" },
+  { id: "departure", label: "Departure Report" },
+  { id: "occupancy", label: "Occupancy Report" },
+  { id: "revenue", label: "Revenue Report" },
+  { id: "cashier", label: "Cashier Report" },
+  { id: "guest", label: "Guest Report" },
+  { id: "room", label: "Room Report" },
+  { id: "tax", label: "Tax Report" },
 ];
 
-function toIsoDay(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function isListReportId(value: string | null): value is ListReportId {
+  return REPORT_TYPE_OPTIONS.some((opt) => opt.id === value);
 }
-
-function rangeToDates(range: RangeId): { from: string; to: string } {
-  const to = new Date();
-  to.setHours(12, 0, 0, 0);
-  const from = new Date(to);
-  if (range === "today") {
-    /* same day */
-  } else if (range === "30d") {
-    from.setDate(to.getDate() - 29);
-  } else if (range === "mtd") {
-    from.setDate(1);
-  } else {
-    from.setDate(to.getDate() - 6);
-  }
-  return { from: toIsoDay(from), to: toIsoDay(to) };
-}
-
-const REPORT_STAT_ICONS: Record<string, LucideIcon[]> = {
-  arrival: [CalendarCheck, CheckCircle2, BedDouble, Star],
-  departure: [LogOut, CheckCircle2, AlertCircle, Wallet],
-  occupancy: [BedDouble, DoorOpen, Wrench, TrendingUp],
-  revenue: [TrendingUp, BedDouble, UtensilsCrossed, Receipt],
-  cashier: [Wallet, Banknote, CreditCard, RotateCcw],
-  "night-audit": [Clock, Receipt, AlertTriangle, CheckCircle2],
-  guest: [Users, Globe, Globe, UserCheck],
-  room: [DoorOpen, BedDouble, CheckCircle2, AlertTriangle],
-  tax: [Receipt, Percent, Percent, Wallet],
-};
-
 function parseMoney(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const raw = String(value ?? "")
@@ -168,35 +133,37 @@ function buildCharts(type: ReportId, rows: ReportRow[]): ReportChartConfig[] {
     case "occupancy":
       return [
         {
-          title: "Rooms by status",
-          type: "pie",
-          data: countBy(rows, "status"),
-          valueFormat: "number",
-        },
-        {
-          title: "Rooms by type",
+          title: "Occupancy by room type",
           type: "bar",
-          data: countBy(rows, "type"),
+          data: rows.map((r) => ({
+            name: String(r.roomType ?? r.id),
+            value: Number(r.occupancy ?? 0),
+          })),
           valueFormat: "number",
           layout: "horizontal",
+        },
+        {
+          title: "Room nights sold",
+          type: "pie",
+          data: rows
+            .map((r) => ({ name: String(r.roomType ?? r.id), value: Number(r.occupied ?? 0) }))
+            .filter((d) => d.value > 0),
+          valueFormat: "number",
         },
       ];
     case "revenue":
       return [
         {
-          title: "Room revenue",
+          title: "Revenue by category",
           type: "bar",
-          data: rows.slice(0, 12).map((r) => ({
-            name: String(r.guestName ?? r.guest ?? r.bookingId ?? r.id),
-            value: parseMoney(r.roomRevenue ?? r.amount ?? r.totalAmount),
-          })),
+          data: sumBy(rows, "category", "amount"),
           valueFormat: "currency",
           layout: "horizontal",
         },
         {
-          title: "Balance outstanding",
-          type: "bar",
-          data: sumBy(rows, "status", "balance"),
+          title: "Revenue share by group",
+          type: "pie",
+          data: sumBy(rows, "group", "amount"),
           valueFormat: "currency",
         },
       ];
@@ -213,11 +180,7 @@ function buildCharts(type: ReportId, rows: ReportRow[]): ReportChartConfig[] {
           type: "bar",
           data: rows.map((r) => ({
             name: String(r.cashier ?? r.shift ?? r.id),
-            value:
-              parseMoney(r.cashSales) +
-              parseMoney(r.cardSales) +
-              parseMoney(r.upiSales) +
-              parseMoney(r.sales),
+            value: parseMoney(r.collected),
           })),
           valueFormat: "currency",
           layout: "horizontal",
@@ -226,10 +189,21 @@ function buildCharts(type: ReportId, rows: ReportRow[]): ReportChartConfig[] {
     case "guest":
       return [
         {
-          title: "Guests by status",
+          title: "Guests by segment",
           type: "pie",
-          data: countBy(rows, "status"),
+          data: countBy(rows, "segment"),
           valueFormat: "number",
+        },
+        {
+          title: "Revenue by guest",
+          type: "bar",
+          data: rows
+            .slice()
+            .sort((a, b) => parseMoney(b.revenue) - parseMoney(a.revenue))
+            .slice(0, 10)
+            .map((r) => ({ name: String(r.guestName ?? r.id), value: parseMoney(r.revenue) })),
+          valueFormat: "currency",
+          layout: "horizontal",
         },
         {
           title: "Guests by nationality",
@@ -258,22 +232,25 @@ function buildCharts(type: ReportId, rows: ReportRow[]): ReportChartConfig[] {
     case "tax":
       return [
         {
-          title: "GST by booking",
+          title: "Tax collected by category",
           type: "bar",
-          data: rows.slice(0, 12).map((r) => ({
-            name: String(r.bookingId ?? r.guest ?? r.id),
-            value: parseMoney(r.gst),
+          data: rows.map((r) => ({
+            name: String(r.category ?? r.id),
+            value: parseMoney(r.totalTax),
           })),
           valueFormat: "currency",
           layout: "horizontal",
         },
         {
-          title: "Taxable amount",
-          type: "area",
-          data: rows.slice(0, 12).map((r, i) => ({
-            name: String(r.bookingId ?? i + 1),
-            value: parseMoney(r.taxableAmount),
-          })),
+          title: "Taxable value by group",
+          type: "pie",
+          data: Object.entries(
+            rows.reduce<Record<string, number>>((acc, r) => {
+              const key = String(r.group ?? "Other");
+              acc[key] = (acc[key] ?? 0) + parseMoney(r.taxable);
+              return acc;
+            }, {}),
+          ).map(([name, value]) => ({ name, value })),
           valueFormat: "currency",
         },
       ];
@@ -324,77 +301,142 @@ function withUniqueIds(rows: ReportRow[]): ReportRow[] {
   });
 }
 
-function buildStats(
-  base: ReportDefinition,
-  rows: ReportRow[],
-  summary: Record<string, unknown>,
-) {
-  const icons = REPORT_STAT_ICONS[base.id] ?? [Receipt, Receipt, Receipt, Receipt];
-  const fromSummary = Object.entries(summary).map(([label, value], i) => ({
-    label: label
-      .replace(/([A-Z])/g, " $1")
-      .replace(/^./, (c) => c.toUpperCase())
-      .trim(),
-    value:
-      typeof value === "number"
-        ? label.toLowerCase().includes("revenue") ||
-          label.toLowerCase().includes("payment") ||
-          label.toLowerCase().includes("total")
-          ? formatINR(value)
-          : value
-        : String(value),
-    icon: icons[i % icons.length],
-  }));
+type Kpi = { label: string; value: string; hint: string; icon: LucideIcon };
 
-  if (fromSummary.length) return fromSummary.slice(0, 4);
+const REPORT_ICONS: Record<ListReportId, LucideIcon> = {
+  arrival: CalendarCheck,
+  departure: LogOut,
+  occupancy: BedDouble,
+  revenue: TrendingUp,
+  cashier: Wallet,
+  guest: Users,
+  room: DoorOpen,
+  tax: Receipt,
+};
 
-  return [
-    { label: "Records", value: rows.length, icon: icons[0] },
-    {
-      label: "Active",
-      value: rows.filter((r) => String(r.status ?? "").toLowerCase() !== "cancelled").length,
-      icon: icons[1],
-    },
-    {
-      label: "Pending",
-      value: rows.filter((r) => /pending|open/i.test(String(r.status ?? ""))).length,
-      icon: icons[2],
-    },
-    { label: "Total", value: rows.length, icon: icons[3] },
-  ];
+const sumOf = (rows: ReportRow[], key: string) => rows.reduce((n, r) => n + parseMoney(r[key]), 0);
+const countWhere = (rows: ReportRow[], re: RegExp, key = "status") =>
+  rows.filter((r) => re.test(String(r[key] ?? ""))).length;
+const pctOf = (part: number, whole: number) => (whole ? Math.round((part / whole) * 100) : 0);
+const plural = (n: number, word: string) => `${n.toLocaleString("en-IN")} ${word}${n === 1 ? "" : "s"}`;
+
+function topBy(rows: ReportRow[], labelKey: string, valueKey?: string) {
+  const totals = new Map<string, number>();
+  for (const r of rows) {
+    const name = String(r[labelKey] ?? "").trim();
+    if (!name) continue;
+    totals.set(name, (totals.get(name) ?? 0) + (valueKey ? parseMoney(r[valueKey]) : 1));
+  }
+  let best: [string, number] | null = null;
+  for (const entry of totals) if (!best || entry[1] > best[1]) best = entry;
+  return { name: best?.[0] ?? "—", value: best?.[1] ?? 0, distinct: totals.size };
 }
 
-function excelValue(value: ReportRow[string], format?: "currency" | "percent") {
-  if (value === undefined || value === null) return "";
-  if (typeof value === "number" || !format) return value;
-  const numeric = Number(String(value).replace(/[₹,%\s]/g, ""));
-  return String(value).trim() !== "" && Number.isFinite(numeric) ? numeric : value;
+/** KPIs are derived from the rows on screen so they always follow the active filters. */
+function buildKpis(type: ListReportId, rows: ReportRow[], summary: Record<string, unknown>): Kpi[] {
+  const n = rows.length;
+  switch (type) {
+    case "arrival": {
+      const confirmed = countWhere(rows, /confirm|checked.?in/i);
+      const pending = countWhere(rows, /pending|reserved|tentative/i);
+      const source = topBy(rows, "source");
+      return [
+        { label: "Arrivals", value: n.toLocaleString("en-IN"), hint: plural(source.distinct, "source"), icon: CalendarCheck },
+        { label: "Confirmed", value: confirmed.toLocaleString("en-IN"), hint: `${pctOf(confirmed, n)}% of arrivals`, icon: CheckCircle2 },
+        { label: "Pending", value: pending.toLocaleString("en-IN"), hint: pending ? "Needs follow-up" : "All clear", icon: AlertCircle },
+        { label: "Top source", value: source.name, hint: source.value ? plural(source.value, "booking") : "No bookings", icon: Globe },
+      ];
+    }
+    case "departure": {
+      const settled = countWhere(rows, /settled|checked.?out/i);
+      const pending = countWhere(rows, /pending/i);
+      const balance = sumOf(rows, "balance");
+      return [
+        { label: "Departures", value: n.toLocaleString("en-IN"), hint: "In selected period", icon: LogOut },
+        { label: "Settled", value: settled.toLocaleString("en-IN"), hint: `${pctOf(settled, n)}% of departures`, icon: CheckCircle2 },
+        { label: "Pending settlement", value: pending.toLocaleString("en-IN"), hint: pending ? "Folios still open" : "All clear", icon: AlertCircle },
+        { label: "Outstanding", value: formatINR(balance), hint: "Balance due", icon: Wallet },
+      ];
+    }
+    case "occupancy": {
+      const available = sumOf(rows, "totalRooms");
+      const sold = sumOf(rows, "occupied");
+      const vacant = sumOf(rows, "vacant");
+      const revenue = rows.reduce((t, r) => t + parseMoney(r.adr) * parseMoney(r.occupied), 0);
+      const best = topBy(rows, "roomType", "occupancy");
+      return [
+        { label: "Occupancy", value: `${pctOf(sold, available)}%`, hint: `${sold} of ${available} room nights`, icon: Percent },
+        { label: "Room nights sold", value: sold.toLocaleString("en-IN"), hint: best.value ? `Best: ${best.name}` : "No stays", icon: BedDouble },
+        { label: "Vacant nights", value: vacant.toLocaleString("en-IN"), hint: `${pctOf(vacant, available)}% unsold`, icon: DoorOpen },
+        {
+          label: "ADR",
+          value: formatINR(sold ? Math.round(revenue / sold) : 0),
+          hint: `Room revenue ${formatINR(parseMoney(summary.roomRevenue) || revenue)}`,
+          icon: TrendingUp,
+        },
+      ];
+    }
+    case "revenue": {
+      const net = sumOf(rows, "amount");
+      const top = topBy(rows, "category", "amount");
+      return [
+        { label: "Net revenue", value: formatINR(net), hint: plural(sumOf(rows, "transactions"), "charge"), icon: TrendingUp },
+        { label: "Tax", value: formatINR(sumOf(rows, "tax")), hint: "Collected on charges", icon: Percent },
+        { label: "Gross", value: formatINR(sumOf(rows, "gross")), hint: "Revenue + tax", icon: Receipt },
+        { label: "Top category", value: top.name, hint: top.value ? `${pctOf(top.value, net)}% of revenue` : "No revenue", icon: Star },
+      ];
+    }
+    case "cashier": {
+      const open = countWhere(rows, /open/i);
+      return [
+        { label: "Shifts", value: n.toLocaleString("en-IN"), hint: open ? `${open} still open` : "All closed", icon: Clock },
+        { label: "Collected", value: formatINR(sumOf(rows, "collected")), hint: "All payment modes", icon: Banknote },
+        { label: "Refunds", value: formatINR(sumOf(rows, "refunds")), hint: "Paid out", icon: RotateCcw },
+        { label: "Cash in drawer", value: formatINR(sumOf(rows, "closing")), hint: `Opening ${formatINR(sumOf(rows, "openingFloat"))}`, icon: Wallet },
+      ];
+    }
+    case "guest": {
+      const repeat = rows.filter((r) => parseMoney(r.totalStays) > 1).length;
+      const intl = countWhere(rows, /international/i, "segment");
+      return [
+        { label: "Guests", value: n.toLocaleString("en-IN"), hint: `${countWhere(rows, /corporate/i, "segment")} corporate`, icon: Users },
+        { label: "Revenue", value: formatINR(sumOf(rows, "revenue")), hint: n ? `Avg ${formatINR(Math.round(sumOf(rows, "revenue") / n))} / guest` : "No guests", icon: TrendingUp },
+        { label: "Repeat guests", value: repeat.toLocaleString("en-IN"), hint: `${pctOf(repeat, n)}% returning`, icon: UserCheck },
+        { label: "International", value: intl.toLocaleString("en-IN"), hint: `${pctOf(intl, n)}% of guests`, icon: Globe },
+      ];
+    }
+    case "room": {
+      const occupied = countWhere(rows, /occupied/i);
+      const vacant = countWhere(rows, /vacant/i);
+      const dirty = countWhere(rows, /dirty/i, "housekeeping");
+      const blocked = countWhere(rows, /blocked|maintenance|out of order/i);
+      return [
+        { label: "Occupied", value: occupied.toLocaleString("en-IN"), hint: `${pctOf(occupied, n)}% of ${n} rooms`, icon: BedDouble },
+        { label: "Vacant", value: vacant.toLocaleString("en-IN"), hint: "Ready to sell", icon: DoorOpen },
+        { label: "Dirty", value: dirty.toLocaleString("en-IN"), hint: dirty ? "Awaiting housekeeping" : "All clean", icon: AlertTriangle },
+        { label: "Blocked", value: blocked.toLocaleString("en-IN"), hint: blocked ? "Out of inventory" : "None blocked", icon: Wrench },
+      ];
+    }
+    case "tax": {
+      const taxable = sumOf(rows, "taxable");
+      const total = sumOf(rows, "totalTax");
+      return [
+        { label: "Taxable value", value: formatINR(taxable), hint: plural(sumOf(rows, "charges"), "charge"), icon: Receipt },
+        { label: "CGST", value: formatINR(sumOf(rows, "cgst")), hint: "Central tax", icon: Percent },
+        { label: "SGST", value: formatINR(sumOf(rows, "sgst")), hint: "State tax", icon: Percent },
+        { label: "Total tax", value: formatINR(total), hint: taxable ? `Effective ${((total / taxable) * 100).toFixed(1)}%` : "No taxable charges", icon: Wallet },
+      ];
+    }
+  }
 }
 
-function exportExcel(
-  title: string,
-  columns: ReportDefinition["columns"],
-  rows: ReportRow[],
-  filters: { fromDate: string; toDate: string; status: string; search: string },
-) {
-  downloadXlsx(`${slugifyFilename(title)}-${filters.fromDate}-to-${filters.toDate}`, [
-    {
-      name: title,
-      title: `${title} — Front Office`,
-      meta: [
-        ["Period", `${filters.fromDate} to ${filters.toDate}`],
-        ...(filters.status !== "all" ? ([["Status", filters.status]] as [string, string][]) : []),
-        ...(filters.search.trim() ? ([["Search", filters.search.trim()]] as [string, string][]) : []),
-        ["Records", rows.length],
-        ["Generated", new Date().toLocaleString("en-IN")],
-      ],
-      header: columns.map((c) => c.header),
-      rows: rows.map((row) => columns.map((c) => excelValue(row[c.key], c.format))),
-    },
-  ]);
-}
-
-function ReportListView({ type }: { type: ReportId }) {
+function ReportListView({
+  type,
+  onTypeChange,
+}: {
+  type: ReportId;
+  onTypeChange?: (next: ListReportId) => void;
+}) {
   const base = reportDefinitions[type];
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [summary, setSummary] = useState<Record<string, unknown>>({});
@@ -402,29 +444,23 @@ function ReportListView({ type }: { type: ReportId }) {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [range, setRange] = useState<RangeId>("today");
-  const initialDates = rangeToDates("today");
-  const [fromDate, setFromDate] = useState(initialDates.from);
-  const [toDate, setToDate] = useState(initialDates.to);
-  const [viewMode, setViewMode] = useState<ViewMode>("table");
-
-  const applyRange = (next: RangeId) => {
-    setRange(next);
-    if (next === "custom") return;
-    const dates = rangeToDates(next);
-    setFromDate(dates.from);
-    setToDate(dates.to);
-  };
+  const [prevType, setPrevType] = useState(type);
+  if (prevType !== type) {
+    setPrevType(type);
+    setStatusFilter("all");
+  }
+  const { from: fromDate, to: toDate, dateRange } = useQuickDateRange("today");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setLoading(true);
-        const data = await reportService.get(type);
+        const data = await reportService.get(type, { from: fromDate, to: toDate });
         if (cancelled) return;
         const apiRows = (data.rows as Record<string, unknown>[]) ?? [];
-        setRows(apiRows.map((row, index) => normalizeRow(type, row, index)));
+        setRows(withUniqueIds(apiRows.map((row, index) => normalizeRow(type, row, index))));
         setSummary(data.summary ?? {});
         setError(null);
       } catch (e) {
@@ -440,14 +476,14 @@ function ReportListView({ type }: { type: ReportId }) {
     return () => {
       cancelled = true;
     };
-  }, [type]);
+  }, [type, fromDate, toDate, reloadKey]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((row) => {
       if (statusFilter !== "all") {
-        const status = String(row.status ?? row.band ?? "");
-        if (status !== statusFilter) return false;
+        const tags = [row.status, row.band, row.group, row.segment, row.shiftBand];
+        if (!tags.some((tag) => String(tag ?? "") === statusFilter)) return false;
       }
       if (!q) return true;
       return Object.values(row).some((v) =>
@@ -461,213 +497,70 @@ function ReportListView({ type }: { type: ReportId }) {
     return buildCharts(type, filtered);
   }, [base.charts, type, filtered]);
 
-  const stats = useMemo(
-    () => buildStats(base, filtered, summary),
-    [base, filtered, summary],
-  );
-
-  const statusMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const row of filtered) {
-      if (row.status) map[String(row.status)] = reportStatusClass(String(row.status));
-      if (row.band) map[String(row.band)] = reportStatusClass(String(row.band));
-    }
-    return map;
-  }, [filtered]);
-
-  const toolbar = (
-    <div className="flex items-center gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm scrollbar-none">
-      <div className="relative min-w-[12rem] flex-1">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={base.searchPlaceholder}
-          className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-        />
-      </div>
-      <SelectInput
-        value={range}
-        onChange={(e) => applyRange(e.target.value as RangeId)}
-        className="!h-10 !w-auto min-w-[9.5rem] shrink-0"
-        aria-label="Date range"
-      >
-        {RANGE_OPTIONS.map((opt) => (
-          <option key={opt.id} value={opt.id}>
-            {opt.label}
-          </option>
-        ))}
-      </SelectInput>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          From
-        </span>
-        <div className="w-[9.25rem]">
-          <FODatePicker
-            value={fromDate}
-            placeholder="From date"
-            className="!h-10"
-            onChange={(value) => {
-              setFromDate(value);
-              setRange("custom");
-              if (toDate && value > toDate) setToDate(value);
-            }}
-          />
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          To
-        </span>
-        <div className="w-[9.25rem]">
-          <FODatePicker
-            value={toDate}
-            placeholder="To date"
-            className="!h-10"
-            onChange={(value) => {
-              setToDate(value);
-              setRange("custom");
-              if (fromDate && value < fromDate) setFromDate(value);
-            }}
-          />
-        </div>
-      </div>
-      {base.filterOptions?.length ? (
-        <SelectInput
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="!h-10 !w-auto min-w-[9rem] shrink-0"
-          aria-label="Status filter"
-        >
-          {base.filterOptions.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </SelectInput>
-      ) : null}
-      <div
-        className="inline-flex shrink-0 rounded-lg border border-slate-200 bg-slate-50 p-0.5"
-        role="tablist"
-        aria-label="Report view"
-      >
-        {(
-          [
-            { id: "table", label: "Table", icon: Table2 },
-            { id: "graph", label: "Graph report", icon: BarChart3 },
-          ] as const
-        ).map((opt) => {
-          const Icon = opt.icon;
-          const active = viewMode === opt.id;
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors",
-                active
-                  ? "bg-emerald-700 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-white hover:text-slate-900",
-              )}
-              onClick={() => setViewMode(opt.id)}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {opt.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  if (loading) {
-    return (
-      <ModulePageShell
-        eyebrow="Front Office · Reports"
-        title={base.title}
-        description={base.description}
-        wrapChildren={false}
-      >
-        <p className="text-sm text-slate-500">Loading report…</p>
-      </ModulePageShell>
-    );
-  }
-
-  if (error) {
-    return (
-      <ModulePageShell
-        eyebrow="Front Office · Reports"
-        title={base.title}
-        description={base.description}
-        wrapChildren={false}
-      >
-        <p className="text-sm text-red-600">{error}</p>
-      </ModulePageShell>
-    );
-  }
+  const listType: ListReportId = isListReportId(type) ? type : "arrival";
+  const kpis = useMemo(() => buildKpis(listType, filtered, summary), [listType, filtered, summary]);
 
   return (
-    <ModulePageShell
+    <ReportWorkspace
       eyebrow="Front Office · Reports"
       title={base.title}
       description={base.description}
-      wrapChildren={false}
-      stats={stats}
-      actionButtons={
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="gap-1"
-          onClick={() =>
-            exportExcel(base.title, base.columns, filtered, {
-              fromDate,
-              toDate,
-              status: statusFilter,
-              search,
-            })
-          }
-          disabled={loading}
-        >
-          <Download className="h-3.5 w-3.5" />
-          Export Excel
-        </Button>
+      reportOptions={
+        onTypeChange ? REPORT_TYPE_OPTIONS.map((opt) => ({ ...opt, icon: REPORT_ICONS[opt.id] })) : undefined
       }
-      aboveTable={
-        <div className="space-y-3">
-          {toolbar}
-          {viewMode === "table" ? (
-            <p className="text-xs text-slate-500">
-              Showing{" "}
-              <span className="font-medium text-slate-700">{filtered.length}</span> of{" "}
-              {rows.length} records ·{" "}
-              {fromDate} → {toDate}
-            </p>
-          ) : null}
-          {viewMode === "graph" ? (
-            charts.length ? (
-              <ReportCharts charts={charts} />
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
-                No chart data for the selected filters.
-              </div>
-            )
-          ) : null}
-        </div>
+      activeReport={type}
+      onReportChange={(id) => onTypeChange?.(id as ListReportId)}
+      loading={loading}
+      error={error}
+      onRefresh={() => setReloadKey((k) => k + 1)}
+      onExport={() =>
+        exportReportXlsx(base.title, "Front Office", base.columns, filtered, [
+          ["Period", `${fromDate} to ${toDate}`],
+          ...(statusFilter !== "all" ? ([["Status", statusFilter]] as [string, string][]) : []),
+          ...(search.trim() ? ([["Search", search.trim()]] as [string, string][]) : []),
+        ])
       }
-    >
-      {viewMode === "table" ? (
-        <ModuleDataTable
-          columns={base.columns}
-          rows={filtered}
-          statusMap={statusMap}
-          emptyMessage="No records match your search or filters."
-        />
-      ) : null}
-    </ModulePageShell>
+      kpis={kpis}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder={base.searchPlaceholder}
+      dateRange={dateRange}
+      filters={
+        base.filterOptions?.length ? (
+          <WorkspaceFilterSelect
+            label="Status"
+            value={statusFilter}
+            onChange={setStatusFilter}
+            allLabel="All statuses"
+            options={base.filterOptions
+              .filter((opt) => opt.id !== "all")
+              .map((opt) => ({ value: opt.id, label: opt.label }))}
+          />
+        ) : null
+      }
+      filtersActive={statusFilter !== "all"}
+      onClearFilters={() => setStatusFilter("all")}
+      columns={base.columns}
+      rows={filtered}
+      totalRows={rows.length}
+      charts={charts}
+    />
+  );
+}
+
+/** Single Reports page; the selected report lives in `?type=` so it survives refresh and can be linked. */
+export function FrontOfficeReportsView() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requested = searchParams.get("type");
+  const type: ListReportId = isListReportId(requested) ? requested : "arrival";
+
+  return (
+    <ReportListView
+      type={type}
+      onTypeChange={(next) => router.replace(`${pathname}?type=${next}`, { scroll: false })}
+    />
   );
 }
 

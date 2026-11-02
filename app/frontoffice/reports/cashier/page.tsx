@@ -1,5 +1,5 @@
-import { CashierReportView } from "@/components/frontoffice/ReportsViews";
+import { redirect } from "next/navigation";
 
-export default function CashierReportPage() {
-  return <CashierReportView />;
+export default function CashierReportRedirect() {
+  redirect("/frontoffice/reports?type=cashier");
 }

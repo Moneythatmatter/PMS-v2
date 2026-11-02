@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,10 @@ const MONTH_NAMES = [
 
 const DAYS_OF_WEEK = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
+const POPOVER_WIDTH = 256;
+const POPOVER_HEIGHT = 330;
+const VIEWPORT_GAP = 8;
+
 export function FODatePicker({
   value,
   onChange,
@@ -28,6 +33,8 @@ export function FODatePicker({
   const [showYearPicker, setShowYearPicker] = useState(false);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
 
   // Parse current selected date or fallback to today
   const selectedDate = value ? new Date(value) : new Date();
@@ -51,7 +58,12 @@ export function FODatePicker({
   // Close popover when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        !popoverRef.current?.contains(target)
+      ) {
         setIsOpen(false);
         setShowYearPicker(false);
         setShowMonthPicker(false);
@@ -60,6 +72,33 @@ export function FODatePicker({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Popover is portalled with fixed positioning so scroll/overflow containers never clip it.
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const place = () => {
+      const anchor = containerRef.current?.getBoundingClientRect();
+      if (!anchor) return;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const left = Math.min(
+        Math.max(VIEWPORT_GAP, anchor.left),
+        vw - POPOVER_WIDTH - VIEWPORT_GAP,
+      );
+      const fitsBelow = anchor.bottom + 4 + POPOVER_HEIGHT <= vh - VIEWPORT_GAP;
+      const top = fitsBelow
+        ? anchor.bottom + 4
+        : Math.max(VIEWPORT_GAP, anchor.top - 4 - POPOVER_HEIGHT);
+      setPopoverPos({ top, left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [isOpen]);
 
   // Format YYYY-MM-DD to DD/MM/YYYY for display
   const formatDisplayDate = (isoStr: string) => {
@@ -144,8 +183,12 @@ export function FODatePicker({
       </div>
 
       {/* Styled Calendar Popover Dropdown */}
-      {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xl animate-in fade-in-50 zoom-in-95">
+      {isOpen && popoverPos && createPortal(
+        <div
+          ref={popoverRef}
+          style={{ top: popoverPos.top, left: popoverPos.left, width: POPOVER_WIDTH }}
+          className="fixed z-[1000] rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xl animate-in fade-in-50 zoom-in-95"
+        >
           {/* Header Controls */}
           <div className="mb-3 flex items-center justify-between gap-1">
             <button
@@ -307,7 +350,8 @@ export function FODatePicker({
               Close
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

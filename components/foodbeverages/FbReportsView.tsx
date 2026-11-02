@@ -1,58 +1,30 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Download, Search, Table2 } from "lucide-react";
-import type { FbPageDefinition } from "@/app/data/foodbeverages/modules";
-import type { ReportChartConfig } from "@/app/data/frontoffice/reports";
+import { useRouter } from "next/navigation";
+import {
+  BarChart3,
+  Clock,
+  IndianRupee,
+  Percent,
+  Receipt,
+  Star,
+  TrendingUp,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+import { fbPageDefinitions, type FbPageDefinition } from "@/app/data/foodbeverages/modules";
+import type { ReportChartConfig, ReportRow } from "@/app/data/frontoffice/reports";
 import { formatINR } from "@/app/data/foodbeverages/ops";
-import { ReportCharts } from "@/components/frontoffice/ReportCharts";
-import { SelectInput, FODatePicker } from "@/components/frontoffice/ui";
+import type { ModuleRow } from "@/components/pms";
 import {
-  ModuleDataTable,
-  ModulePageShell,
-  type ModuleRow,
-} from "@/components/pms";
-import { Button } from "@/components/ui/Button";
-import { cn } from "@/lib/utils";
-import {
-  fbReportService,
-  type FbOutlet,
-} from "@/services/food-beverages";
+  ReportWorkspace,
+  WorkspaceFilterSelect,
+  exportReportXlsx,
+  useQuickDateRange,
+} from "@/components/reports/ReportWorkspace";
+import { fbReportService, type FbOutlet } from "@/services/food-beverages";
 import { useFbOutlets } from "@/services/food-beverages/useFbOutlets";
-
-type ViewMode = "table" | "graph";
-type RangeId = "today" | "7d" | "30d" | "mtd" | "custom";
-
-const RANGE_OPTIONS: { id: RangeId; label: string }[] = [
-  { id: "today", label: "Today" },
-  { id: "7d", label: "Last 7 days" },
-  { id: "30d", label: "Last 30 days" },
-  { id: "mtd", label: "Month to date" },
-  { id: "custom", label: "Custom range" },
-];
-
-function toIsoDay(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function rangeToDates(range: RangeId): { from: string; to: string } {
-  const to = new Date();
-  to.setHours(12, 0, 0, 0);
-  const from = new Date(to);
-  if (range === "today") {
-    /* same day */
-  } else if (range === "30d") {
-    from.setDate(to.getDate() - 29);
-  } else if (range === "mtd") {
-    from.setDate(1);
-  } else {
-    from.setDate(to.getDate() - 6);
-  }
-  return { from: toIsoDay(from), to: toIsoDay(to) };
-}
 
 function reportTypeFromPath(path: string) {
   const m = path.match(/\/food-beverages\/reports\/([^/]+)/);
@@ -245,6 +217,47 @@ function buildCharts(type: string, rows: ModuleRow[]): ReportChartConfig[] {
     ];
   }
 
+  if (type === "gst") {
+    const byOutlet = new Map<string, number>();
+    const byDay = new Map<string, number>();
+    for (const r of rows) {
+      const tax = Number(r.taxValue ?? 0);
+      const outlet = String(r.outlet ?? "—");
+      byOutlet.set(outlet, (byOutlet.get(outlet) ?? 0) + tax);
+      const day = String(r.date ?? "—");
+      byDay.set(day, (byDay.get(day) ?? 0) + tax);
+    }
+    const cgst = rows.reduce((s, r) => s + Number(r.cgstValue ?? 0), 0);
+    const sgst = rows.reduce((s, r) => s + Number(r.sgstValue ?? 0), 0);
+    const igst = rows.reduce((s, r) => s + Number(r.igstValue ?? 0), 0);
+    return [
+      {
+        title: "GST by day",
+        subtitle: "Output tax collected",
+        type: "area",
+        data: [...byDay].map(([name, value]) => ({ name, value })),
+        valueFormat: "currency",
+      },
+      {
+        title: "GST by outlet",
+        type: "bar",
+        data: [...byOutlet].map(([name, value]) => ({ name, value })),
+        valueFormat: "currency",
+        layout: "horizontal",
+      },
+      {
+        title: "Tax components",
+        type: "pie",
+        data: [
+          { name: "CGST", value: cgst },
+          { name: "SGST", value: sgst },
+          { name: "IGST / Other", value: igst },
+        ].filter((d) => d.value > 0),
+        valueFormat: "currency",
+      },
+    ];
+  }
+
   if (type === "cancelled-bills" || type === "discount") {
     return [
       {
@@ -296,6 +309,12 @@ function buildStats(
     if (label === "cash" && summary?.cashLabel != null) return { ...stat, value: String(summary.cashLabel) };
     if (label === "digital" && summary?.digitalLabel != null) return { ...stat, value: String(summary.digitalLabel) };
     if (label === "variance" && summary?.varianceLabel != null) return { ...stat, value: String(summary.varianceLabel) };
+    if (summary?.taxLabel != null) {
+      if (label === "taxable value") return { ...stat, value: String(summary.taxableLabel) };
+      if (label === "cgst") return { ...stat, value: String(summary.cgstLabel) };
+      if (label === "sgst") return { ...stat, value: String(summary.sgstLabel) };
+      if (label === "total gst") return { ...stat, value: String(summary.taxLabel) };
+    }
     if (
       label.includes("today") ||
       label.includes("mtd total") ||
@@ -347,29 +366,41 @@ function buildStats(
   });
 }
 
-function exportCsv(
-  title: string,
-  columns: FbPageDefinition["columns"],
-  rows: ModuleRow[],
-) {
-  const header = columns.map((c) => c.header).join(",");
-  const body = rows
-    .map((row) =>
-      columns
-        .map((c) => `"${String(row[c.key] ?? "").replace(/"/g, '""')}"`)
-        .join(","),
-    )
-    .join("\n");
-  const blob = new Blob([[header, body].filter(Boolean).join("\n")], {
-    type: "text/csv;charset=utf-8;",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${title.toLowerCase().replace(/\s+/g, "-")}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+function statIcon(label: string): LucideIcon {
+  const l = label.toLowerCase();
+  if (/gst|tax|cgst|sgst/.test(l)) return Percent;
+  if (/cash|digital|collected|revenue|sales|today|mtd|value|discount|on hand|cost/.test(l)) return IndianRupee;
+  if (/bill|cancel|item|sku/.test(l)) return Receipt;
+  if (/cover|guest/.test(l)) return Users;
+  if (/growth|vs |variance/.test(l)) return TrendingUp;
+  if (/top |outlet|categor|kitchen/.test(l)) return Star;
+  if (/time|sla|ticket/.test(l)) return Clock;
+  return BarChart3;
 }
+
+export const FB_DEFAULT_REPORT = "daily-sales";
+
+const FB_REPORT_ICONS: Record<string, LucideIcon> = {
+  "daily-sales": TrendingUp,
+  "item-sales": Receipt,
+  "category-sales": BarChart3,
+  "outlet-sales": Star,
+  cashier: IndianRupee,
+  "table-turnover": Users,
+  "food-cost": Percent,
+  inventory: BarChart3,
+  "kitchen-performance": Clock,
+  "cancelled-bills": Receipt,
+  discount: Percent,
+  gst: Percent,
+};
+
+const FB_REPORT_OPTIONS = Object.entries(fbPageDefinitions)
+  .filter(([path]) => path.startsWith("/food-beverages/reports/"))
+  .map(([path, def]) => {
+    const id = reportTypeFromPath(path);
+    return { id, label: def.title, icon: FB_REPORT_ICONS[id] };
+  });
 
 export function FbReportsView({
   definition,
@@ -378,27 +409,17 @@ export function FbReportsView({
   definition: FbPageDefinition;
   path: string;
 }) {
+  const router = useRouter();
   const type = reportTypeFromPath(path);
   const { outlets } = useFbOutlets(["restaurant", "cafe", "bar"]);
-  const [range, setRange] = useState<RangeId>("7d");
-  const initialDates = rangeToDates("7d");
-  const [fromDate, setFromDate] = useState(initialDates.from);
-  const [toDate, setToDate] = useState(initialDates.to);
+  const { from: fromDate, to: toDate, dateRange } = useQuickDateRange("7d");
   const [outletId, setOutletId] = useState("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [search, setSearch] = useState("");
   const [rows, setRows] = useState<ModuleRow[]>([]);
   const [summary, setSummary] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const applyRange = (next: RangeId) => {
-    setRange(next);
-    if (next === "custom") return;
-    const dates = rangeToDates(next);
-    setFromDate(dates.from);
-    setToDate(dates.to);
-  };
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -435,13 +456,7 @@ export function FbReportsView({
     return () => {
       cancelled = true;
     };
-  }, [type, fromDate, toDate, outletId]);
-
-  const charts = useMemo(() => buildCharts(type, rows), [type, rows]);
-  const stats = useMemo(
-    () => buildStats(definition, rows, summary),
-    [definition, rows, summary],
-  );
+  }, [type, fromDate, toDate, outletId, reloadKey]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -451,193 +466,60 @@ export function FbReportsView({
     );
   }, [rows, search]);
 
-  const toolbar = (
-    <div className="flex items-center gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm scrollbar-none">
-      <div className="relative min-w-[12rem] flex-1">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={definition.searchPlaceholder}
-          className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-        />
-      </div>
-      <SelectInput
-        value={range}
-        onChange={(e) => applyRange(e.target.value as RangeId)}
-        className="!h-10 !w-auto min-w-[9.5rem] shrink-0"
-        aria-label="Date range"
-      >
-        {RANGE_OPTIONS.map((opt) => (
-          <option key={opt.id} value={opt.id}>
-            {opt.label}
-          </option>
-        ))}
-      </SelectInput>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          From
-        </span>
-        <div className="w-[9.25rem]">
-          <FODatePicker
-            value={fromDate}
-            placeholder="From date"
-            className="!h-10"
-            onChange={(value) => {
-              setFromDate(value);
-              setRange("custom");
-              if (toDate && value > toDate) setToDate(value);
-            }}
-          />
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          To
-        </span>
-        <div className="w-[9.25rem]">
-          <FODatePicker
-            value={toDate}
-            placeholder="To date"
-            className="!h-10"
-            onChange={(value) => {
-              setToDate(value);
-              setRange("custom");
-              if (fromDate && value < fromDate) setFromDate(value);
-            }}
-          />
-        </div>
-      </div>
-      <SelectInput
-        value={outletId}
-        onChange={(e) => setOutletId(e.target.value)}
-        className="!h-10 !w-auto min-w-[11rem] shrink-0"
-        aria-label="Outlet"
-      >
-        <option value="all">All outlets</option>
-        {outlets.map((o: FbOutlet) => (
-          <option key={o.id} value={o.id}>
-            {o.name}
-          </option>
-        ))}
-      </SelectInput>
-      <div
-        className="inline-flex shrink-0 rounded-lg border border-slate-200 bg-slate-50 p-0.5"
-        role="tablist"
-        aria-label="Report view"
-      >
-        {(
-          [
-            { id: "table", label: "Table", icon: Table2 },
-            { id: "graph", label: "Graph report", icon: BarChart3 },
-          ] as const
-        ).map((opt) => {
-          const Icon = opt.icon;
-          const active = viewMode === opt.id;
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors",
-                active
-                  ? "bg-emerald-700 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-white hover:text-slate-900",
-              )}
-              onClick={() => setViewMode(opt.id)}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {opt.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+  const charts = useMemo(() => buildCharts(type, filtered), [type, filtered]);
+  const kpis = useMemo(
+    () =>
+      buildStats(definition, rows, summary).map((stat) => ({
+        label: stat.label,
+        value: stat.value,
+        hint: stat.sublabel,
+        icon: statIcon(stat.label),
+      })),
+    [definition, rows, summary],
   );
-
-  if (loading) {
-    return (
-      <ModulePageShell
-        eyebrow="Food & Beverages · Reports"
-        title={definition.title}
-        description={definition.description}
-        wrapChildren={false}
-      >
-        <p className="text-sm text-slate-500">Loading report…</p>
-      </ModulePageShell>
-    );
-  }
-
-  if (error) {
-    return (
-      <ModulePageShell
-        eyebrow="Food & Beverages · Reports"
-        title={definition.title}
-        description={definition.description}
-        wrapChildren={false}
-      >
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-6 text-sm text-red-700">
-          <p className="font-semibold">Could not load report</p>
-          <p className="mt-1">{error}</p>
-        </div>
-      </ModulePageShell>
-    );
-  }
+  const columns = useMemo(
+    () => definition.columns.map((c) => ({ key: c.key, header: c.header })),
+    [definition.columns],
+  );
+  const outletName = outlets.find((o: FbOutlet) => o.id === outletId)?.name;
 
   return (
-    <ModulePageShell
+    <ReportWorkspace
       eyebrow="Food & Beverages · Reports"
       title={definition.title}
       description={definition.description}
-      wrapChildren={false}
-      stats={stats}
-      actionButtons={
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="gap-1"
-          onClick={() => exportCsv(definition.title, definition.columns, filtered)}
-        >
-          <Download className="h-3.5 w-3.5" />
-          Export
-        </Button>
+      reportOptions={FB_REPORT_OPTIONS}
+      activeReport={type}
+      onReportChange={(next) => router.replace(`/food-beverages/reports?type=${next}`, { scroll: false })}
+      loading={loading}
+      error={error}
+      onRefresh={() => setReloadKey((k) => k + 1)}
+      onExport={() =>
+        exportReportXlsx(definition.title, "Food & Beverages", columns, filtered as ReportRow[], [
+          ["Period", `${fromDate} to ${toDate}`],
+          ["Outlet", outletName ?? "All outlets"],
+        ])
       }
-      aboveTable={
-        <div className="space-y-3">
-          {toolbar}
-          {viewMode === "table" ? (
-            <p className="text-xs text-slate-500">
-              Showing{" "}
-              <span className="font-medium text-slate-700">{filtered.length}</span> of{" "}
-              {rows.length} records
-              {summary?.from
-                ? ` · ${String(summary.from)} → ${String(summary.to)}`
-                : ""}
-            </p>
-          ) : null}
-          {viewMode === "graph" ? (
-            charts.length ? (
-              <ReportCharts charts={charts} />
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
-                No chart data for the selected filters.
-              </div>
-            )
-          ) : null}
-        </div>
-      }
-    >
-      {viewMode === "table" ? (
-        <ModuleDataTable
-          columns={definition.columns}
-          rows={filtered}
-          emptyMessage="No records match your search or filters."
+      kpis={kpis}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder={definition.searchPlaceholder}
+      dateRange={dateRange}
+      filters={
+        <WorkspaceFilterSelect
+          label="Outlet"
+          value={outletId}
+          onChange={setOutletId}
+          allLabel="All outlets"
+          options={outlets.map((o: FbOutlet) => ({ value: o.id, label: o.name }))}
         />
-      ) : null}
-    </ModulePageShell>
+      }
+      filtersActive={outletId !== "all"}
+      onClearFilters={() => setOutletId("all")}
+      columns={columns}
+      rows={filtered as ReportRow[]}
+      totalRows={rows.length}
+      charts={charts}
+    />
   );
 }

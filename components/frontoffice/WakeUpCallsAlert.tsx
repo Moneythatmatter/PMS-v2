@@ -4,19 +4,44 @@ import type { WakeUpCall } from "@/app/data/frontoffice/modules";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 
-const BUSINESS_DATE = "23 Jun 2026";
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+/** YYYY-MM-DD for "27 Sept 2026" or "2026-09-27" style call dates. */
+function callDay(call: WakeUpCall) {
+  const raw = String(call.date ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const m = raw.match(/^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})/);
+  if (!m) return "";
+  const month = MONTHS.indexOf(m[2].toLowerCase());
+  return month < 0 ? "" : `${m[3]}-${pad(month + 1)}-${pad(Number(m[1]))}`;
+}
+
+function todayDay() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 function sortKey(call: WakeUpCall) {
-  return `${call.date} ${call.time}`;
+  return `${callDay(call)} ${call.time}`;
 }
 
 function isToday(call: WakeUpCall) {
-  return call.date === BUSINESS_DATE;
+  return callDay(call) === todayDay();
 }
 
+/** Calls not yet completed, today or later, soonest first. */
 export function getPendingWakeUpCalls(calls: WakeUpCall[]) {
+  const today = todayDay();
   return [...calls]
     .filter((call) => !call.completed)
+    .filter((call) => {
+      const day = callDay(call);
+      return !day || day >= today;
+    })
     .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
 }
 

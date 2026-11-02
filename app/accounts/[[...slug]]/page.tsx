@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { ACCOUNTS_REPORTS, AccountsReportsBar } from "@/components/accounts/AccountsReportsBar";
 import { accountsNavItems } from "@/app/data/navigation/accounts";
 import { AccountsDashboardView } from "@/components/accounts/AccountsDashboardView";
 import { GLTransactionView } from "@/components/accounts/GLTransactionView";
@@ -78,6 +80,24 @@ function findNavLabel(slugPath: string): { title: string; category?: string } {
 
   return { title: formattedTitle, category };
 }
+
+/** Old per-report URLs now open the single Reports page. */
+const LEGACY_REPORT_PATHS: Record<string, string> = {
+  "reports/trial-balance": "trial-balance",
+  "trial-balance": "trial-balance",
+  "reports/profit-and-loss": "profit-and-loss",
+  "reports/profit-loss": "profit-and-loss",
+  "profit-and-loss": "profit-and-loss",
+  "profit-loss": "profit-and-loss",
+  "reports/general-ledger": "general-ledger",
+  "general-ledger": "general-ledger",
+  "reports/balance-sheet": "balance-sheet",
+  "balance-sheet": "balance-sheet",
+  balancesheet: "balance-sheet",
+  "reports/day-book": "day-book",
+  "day-book": "day-book",
+  daybook: "day-book",
+};
 
 export default async function AccountsPage({
   params,
@@ -395,49 +415,41 @@ export default async function AccountsPage({
     return <FinancialAnalysisView />;
   }
 
-  if (slugPath === "reports/trial-balance" || slugPath === "trial-balance") {
-    return <TrialBalanceView />;
+  const legacyReport = LEGACY_REPORT_PATHS[slugPath];
+  if (legacyReport) {
+    const query = new URLSearchParams();
+    for (const [k, v] of Object.entries(await searchParams)) {
+      if (typeof v === "string" && k !== "type") query.set(k, v);
+    }
+    query.set("type", legacyReport);
+    redirect(`/accounts/reports?${query.toString()}`);
   }
 
-  if (
-    slugPath === "reports/profit-and-loss" ||
-    slugPath === "reports/profit-loss" ||
-    slugPath === "profit-and-loss" ||
-    slugPath === "profit-loss"
-  ) {
-    return <ProfitLossView />;
-  }
-
-  if (slugPath === "reports/general-ledger" || slugPath === "general-ledger") {
+  if (slugPath === "reports") {
     const query = await searchParams;
-    const accountId = typeof query.accountId === "string" ? query.accountId : undefined;
+    const requested = typeof query.type === "string" ? query.type : "trial-balance";
+    const type = ACCOUNTS_REPORTS.some((r) => r.id === requested) ? requested : "trial-balance";
     const isoParam = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+    const accountId = typeof query.accountId === "string" ? query.accountId : undefined;
     const from = isoParam(query.from);
     const to = isoParam(query.to);
     return (
-      <GeneralLedgerView
-        key={`${accountId ?? "none"}|${from ?? ""}|${to ?? ""}`}
-        initialAccountId={accountId}
-        initialFromDate={from}
-        initialToDate={to}
-      />
+      <div className="space-y-4">
+        <AccountsReportsBar type={type} />
+        {type === "trial-balance" && <TrialBalanceView />}
+        {type === "profit-and-loss" && <ProfitLossView />}
+        {type === "balance-sheet" && <BalanceSheetView />}
+        {type === "day-book" && <DayBookView />}
+        {type === "general-ledger" && (
+          <GeneralLedgerView
+            key={`${accountId ?? "none"}|${from ?? ""}|${to ?? ""}`}
+            initialAccountId={accountId}
+            initialFromDate={from}
+            initialToDate={to}
+          />
+        )}
+      </div>
     );
-  }
-
-  if (
-    slugPath === "reports/balance-sheet" ||
-    slugPath === "balance-sheet" ||
-    slugPath === "balancesheet"
-  ) {
-    return <BalanceSheetView />;
-  }
-
-  if (
-    slugPath === "reports/day-book" ||
-    slugPath === "day-book" ||
-    slugPath === "daybook"
-  ) {
-    return <DayBookView />;
   }
 
   const { title, category } = findNavLabel(slugPath);

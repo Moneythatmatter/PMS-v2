@@ -11,7 +11,6 @@ import {
   fbOrderService,
   fbReportService,
   fbOutletTypeService,
-  fbTaxGroupService,
   fbUnitService,
   ingredientService,
   menuCategoryService,
@@ -256,7 +255,6 @@ const PATH_SERVICE: Record<string, CrudLike> = {
     remove: (id) => fbOrderService.remove(id),
   },
   "/food-beverages/masters/units": fbUnitService as CrudLike,
-  "/food-beverages/masters/tax-groups": fbTaxGroupService as CrudLike,
   "/food-beverages/masters/outlet-types": fbOutletTypeService as CrudLike,
   "/food-beverages/menu/categories": menuCategoryService as CrudLike,
   "/food-beverages/menu/items": menuItemService as CrudLike,
@@ -274,6 +272,7 @@ const PATH_SERVICE: Record<string, CrudLike> = {
   "/food-beverages/reports/kitchen-performance": readOnlyReport("kitchen-performance"),
   "/food-beverages/reports/cancelled-bills": readOnlyReport("cancelled-bills"),
   "/food-beverages/reports/discount": readOnlyReport("discount"),
+  "/food-beverages/reports/gst": readOnlyReport("gst"),
 };
 
 function scopeTypes(

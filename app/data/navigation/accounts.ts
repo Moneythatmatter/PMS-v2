@@ -3,11 +3,11 @@ import type { ModuleNavItem, NavItem } from "../types";
 export const accountsShortcutItems: NavItem[] = [
   { label: "Transaction", href: "/accounts/transactions/gl-transaction", icon: "receipt" },
   { label: "Receipt Transaction", href: "/accounts/transactions/gl-receipts-payments", icon: "wallet" },
-  { label: "Trial Balance", href: "/accounts/reports/trial-balance", icon: "scale" },
-  { label: "Profit & Loss", href: "/accounts/reports/profit-and-loss", icon: "trending-up" },
-  { label: "Balance Sheet", href: "/accounts/reports/balance-sheet", icon: "file-text" },
-  { label: "General Ledger", href: "/accounts/reports/general-ledger", icon: "book-open" },
-  { label: "Day Book", href: "/accounts/reports/day-book", icon: "calendar-clock" },
+  { label: "Trial Balance", href: "/accounts/reports?type=trial-balance", icon: "scale" },
+  { label: "Profit & Loss", href: "/accounts/reports?type=profit-and-loss", icon: "trending-up" },
+  { label: "Balance Sheet", href: "/accounts/reports?type=balance-sheet", icon: "file-text" },
+  { label: "General Ledger", href: "/accounts/reports?type=general-ledger", icon: "book-open" },
+  { label: "Day Book", href: "/accounts/reports?type=day-book", icon: "calendar-clock" },
   { label: "Exit", href: "/dashboard", icon: "log-out" },
 ];
 
@@ -32,7 +32,7 @@ export const accountsNavItems: ModuleNavItem[] = [
       { label: "Revenue Category Master", href: "/accounts/masters/revenue-categories", icon: "pie-chart" },
     ],
   },
-  { label: "General Ledger", href: "/accounts/reports/general-ledger", icon: "book-open" },
+  { label: "General Ledger", href: "/accounts/reports?type=general-ledger", icon: "book-open" },
   {
     label: "Transaction",
     href: "/accounts/transactions",
@@ -76,13 +76,6 @@ export const accountsNavItems: ModuleNavItem[] = [
     label: "Reports",
     href: "/accounts/reports",
     icon: "bar-chart",
-    children: [
-      { label: "Trial Balance", href: "/accounts/reports/trial-balance", icon: "scale" },
-      { label: "Profit & Loss", href: "/accounts/reports/profit-and-loss", icon: "trending-up" },
-      { label: "General Ledger", href: "/accounts/reports/general-ledger", icon: "book-open" },
-      { label: "Balance Sheet", href: "/accounts/reports/balance-sheet", icon: "file-text" },
-      { label: "Day Book", href: "/accounts/reports/day-book", icon: "calendar-clock" },
-    ],
   },
   { label: "Settings", href: "/accounts/settings", icon: "settings" },
 ];

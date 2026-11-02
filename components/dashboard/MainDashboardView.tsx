@@ -1,18 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import {
-  summaryStats,
-  guestData,
-  revenueData,
-  bookingsChartData,
-  platformData,
-  occupancyData,
-  ratingsData,
-  activityLog,
-  navItems,
-  currentUser,
-} from "@/app/data";
+import { navItems, currentUser } from "@/app/data";
 import type { Booking } from "@/app/data/types";
 import type { ReservationBooking } from "@/app/data/types";
 import { displayBookingNo } from "@/lib/booking-display";
@@ -35,7 +24,11 @@ import { WakeUpCallsAlert } from "@/components/frontoffice/WakeUpCallsAlert";
 import type { HKRoom } from "@/components/housekeeping/HousekeepingTypes";
 import { normalizeHkRoom } from "@/components/housekeeping/roomUtils";
 import { hkRoomService } from "@/services/housekeeping";
-import { wakeUpCallService } from "@/services/front-office";
+import {
+  mainDashboardService,
+  wakeUpCallService,
+  type MainDashboardData,
+} from "@/services/front-office";
 import type { WakeUpCall } from "@/app/data/frontoffice/modules";
 
 function mapReservationStatus(status: string): Booking["status"] {
@@ -69,11 +62,39 @@ function mapReservationToBooking(reservation: ReservationBooking): Booking {
   };
 }
 
+const PLACEHOLDER_STATS: MainDashboardData["summary"] = [
+  "Revenue (this month)",
+  "New Bookings (this month)",
+  "Check In (today)",
+  "Check Out (today)",
+].map((title) => ({ title, value: "—", change: "", trend: "up" as const }));
+
+const EMPTY_RATINGS: MainDashboardData["ratings"] = {
+  overall: 0,
+  maxScore: 10,
+  count: 0,
+  categories: [],
+};
+
 export function MainDashboardView() {
   const [rooms, setRooms] = useState<HKRoom[]>([]);
   const [wakeUpCalls, setWakeUpCalls] = useState<WakeUpCall[]>([]);
   const [todayBookings, setTodayBookings] = useState<Booking[]>([]);
   const [bookingsLoading, setBookingsLoading] = useState(true);
+  const [dashboard, setDashboard] = useState<MainDashboardData | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    mainDashboardService
+      .get()
+      .then((data) => {
+        if (!cancelled) setDashboard(data);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,7 +152,9 @@ export function MainDashboardView() {
   }, []);
 
   const computedOccupancy = useMemo(() => {
-    if (!rooms.length) return occupancyData;
+    if (!rooms.length) {
+      return { percentage: 0, occupied: 0, total: 0, statuses: [] };
+    }
     const total = rooms.length;
     const occupied = rooms.filter((r) => r.status === "Occupied").length;
     const vacantReady = rooms.filter((r) => r.status === "Vacant" || r.status === "Inspected").length;
@@ -158,17 +181,17 @@ export function MainDashboardView() {
     >
       <div className="min-w-0 space-y-4 sm:space-y-6 lg:space-y-8">
         <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6">
-          {summaryStats.map((stat, index) => (
-            <StatCard key={index} stat={stat} />
+          {(dashboard?.summary ?? PLACEHOLDER_STATS).map((stat) => (
+            <StatCard key={stat.title} stat={stat} />
           ))}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8">
           <div className="min-w-0">
-            <GuestsChart data={guestData} />
+            <GuestsChart data={dashboard?.guests ?? []} />
           </div>
           <div className="min-w-0">
-            <RevenueChart data={revenueData} />
+            <RevenueChart data={dashboard?.revenue ?? []} />
           </div>
           <div className="min-w-0 md:col-span-2 lg:col-span-1">
             <WakeUpCallsAlert calls={wakeUpCalls} />
@@ -177,10 +200,10 @@ export function MainDashboardView() {
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8">
           <div className="min-w-0">
-            <BookingsChart data={bookingsChartData} />
+            <BookingsChart data={dashboard?.bookingsChart ?? []} />
           </div>
           <div className="min-w-0">
-            <PlatformChart data={platformData} />
+            <PlatformChart data={dashboard?.platform ?? []} />
           </div>
           <div className="min-w-0 md:col-span-2 lg:col-span-1">
             <RoomOccupancy data={computedOccupancy} />
@@ -189,10 +212,10 @@ export function MainDashboardView() {
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3 lg:gap-8">
           <div className="min-w-0">
-            <OverallRatings data={ratingsData} />
+            <OverallRatings data={dashboard?.ratings ?? EMPTY_RATINGS} />
           </div>
           <div className="min-w-0 lg:col-span-2">
-            <RecentActivity activities={activityLog} />
+            <RecentActivity activities={dashboard?.activity ?? []} />
           </div>
         </div>
 

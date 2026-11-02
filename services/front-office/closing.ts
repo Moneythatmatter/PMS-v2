@@ -180,6 +180,13 @@ export type ReportResponse = {
 };
 
 export const reportService = {
-  get: (type: string) =>
-    api.get<ReportResponse>(foPath(`/reports/${type}`)),
+  get: (type: string, range?: { from?: string; to?: string }) => {
+    const qs = new URLSearchParams();
+    if (range?.from) qs.set("from", range.from);
+    if (range?.to) qs.set("to", range.to);
+    const query = qs.toString();
+    return api.get<ReportResponse>(
+      foPath(`/reports/${type}${query ? `?${query}` : ""}`),
+    );
+  },
 };

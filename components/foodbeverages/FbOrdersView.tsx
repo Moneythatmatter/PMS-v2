@@ -18,6 +18,7 @@ import {
   type OrderTab,
 } from "@/components/foodbeverages/FbOrderEntryPanel";
 import { FbTableSelectPanel } from "@/components/foodbeverages/FbTableSelectPanel";
+import { FbTablesSkeleton } from "@/components/foodbeverages/FbSkeletons";
 import { AlertBanner } from "@/components/frontoffice/ui";
 import { ConfirmModal } from "@/components/frontoffice/ui/Modal";
 import { ReservationArrivalModal } from "@/components/foodbeverages/reservations/ReservationArrivalModal";
@@ -68,6 +69,7 @@ export function FbOrdersView() {
   const [categories, setCategories] = useState<FbPosCategory[]>([]);
   const [tables, setTables] = useState<LiveTable[]>([]);
   const [roomServiceOrders, setRoomServiceOrders] = useState<LiveTable[]>([]);
+  const [takeawayOrders, setTakeawayOrders] = useState<LiveTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -97,6 +99,14 @@ export function FbOrdersView() {
       setRoomServiceOrders(rows);
     } catch {
       setRoomServiceOrders([]);
+    }
+  };
+
+  const reloadTakeawayOrders = async (outletId?: string) => {
+    try {
+      setTakeawayOrders(await floorPlanService.listTakeawayOpen(outletId));
+    } catch {
+      setTakeawayOrders([]);
     }
   };
 
@@ -151,13 +161,28 @@ export function FbOrdersView() {
         .list()
         .then(setTables)
         .catch(() => undefined);
-    }, 60_000);
+    }, 15_000);
     return () => window.clearInterval(timer);
   }, [entryStep, entryOrderType]);
 
   useEffect(() => {
     if (entryStep !== "tables" || entryOrderType !== "Room Service") return;
     void reloadRoomServiceOrders(filterOutletId || undefined);
+    const timer = window.setInterval(
+      () => void reloadRoomServiceOrders(filterOutletId || undefined),
+      15_000,
+    );
+    return () => window.clearInterval(timer);
+  }, [entryStep, entryOrderType, filterOutletId]);
+
+  useEffect(() => {
+    if (entryStep !== "tables" || entryOrderType !== "Takeaway") return;
+    void reloadTakeawayOrders(filterOutletId || undefined);
+    const timer = window.setInterval(
+      () => void reloadTakeawayOrders(filterOutletId || undefined),
+      15_000,
+    );
+    return () => window.clearInterval(timer);
   }, [entryStep, entryOrderType, filterOutletId]);
 
   const posMenuItems = useMemo((): FbPosMenuItem[] => {
@@ -177,6 +202,7 @@ export function FbOrdersView() {
     await Promise.all([
       reloadTables(),
       reloadRoomServiceOrders(filterOutletId || undefined),
+      reloadTakeawayOrders(filterOutletId || undefined),
     ]);
     setSelectedTable(null);
     setSelectedRoomOrder(null);
@@ -206,13 +232,17 @@ export function FbOrdersView() {
     setEntryStep("order");
   };
 
-  const openRoomServiceEntry = (room: LiveTable, mode: PosEntryMode) => {
+  const openRoomServiceEntry = (
+    room: LiveTable,
+    mode: PosEntryMode,
+    type: OrderTab = "Room Service",
+  ) => {
     setSelectedRoomOrder(room);
     setSelectedTable(null);
     setOpenOrderId(room.openOrderId ?? room.id);
     setOpenBillId(room.openBillId ?? "");
     setEntryMode(mode);
-    setEntryOrderType("Room Service");
+    setEntryOrderType(type);
     setOrderOutletId(room.outletId || filterOutletId);
     setEntryStep("order");
   };
@@ -270,6 +300,14 @@ export function FbOrdersView() {
     openRoomServiceEntry(room, "settle");
   };
 
+  const handleSelectTakeaway = (order: LiveTable) =>
+    openRoomServiceEntry(order, order.status === "Billing" ? "settle" : "manage", "Takeaway");
+
+  const handleBillTakeaway = (order: LiveTable) => {
+    if (order.status !== "Billing") return;
+    openRoomServiceEntry(order, "settle", "Takeaway");
+  };
+
   const handleNoShow = async () => {
     const reservation = noShowTable?.reservation;
     if (!noShowTable || !reservation) return;
@@ -308,8 +346,8 @@ export function FbOrdersView() {
 
   if (loading || outletsLoading) {
     return (
-      <div className="absolute -inset-3 z-10 flex items-center justify-center bg-[#f7f8f7] sm:-inset-4 lg:-inset-6">
-        <p className="text-sm text-slate-500">Loading…</p>
+      <div className="absolute -inset-3 z-10 bg-[#f7f8f7] sm:-inset-4 lg:-inset-6">
+        <FbTablesSkeleton />
       </div>
     );
   }
@@ -342,6 +380,9 @@ export function FbOrdersView() {
           onOrderTypeChange={setEntryOrderType}
           tables={tables}
           roomServiceOrders={roomServiceOrders}
+          takeawayOrders={takeawayOrders}
+          onSelectTakeaway={handleSelectTakeaway}
+          onBillTakeaway={handleBillTakeaway}
           onSelectTable={handleSelectTable}
           onSelectRoomOrder={handleSelectRoomOrder}
           onBillTable={handleBillTable}
@@ -364,6 +405,7 @@ export function FbOrdersView() {
           onTablesRefresh={() => {
             void reloadTables();
             void reloadRoomServiceOrders(filterOutletId || undefined);
+            void reloadTakeawayOrders(filterOutletId || undefined);
           }}
           onToast={setToast}
           className="min-h-0 flex-1"

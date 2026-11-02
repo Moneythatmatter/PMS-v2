@@ -44,19 +44,5 @@ export const frontOfficeNavItems: ModuleNavItem[] = [
       { label: "Staff & Shifts", href: "/frontoffice/masters/staff", icon: "users" },
     ],
   },
-  {
-    label: "Reports",
-    href: "/frontoffice/reports",
-    icon: "bar-chart",
-    children: [
-      { label: "Daily Arrival", href: "/frontoffice/reports/arrival", icon: "calendar-check" },
-      { label: "Departure Report", href: "/frontoffice/reports/departure", icon: "log-out" },
-      { label: "Occupancy Report", href: "/frontoffice/reports/occupancy", icon: "bed-double" },
-      { label: "Revenue Report", href: "/frontoffice/reports/revenue", icon: "trending-up" },
-      { label: "Cashier Report", href: "/frontoffice/reports/cashier", icon: "wallet" },
-      { label: "Guest Report", href: "/frontoffice/reports/guest", icon: "user-circle" },
-      { label: "Room Report", href: "/frontoffice/reports/room", icon: "door-open" },
-      { label: "Tax Report", href: "/frontoffice/reports/tax", icon: "receipt" },
-    ],
-  },
+  { label: "Reports", href: "/frontoffice/reports", icon: "bar-chart" },
 ];

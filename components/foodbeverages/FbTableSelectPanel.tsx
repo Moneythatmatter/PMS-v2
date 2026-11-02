@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowRight, Eye, Receipt, Search } from "lucide-react";
+import { ArrowRight, Eye, Receipt, Search, UtensilsCrossed } from "lucide-react";
 import {
   formatTableAmount,
   formatTableDuration,
@@ -39,10 +39,13 @@ type Props = {
   onOrderTypeChange: (type: OrderTab) => void;
   tables: LiveTable[];
   roomServiceOrders?: LiveTable[];
+  takeawayOrders?: LiveTable[];
   onSelectTable: (table: LiveTable) => void;
   onSelectRoomOrder?: (room: LiveTable) => void;
   onBillTable?: (table: LiveTable) => void;
   onBillRoomOrder?: (room: LiveTable) => void;
+  onSelectTakeaway?: (order: LiveTable) => void;
+  onBillTakeaway?: (order: LiveTable) => void;
   onCleanTable?: (table: LiveTable) => void;
   onNoShow?: (table: LiveTable) => void;
   onContinue: () => void;
@@ -57,10 +60,13 @@ export function FbTableSelectPanel({
   onOrderTypeChange,
   tables,
   roomServiceOrders = [],
+  takeawayOrders = [],
   onSelectTable,
   onSelectRoomOrder,
   onBillTable,
   onBillRoomOrder,
+  onSelectTakeaway,
+  onBillTakeaway,
   onCleanTable,
   onNoShow,
   onContinue,
@@ -145,14 +151,20 @@ export function FbTableSelectPanel({
 
   const isDineIn = orderType === "Dine In";
   const isRoomService = orderType === "Room Service";
+  const isTakeaway = orderType === "Takeaway";
+  const isOrderList = isRoomService || isTakeaway;
+  const listOrders = isTakeaway ? takeawayOrders : roomServiceOrders;
+  const statusFilters = isOrderList
+    ? STATUS_FILTERS.filter((f) => f.id !== "Available" && f.id !== "Booked")
+    : STATUS_FILTERS;
   const showOutletHeaders = !outletId || outletGroups.length > 1;
 
   const outletRoomOrders = useMemo(() => {
-    if (!outletId) return roomServiceOrders;
-    return roomServiceOrders.filter(
+    if (!outletId) return listOrders;
+    return listOrders.filter(
       (room) => !room.outletId || room.outletId === outletId,
     );
-  }, [roomServiceOrders, outletId]);
+  }, [listOrders, outletId]);
 
   const visibleRoomOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -162,6 +174,7 @@ export function FbTableSelectPanel({
       const outletLabel = outletName(room.outletId).toLowerCase();
       return (
         room.tableNo.toLowerCase().includes(q) ||
+        (room.orderNo ?? "").toLowerCase().includes(q) ||
         room.guest.toLowerCase().includes(q) ||
         outletLabel.includes(q)
       );
@@ -181,11 +194,13 @@ export function FbTableSelectPanel({
         outletId: oid,
         outletName: outletName(oid === "unknown" ? undefined : oid),
         rooms: rooms.sort((a, b) =>
-          a.tableNo.localeCompare(b.tableNo, undefined, { numeric: true }),
+          isTakeaway
+            ? (a.orderNo ?? "").localeCompare(b.orderNo ?? "", undefined, { numeric: true })
+            : a.tableNo.localeCompare(b.tableNo, undefined, { numeric: true }),
         ),
       }))
       .sort((a, b) => a.outletName.localeCompare(b.outletName));
-  }, [visibleRoomOrders, outlets]);
+  }, [visibleRoomOrders, outlets, isTakeaway]);
 
   const roomSearchFiltered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -194,6 +209,7 @@ export function FbTableSelectPanel({
       const outletLabel = outletName(room.outletId).toLowerCase();
       return (
         room.tableNo.toLowerCase().includes(q) ||
+        (room.orderNo ?? "").toLowerCase().includes(q) ||
         room.guest.toLowerCase().includes(q) ||
         outletLabel.includes(q)
       );
@@ -223,10 +239,10 @@ export function FbTableSelectPanel({
             value={outletId}
             onChange={onOutletChange}
             allowAll
-            className="w-full sm:w-auto"
+            className="h-10 w-full min-w-[11rem] sm:w-auto"
           />
-          {isDineIn || isRoomService ? (
-            <div className="relative min-w-[12rem] flex-1">
+          {isDineIn || isOrderList ? (
+            <div className="relative w-full min-w-[12rem] sm:w-auto sm:flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="search"
@@ -235,9 +251,11 @@ export function FbTableSelectPanel({
                 placeholder={
                   isRoomService
                     ? "Search room, guest, or outlet…"
-                    : "Search table, outlet, or section…"
+                    : isTakeaway
+                      ? "Search order no. or customer…"
+                      : "Search table, outlet, or section…"
                 }
-                className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none ring-emerald-500/30 focus:border-emerald-500 focus:ring-2"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none ring-emerald-500/30 focus:border-emerald-500 focus:ring-2"
               />
             </div>
           ) : (
@@ -245,7 +263,7 @@ export function FbTableSelectPanel({
           )}
           <div className="ml-auto flex w-full min-w-0 shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
             <div
-              className="flex w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-0.5 sm:max-w-md"
+              className="flex w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-0.5 sm:w-[28rem] sm:max-w-lg"
               role="tablist"
               aria-label="Order type"
             >
@@ -274,17 +292,17 @@ export function FbTableSelectPanel({
                 className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
                 onClick={onContinue}
               >
-                {isRoomService ? "New order" : "Continue"}
+                {isTakeaway ? "New takeaway" : "New order"}
                 <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             )}
           </div>
         </div>
 
-        {(isDineIn || isRoomService) && (
+        {(isDineIn || isOrderList) && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              {STATUS_FILTERS.map((opt) => (
+              {statusFilters.map((opt) => (
               <button
                 key={opt.id}
                 type="button"
@@ -303,7 +321,7 @@ export function FbTableSelectPanel({
                     filter === opt.id ? "text-white/85" : "text-slate-400",
                   )}
                 >
-                  {(isRoomService ? roomStatusCounts : statusCounts)[opt.id] ?? 0}
+                  {(isOrderList ? roomStatusCounts : statusCounts)[opt.id] ?? 0}
                 </span>
               </button>
               ))}
@@ -362,19 +380,20 @@ export function FbTableSelectPanel({
             )}
           </div>
         </>
-      ) : isRoomService ? (
+      ) : (
         <div className="min-h-0 flex-1 overflow-y-auto border-b border-slate-200 bg-white">
           {roomOutletGroups.length === 0 ? (
             <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-4 px-4 text-center">
               <p className="text-sm text-slate-500">
-                No open room service orders{outletId ? " for this outlet" : ""}.
+                No open {isTakeaway ? "takeaway" : "room service"} orders
+                {outletId ? " for this outlet" : ""}.
               </p>
               <Button
                 type="button"
                 className="gap-1.5 bg-emerald-700 hover:bg-emerald-800"
                 onClick={onContinue}
               >
-                Start room service order
+                {isTakeaway ? "Start takeaway order" : "Start room service order"}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
@@ -388,7 +407,7 @@ export function FbTableSelectPanel({
                         {group.outletName}
                       </h2>
                       <span className="text-[11px] text-slate-500">
-                        {group.rooms.length} room
+                        {group.rooms.length} {isTakeaway ? "order" : "room"}
                         {group.rooms.length === 1 ? "" : "s"}
                       </span>
                     </div>
@@ -398,9 +417,14 @@ export function FbTableSelectPanel({
                       <RoomServiceTile
                         key={room.id}
                         room={room}
-                        onSelect={() => onSelectRoomOrder?.(room)}
+                        variant={isTakeaway ? "takeaway" : "room"}
+                        onSelect={() =>
+                          isTakeaway ? onSelectTakeaway?.(room) : onSelectRoomOrder?.(room)
+                        }
                         onBill={
-                          onBillRoomOrder ? () => onBillRoomOrder(room) : undefined
+                          isTakeaway
+                            ? onBillTakeaway && (() => onBillTakeaway(room))
+                            : onBillRoomOrder && (() => onBillRoomOrder(room))
                         }
                       />
                     ))}
@@ -409,23 +433,6 @@ export function FbTableSelectPanel({
               ))}
             </div>
           )}
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-8">
-          <div className="max-w-sm rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-            <p className="text-lg font-semibold text-slate-900">{orderType} order</p>
-            <p className="mt-2 text-sm text-slate-500">
-              Start a counter pickup order — no table needed.
-            </p>
-            <Button
-              type="button"
-              className="mt-6 gap-1.5 bg-emerald-700 hover:bg-emerald-800"
-              onClick={onContinue}
-            >
-              Continue to menu
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
         </div>
       )}
     </div>
@@ -451,15 +458,37 @@ function TableStatusLegend() {
   );
 }
 
+function FoodReadyBadge() {
+  return (
+    <span
+      className="absolute bottom-1.5 left-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm"
+      title="Food is ready"
+      aria-label="Food is ready"
+    >
+      <UtensilsCrossed className="h-3 w-3" />
+    </span>
+  );
+}
+
+/** Takeaway tokens show the order number's digits ("ORD-091" → "091"). */
+function takeawayToken(room: LiveTable) {
+  const digits = (room.orderNo ?? "").match(/\d+/g)?.join("") ?? "";
+  return digits || room.orderNo || "—";
+}
+
 function RoomServiceTile({
   room,
+  variant = "room",
   onSelect,
   onBill,
 }: {
   room: LiveTable;
+  variant?: "room" | "takeaway";
   onSelect: () => void;
   onBill?: () => void;
 }) {
+  const isTakeaway = variant === "takeaway";
+  const label = isTakeaway ? "Order" : "Room";
   const status = (room.status as LiveTableStatus) ?? "Occupied";
   const style = tableStatusStyles[status] ?? tableStatusStyles.Occupied;
   const isPrinted = status === "Billing";
@@ -485,11 +514,14 @@ function RoomServiceTile({
         className="flex flex-1 cursor-pointer flex-col items-center justify-center text-center"
       >
         <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-          Room
+          {isTakeaway ? "Token" : "Room"}
         </p>
         <p className="text-2xl font-bold leading-none text-slate-900">
-          {room.tableNo.replace(/^R-?/i, "")}
+          {isTakeaway ? takeawayToken(room) : room.tableNo.replace(/^R-?/i, "")}
         </p>
+        {isTakeaway && room.guest && room.guest !== "—" && room.guest !== "Walk-in" && room.checkAmount > 0 && (
+          <p className="mt-1 w-full truncate text-[10px] font-medium text-slate-700">{room.guest}</p>
+        )}
         {room.checkAmount > 0 && (
           <p className="mt-2 text-[11px] font-bold text-slate-900">
             {formatTableAmount(room.checkAmount)}
@@ -510,7 +542,7 @@ function RoomServiceTile({
             onBill();
           }}
           className="mx-auto flex h-6 w-8 items-center justify-center rounded-sm border border-emerald-800 bg-white text-emerald-900 shadow-sm transition hover:bg-emerald-50"
-          aria-label={`Settle room ${room.tableNo}`}
+          aria-label={`Settle ${label.toLowerCase()} ${isTakeaway ? room.orderNo : room.tableNo}`}
         >
           <Receipt className="h-3.5 w-3.5" />
         </button>
@@ -522,11 +554,12 @@ function RoomServiceTile({
             onSelect();
           }}
           className="mx-auto flex h-6 w-8 items-center justify-center rounded-sm border border-slate-700 bg-white text-slate-800 shadow-sm transition hover:bg-slate-50"
-          aria-label={`View room ${room.tableNo} order`}
+          aria-label={`View ${label.toLowerCase()} ${isTakeaway ? room.orderNo : room.tableNo}`}
         >
           <Eye className="h-3.5 w-3.5" />
         </button>
       ) : null}
+      {isActive && !isPrinted && room.foodReady && <FoodReadyBadge />}
     </div>
   );
 }
@@ -718,6 +751,7 @@ function TableTile({
           <Eye className="h-3.5 w-3.5" />
         </button>
       ) : null}
+      {isActive && !isPaid && !isPrinted && table.foodReady && <FoodReadyBadge />}
     </div>
   );
 }

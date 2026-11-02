@@ -30,6 +30,8 @@ export {
 export {
   transferService,
   wakeUpCallService,
+  mainDashboardService,
+  type MainDashboardData,
   taxiBookingService,
   luggageService,
   messageService,

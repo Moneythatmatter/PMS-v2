@@ -1,5 +1,14 @@
 import { api, foPath } from "../api";
 import type {
+  ActivityItem,
+  BookingChartDataPoint,
+  GuestDataPoint,
+  PlatformDataPoint,
+  RatingsData,
+  RevenueDataPoint,
+  SummaryStat,
+} from "@/app/data/types";
+import type {
   GuestFeedbackRecord,
   HousekeepingRequest,
   LuggageRecord,
@@ -23,6 +32,21 @@ function crud<T>(base: string) {
 
 export const transferService = crud<RoomTransferRecord>("/transfers");
 export const wakeUpCallService = crud<WakeUpCall>("/wake-up-calls");
+
+export type MainDashboardData = {
+  summary: SummaryStat[];
+  guests: GuestDataPoint[];
+  revenue: RevenueDataPoint[];
+  bookingsChart: BookingChartDataPoint[];
+  platform: PlatformDataPoint[];
+  ratings: RatingsData & { count: number };
+  activity: ActivityItem[];
+  generatedAt: string;
+};
+
+export const mainDashboardService = {
+  get: () => api.get<MainDashboardData>(foPath("/main-dashboard")),
+};
 export const taxiBookingService = crud<TaxiBooking>("/taxi-bookings");
 export const luggageService = crud<LuggageRecord>("/luggage");
 export const messageService = crud<MessageRecord>("/messages");

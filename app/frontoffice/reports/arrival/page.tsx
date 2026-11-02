@@ -1,5 +1,5 @@
-import { DailyArrivalReportView } from "@/components/frontoffice/ReportsViews";
+import { redirect } from "next/navigation";
 
-export default function ArrivalReportPage() {
-  return <DailyArrivalReportView />;
+export default function ArrivalReportRedirect() {
+  redirect("/frontoffice/reports?type=arrival");
 }

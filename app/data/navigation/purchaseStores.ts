@@ -57,19 +57,5 @@ export const purchaseStoresNavItems: ModuleNavItem[] = [
     label: "Reports",
     href: "/purchase-stores/reports",
     icon: "bar-chart",
-    children: [
-      { label: "Stock Register", href: "/purchase-stores/reports/stock-register", icon: "file-text" },
-      { label: "Purchases", href: "/purchase-stores/reports/purchases", icon: "shopping-bag" },
-      { label: "Issues", href: "/purchase-stores/reports/issues", icon: "arrow-up-right" },
-      { label: "Par Stock", href: "/purchase-stores/reports/par-stock", icon: "sliders" },
-      { label: "Spoilage", href: "/purchase-stores/reports/spoilage", icon: "alert-triangle" },
-      { label: "Purchase Orders", href: "/purchase-stores/reports/orders", icon: "shopping-cart" },
-      { label: "Returns", href: "/purchase-stores/reports/returns", icon: "rotate-ccw" },
-    ],
-  },
-  {
-    label: "Settings",
-    href: "/purchase-stores/settings",
-    icon: "settings",
   },
 ];

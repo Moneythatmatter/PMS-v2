@@ -443,7 +443,7 @@ function SidebarNav({
             const Icon = iconMap[item.icon] ?? LayoutGrid;
             const hasChildren = item.children && item.children.length > 0;
             const parentActive = isParentActive(pathname, item);
-            const isGroupExpanded = expandedGroups[item.label] ?? parentActive;
+            const isGroupExpanded = expandedGroups[item.label] ?? true;
 
             if (hasChildren) {
               if (showTooltips) {
@@ -573,14 +573,11 @@ export function ModuleSidebar({ title, subtitle = "Module menu", items }: Module
   const pathname = usePathname();
   const mobileNav = useMobileNav();
   const [hovered, setHovered] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    Masters: true,
-    Reports: false,
-    Restaurants: true,
-  });
+  // Groups start expanded; the user can collapse them.
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   const toggleGroup = (label: string) => {
-    setExpandedGroups((prev) => ({ ...prev, [label]: !prev[label] }));
+    setExpandedGroups((prev) => ({ ...prev, [label]: !(prev[label] ?? true) }));
   };
 
   const navProps = {

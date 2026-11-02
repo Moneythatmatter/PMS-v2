@@ -1,5 +1,5 @@
-import { OccupancyReportView } from "@/components/frontoffice/ReportsViews";
+import { redirect } from "next/navigation";
 
-export default function OccupancyReportPage() {
-  return <OccupancyReportView />;
+export default function OccupancyReportRedirect() {
+  redirect("/frontoffice/reports?type=occupancy");
 }
