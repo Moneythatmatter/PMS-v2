@@ -9,6 +9,8 @@ export type FoGroupDto = {
   contactPhone?: string | null;
   contactEmail?: string | null;
   companyName?: string | null;
+  /** Billable company (linked to an Accounts Corporate party). */
+  companyId?: string | null;
   arrivalDate: string;
   departureDate: string;
   status: string;
@@ -30,6 +32,7 @@ export type CreateGroupPayload = {
   contactPhone?: string | null;
   contactEmail?: string | null;
   companyName?: string | null;
+  companyId?: string | null;
   arrivalDate: string;
   departureDate: string;
   nights?: number;
@@ -82,10 +85,40 @@ export type UpdateGroupPayload = {
   contactPhone?: string | null;
   contactEmail?: string | null;
   companyName?: string | null;
+  companyId?: string | null;
   arrivalDate?: string;
   departureDate?: string;
   notes?: string | null;
   status?: string;
+};
+
+/** Folio balance billed to a company (checkout or group master folio). */
+export type CompanyBillDto = {
+  id: string;
+  billNo: string;
+  reservationId?: string | null;
+  groupId?: string | null;
+  folioId?: string | null;
+  companyId?: string | null;
+  partyId: string;
+  partyName?: string | null;
+  amount: number;
+  businessDate: string;
+  status: "Open" | "Void";
+  notes?: string | null;
+  accVoucherId?: string | null;
+  voucherNo?: string | null;
+  voucherStatus?: string | null;
+  voidVoucherNo?: string | null;
+  arBillStatus?: string | null;
+  settledAmount: number;
+  bookingNo?: string | null;
+  guestName?: string | null;
+  groupNo?: string | null;
+  groupName?: string | null;
+  voidReason?: string | null;
+  voidedAt?: string | null;
+  createdAt?: string;
 };
 
 export const groupService = {
@@ -101,6 +134,11 @@ export const groupService = {
   reservations: (id: string) =>
     api.get<Record<string, unknown>[]>(foPath(`/groups/${id}/reservations`)),
   folio: (id: string) => api.get<GroupFolioDto>(foPath(`/groups/${id}/folio`)),
+  billToCompany: (id: string, body: { amount: number; notes?: string }) =>
+    api.post<{ bill: CompanyBillDto; folio: GroupFolioDto | null }>(
+      foPath(`/groups/${id}/bill-to-company`),
+      body,
+    ),
   billingRules: (id: string) =>
     api.get<FoGroupBillingRuleDto[]>(foPath(`/groups/${id}/billing-rules`)),
   updateBillingRules: (
@@ -109,5 +147,16 @@ export const groupService = {
   ) =>
     api.put<FoGroupBillingRuleDto[]>(foPath(`/groups/${id}/billing-rules`), {
       rules,
+    }),
+};
+
+export const companyBillService = {
+  list: (status?: "Open" | "Void" | "") =>
+    api.get<CompanyBillDto[]>(
+      foPath(`/company-bills${status ? `?status=${status}` : ""}`),
+    ),
+  void: (id: string, reason: string) =>
+    api.post<{ id: string; status: string }>(foPath(`/company-bills/${id}/void`), {
+      reason,
     }),
 };

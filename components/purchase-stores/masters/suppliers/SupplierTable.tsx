@@ -96,6 +96,9 @@ export function SupplierTable({
                 <div>
                   <h4 className="font-bold text-sm text-slate-900">{sup.supplierName}</h4>
                   <p className="text-[11px] font-semibold text-emerald-700">{sup.supplierCode}</p>
+                  {sup.linked === false && (
+                    <p className="text-[11px] font-semibold text-amber-600">Not linked to Accounts</p>
+                  )}
                 </div>
               </div>
               <span
@@ -194,6 +197,9 @@ export function SupplierTable({
                   <td className="py-3.5 px-4">
                     <p className="font-semibold text-slate-900">{sup.supplierName}</p>
                     {sup.city && <p className="text-[11px] text-slate-400 font-normal">{sup.city}</p>}
+                    {sup.linked === false && (
+                      <p className="text-[11px] font-semibold text-amber-600">Not linked to Accounts</p>
+                    )}
                   </td>
                   <td className="py-3.5 px-4 text-slate-800">{sup.contactPerson}</td>
                   <td className="py-3.5 px-4">

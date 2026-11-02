@@ -6,6 +6,7 @@ import type {
   RecipeInput,
 } from "@/app/data/foodbeverages/recipes";
 import type { ModifierGroup, ModifierGroupInput } from "@/app/data/foodbeverages/modifiers";
+import type { CashierSession, CashierSessionDetail } from "../front-office/cashier-sessions";
 import type {
   Reservation,
   ReservationInput,
@@ -339,6 +340,97 @@ export const fbCashierService = {
     api.post<FbCashierShift>(fbPath(`/cashier-shifts/${id}/close`), {
       declaredCash,
     }),
+};
+
+type FbClosingBody = {
+  lines: { paymentMethod: string; actualAmount: number | null; remarks?: string | null }[];
+  closingRemarks?: string;
+};
+
+/** Cashier sessions at one outlet; same shape as the Front Office cashier service. */
+export function fbCashierSessionService(outletId: string) {
+  const base = "/cashier-sessions";
+  const q = `outletId=${encodeURIComponent(outletId)}`;
+  return {
+    list: (status?: string) =>
+      api.get<CashierSession[]>(fbPath(`${base}?${q}${status ? `&status=${encodeURIComponent(status)}` : ""}`)),
+    active: () => api.get<CashierSession | null>(fbPath(`${base}/active?${q}`)),
+    get: (id: string) => api.get<CashierSessionDetail>(fbPath(`${base}/${id}`)),
+    start: (body: { shiftName: string; openingCash: number; openingRemarks?: string }) =>
+      api.post<CashierSessionDetail>(fbPath(base), { ...body, outletId }),
+    saveClosing: (id: string, body: FbClosingBody) =>
+      api.put<CashierSessionDetail>(fbPath(`${base}/${id}/closing`), body),
+    submit: (id: string, body: FbClosingBody) =>
+      api.post<CashierSessionDetail>(fbPath(`${base}/${id}/submit`), body),
+    approve: (id: string) => api.post<CashierSessionDetail>(fbPath(`${base}/${id}/approve`), {}),
+    reject: (id: string, remarks: string) =>
+      api.post<CashierSessionDetail>(fbPath(`${base}/${id}/reject`), { remarks }),
+    resubmit: (id: string, body: FbClosingBody) =>
+      api.post<CashierSessionDetail>(fbPath(`${base}/${id}/resubmit`), body),
+  };
+}
+
+export type FbDayCloseCheck = {
+  id: string;
+  label: string;
+  mandatory: boolean;
+  passed: boolean;
+  detail: string;
+  href?: string;
+};
+
+export type FbOutletDayClosing = {
+  id: string;
+  outletId: string;
+  outletName?: string | null;
+  businessDate: string;
+  billsCount: number;
+  grossSales: number;
+  discount: number;
+  tax: number;
+  netSales: number;
+  roomCharges: number;
+  collections: number;
+  closedAt: string;
+  closedByName?: string | null;
+};
+
+export type FbDayCloseStatus = {
+  businessDate: string;
+  calendarDate: string;
+  outlet: { id: string; name: string; type: string };
+  closed: boolean;
+  closing: FbOutletDayClosing | null;
+  canClose: boolean;
+  checks: FbDayCloseCheck[];
+  blockers: number;
+  unsettledShifts: { id: string; cashierName: string; shiftName: string; openedAt: string; status: string }[];
+  openOrders: { id: string; orderNo: string; type: string; ref: string; status: string; amount: number }[];
+  unpaidBills: { id: string; billNo: string; total: number; paymentStatus: string }[];
+  totals: {
+    billsCount: number;
+    grossSales: number;
+    discount: number;
+    tax: number;
+    netSales: number;
+    roomCharges: number;
+    collections: {
+      byMethod: { method: string; label: string; amount: number }[];
+      gross: number;
+      refunds: number;
+      net: number;
+    };
+  };
+};
+
+export const fbDayCloseService = {
+  status: (outletId: string) =>
+    api.get<FbDayCloseStatus>(fbPath(`/day-close/status?outletId=${encodeURIComponent(outletId)}`)),
+  run: (outletId: string) => api.post<FbOutletDayClosing>(fbPath("/day-close/run"), { outletId }),
+  history: (outletId?: string) =>
+    api.get<FbOutletDayClosing[]>(
+      fbPath(`/day-close/history${outletId ? `?outletId=${encodeURIComponent(outletId)}` : ""}`),
+    ),
 };
 
 export const menuCategoryService = crud("/menu/categories");

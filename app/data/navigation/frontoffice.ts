@@ -12,6 +12,7 @@ export const frontOfficeNavItems: ModuleNavItem[] = [
   { label: "Guest Profiles", href: "/frontoffice/guest-profiles", icon: "user-circle" },
   { label: "Guest Folio", href: "/frontoffice/guest-folio", icon: "file-text" },
   { label: "Payments", href: "/frontoffice/payments", icon: "credit-card" },
+  { label: "Company Bills", href: "/frontoffice/company-bills", icon: "receipt" },
   { label: "Room Transfer", href: "/frontoffice/room-transfer", icon: "arrow-right-left" },
   { label: "Extend Stay", href: "/frontoffice/extend-stay", icon: "calendar-plus" },
   {

@@ -45,7 +45,7 @@ export function CompanySearchSelect({
 
   const options = useMemo(() => {
     return companies
-      .filter((c) => c.status === "Active")
+      .filter((c) => c.status === "Active" && c.linked && c.partyStatus === "Active")
       .map((c) => ({
         id: c.id,
         label: c.name,

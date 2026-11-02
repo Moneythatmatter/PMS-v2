@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   BedDouble,
   Building2,
@@ -20,6 +21,7 @@ import {
 import type {
   BookingSourceMaster,
   CompanyMaster,
+  CompanyPartyOption,
   TariffPlanMaster,
   RoomTypeMaster,
 } from "@/app/data/frontoffice/masters";
@@ -1395,26 +1397,38 @@ export function CompaniesView() {
   const [toastVariant, setToastVariant] = useState<"success" | "error">("success");
   const [saving, setSaving] = useState(false);
 
+  const [partyOptions, setPartyOptions] = useState<CompanyPartyOption[]>([]);
+  const [partyOptionsError, setPartyOptionsError] = useState<string | null>(null);
+
   const [code, setCode] = useState("");
-  const [name, setName] = useState("");
+  const [partyId, setPartyId] = useState("");
   const [type, setType] = useState<CompanyMaster["type"]>("Corporate");
-  const [contactPerson, setContactPerson] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [gstNumber, setGstNumber] = useState("");
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
   const [corporateDiscount, setCorporateDiscount] = useState("0");
-  const [creditLimit, setCreditLimit] = useState("0");
+
+  const loadPartyOptions = async () => {
+    try {
+      setPartyOptions(await companyService.partyOptions());
+      setPartyOptionsError(null);
+    } catch (e) {
+      setPartyOptionsError(e instanceof Error ? e.message : "Failed to load Accounts parties");
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setLoading(true);
-        const data = await companyService.list();
+        const [data, options] = await Promise.all([
+          companyService.list(),
+          companyService.partyOptions().catch((e: unknown) => {
+            if (!cancelled) setPartyOptionsError(e instanceof Error ? e.message : "Failed to load Accounts parties");
+            return [] as CompanyPartyOption[];
+          }),
+        ]);
         if (!cancelled) {
           setItems(data);
+          setPartyOptions(options);
           setError(null);
         }
       } catch (e) {
@@ -1427,6 +1441,11 @@ export function CompaniesView() {
       cancelled = true;
     };
   }, []);
+
+  const allowedTypes: CompanyMaster["type"][] = ["Corporate", "Government", "Event"];
+  const availableParties = partyOptions.filter(
+    (p) => (p.status === "Active" && !p.linkedCompanyId) || p.id === partyId || p.linkedCompanyId === editing?.id,
+  );
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -1447,7 +1466,7 @@ export function CompaniesView() {
     () => ({
       total: items.length,
       active: items.filter((r) => r.status === "Active").length,
-      corporate: items.filter((r) => r.type === "Corporate").length,
+      unlinked: items.filter((r) => !r.linked).length,
       avgDiscount:
         items.length > 0
           ? Math.round(items.reduce((s, r) => s + r.corporateDiscount, 0) / items.length)
@@ -1466,16 +1485,17 @@ export function CompaniesView() {
   const resetForm = () => {
     setEditing(null);
     setCode("");
-    setName("");
+    setPartyId("");
     setType("Corporate");
-    setContactPerson("");
-    setEmail("");
-    setPhone("");
-    setGstNumber("");
-    setAddress("");
-    setCity("");
     setCorporateDiscount("0");
-    setCreditLimit("0");
+  };
+
+  const choosePartyId = (id: string) => {
+    setPartyId(id);
+    const party = partyOptions.find((p) => p.id === id);
+    if (!party) return;
+    if (!allowedTypes.includes(type)) setType("Corporate");
+    if (!editing && !code.trim()) setCode(party.partyCode);
   };
 
   const showToast = (message: string, variant: "success" | "error" = "success") => {
@@ -1491,50 +1511,37 @@ export function CompaniesView() {
   const openEdit = (row: CompanyMaster) => {
     setEditing(row);
     setCode(row.code);
-    setName(row.name);
+    setPartyId(row.partyId ?? "");
     setType(row.type);
-    setContactPerson(row.contactPerson);
-    setEmail(row.email);
-    setPhone(row.phone);
-    setGstNumber(row.gstNumber ?? "");
-    setAddress(row.address);
-    setCity(row.city);
     setCorporateDiscount(String(row.corporateDiscount));
-    setCreditLimit(String(row.creditLimit));
     setPreview(null);
     setFormOpen(true);
   };
 
   const handleSave = async () => {
-    if (!code.trim() || !name.trim() || !contactPerson.trim() || !email.trim() || !phone.trim()) {
-      showToast("Please fill all required fields.", "error");
+    if (!partyId) {
+      showToast("Select the Accounts party for this company.", "error");
       return;
     }
     setSaving(true);
     try {
-      const payload = {
-        code: code.toUpperCase(),
-        name,
+      const payload: Partial<CompanyMaster> = {
+        partyId,
+        code: code.trim().toUpperCase(),
         type,
-        contactPerson,
-        email,
-        phone,
-        gstNumber: gstNumber || undefined,
-        address: address || "—",
-        city: city || "—",
         corporateDiscount: parseFloat(corporateDiscount) || 0,
-        creditLimit: parseFloat(creditLimit) || 0,
         status: editing?.status ?? "Active",
       };
       if (editing) {
         const record = await companyService.update(editing.id, payload);
         setItems((prev) => prev.map((r) => (r.id === editing.id ? record : r)));
-        showToast(`Company "${name}" updated.`);
+        showToast(`Company "${record.name}" updated.`);
       } else {
-        const record = await companyService.create({ ...payload, status: "Active" });
+        const record = await companyService.create(payload);
         setItems((prev) => [record, ...prev]);
-        showToast(`Company "${name}" added successfully.`);
+        showToast(`Company "${record.name}" added successfully.`);
       }
+      void loadPartyOptions();
       setFormOpen(false);
       resetForm();
     } catch (e) {
@@ -1586,7 +1593,7 @@ export function CompaniesView() {
       <FOPageHeader
         eyebrow="Front Office · Masters"
         title="Companies"
-        description="Manage corporate accounts, travel agents, and billing companies for company bookings."
+        description="Corporate companies for bookings. Each company is a Corporate party from Accounts → Party Master, so names, GST and credit limits always match Accounts."
         action={
           <Button
             size="sm"
@@ -1602,7 +1609,12 @@ export function CompaniesView() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatMiniCard label="Companies" value={stats.total} icon={Building2} />
         <StatMiniCard label="Active" value={stats.active} accent="#10b981" icon={CheckCircle2} />
-        <StatMiniCard label="Corporate" value={stats.corporate} accent="#15803d" icon={Users} />
+        <StatMiniCard
+          label="Not linked to Accounts"
+          value={stats.unlinked}
+          accent={stats.unlinked ? "#e11d48" : "#15803d"}
+          icon={Users}
+        />
         <StatMiniCard
           label="Avg. Discount"
           value={`${stats.avgDiscount}%`}
@@ -1621,7 +1633,6 @@ export function CompaniesView() {
           options: [
             { id: "all", label: "All Types" },
             { id: "Corporate", label: "Corporate" },
-            { id: "Travel Agent", label: "Travel Agent" },
             { id: "Government", label: "Government" },
             { id: "Event", label: "Event" },
           ],
@@ -1688,6 +1699,23 @@ export function CompaniesView() {
               render: (r: CompanyMaster) => r.city,
             },
             {
+              key: "party",
+              header: "Accounts Party",
+              render: (r: CompanyMaster) =>
+                r.linked ? (
+                  <span className="font-mono text-xs text-slate-600">
+                    {r.partyCode}
+                    {r.partyStatus !== "Active" && (
+                      <span className="ml-1 font-sans text-rose-600">({r.partyStatus})</span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                    Not linked
+                  </span>
+                ),
+            },
+            {
               key: "discount",
               header: "Discount",
               render: (r: CompanyMaster) => `${r.corporateDiscount}%`,
@@ -1706,7 +1734,11 @@ export function CompaniesView() {
         open={formOpen}
         onClose={() => { setFormOpen(false); resetForm(); }}
         title={editing ? "Edit Company" : "Add Company"}
-        description={editing ? "Update company details." : "Register a new corporate or billing company."}
+        description={
+          editing
+            ? "Booking settings for this company. Party details are edited in Accounts."
+            : "Pick the company from Accounts → Party Master and set its booking settings."
+        }
         width="md"
         footer={
           <>
@@ -1718,80 +1750,74 @@ export function CompaniesView() {
         }
       >
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Code" required>
-              <TextInput placeholder="TCS" value={code} onChange={(e) => setCode(e.target.value)} />
-            </FormField>
-            <FormField label="Company Name" required>
-              <TextInput placeholder="Company name" value={name} onChange={(e) => setName(e.target.value)} />
-            </FormField>
-          </div>
-          <FormField label="Type">
+          {partyOptionsError && <AlertBanner variant="error" message={partyOptionsError} />}
+          <FormField label="Accounts Party" required>
             <SelectInput
-              value={type}
-              onChange={(e) => setType(e.target.value as CompanyMaster["type"])}
+              value={partyId}
+              onChange={(e) => choosePartyId(e.target.value)}
+              disabled={!!editing?.linked}
             >
-              <option value="Corporate">Corporate</option>
-              <option value="Travel Agent">Travel Agent</option>
-              <option value="Government">Government</option>
-              <option value="Event">Event</option>
+              <option value="">Select Corporate party…</option>
+              {availableParties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.partyName} ({p.partyCode}
+                  {p.city ? ` · ${p.city}` : ""})
+                </option>
+              ))}
             </SelectInput>
+            <p className="mt-1 text-xs text-slate-500">
+              Not in the list? Create it in{" "}
+              <Link href="/accounts/masters/party-master" className="font-medium text-emerald-700 hover:underline">
+                Accounts → Party Master
+              </Link>{" "}
+              with party type Corporate.
+            </p>
           </FormField>
-          <FormField label="Contact Person" required>
-            <TextInput
-              placeholder="Contact name"
-              value={contactPerson}
-              onChange={(e) => setContactPerson(e.target.value)}
-            />
-          </FormField>
+          {editing && !editing.linked && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+              This company was created in Front Office before the Accounts link. Pick its party above; its name,
+              contact, GST, address and credit limit will then come from Accounts.
+            </p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Email" required>
+            <FormField label="Code">
               <TextInput
-                type="email"
-                placeholder="billing@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Defaults to party code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
               />
             </FormField>
-            <FormField label="Phone" required>
-              <TextInput
-                placeholder="+91 98765 43210"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
+            <FormField label="Booking Type">
+              <SelectInput
+                value={type}
+                onChange={(e) => setType(e.target.value as CompanyMaster["type"])}
+              >
+                {allowedTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </SelectInput>
             </FormField>
           </div>
-          <FormField label="GST Number">
+          <FormField label="Corporate Discount (%)">
             <TextInput
-              placeholder="GSTIN (optional)"
-              value={gstNumber}
-              onChange={(e) => setGstNumber(e.target.value)}
+              type="number"
+              min={0}
+              value={corporateDiscount}
+              onChange={(e) => setCorporateDiscount(e.target.value)}
             />
           </FormField>
-          <FormField label="Address">
-            <TextInput placeholder="Street address" value={address} onChange={(e) => setAddress(e.target.value)} />
-          </FormField>
-          <FormField label="City">
-            <TextInput placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
-          </FormField>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Corporate Discount (%)">
-              <TextInput
-                type="number"
-                min={0}
-                value={corporateDiscount}
-                onChange={(e) => setCorporateDiscount(e.target.value)}
-              />
-            </FormField>
-            <FormField label="Credit Limit (₹)">
-              <TextInput
-                type="number"
-                min={0}
-                value={creditLimit}
-                onChange={(e) => setCreditLimit(e.target.value)}
-              />
-            </FormField>
-          </div>
+          {editing?.linked && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              <p className="font-semibold text-slate-800">{editing.name}</p>
+              <p>
+                {editing.contactPerson || "—"} · {editing.phone || "—"} · {editing.email || "—"}
+              </p>
+              <p>GST {editing.gstNumber ?? "—"} · Credit limit {formatINR(editing.creditLimit)}</p>
+              <p className="mt-1 text-slate-500">To change these, edit party {editing.partyCode} in Accounts.</p>
+            </div>
+          )}
         </div>
       </Drawer>
 
@@ -1838,6 +1864,7 @@ export function CompaniesView() {
                 { icon: Building2, label: "GST", value: preview.gstNumber ?? "—" },
                 { icon: Percent, label: "Discount", value: `${preview.corporateDiscount}%` },
                 { icon: IndianRupee, label: "Credit Limit", value: formatINR(preview.creditLimit) },
+                { icon: Tag, label: "Accounts Party", value: preview.linked ? preview.partyCode : "Not linked" },
                 { icon: CheckCircle2, label: "Status", value: preview.status },
               ].map(({ icon: Icon, label, value }) => (
                 <div key={label} className="flex gap-3 rounded-lg border border-slate-100 p-3">

@@ -299,6 +299,7 @@ export function NewReservationForm() {
           bookingType:
             booking.bookingType ?? (booking.companyName ? "Company" : "Individual"),
           companyName: booking.companyName ?? "",
+          companyId: booking.companyId ?? "",
           checkIn: booking.checkIn?.slice(0, 10) ?? prev.checkIn,
           checkOut: booking.checkOut?.slice(0, 10) ?? prev.checkOut,
           adults: booking.adults ?? 1,
@@ -839,9 +840,9 @@ export function NewReservationForm() {
     if (
       form.bookingType === "Company" &&
       !form.companyId &&
-      !form.companyName.trim()
+      (!isEditMode || !form.companyName.trim())
     ) {
-      next.companyName = "Please select a company";
+      next.companyName = "Please select a company from the list";
     }
     if (!form.checkIn) {
       next.checkIn = "Required";
@@ -945,7 +946,8 @@ export function NewReservationForm() {
         externalReference: form.externalReference.trim() || undefined,
         balance: pendingAmount,
         bookingType: form.bookingType || undefined,
-        companyName: form.companyName,
+        companyName: form.bookingType === "Company" ? form.companyName : "",
+        companyId: form.bookingType === "Company" ? form.companyId || null : null,
         specialRequests: form.notes || undefined,
       };
 
@@ -957,6 +959,7 @@ export function NewReservationForm() {
             children: payload.children,
             bookingType: payload.bookingType,
             companyName: payload.companyName,
+            companyId: payload.companyId,
             specialRequests: payload.specialRequests,
           })
         : isEditMode

@@ -12,6 +12,8 @@ import { ClosingStockView } from "@/components/accounts/ClosingStockView";
 import { FiscalPeriodClosingView } from "@/components/accounts/FiscalPeriodClosingView";
 import { FiscalPeriodClosingReversingView } from "@/components/accounts/FiscalPeriodClosingReversingView";
 import { ReprintVoucherView } from "@/components/accounts/ReprintVoucherView";
+import { FrontOfficePostingView } from "@/components/accounts/FrontOfficePostingView";
+import { FnbPostingView } from "@/components/accounts/FnbPostingView";
 import { OutstandingBillsAgingView } from "@/components/accounts/OutstandingBillsAgingView";
 import { OutstandingAgingSummaryView } from "@/components/accounts/OutstandingAgingSummaryView";
 import { OutstandingBillsAgingCustomView } from "@/components/accounts/OutstandingBillsAgingCustomView";
@@ -31,7 +33,6 @@ import { CompanySettingsView } from "@/components/accounts/CompanySettingsView";
 import { FiscalYearView } from "@/components/accounts/FiscalYearView";
 import { VoucherTypeView } from "@/components/accounts/VoucherTypeView";
 import { CurrencyMasterView } from "@/components/accounts/CurrencyMasterView";
-import { PartyTypeMasterView } from "@/components/accounts/PartyTypeMasterView";
 import { PartySubTypeMasterView } from "@/components/accounts/PartySubTypeMasterView";
 import { DivisionMasterView } from "@/components/accounts/DivisionMasterView";
 import { FinancialAnalysisView } from "@/components/accounts/FinancialAnalysisView";
@@ -102,6 +103,17 @@ export default async function AccountsPage({
     slugPath === "gl-receipts-payments"
   ) {
     return <GLReceiptsPaymentsView />;
+  }
+
+  if (
+    slugPath === "transactions/front-office-posting" ||
+    slugPath === "front-office-posting"
+  ) {
+    return <FrontOfficePostingView />;
+  }
+
+  if (slugPath === "transactions/fnb-posting" || slugPath === "fnb-posting") {
+    return <FnbPostingView />;
   }
 
   if (
@@ -324,12 +336,7 @@ export default async function AccountsPage({
   if (
     slugPath === "masters/party-type" ||
     slugPath === "party-type" ||
-    slugPath === "partytype"
-  ) {
-    return <PartyTypeMasterView />;
-  }
-
-  if (
+    slugPath === "partytype" ||
     slugPath === "masters/party-sub-type" ||
     slugPath === "party-sub-type" ||
     slugPath === "partysubtype"

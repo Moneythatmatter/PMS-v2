@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Banknote,
@@ -34,10 +34,36 @@ import { cn } from "@/lib/utils";
 
 export type CashierDeskMode = "start" | "session" | "closing" | "history" | "approvals";
 
-const LINKS: { href: string; label: string; modes: CashierDeskMode[] }[] = [
-  { href: "/frontoffice/cashier/session", label: "My Shift", modes: ["start", "session", "closing"] },
-  { href: "/frontoffice/cashier/history", label: "History & Approvals", modes: ["history", "approvals"] },
-];
+export type CashierDeskService = Pick<
+  typeof cashierSessionService,
+  "list" | "active" | "get" | "start" | "saveClosing" | "submit" | "approve" | "reject" | "resubmit"
+>;
+
+export type CashierDeskConfig = {
+  service: CashierDeskService;
+  eyebrow: string;
+  /** Where payments come from, e.g. "Front Office" or an outlet name. */
+  sourceLabel: string;
+  links: { href: string; label: string; modes: CashierDeskMode[] }[];
+  historyHref: string;
+  /** Rendered next to the page links, e.g. an outlet picker. */
+  headerSlot?: ReactNode;
+  /** Extra column in the history table, e.g. the outlet. */
+  sessionTag?: (session: CashierSession) => string | null | undefined;
+};
+
+const FO_CONFIG: CashierDeskConfig = {
+  service: cashierSessionService,
+  eyebrow: "Front Office",
+  sourceLabel: "Front Office",
+  links: [
+    { href: "/frontoffice/cashier/session", label: "My Shift", modes: ["start", "session", "closing"] },
+    { href: "/frontoffice/cashier/history", label: "History & Approvals", modes: ["history", "approvals"] },
+  ],
+  historyHref: "/frontoffice/cashier/history",
+};
+
+const DeskConfig = createContext<CashierDeskConfig>(FO_CONFIG);
 
 const SHIFTS = ["Morning", "Evening", "Night", "General"];
 
@@ -60,9 +86,11 @@ function draftsFrom(detail: CashierSessionDetail): Drafts {
 }
 
 function DeskNav({ mode }: { mode: CashierDeskMode }) {
+  const { links, headerSlot } = useContext(DeskConfig);
   return (
-    <div className="flex flex-wrap gap-2">
-      {LINKS.map((link) => (
+    <div className="flex flex-wrap items-center gap-2">
+      {headerSlot}
+      {links.map((link) => (
         <Link
           key={link.href}
           href={link.href}
@@ -94,7 +122,16 @@ function Variance({ value }: { value: number | null }) {
   );
 }
 
-export function CashierDeskView({ mode }: { mode: CashierDeskMode }) {
+export function CashierDeskView({ mode, config }: { mode: CashierDeskMode; config?: CashierDeskConfig }) {
+  return (
+    <DeskConfig.Provider value={config ?? FO_CONFIG}>
+      <CashierDesk mode={mode} />
+    </DeskConfig.Provider>
+  );
+}
+
+function CashierDesk({ mode }: { mode: CashierDeskMode }) {
+  const { service, eyebrow, sourceLabel } = useContext(DeskConfig);
   const isShiftPage = mode === "start" || mode === "session" || mode === "closing";
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -121,16 +158,16 @@ export function CashierDeskView({ mode }: { mode: CashierDeskMode }) {
     (async () => {
       try {
         if (!isShiftPage) {
-          const rows = await cashierSessionService.list();
+          const rows = await service.list();
           if (!cancelled) setHistory(rows);
         } else {
-          const session = await cashierSessionService.active();
+          const session = await service.active();
           if (cancelled) return;
           if (session) {
-            const full = await cashierSessionService.get(session.id);
+            const full = await service.get(session.id);
             if (!cancelled) loadDetail(full);
           } else {
-            const rows = await cashierSessionService.list().catch(() => [] as CashierSession[]);
+            const rows = await service.list().catch(() => [] as CashierSession[]);
             if (!cancelled) setHistory(rows);
           }
         }
@@ -144,7 +181,7 @@ export function CashierDeskView({ mode }: { mode: CashierDeskMode }) {
     return () => {
       cancelled = true;
     };
-  }, [mode, isShiftPage]);
+  }, [mode, isShiftPage, service]);
 
   function payloadFromDrafts() {
     return {
@@ -165,7 +202,7 @@ export function CashierDeskView({ mode }: { mode: CashierDeskMode }) {
     }
     setBusy(true);
     try {
-      const created = await cashierSessionService.start({ shiftName, openingCash: amount, openingRemarks });
+      const created = await service.start({ shiftName, openingCash: amount, openingRemarks });
       loadDetail(created);
       setClosingOpen(false);
       setOpeningCash("");
@@ -196,10 +233,10 @@ export function CashierDeskView({ mode }: { mode: CashierDeskMode }) {
       const rejected = detail.session.status === "Rejected";
       const next =
         kind === "save" && !rejected
-          ? await cashierSessionService.saveClosing(detail.session.id, body)
+          ? await service.saveClosing(detail.session.id, body)
           : rejected
-            ? await cashierSessionService.resubmit(detail.session.id, body)
-            : await cashierSessionService.submit(detail.session.id, body);
+            ? await service.resubmit(detail.session.id, body)
+            : await service.submit(detail.session.id, body);
       setDetail(next);
       setDrafts(draftsFrom(next));
       setToast(kind === "save" && !rejected ? "Count saved." : "Closing submitted for manager approval.");
@@ -214,13 +251,13 @@ export function CashierDeskView({ mode }: { mode: CashierDeskMode }) {
   const title = isShiftPage ? "My Cashier Shift" : "Shift History & Approvals";
   const description = isShiftPage
     ? "Start your shift, watch collections as they are posted, then count and submit your closing — all on one page."
-    : "Every cashier shift at this property. Review submitted closings and approve them or send them back.";
+    : `Every cashier shift at ${sourceLabel === "Front Office" ? "this property" : sourceLabel}. Review submitted closings and approve them or send them back.`;
 
   return (
     <div className="space-y-5">
       {toast && <AlertBanner variant="success" message={toast} onDismiss={() => setToast(null)} />}
       {error && <AlertBanner variant="error" message={error} onDismiss={() => setError(null)} />}
-      <FOPageHeader eyebrow="Front Office" title={title} description={description} action={<DeskNav mode={mode} />} />
+      <FOPageHeader eyebrow={eyebrow} title={title} description={description} action={<DeskNav mode={mode} />} />
       {loading ? (
         <p className="flex items-center gap-2 text-sm text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
@@ -265,7 +302,7 @@ export function CashierDeskView({ mode }: { mode: CashierDeskMode }) {
           onStartNext={() => {
             setDetail(null);
             setClosingOpen(false);
-            void cashierSessionService.list().then(setHistory).catch(() => undefined);
+            void service.list().then(setHistory).catch(() => undefined);
           }}
         />
       )}
@@ -276,7 +313,7 @@ export function CashierDeskView({ mode }: { mode: CashierDeskMode }) {
           initialFilter={mode === "approvals" ? "Pending Approval" : "All"}
           onToast={setToast}
           onError={setError}
-          onReload={() => cashierSessionService.list().then(setHistory)}
+          onReload={() => service.list().then(setHistory)}
         />
       )}
     </div>
@@ -396,9 +433,10 @@ function StartShiftCard({
 }
 
 function ShiftGuide() {
+  const { sourceLabel } = useContext(DeskConfig);
   const steps = [
     { icon: Play, title: "Start shift", note: "Choose the shift and enter the float in your drawer." },
-    { icon: Banknote, title: "Collect payments", note: "Payments posted in Front Office add up here automatically." },
+    { icon: Banknote, title: "Collect payments", note: `Payments posted in ${sourceLabel} add up here automatically.` },
     { icon: LockKeyhole, title: "Close & count", note: "Enter what you actually hold for each payment method." },
     { icon: CheckCircle2, title: "Manager approval", note: "Your closing is reviewed, then approved or sent back." },
   ];
@@ -443,11 +481,12 @@ function statusChip(status: string) {
 }
 
 function RecentShifts({ rows }: { rows: CashierSession[] }) {
+  const { historyHref } = useContext(DeskConfig);
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-xs">
       <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
         <h3 className="text-sm font-bold text-slate-900">Recent shifts</h3>
-        <Link href="/frontoffice/cashier/history" className="text-[11px] font-semibold text-emerald-700 hover:underline">
+        <Link href={historyHref} className="text-[11px] font-semibold text-emerald-700 hover:underline">
           View all
         </Link>
       </div>
@@ -504,6 +543,7 @@ function ShiftPanel({
   onSubmit: () => void;
   onStartNext: () => void;
 }) {
+  const { sourceLabel } = useContext(DeskConfig);
   const { session, lines } = detail;
   const status = session.status;
   const locked = status === "Pending Approval" || status === "Closed";
@@ -587,7 +627,7 @@ function ShiftPanel({
             <p className="text-[11px] text-slate-500">
               {showCount
                 ? "Enter what you actually have for each method. Variance is worked out against the expected amount."
-                : "Amounts come from payments already posted in Front Office during this shift."}
+                : `Amounts come from payments already posted in ${sourceLabel} during this shift.`}
             </p>
           </div>
           {!locked && !closingOpen && (
@@ -734,6 +774,7 @@ function ReviewPanel({
   onError: (msg: string | null) => void;
   onReload: () => Promise<unknown>;
 }) {
+  const { service, sessionTag } = useContext(DeskConfig);
   const [filter, setFilter] = useState<ReviewFilter>(initialFilter);
   const [query, setQuery] = useState("");
   const [cashierFilter, setCashierFilter] = useState("");
@@ -774,7 +815,7 @@ function ReviewPanel({
     setViewId(id);
     setView(null);
     try {
-      setView(await cashierSessionService.get(id));
+      setView(await service.get(id));
     } catch (e) {
       onError(e instanceof Error ? e.message : "Could not load the shift");
       setViewId(null);
@@ -784,7 +825,7 @@ function ReviewPanel({
   const approve = async (id: string) => {
     setBusyId(id);
     try {
-      await cashierSessionService.approve(id);
+      await service.approve(id);
       await onReload();
       onToast("Closing approved — shift closed.");
       onError(null);
@@ -804,7 +845,7 @@ function ReviewPanel({
     }
     setBusyId(rejectId);
     try {
-      await cashierSessionService.reject(rejectId, rejectNote.trim());
+      await service.reject(rejectId, rejectNote.trim());
       await onReload();
       onToast("Closing sent back to the cashier.");
       onError(null);
@@ -973,7 +1014,10 @@ function ReviewPanel({
                     <td className={td}>
                       <CashierCell name={row.cashierName} email={row.cashierEmail} />
                     </td>
-                    <td className={cn(td, "font-semibold text-slate-900")}>{row.shiftName}</td>
+                    <td className={cn(td, "font-semibold text-slate-900")}>
+                      {row.shiftName}
+                      {sessionTag?.(row) && <p className="text-[10px] font-normal text-slate-400">{sessionTag(row)}</p>}
+                    </td>
                     <td className={td}>{when(row.openedAt)}</td>
                     <td className={td}>
                       {when(row.closedAt)}

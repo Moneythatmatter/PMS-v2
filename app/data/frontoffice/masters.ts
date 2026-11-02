@@ -53,6 +53,25 @@ export interface CompanyMaster {
   corporateDiscount: number;
   creditLimit: number;
   status: "Active" | "Inactive";
+  /** Accounts party this company is. Name, contact, GST, address and credit come from it. */
+  partyId?: string | null;
+  linked?: boolean;
+  partyCode?: string;
+  partyStatus?: "Active" | "Inactive" | "Blocked";
+  partyTypeCode?: "CORP" | null;
+  creditDays?: number;
+}
+
+export interface CompanyPartyOption {
+  id: string;
+  partyCode: string;
+  partyName: string;
+  partyTypeCode: "CORP";
+  gstin: string;
+  city: string;
+  status: "Active" | "Inactive" | "Blocked";
+  linkedCompanyId: string | null;
+  linkedCompanyCode: string | null;
 }
 
 export interface BookingSourceMaster {

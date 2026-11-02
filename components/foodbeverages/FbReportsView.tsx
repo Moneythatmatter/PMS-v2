@@ -293,6 +293,9 @@ function buildStats(
 
   return definition.stats.map((stat) => {
     const label = stat.label.toLowerCase();
+    if (label === "cash" && summary?.cashLabel != null) return { ...stat, value: String(summary.cashLabel) };
+    if (label === "digital" && summary?.digitalLabel != null) return { ...stat, value: String(summary.digitalLabel) };
+    if (label === "variance" && summary?.varianceLabel != null) return { ...stat, value: String(summary.varianceLabel) };
     if (
       label.includes("today") ||
       label.includes("mtd total") ||

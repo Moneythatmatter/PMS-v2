@@ -2,6 +2,7 @@ import { api, foPath } from "../api";
 import type {
   BookingSourceMaster,
   CompanyMaster,
+  CompanyPartyOption,
   TariffPlanMaster,
   RoomTypeMaster,
 } from "@/app/data/frontoffice/masters";
@@ -21,7 +22,11 @@ export const roomTypeService = crud<RoomTypeMaster>("/masters/room-types");
 export const tariffPlanService = crud<TariffPlanMaster>("/masters/tariff-plans");
 /** @deprecated Use tariffPlanService */
 export const ratePlanService = tariffPlanService;
-export const companyService = crud<CompanyMaster>("/masters/companies");
+export const companyService = {
+  ...crud<CompanyMaster>("/masters/companies"),
+  /** Accounts parties of type Corporate a company can be linked to. */
+  partyOptions: () => api.get<CompanyPartyOption[]>(foPath("/masters/companies/party-options")),
+};
 export const bookingSourceService =
   crud<BookingSourceMaster>("/masters/booking-sources");
 

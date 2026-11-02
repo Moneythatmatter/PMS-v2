@@ -43,6 +43,7 @@ const EDITABLE_FIELDS = [
   "allowManualVoucherNo", "preventDuplicateVouchers", "requirePostingApproval", "allowNegativeCash",
   "enforceCreditLimit", "defaultReceivableAccountId", "defaultPayableAccountId", "defaultRoundOffAccountId",
   "defaultGuestDepositAccountId", "enableGst", "enableEinvoice", "defaultTaxRegion", "enableTdsDeductions",
+  "defaultGuestLedgerAccountId", "foPostingStatus", "foPostingStartDate",
 ] as const satisfies readonly (keyof CompanySettings)[];
 
 /** Database defaults for accounting control parameters (identity, FY, GL defaults and tax region are kept). */
@@ -716,6 +717,7 @@ export function CompanySettingsView() {
                       { field: "defaultPayableAccountId", label: "Default Payable Account (AP)" },
                       { field: "defaultRoundOffAccountId", label: "Default Round Off Account" },
                       { field: "defaultGuestDepositAccountId", label: "Default Guest Security Deposit Ledger" },
+                      { field: "defaultGuestLedgerAccountId", label: "Guest Ledger (In-House Guests)" },
                     ] as const
                   ).map(({ field, label }) => (
                     <FormField key={field} label={label}>
@@ -733,6 +735,26 @@ export function CompanySettingsView() {
                       </SelectInput>
                     </FormField>
                   ))}
+                  <FormField label="Front Office Night Audit Vouchers">
+                    <SelectInput
+                      value={settings.foPostingStatus ?? "Draft"}
+                      onChange={(e) => handleChange("foPostingStatus", e.target.value as CompanySettings["foPostingStatus"])}
+                      className="bg-white font-semibold"
+                    >
+                      <option value="Draft">Create as Draft (accountant reviews and posts)</option>
+                      <option value="Posted">Post directly to the ledgers</option>
+                    </SelectInput>
+                  </FormField>
+                  <FormField label="Front Office Posting Starts From">
+                    <FODatePicker
+                      value={settings.foPostingStartDate ? settings.foPostingStartDate.slice(0, 10) : ""}
+                      onChange={(val) => handleChange("foPostingStartDate", val || null)}
+                    />
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Front Office charges, payments and company bills before this date are never posted (they are in
+                      your opening balances).
+                    </p>
+                  </FormField>
                 </div>
               </div>
             )}

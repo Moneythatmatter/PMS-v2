@@ -568,6 +568,7 @@ export function NewGroupReservationForm() {
         groupName: groupName.trim(),
         groupType,
         companyName: companyName.trim() || null,
+        ...(companyId ? { companyId } : {}),
         contactName: contactName.trim() || null,
         contactPhone: contactPhone.trim() || null,
         contactEmail: contactEmail.trim() || null,

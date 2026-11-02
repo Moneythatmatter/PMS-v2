@@ -1263,7 +1263,8 @@ export function CheckInForm() {
           status: "Confirmed",
           source: "Walk-in",
           bookingType: walkIn.bookingType || "Individual",
-          companyName: walkIn.companyName || undefined,
+          companyName: walkIn.bookingType === "Company" ? walkIn.companyName || undefined : undefined,
+          companyId: walkIn.bookingType === "Company" ? walkIn.companyId || undefined : undefined,
           specialRequests: remarksWithGuests || undefined,
         } as Partial<ReservationBooking>);
         await reservationService.checkIn(created.id, {

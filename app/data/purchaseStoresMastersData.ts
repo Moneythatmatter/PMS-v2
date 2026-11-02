@@ -49,6 +49,23 @@ export interface SupplierItem {
   rating: number;
   status: MasterStatus;
   createdDate: string;
+  /** Accounts party (type Vendor) this supplier is linked to; identity fields come from it. */
+  partyId?: string | null;
+  linked?: boolean;
+  partyCode?: string;
+  partyStatus?: string;
+  creditDays?: number;
+}
+
+export interface SupplierPartyOption {
+  id: string;
+  partyCode: string;
+  partyName: string;
+  gstin: string;
+  city: string;
+  status: string;
+  linkedSupplierId: string | null;
+  linkedSupplierCode: string | null;
 }
 
 export const PAYMENT_TERMS_OPTIONS = [

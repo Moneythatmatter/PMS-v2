@@ -143,7 +143,7 @@ export default function VendorsPage() {
       <FOPageHeader
         eyebrow="Purchase & Stores"
         title="Vendors"
-        description="Manage vendor profiles, contact details, GSTIN tax registration, payment terms, and ratings."
+        description="Vendors are Accounts parties of type Vendor. Manage payment terms, ratings and status here; edit contact and GSTIN details in Accounts → Party Master."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100">

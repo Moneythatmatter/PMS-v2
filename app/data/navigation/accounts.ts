@@ -23,7 +23,6 @@ export const accountsNavItems: ModuleNavItem[] = [
       { label: "Fiscal Year", href: "/accounts/masters/fiscal-year", icon: "calendar" },
       { label: "Currency", href: "/accounts/masters/currency", icon: "coins" },
       { label: "Chart of Accounts", href: "/accounts/masters/chart-of-accounts", icon: "layers" },
-      { label: "Party Type", href: "/accounts/masters/party-type", icon: "users" },
       { label: "Party Sub Type", href: "/accounts/masters/party-sub-type", icon: "user-plus" },
       { label: "Party Master", href: "/accounts/masters/party-master", icon: "user-circle" },
       { label: "Division", href: "/accounts/masters/division", icon: "folder-kanban" },
@@ -41,6 +40,8 @@ export const accountsNavItems: ModuleNavItem[] = [
     children: [
       { label: "GL Transaction", href: "/accounts/transactions/gl-transaction", icon: "file-text" },
       { label: "GL Receipts / Payments Transaction", href: "/accounts/transactions/gl-receipts-payments", icon: "wallet" },
+      { label: "Front Office Posting", href: "/accounts/transactions/front-office-posting", icon: "file-text" },
+      { label: "F&B Posting", href: "/accounts/transactions/fnb-posting", icon: "file-text" },
       { label: "Provisional Transactions", href: "/accounts/transactions/provisional-transactions", icon: "clock" },
       { label: "Bank Reconciliation", href: "/accounts/transactions/bank-reconciliation", icon: "building-2" },
       { label: "Bank Reconciliation Reversing", href: "/accounts/transactions/bank-reconciliation-reversing", icon: "rotate-ccw" },

@@ -24,6 +24,9 @@ export interface CheckoutFolio {
   advancePaid: number;
   isVip?: boolean;
   departingToday?: boolean;
+  /** Set when the stay can be billed to a company (individual booking with a linked company). */
+  companyId?: string | null;
+  companyName?: string | null;
 }
 
 export type SplittableChargeKey =

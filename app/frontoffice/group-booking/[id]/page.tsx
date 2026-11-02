@@ -30,6 +30,7 @@ import {
   formatINR,
 } from "@/components/frontoffice/ui";
 import { ReservationStatusBadge } from "@/components/frontoffice/reservation/ReservationStatusBadge";
+import { CompanySearchSelect } from "@/components/frontoffice/CompanySearchSelect";
 import {
   groupService,
   type FoGroupBillingRuleDto,
@@ -160,6 +161,7 @@ export default function GroupBookingDetailPage() {
     groupName: "",
     groupType: "",
     companyName: "",
+    companyId: "",
     contactName: "",
     contactPhone: "",
     contactEmail: "",
@@ -167,6 +169,12 @@ export default function GroupBookingDetailPage() {
     departureDate: "",
     notes: "",
   });
+
+  const [billOpen, setBillOpen] = useState(false);
+  const [billAmount, setBillAmount] = useState("");
+  const [billNotes, setBillNotes] = useState("");
+  const [billSaving, setBillSaving] = useState(false);
+  const [billError, setBillError] = useState("");
 
   const [assignTarget, setAssignTarget] = useState<ChildReservation | null>(
     null,
@@ -212,6 +220,7 @@ export default function GroupBookingDetailPage() {
       groupName: g.groupName ?? "",
       groupType: g.groupType ?? "",
       companyName: g.companyName ?? "",
+      companyId: g.companyId ?? "",
       contactName: g.contactName ?? "",
       contactPhone: g.contactPhone ?? "",
       contactEmail: g.contactEmail ?? "",
@@ -251,6 +260,7 @@ export default function GroupBookingDetailPage() {
         groupName: name,
         groupType: editForm.groupType.trim() || null,
         companyName: editForm.companyName.trim() || null,
+        companyId: editForm.companyId || null,
         contactName: editForm.contactName.trim() || null,
         contactPhone: editForm.contactPhone.trim() || null,
         contactEmail: editForm.contactEmail.trim() || null,
@@ -269,6 +279,45 @@ export default function GroupBookingDetailPage() {
       );
     } finally {
       setEditSaving(false);
+    }
+  };
+
+  const openBillToCompany = () => {
+    setBillAmount(folio ? String(Number(folio.balanceAmount ?? 0)) : "");
+    setBillNotes("");
+    setBillError("");
+    setBillOpen(true);
+  };
+
+  const handleBillToCompany = async () => {
+    if (!id) return;
+    const amount = Math.round(Number(billAmount) * 100) / 100;
+    const balance = Number(folio?.balanceAmount ?? 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setBillError("Enter the amount to bill to the company.");
+      return;
+    }
+    if (amount > balance + 0.005) {
+      setBillError(`Amount is more than the master folio balance (${formatINR(balance)}).`);
+      return;
+    }
+    setBillSaving(true);
+    setBillError("");
+    try {
+      const { bill } = await groupService.billToCompany(id, {
+        amount,
+        notes: billNotes.trim() || undefined,
+      });
+      setBillOpen(false);
+      setToastVariant("success");
+      setToast(
+        `${formatINR(amount)} billed to ${group?.companyName ?? "the company"} (${bill.billNo}). It is posted to Accounts at Night Audit.`,
+      );
+      await load();
+    } catch (e) {
+      setBillError(e instanceof ApiError ? e.message : "Failed to bill the company");
+    } finally {
+      setBillSaving(false);
     }
   };
 
@@ -788,6 +837,33 @@ export default function GroupBookingDetailPage() {
                         {formatINR(Number(folio.balanceAmount ?? 0))}
                       </dd>
                     </div>
+                    {Number(folio.balanceAmount ?? 0) > 0 ? (
+                      <div className="border-t border-slate-100 pt-3">
+                        {group?.companyId ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="w-full gap-1.5 border-indigo-200 text-indigo-800 hover:bg-indigo-50"
+                            onClick={openBillToCompany}
+                          >
+                            <Building2 className="h-3.5 w-3.5" />
+                            Bill to company
+                          </Button>
+                        ) : (
+                          <p className="text-xs text-slate-500">
+                            To bill this folio to a company, edit the group and
+                            select the company.
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
+                    <Link
+                      href="/frontoffice/company-bills"
+                      className="block pt-1 text-xs font-medium text-teal-700 hover:underline"
+                    >
+                      Company bills
+                    </Link>
                   </dl>
                 ) : (
                   <p className="text-sm text-slate-500">
@@ -966,6 +1042,69 @@ export default function GroupBookingDetailPage() {
       </Modal>
 
       <Modal
+        open={billOpen}
+        onClose={() => {
+          if (!billSaving) setBillOpen(false);
+        }}
+        title="Bill master folio to company"
+        description={`${group?.companyName ?? "Company"} · balance ${formatINR(Number(folio?.balanceAmount ?? 0))}. The amount leaves the folio and is posted to the company's account at Night Audit.`}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={billSaving}
+              onClick={() => setBillOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-indigo-700 hover:bg-indigo-800"
+              disabled={billSaving}
+              onClick={() => void handleBillToCompany()}
+            >
+              {billSaving ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Billing…
+                </span>
+              ) : (
+                "Bill to company"
+              )}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {billError ? (
+            <AlertBanner
+              variant="error"
+              message={billError}
+              onDismiss={() => setBillError("")}
+            />
+          ) : null}
+          <FormField label="Amount" required>
+            <TextInput
+              type="number"
+              min={0}
+              step="0.01"
+              value={billAmount}
+              onChange={(e) => setBillAmount(e.target.value)}
+            />
+          </FormField>
+          <FormField label="Notes">
+            <TextAreaInput
+              value={billNotes}
+              maxLength={500}
+              onChange={(e) => setBillNotes(e.target.value)}
+              placeholder="e.g. PO number, billing contact…"
+            />
+          </FormField>
+        </div>
+      </Modal>
+
+      <Modal
         open={editOpen}
         onClose={() => {
           if (!editSaving) setEditOpen(false);
@@ -1034,12 +1173,18 @@ export default function GroupBookingDetailPage() {
               </SelectInput>
             </FormField>
             <FormField label="Company">
-              <TextInput
+              <CompanySearchSelect
                 value={editForm.companyName}
-                onChange={(e) =>
-                  setEditForm((p) => ({ ...p, companyName: e.target.value }))
+                selectedCompanyId={editForm.companyId || null}
+                onChange={(v) =>
+                  setEditForm((p) => ({ ...p, companyName: v, companyId: "" }))
                 }
-                placeholder="Company name"
+                onSelect={(c) =>
+                  setEditForm((p) => ({ ...p, companyName: c.name, companyId: c.id }))
+                }
+                onClear={() =>
+                  setEditForm((p) => ({ ...p, companyName: "", companyId: "" }))
+                }
               />
             </FormField>
             <FormField label="Contact name">

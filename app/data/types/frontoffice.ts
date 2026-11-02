@@ -113,6 +113,8 @@ export interface ReservationBooking {
   arrivingToday?: boolean;
   bookingType?: "Individual" | "Company";
   companyName?: string;
+  /** Front Office company (linked to an Accounts party); needed to bill the stay to the company. */
+  companyId?: string | null;
   // Extended detail fields — collected at check-in
   gender?: string;
   dob?: string;

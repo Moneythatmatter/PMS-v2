@@ -1,412 +1,181 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   CalendarClock,
   CheckCircle2,
-  Circle,
   ClipboardList,
   IndianRupee,
-  LayoutGrid,
   Loader2,
+  Receipt,
   RotateCcw,
-  UtensilsCrossed,
   Wallet,
 } from "lucide-react";
 import { formatINR } from "@/app/data/foodbeverages/ops";
-import { currentUser } from "@/app/data";
 import { Button } from "@/components/ui/Button";
 import { ModulePageShell } from "@/components/pms";
 import { AlertBanner, ConfirmModal } from "@/components/frontoffice/ui";
 import { FbOutletSelect } from "@/components/foodbeverages/FbOutletSelect";
+import { useSelectedFbOutlet } from "@/components/foodbeverages/FbCashierView";
 import { cn } from "@/lib/utils";
 import {
-  dayCloseService,
-  fbCashierService,
-  fbOrderService,
-  liveTableService,
-  type FbCashierShift,
-  type FbOrder,
-  type LiveTable,
+  fbDayCloseService,
+  type FbDayCloseStatus,
+  type FbOutletDayClosing,
 } from "@/services/food-beverages";
 import { useFbOutlets } from "@/services/food-beverages/useFbOutlets";
 
-type CheckStatus = "done" | "pending" | "warning";
-
-type ChecklistItem = {
-  id: string;
-  label: string;
-  status: CheckStatus;
-  detail: string;
-  mandatory: boolean;
-  href?: string;
-};
-
-function businessDateLabel(d = new Date()) {
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function isOpenTable(status: string) {
-  const s = status.toLowerCase();
-  return ["occupied", "seated", "dining", "dirty", "reserved", "open"].includes(s);
-}
-
-function isOpenOrder(status: string) {
-  const s = status.toLowerCase();
-  return !["settled", "served", "closed", "cancelled", "void", "voided", "rejected"].includes(s);
-}
-
-function isActiveKitchenOrder(status: string) {
-  const s = status.toLowerCase();
-  return ["pending", "preparing", "ready"].includes(s);
+function dateLabel(iso?: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return iso.length === 10
+    ? d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+    : d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 }
 
 export function FbDayCloseView() {
-  const { outlets } = useFbOutlets(["restaurant", "cafe", "bar"]);
-  const [outletId, setOutletId] = useState("");
-  const [tables, setTables] = useState<LiveTable[]>([]);
-  const [orders, setOrders] = useState<FbOrder[]>([]);
-  const [shifts, setShifts] = useState<FbCashierShift[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { outlets, loading: outletsLoading } = useFbOutlets(["restaurant", "cafe", "bar"]);
+  const [outletId, setOutletId] = useSelectedFbOutlet(outlets);
+  const [status, setStatus] = useState<FbDayCloseStatus | null>(null);
+  const [history, setHistory] = useState<FbOutletDayClosing[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [running, setRunning] = useState(false);
-  const [stepIndex, setStepIndex] = useState(-1);
-  const [closedOutlets, setClosedOutlets] = useState<Record<string, string>>({});
-
-  const bizDate = businessDateLabel();
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    if (!outletId && outlets[0]?.id) setOutletId(outlets[0].id);
-  }, [outlets, outletId]);
-
-  const reload = useCallback(async () => {
     if (!outletId) return;
-    setLoading(true);
-    try {
-      const [t, o, s] = await Promise.all([
-        liveTableService.list(outletId),
-        fbOrderService.list(outletId),
-        fbCashierService.list(outletId),
-      ]);
-      setTables(t);
-      setOrders(o);
-      setShifts(s);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load day close data");
-    } finally {
-      setLoading(false);
-    }
-  }, [outletId]);
+    let cancelled = false;
+    Promise.all([fbDayCloseService.status(outletId), fbDayCloseService.history(outletId).catch(() => [])])
+      .then(([s, h]) => {
+        if (cancelled) return;
+        setStatus(s);
+        setHistory(h);
+        setError(null);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load day close");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [outletId, reloadKey]);
 
-  useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  const openTables = useMemo(
-    () => tables.filter((t) => isOpenTable(String(t.status ?? ""))),
-    [tables],
-  );
-  const openOrders = useMemo(
-    () => orders.filter((o) => isOpenOrder(String(o.status ?? ""))),
-    [orders],
-  );
-  const openShifts = useMemo(
-    () => shifts.filter((s) => String(s.status).toLowerCase() === "open"),
-    [shifts],
-  );
-  const activeKitchenOrders = useMemo(
-    () => orders.filter((o) => isActiveKitchenOrder(String(o.status ?? ""))),
-    [orders],
-  );
-  const settledOrders = useMemo(
-    () =>
-      orders.filter((o) =>
-        ["settled", "served", "closed"].includes(String(o.status ?? "").toLowerCase()),
-      ),
-    [orders],
-  );
-  const daySales = settledOrders.reduce((sum, o) => sum + Number(o.amount ?? 0), 0);
-  const outletClosed = Boolean(closedOutlets[outletId]);
-
-  const checklist: ChecklistItem[] = useMemo(
-    () => [
-      {
-        id: "tables",
-        label: "Open tables settled",
-        status: openTables.length === 0 ? "done" : "warning",
-        detail:
-          openTables.length === 0
-            ? "No active covers on the floor"
-            : `${openTables.length} table${openTables.length === 1 ? "" : "s"} still open`,
-        mandatory: true,
-        href: "/food-beverages/restaurants/orders",
-      },
-      {
-        id: "orders",
-        label: "Open orders closed",
-        status: openOrders.length === 0 ? "done" : "warning",
-        detail:
-          openOrders.length === 0
-            ? "All orders settled or cancelled"
-            : `${openOrders.length} order${openOrders.length === 1 ? "" : "s"} still open`,
-        mandatory: true,
-        href: "/food-beverages/restaurants/orders",
-      },
-      {
-        id: "cashier",
-        label: "All cashier shifts closed",
-        status: openShifts.length === 0 ? "done" : "warning",
-        detail:
-          openShifts.length === 0
-            ? "All shifts reconciled"
-            : `${openShifts.length} shift${openShifts.length === 1 ? "" : "s"} still open`,
-        mandatory: true,
-        href: "/food-beverages/restaurants/cashier",
-      },
-      {
-        id: "kitchen",
-        label: "Kitchen orders cleared",
-        status: activeKitchenOrders.length === 0 ? "done" : "warning",
-        detail:
-          activeKitchenOrders.length === 0
-            ? "No pending kitchen orders"
-            : `${activeKitchenOrders.length} order${activeKitchenOrders.length === 1 ? "" : "s"} still in kitchen`,
-        mandatory: true,
-        href: "/food-beverages/kitchen/orders",
-      },
-      {
-        id: "close",
-        label: "Day close posted",
-        status: outletClosed ? "done" : "pending",
-        detail: outletClosed
-          ? `Closed for ${bizDate}`
-          : "Available after mandatory checks pass",
-        mandatory: false,
-      },
-    ],
-    [
-      openTables.length,
-      openOrders.length,
-      openShifts.length,
-      activeKitchenOrders.length,
-      outletClosed,
-      bizDate,
-    ],
-  );
-
-  const blockers = checklist.filter((c) => c.mandatory && c.status !== "done");
-  const canClose = blockers.length === 0 && !outletClosed && !running;
-  const doneCount = checklist.filter((c) => c.status === "done").length;
-  const progressPercent = Math.round((doneCount / checklist.length) * 100);
-
-  const steps = [
-    "Checking open tables…",
-    "Verifying open orders…",
-    "Confirming cashier shifts…",
-    "Clearing kitchen orders…",
-    "Posting day sales…",
-    "Locking outlet business day…",
-    "Day close completed.",
-  ];
+  const reload = () => setReloadKey((k) => k + 1);
+  const current = status && status.outlet.id === outletId ? status : null;
 
   const runDayClose = async () => {
-    if (!canClose) return;
     setConfirmOpen(false);
     setRunning(true);
-    setStepIndex(0);
-
-    for (let i = 0; i < steps.length; i++) {
-      setStepIndex(i);
-      await new Promise((r) => setTimeout(r, 350));
-    }
-
     try {
-      await dayCloseService.create({
-        outletId,
-        businessDate: bizDate,
-        checkpoint: "Day close",
-        detail: `Closed by ${currentUser.name}`,
-        count: 0,
-        status: "Completed",
-      });
-      setClosedOutlets((prev) => ({ ...prev, [outletId]: bizDate }));
-      setToast(`Day close completed for ${outlets.find((o) => o.id === outletId)?.name ?? "outlet"}.`);
+      await fbDayCloseService.run(outletId);
+      setToast(`Day close completed for ${current?.outlet.name ?? "outlet"} (${dateLabel(current?.businessDate)}).`);
+      reload();
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Failed to post day close");
+      setError(e instanceof Error ? e.message : "Failed to run day close");
     } finally {
       setRunning(false);
-      setStepIndex(-1);
     }
   };
 
-  const resetSession = () => {
-    setClosedOutlets((prev) => {
-      const next = { ...prev };
-      delete next[outletId];
-      return next;
-    });
-    setToast("Day close session reset for this outlet.");
-    void reload();
-  };
-
-  const selectedOutlet = outlets.find((o) => o.id === outletId);
-
-  if (loading && !outletId) {
-    return (
-      <ModulePageShell
-        eyebrow="Restaurants"
-        title="Day Close"
-        description="End-of-day close checklist for the selected restaurant outlet."
-        wrapChildren={false}
-      >
-        <p className="text-sm text-slate-500">Loading…</p>
-      </ModulePageShell>
-    );
-  }
-
-  if (error) {
-    return (
-      <ModulePageShell
-        eyebrow="Restaurants"
-        title="Day Close"
-        description="End-of-day close checklist for the selected restaurant outlet."
-        wrapChildren={false}
-      >
-        <p className="text-sm text-red-600">{error}</p>
-      </ModulePageShell>
-    );
-  }
-
-  return (
+  const shell = (children: ReactNode) => (
     <ModulePageShell
-      eyebrow={selectedOutlet ? `Food & Beverages · ${selectedOutlet.name}` : "Restaurants"}
+      eyebrow={current ? `Food & Beverages · ${current.outlet.name}` : "Restaurants"}
       title="Day Close"
-      description="Verify outlet checklist and close the F&B business day."
+      description="Close the outlet for the hotel business date once every shift, order and bill is settled."
       toast={toast}
       onDismissToast={() => setToast(null)}
       wrapChildren={false}
-      beforeFilters={
-        <FbOutletSelect outlets={outlets} value={outletId} onChange={setOutletId} />
-      }
+      beforeFilters={<FbOutletSelect outlets={outlets} value={outletId} onChange={setOutletId} />}
       actionButtons={
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 shadow-sm">
-            <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />
-            Business Date: {bizDate}
-            {outletClosed && (
-              <span className="ml-1 rounded bg-emerald-50 px-1 py-0.5 text-[9px] font-semibold uppercase text-emerald-700">
-                Closed
-              </span>
+        current && (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 shadow-sm">
+              <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />
+              Business Date: {dateLabel(current.businessDate)}
+              {current.closed && (
+                <span className="ml-1 rounded bg-emerald-50 px-1 py-0.5 text-[9px] font-semibold uppercase text-emerald-700">
+                  Closed
+                </span>
+              )}
+            </div>
+            <Button type="button" variant="outline" size="sm" className="gap-1 text-xs font-semibold" onClick={reload}>
+              <RotateCcw className="h-3 w-3" />
+              Refresh
+            </Button>
+            {!current.closed && (
+              <Button
+                size="sm"
+                className="bg-emerald-700 text-xs font-semibold hover:bg-emerald-800"
+                disabled={!current.canClose || current.blockers > 0 || running}
+                onClick={() => setConfirmOpen(true)}
+              >
+                {running && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                Run Day Close
+              </Button>
             )}
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1 text-xs font-semibold"
-            onClick={resetSession}
-          >
-            <RotateCcw className="h-3 w-3" />
-            Reset
-          </Button>
-          {!outletClosed && (
-            <Button
-              size="sm"
-              className="bg-emerald-700 text-xs font-semibold hover:bg-emerald-800"
-              disabled={!canClose}
-              onClick={() => setConfirmOpen(true)}
-            >
-              Run Day Close
-            </Button>
-          )}
-        </div>
+        )
       }
-      stats={[
-        {
-          label: "Business Date",
-          value: bizDate,
-          sublabel: "Current day",
-          icon: CalendarClock,
-        },
-        {
-          label: "Open Checks",
-          value: openTables.length + openOrders.length,
-          accent: openTables.length + openOrders.length > 0 ? "#f59e0b" : "#15803d",
-          sublabel: "Must settle",
-          icon: ClipboardList,
-        },
-        {
-          label: "Day Sales",
-          value: formatINR(daySales),
-          accent: "#15803d",
-          sublabel: "Gross settled",
-          icon: IndianRupee,
-        },
-        {
-          label: "Status",
-          value: outletClosed ? "Closed" : blockers.length ? "Blocked" : "Ready",
-          accent: outletClosed ? "#15803d" : blockers.length ? "#f59e0b" : "#10b981",
-          sublabel: outletClosed ? "Posted" : blockers.length ? "Resolve checks" : "Can close",
-          icon: CheckCircle2,
-        },
-      ]}
+      stats={
+        current
+          ? [
+              { label: "Business Date", value: dateLabel(current.businessDate), sublabel: "Hotel business day", icon: CalendarClock },
+              {
+                label: "Blocking Checks",
+                value: current.blockers,
+                accent: current.blockers ? "#f59e0b" : "#15803d",
+                sublabel: current.blockers ? "Resolve before closing" : "None",
+                icon: ClipboardList,
+              },
+              {
+                label: "Net Sales",
+                value: formatINR(current.totals.netSales),
+                accent: "#15803d",
+                sublabel: `${current.totals.billsCount} bill${current.totals.billsCount === 1 ? "" : "s"} raised`,
+                icon: IndianRupee,
+              },
+              {
+                label: "Collected",
+                value: formatINR(current.totals.collections.net),
+                accent: "#0f766e",
+                sublabel: "Payments taken today",
+                icon: Wallet,
+              },
+            ]
+          : []
+      }
     >
-      {running && (
-        <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <div className="flex items-center gap-2 font-semibold">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Running day close…
-          </div>
-          <p className="mt-1 text-xs text-emerald-700">
-            {stepIndex >= 0 ? steps[stepIndex] : "Starting…"}
-          </p>
-        </div>
-      )}
+      {error && <AlertBanner variant="error" message={error} onDismiss={() => setError(null)} />}
+      {children}
+    </ModulePageShell>
+  );
 
+  if (outletsLoading) return shell(<p className="text-sm text-slate-500">Loading…</p>);
+  if (!outlets.length) return shell(<p className="text-sm text-slate-500">No restaurant, cafe or bar outlets yet.</p>);
+  if (!current) return shell(error ? null : <p className="text-sm text-slate-500">Loading…</p>);
+
+  const t = current.totals;
+  const blockers = current.checks.filter((c) => c.mandatory && !c.passed);
+
+  return shell(
+    <>
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                  Day Close Readiness
-                </h3>
-                <p className="mt-1 text-sm text-slate-600">
-                  {doneCount} of {checklist.length} checks passed
-                </p>
-              </div>
-              <span
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-xs font-bold",
-                  progressPercent === 100
-                    ? "bg-emerald-50 text-emerald-700"
-                    : "bg-amber-50 text-amber-700",
-                )}
-              >
-                {progressPercent}%
-              </span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all",
-                  progressPercent === 100 ? "bg-emerald-600" : "bg-amber-500",
-                )}
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-          </div>
-
-          {blockers.length > 0 && !outletClosed && (
+          {current.closed && current.closing && (
+            <AlertBanner
+              variant="success"
+              message={`${current.outlet.name} is closed for ${dateLabel(current.businessDate)} by ${current.closing.closedByName ?? "—"} at ${dateLabel(current.closing.closedAt)}. New shifts open after Night Audit moves the business date.`}
+            />
+          )}
+          {!current.closed && !current.canClose && (
+            <AlertBanner variant="error" message="The business date is ahead of today. Run day close on that date." />
+          )}
+          {!current.closed && blockers.length > 0 && (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               <div className="mb-2 flex items-center gap-2 font-bold uppercase tracking-wide">
                 <AlertTriangle className="h-4 w-4" />
@@ -424,191 +193,143 @@ export function FbDayCloseView() {
 
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                Closing Checklist
-              </h3>
-              {blockers.length > 0 ? (
-                <span className="rounded bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
-                  {blockers.length} remaining
-                </span>
-              ) : (
-                <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
-                  Ready
-                </span>
-              )}
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">Closing Checklist</h3>
+              <span
+                className={cn(
+                  "rounded px-2 py-0.5 text-[10px] font-bold uppercase",
+                  blockers.length ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700",
+                )}
+              >
+                {blockers.length ? `${blockers.length} remaining` : "Ready"}
+              </span>
             </div>
             <ul className="divide-y divide-slate-100">
-              {checklist.map((item) => {
-                const Icon =
-                  item.status === "done"
-                    ? CheckCircle2
-                    : item.status === "warning"
-                      ? AlertTriangle
-                      : Circle;
-                return (
-                  <li
-                    key={item.id}
-                    className="flex items-start justify-between gap-3 px-4 py-3"
-                  >
-                    <div className="flex gap-3">
-                      <Icon
-                        className={cn(
-                          "mt-0.5 h-4 w-4 shrink-0",
-                          item.status === "done"
-                            ? "text-emerald-600"
-                            : item.status === "warning"
-                              ? "text-amber-500"
-                              : "text-slate-300",
+              {current.checks.map((item) => (
+                <li key={item.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                  <div className="flex gap-3">
+                    {item.passed ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                    ) : (
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                    )}
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                        {item.mandatory && (
+                          <span className="rounded bg-red-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-red-600">
+                            Mandatory
+                          </span>
                         )}
-                      />
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-                          {item.mandatory && (
-                            <span className="rounded bg-red-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-red-600">
-                              Mandatory
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-0.5 text-xs text-slate-500">{item.detail}</p>
                       </div>
+                      <p className="mt-0.5 text-xs text-slate-500">{item.detail}</p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span
-                        className={cn(
-                          "text-[11px] font-semibold",
-                          item.status === "done" ? "text-emerald-600" : "text-amber-600",
-                        )}
-                      >
-                        {item.status === "done" ? "Checked" : "Pending"}
-                      </span>
-                      {item.href && item.status !== "done" && (
-                        <Link
-                          href={item.href}
-                          className="text-[11px] font-semibold text-emerald-700 hover:underline"
-                        >
-                          Resolve
-                        </Link>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
+                  </div>
+                  {!item.passed && item.href && (
+                    <Link href={item.href} className="shrink-0 text-[11px] font-semibold text-emerald-700 hover:underline">
+                      Resolve
+                    </Link>
+                  )}
+                </li>
+              ))}
             </ul>
           </div>
 
-          {openShifts.length > 0 && (
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-900">
-                Open Cashier Shifts
-              </h3>
-              <ul className="space-y-2">
-                {openShifts.map((s) => (
-                  <li
-                    key={s.id}
-                    className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm"
-                  >
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {s.cashier} · {s.shift}
-                      </p>
-                      <p className="text-xs text-slate-500">Opened {s.openedAt}</p>
-                    </div>
-                    <Link href="/food-beverages/restaurants/cashier">
-                      <Button size="sm" className="bg-emerald-700 text-xs hover:bg-emerald-800">
-                        Close shift
-                      </Button>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
+          {current.unsettledShifts.length > 0 && (
+            <ListCard title="Cashier Shifts Not Closed">
+              {current.unsettledShifts.map((s) => (
+                <Row
+                  key={s.id}
+                  title={`${s.cashierName} · ${s.shiftName}`}
+                  sub={`Opened ${dateLabel(s.openedAt)} · ${s.status}`}
+                  href={s.status === "Pending Approval" ? "/food-beverages/restaurants/cashier/history" : "/food-beverages/restaurants/cashier"}
+                  action={s.status === "Pending Approval" ? "Review" : "Close shift"}
+                />
+              ))}
+            </ListCard>
           )}
 
-          {openTables.length > 0 && (
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-900">
-                Open Tables
-              </h3>
-              <ul className="space-y-2">
-                {openTables.slice(0, 6).map((t) => (
-                  <li
-                    key={t.id}
-                    className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm"
-                  >
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {t.tableNo} · {t.guest || "Guest"}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {t.status} · {formatINR(Number(t.checkAmount ?? 0))}
-                      </p>
-                    </div>
-                    <Link href="/food-beverages/restaurants/orders">
-                      <Button size="sm" variant="outline" className="text-xs">
-                        Settle
-                      </Button>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
+          {current.openOrders.length > 0 && (
+            <ListCard title="Open Orders">
+              {current.openOrders.map((o) => (
+                <Row
+                  key={o.id}
+                  title={`${o.orderNo} · ${o.type}${o.ref ? ` · ${o.ref}` : ""}`}
+                  sub={`${o.status} · ${formatINR(o.amount)}`}
+                  href="/food-beverages/restaurants/orders"
+                  action="Settle"
+                />
+              ))}
+            </ListCard>
+          )}
+
+          {current.unpaidBills.length > 0 && (
+            <ListCard title="Unpaid Bills">
+              {current.unpaidBills.map((b) => (
+                <Row
+                  key={b.id}
+                  title={b.billNo}
+                  sub={`${b.paymentStatus.replace("_", " ")} · ${formatINR(b.total)}`}
+                  href="/food-beverages/restaurants/bills"
+                  action="Collect"
+                />
+              ))}
+            </ListCard>
           )}
         </div>
 
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-900">
-              Outlet Snapshot
+              Sales · {dateLabel(current.businessDate)}
             </h3>
             <ul className="space-y-2 text-sm">
-              <SummaryLine
-                icon={LayoutGrid}
-                label="Open tables"
-                value={String(openTables.length)}
-              />
-              <SummaryLine
-                icon={UtensilsCrossed}
-                label="Open orders"
-                value={String(openOrders.length)}
-              />
-              <SummaryLine
-                icon={Wallet}
-                label="Open shifts"
-                value={String(openShifts.length)}
-              />
-              <SummaryLine
-                icon={ClipboardList}
-                label="Kitchen orders"
-                value={String(activeKitchenOrders.length)}
-              />
-              <SummaryLine
-                icon={IndianRupee}
-                label="Settled sales"
-                value={formatINR(daySales)}
-                strong
-              />
+              <SummaryLine icon={Receipt} label="Bills raised" value={String(t.billsCount)} />
+              <SummaryLine icon={IndianRupee} label="Gross (before tax)" value={formatINR(t.grossSales)} />
+              <SummaryLine icon={IndianRupee} label="Discount" value={formatINR(t.discount)} />
+              <SummaryLine icon={IndianRupee} label="Tax" value={formatINR(t.tax)} />
+              <SummaryLine icon={IndianRupee} label="Net sales" value={formatINR(t.netSales)} strong />
+              <SummaryLine icon={IndianRupee} label="Charged to rooms" value={formatINR(t.roomCharges)} />
             </ul>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-900">
-              Before You Close
-            </h3>
-            <ul className="space-y-2 text-xs text-slate-600">
-              <li>Settle or transfer all open covers and orders.</li>
-              <li>Close and reconcile every cashier shift.</li>
-              <li>Clear pending kitchen orders (Pending / Preparing / Ready).</li>
-              <li>Run day close once readiness reaches 100%.</li>
+            <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-900">Collections by Method</h3>
+            <ul className="space-y-2 text-sm">
+              {t.collections.byMethod
+                .filter((m) => m.amount !== 0 || m.method === "CASH")
+                .map((m) => (
+                  <SummaryLine key={m.method} icon={Wallet} label={m.label} value={formatINR(m.amount)} />
+                ))}
+              {t.collections.refunds > 0 && (
+                <SummaryLine icon={Wallet} label="Refunds" value={`−${formatINR(t.collections.refunds)}`} />
+              )}
+              <SummaryLine icon={Wallet} label="Net collected" value={formatINR(t.collections.net)} strong />
             </ul>
           </div>
 
-          {outletClosed && (
-            <AlertBanner
-              variant="success"
-              message={`Day close posted for ${selectedOutlet?.name ?? "outlet"} on ${closedOutlets[outletId]}.`}
-            />
-          )}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-900">Recent Day Closes</h3>
+            {history.length === 0 ? (
+              <p className="text-xs text-slate-400">No day close recorded for this outlet yet.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 text-xs">
+                {history.slice(0, 10).map((h) => (
+                  <li key={h.id} className="flex items-center justify-between gap-3 py-2">
+                    <div>
+                      <p className="font-semibold text-slate-900">{dateLabel(h.businessDate)}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {h.closedByName ?? "—"} · {dateLabel(h.closedAt)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-slate-900">{formatINR(Number(h.netSales))}</p>
+                      <p className="text-[11px] text-slate-500">Collected {formatINR(Number(h.collections))}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
 
@@ -617,10 +338,35 @@ export function FbDayCloseView() {
         onClose={() => setConfirmOpen(false)}
         onConfirm={() => void runDayClose()}
         title="Run Day Close?"
-        message={`This will lock the F&B business day for ${selectedOutlet?.name ?? "this outlet"} (${bizDate}).`}
+        message={`This closes ${current.outlet.name} for ${dateLabel(current.businessDate)}. No new cashier shift can start here until Night Audit moves the business date.`}
         confirmLabel="Run Day Close"
       />
-    </ModulePageShell>
+    </>,
+  );
+}
+
+function ListCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-900">{title}</h3>
+      <ul className="space-y-2">{children}</ul>
+    </section>
+  );
+}
+
+function Row({ title, sub, href, action }: { title: string; sub: string; href: string; action: string }) {
+  return (
+    <li className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm">
+      <div>
+        <p className="font-semibold text-slate-900">{title}</p>
+        <p className="text-xs text-slate-500">{sub}</p>
+      </div>
+      <Link href={href}>
+        <Button size="sm" variant="outline" className="text-xs">
+          {action}
+        </Button>
+      </Link>
+    </li>
   );
 }
 
@@ -630,7 +376,7 @@ function SummaryLine({
   value,
   strong,
 }: {
-  icon: typeof LayoutGrid;
+  icon: typeof Wallet;
   label: string;
   value: string;
   strong?: boolean;
@@ -641,9 +387,7 @@ function SummaryLine({
         <Icon className="h-3.5 w-3.5 text-slate-400" />
         {label}
       </span>
-      <span className={cn("font-semibold text-slate-900", strong && "text-emerald-700")}>
-        {value}
-      </span>
+      <span className={cn("font-semibold text-slate-900", strong && "text-emerald-700")}>{value}</span>
     </li>
   );
 }

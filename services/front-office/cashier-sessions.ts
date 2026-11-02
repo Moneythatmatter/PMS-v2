@@ -33,6 +33,9 @@ export type CashierSession = {
   approvedBy?: string | null;
   approvedByName?: string | null;
   approvedAt?: string | null;
+  /** F&B shifts only. */
+  outletId?: string | null;
+  outletName?: string | null;
 };
 
 export type CashierAudit = {

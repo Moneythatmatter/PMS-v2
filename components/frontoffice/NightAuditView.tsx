@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { downloadXlsx } from "@/lib/xlsx";
 import {
   nightAuditService,
+  type NightAuditAccountsResult,
   type NightAuditRecord,
   type NightAuditStatus,
 } from "@/services/front-office/closing";
@@ -66,6 +67,21 @@ async function fetchAll() {
     nightAuditService.history(15).catch(() => [] as NightAuditRecord[]),
   ]);
   return { status, history };
+}
+
+function accountsText(acc: NightAuditAccountsResult | undefined) {
+  if (!acc) return "Not posted";
+  if (acc.status === "POSTED") {
+    return `Voucher ${acc.voucherNo ?? ""} (${acc.voucherStatus ?? "Draft"}) · ${formatINR(Number(acc.amount ?? 0))}`;
+  }
+  if (acc.status === "NOTHING") return "Nothing new to post";
+  return "Failed — post manually";
+}
+
+/** Front Office and F&B posting results on one line (older audits have no F&B result). */
+function postingText(summary: NightAuditRecord["summary"]) {
+  const fo = accountsText(summary?.accounts);
+  return summary?.accountsFnb ? `FO: ${fo} · F&B: ${accountsText(summary.accountsFnb)}` : fo;
 }
 
 const STATUS_TONE: Record<NightAuditRecord["status"], string> = {
@@ -117,8 +133,12 @@ export function NightAuditView() {
     try {
       const record = await nightAuditService.run();
       setConfirmOpen(false);
+      const posted =
+        record.summary?.accounts?.status === "POSTED" || record.summary?.accountsFnb?.status === "POSTED";
       setToast(
-        `Night audit for ${formatDay(record.businessDate)} complete — ${record.roomNightsPosted} room night(s) posted. Business date is now ${formatDay(record.nextBusinessDate)}.`,
+        `Night audit for ${formatDay(record.businessDate)} complete — ${record.roomNightsPosted} room night(s) posted. Business date is now ${formatDay(record.nextBusinessDate)}.${
+          posted ? ` Accounts: ${postingText(record.summary)}.` : ""
+        }`,
       );
     } catch (e) {
       setConfirmOpen(false);
@@ -147,6 +167,7 @@ export function NightAuditView() {
           ["Room revenue", Number(record.roomRevenue)],
           ["Room tax", Number(record.roomTax)],
           ["Attempts", Number(record.attempts)],
+          ["Posted to Accounts", postingText(record.summary)],
         ],
       },
     ]);
@@ -174,6 +195,8 @@ export function NightAuditView() {
   const { preview, audit } = status;
   const needsClosing = !status.dayClosing;
   const failed = audit?.status === "FAILED";
+  const lastAccounts = status.lastAudit?.summary?.accounts;
+  const lastFnb = status.lastAudit?.summary?.accountsFnb;
 
   return (
     <div className="space-y-4">
@@ -256,6 +279,40 @@ export function NightAuditView() {
           variant="error"
           message={`Last attempt failed (business date not advanced): ${audit.error}`}
         />
+      )}
+
+      {lastAccounts?.status === "FAILED" && status.lastAudit && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div>
+            <p className="text-sm font-bold text-amber-900">
+              Night audit for {formatDay(status.lastAudit.businessDate)} was not posted to Accounts
+            </p>
+            <p className="text-xs text-amber-800">{lastAccounts.message}</p>
+          </div>
+          <Link
+            href="/accounts/transactions/front-office-posting"
+            className="inline-flex items-center gap-1 text-xs font-bold text-amber-900 hover:underline"
+          >
+            Front Office Posting <ExternalLink className="h-3 w-3" />
+          </Link>
+        </div>
+      )}
+
+      {lastFnb?.status === "FAILED" && status.lastAudit && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div>
+            <p className="text-sm font-bold text-amber-900">
+              F&amp;B bills for {formatDay(status.lastAudit.businessDate)} were not posted to Accounts
+            </p>
+            <p className="text-xs text-amber-800">{lastFnb.message}</p>
+          </div>
+          <Link
+            href="/accounts/transactions/fnb-posting"
+            className="inline-flex items-center gap-1 text-xs font-bold text-amber-900 hover:underline"
+          >
+            F&amp;B Posting <ExternalLink className="h-3 w-3" />
+          </Link>
+        </div>
       )}
 
       {status.blockers
@@ -359,6 +416,7 @@ export function NightAuditView() {
                 label="Last completed audit"
                 value={status.lastAudit ? formatDay(status.lastAudit.businessDate) : "None yet"}
               />
+              {status.lastAudit && <SummaryRow label="Last posting to Accounts" value={postingText(status.lastAudit.summary)} />}
             </div>
           </div>
 
@@ -382,6 +440,18 @@ export function NightAuditView() {
                       <p className="truncate text-[10px] text-slate-500">
                         {h.runByName ?? "—"} · {formatStamp(h.completedAt ?? h.startedAt)} · {h.roomNightsPosted} night(s)
                       </p>
+                      {h.status === "COMPLETED" && (
+                        <p
+                          className={cn(
+                            "truncate text-[10px]",
+                            h.summary?.accounts?.status === "FAILED" || h.summary?.accountsFnb?.status === "FAILED"
+                              ? "font-semibold text-amber-700"
+                              : "text-slate-500",
+                          )}
+                        >
+                          Accounts: {postingText(h.summary)}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold text-slate-700">

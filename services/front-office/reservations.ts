@@ -21,6 +21,9 @@ export type InHouseGuestDto = {
   email?: string;
   adults: number;
   children: number;
+  companyId?: string | null;
+  companyName?: string | null;
+  groupId?: string | null;
 };
 
 export type ReservationGuestLinkDto = {

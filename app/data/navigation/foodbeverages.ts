@@ -16,6 +16,7 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
       { label: "Bills", href: "/food-beverages/restaurants/bills", icon: "receipt" },
       { label: "Kitchen", href: "/food-beverages/kitchen/orders", icon: "chef-hat" },
       { label: "Cashier", href: "/food-beverages/restaurants/cashier", icon: "wallet" },
+      { label: "Cashier Approvals", href: "/food-beverages/restaurants/cashier/history", icon: "history" },
       { label: "Day Close", href: "/food-beverages/restaurants/day-close", icon: "calendar-clock" },
     ],
   },

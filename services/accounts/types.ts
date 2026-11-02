@@ -88,6 +88,11 @@ export type CompanySettings = {
   defaultPayableAccountId: string | null;
   defaultRoundOffAccountId: string | null;
   defaultGuestDepositAccountId: string | null;
+  /** Receivable for in-house guests: Front Office charges are debited here until paid. */
+  defaultGuestLedgerAccountId: string | null;
+  foPostingStatus: "Draft" | "Posted";
+  /** Front Office activity before this date is never posted (books taken over mid-year). */
+  foPostingStartDate?: string | null;
   enableGst: boolean;
   enableEinvoice: boolean;
   defaultTaxRegion: string;
@@ -205,15 +210,19 @@ export type Division = Audit & {
   transactionCount: number;
 };
 
-export type PartyType = Audit & {
+/** Fixed list shared by every property; read-only. */
+export type PartyType = {
   id: string;
   typeCode: string;
   typeName: string;
   description: string;
   sequence: number;
+  isSystem: boolean;
   status: Status;
   subTypeCount: number;
   partyCount: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type PartySubType = Audit & {
@@ -238,10 +247,14 @@ export type PaymentMethod = Audit & {
   paymentMethodName: string;
   methodType: string;
   referenceRequired: boolean;
+  /** Front Office payments of this mode post to this method's ledger. */
+  foPaymentMode: FoPaymentMode | null;
   description: string;
   status: Status;
   transactionCount: number;
 };
+
+export type FoPaymentMode = "CASH" | "CARD" | "UPI" | "BANK_TRANSFER" | "CHEQUE" | "OTHER";
 
 export type Party = Audit & {
   id: string;
@@ -402,10 +415,98 @@ export type TaxApplication = Audit & {
     maximumAmount: number | null;
     status: string;
   }[];
+  /** Division tagged on the income line when this billing point is posted to Accounts. */
+  divisionId: string | null;
+  divisionName: string | null;
   effectiveFrom: string;
   effectiveTo: string | null;
   description: string;
   status: Status;
+};
+
+export type FoPostingLine = {
+  accountId: string;
+  accountCode: string | null;
+  accountName: string | null;
+  divisionId: string | null;
+  divisionName: string | null;
+  partyId: string | null;
+  partyName: string | null;
+  entryType: "Dr" | "Cr";
+  amount: number;
+  narration: string;
+};
+
+export type FoPostingCounts = {
+  charges: number;
+  payments: number;
+  adjustments: number;
+  companyBills: number;
+  voided: number;
+};
+
+export type FoPostingTotals = {
+  charges: number;
+  tax: number;
+  payments: number;
+  refunds: number;
+  advances: number;
+  adjusted: number;
+  companyBills: number;
+  voided: number;
+};
+
+export type FoPostingPreview = {
+  businessDate: string;
+  postingStatus: "Draft" | "Posted";
+  /** Nothing older than this is posted (Company Settings). */
+  startDate: string | null;
+  lines: FoPostingLine[];
+  issues: string[];
+  counts: FoPostingCounts & { beforeStart: number };
+  totals: FoPostingTotals & { debit: number; credit: number };
+  canPost: boolean;
+};
+
+export type FoPostingResult = {
+  businessDate: string;
+  voucher: { id: string; voucherNo: string; status: string; totalAmount: number } | null;
+  totals: FoPostingTotals;
+  counts: FoPostingCounts;
+};
+
+export type FbPostingCounts = { bills: number; payments: number; voided: number };
+
+export type FbPostingTotals = { sales: number; tax: number; discount: number; collections: number; voided: number };
+
+export type FbPostingPreview = {
+  businessDate: string;
+  postingStatus: "Draft" | "Posted";
+  startDate: string | null;
+  lines: FoPostingLine[];
+  issues: string[];
+  counts: FbPostingCounts & { beforeStart: number };
+  totals: FbPostingTotals & { debit: number; credit: number };
+  canPost: boolean;
+};
+
+export type FbPostingResult = {
+  businessDate: string;
+  voucher: { id: string; voucherNo: string; status: string; totalAmount: number } | null;
+  totals: FbPostingTotals;
+  counts: FbPostingCounts;
+};
+
+export type FoPostingVoucher = {
+  id: string;
+  voucherNo: string;
+  voucherDate: string;
+  businessDate: string | null;
+  status: VoucherStatus;
+  totalAmount: number;
+  sourceType: string;
+  narration: string;
+  createdAt: string;
 };
 
 export type Budget = {
@@ -572,6 +673,8 @@ export type VoucherLineInput = {
   entryType: EntryType;
   amount: number;
   divisionId?: string | null;
+  /** Party of this line (receivable / payable ledgers); defaults to the voucher party. */
+  partyId?: string | null;
   chequeNo?: string;
   chequeDate?: string | null;
   gstRate?: number | null;

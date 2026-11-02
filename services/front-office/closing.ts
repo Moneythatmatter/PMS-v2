@@ -123,6 +123,18 @@ export type NightAuditRecord = {
   runByName: string | null;
   startedAt: string;
   completedAt: string | null;
+  /** accounts = Front Office posting, accountsFnb = F&B (POS) posting. */
+  summary?: { accounts?: NightAuditAccountsResult; accountsFnb?: NightAuditAccountsResult } | null;
+};
+
+/** What Night Audit posted to Accounts (a failure here does not undo the audit). */
+export type NightAuditAccountsResult = {
+  status: "POSTED" | "NOTHING" | "FAILED";
+  voucherId?: string;
+  voucherNo?: string;
+  voucherStatus?: string;
+  amount?: number;
+  message?: string;
 };
 
 export type NightAuditPreviewRow = {

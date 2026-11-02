@@ -21,7 +21,12 @@ import {
   TextAreaInput,
 } from "@/components/frontoffice/ui";
 import { ModulePageShell } from "@/components/pms";
-import { accPaymentMethodService, type PaymentMethod, type Status } from "@/services/accounts";
+import {
+  accPaymentMethodService,
+  type FoPaymentMode,
+  type PaymentMethod,
+  type Status,
+} from "@/services/accounts";
 import {
   CompanySelector,
   MasterFormSection,
@@ -46,11 +51,21 @@ type PaymentMethodForm = Pick<
   | "paymentMethodName"
   | "methodType"
   | "referenceRequired"
+  | "foPaymentMode"
   | "accountId"
   | "description"
   | "status"
   | "companyId"
 >;
+
+const FO_PAYMENT_MODES: { value: FoPaymentMode; label: string }[] = [
+  { value: "CASH", label: "Cash" },
+  { value: "CARD", label: "Card" },
+  { value: "UPI", label: "UPI" },
+  { value: "BANK_TRANSFER", label: "Bank Transfer" },
+  { value: "CHEQUE", label: "Cheque" },
+  { value: "OTHER", label: "Other" },
+];
 
 function blankForm(companyId: string | null): PaymentMethodForm {
   return {
@@ -58,6 +73,7 @@ function blankForm(companyId: string | null): PaymentMethodForm {
     paymentMethodName: "",
     methodType: "Cash",
     referenceRequired: false,
+    foPaymentMode: null,
     accountId: null,
     description: "",
     status: "Active",
@@ -71,6 +87,7 @@ function toForm(m: PaymentMethod): PaymentMethodForm {
     paymentMethodName: m.paymentMethodName,
     methodType: m.methodType,
     referenceRequired: m.referenceRequired,
+    foPaymentMode: m.foPaymentMode ?? null,
     accountId: m.accountId,
     description: m.description ?? "",
     status: m.status,
@@ -716,6 +733,25 @@ export function PaymentMethodMasterView() {
                     >
                       <option value="Yes">Yes (Mandatory Reference / UTR / Card Auth)</option>
                       <option value="No">No (Optional / Direct Cash)</option>
+                    </SelectInput>
+                  </FormField>
+
+                  <FormField
+                    label="Front Office Payment Mode"
+                    helperText="Front Office payments of this mode are posted to this method's ledger at Night Audit. One method per mode."
+                  >
+                    <SelectInput
+                      value={formData.foPaymentMode ?? ""}
+                      onChange={(e) =>
+                        handleFormChange("foPaymentMode", (e.target.value || null) as FoPaymentMode | null)
+                      }
+                    >
+                      <option value="">— Not used by Front Office —</option>
+                      {FO_PAYMENT_MODES.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
                     </SelectInput>
                   </FormField>
 

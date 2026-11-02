@@ -20,6 +20,11 @@ import type {
   Division,
   FiscalPeriod,
   FiscalYear,
+  FbPostingPreview,
+  FbPostingResult,
+  FoPostingPreview,
+  FoPostingResult,
+  FoPostingVoucher,
   GeneralLedgerReport,
   Lookups,
   NewBillInput,
@@ -85,7 +90,10 @@ export const accAccountService = {
   tree: (asOn?: string) => api.get<AccountTreeNode[]>(accPath(`/masters/accounts/tree${qs({ asOn })}`)),
 };
 export const accDivisionService = crud<Division>("/masters/divisions");
-export const accPartyTypeService = crud<PartyType>("/masters/party-types");
+export const accPartyTypeService = {
+  list: (params: Record<string, QueryValue> = {}) => api.get<PartyType[]>(accPath(`/masters/party-types${qs(params)}`)),
+  get: (id: string) => api.get<PartyType>(accPath(`/masters/party-types/${id}`)),
+};
 export const accPartySubTypeService = crud<PartySubType>("/masters/party-sub-types");
 export const accPaymentMethodService = crud<PaymentMethod>("/masters/payment-methods");
 export const accPartyService = crud<Party>("/masters/parties");
@@ -152,6 +160,18 @@ export const accBankReconService = {
     api.post<{ reconciled: number }>(accPath("/bank-reconciliation/reconcile"), { items }),
   unreconcile: (lineIds: string[], reason: string) =>
     api.post<{ unreconciled: number }>(accPath("/bank-reconciliation/unreconcile"), { lineIds, reason }),
+};
+
+export const accFoPostingService = {
+  preview: (date: string) => api.get<FoPostingPreview>(accPath(`/fo-posting/preview${qs({ date })}`)),
+  post: (businessDate: string) => api.post<FoPostingResult>(accPath("/fo-posting/post"), { businessDate }),
+  history: () => api.get<FoPostingVoucher[]>(accPath("/fo-posting/history")),
+};
+
+export const accFbPostingService = {
+  preview: (date: string) => api.get<FbPostingPreview>(accPath(`/fb-posting/preview${qs({ date })}`)),
+  post: (businessDate: string) => api.post<FbPostingResult>(accPath("/fb-posting/post"), { businessDate }),
+  history: () => api.get<FoPostingVoucher[]>(accPath("/fb-posting/history")),
 };
 
 export const accClosingStockService = {

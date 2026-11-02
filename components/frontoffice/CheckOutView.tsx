@@ -103,6 +103,9 @@ function mapInHouseToFolio(
     restaurantBill?: number;
     laundry?: number;
     isVip?: boolean;
+    companyId?: string | null;
+    companyName?: string | null;
+    groupId?: string | null;
   },
   folio?: FolioListItem | null,
 ): CheckoutFolio {
@@ -142,6 +145,8 @@ function mapInHouseToFolio(
     advancePaid,
     isVip: g.isVip,
     departingToday: isDepartingToday({ checkOut: g.checkOut }),
+    companyId: g.companyId ?? null,
+    companyName: g.companyName ?? null,
   };
 }
 
@@ -181,6 +186,7 @@ export function CheckOutView() {
   const [paymentMode, setPaymentMode] = useState("UPI");
   const [externalReference, setExternalReference] = useState("");
   const [amountReceived, setAmountReceived] = useState(0);
+  const [billToCompany, setBillToCompany] = useState(0);
   const [departureFilter, setDepartureFilter] = useState<DepartureFilter>("all");
   const [departureDate, setDepartureDate] = useState(todayIso());
   const [invoiceNos, setInvoiceNos] = useState<Record<string, string>>({});
@@ -262,12 +268,14 @@ export function CheckOutView() {
   }, [selected, discount, splitBilling, separateBillItems]);
 
   const totals = billBreakdown?.totals ?? null;
+  const companyShare = selected?.companyId ? Math.max(0, billToCompany) : 0;
+  const settled = amountReceived + companyShare;
 
   const currentStep: Step = completed
     ? "done"
     : !selected
       ? "find"
-      : amountReceived >= (totals?.pending ?? 0)
+      : settled >= (totals?.pending ?? 0)
         ? "pay"
         : "review";
 
@@ -280,6 +288,7 @@ export function CheckOutView() {
     setPaymentMode("UPI");
     setExternalReference("");
     setAmountReceived(computeCheckoutTotals(folio).pending);
+    setBillToCompany(0);
     setLookupError("");
     setCompleted(false);
     setInvoiceNos({});
@@ -429,8 +438,16 @@ export function CheckOutView() {
 
   const handleCheckout = async () => {
     if (!selected || !totals || checkingOut) return;
-    if (amountReceived < totals.pending) {
-      setLookupError(`Amount received (${formatINR(amountReceived)}) is less than pending balance (${formatINR(totals.pending)}).`);
+    if (companyShare > totals.pending) {
+      setLookupError(`Bill to company (${formatINR(companyShare)}) cannot exceed the pending balance (${formatINR(totals.pending)}).`);
+      return;
+    }
+    if (settled < totals.pending) {
+      setLookupError(
+        companyShare > 0
+          ? `Amount received plus bill to company (${formatINR(settled)}) is less than pending balance (${formatINR(totals.pending)}).`
+          : `Amount received (${formatINR(amountReceived)}) is less than pending balance (${formatINR(totals.pending)}).`,
+      );
       return;
     }
     if (externalReferenceRequired && !externalReference.trim()) {
@@ -447,6 +464,7 @@ export function CheckOutView() {
       await reservationService.checkOut(selected.id, {
         paymentMode,
         amountReceived,
+        billToCompanyAmount: companyShare,
         externalReference: externalReference.trim() || undefined,
       });
       setFolios((prev) => prev.filter((f) => f.id !== selected.id));
@@ -455,8 +473,10 @@ export function CheckOutView() {
         splitBilling && billBreakdown && billBreakdown.bills.length > 1
           ? ` across ${billBreakdown.bills.length} bills`
           : "";
+      const collected = Math.max(0, totals.pending - companyShare);
+      const companyNote = companyShare > 0 ? ` ${formatINR(companyShare)} billed to ${selected.companyName ?? "the company"}.` : "";
       setToast(
-        `${selected.guestName} checked out from Room ${selected.room}. ${formatINR(totals.pending)} collected via ${paymentMode}${billNote}.`,
+        `${selected.guestName} checked out from Room ${selected.room}. ${formatINR(collected)} collected via ${paymentMode}${billNote}.${companyNote}`,
       );
     } catch (e) {
       setLookupError(e instanceof Error ? e.message : "Check-out failed");
@@ -467,7 +487,8 @@ export function CheckOutView() {
 
   const checkoutBlocked =
     !paymentMode ||
-    amountReceived < (totals?.pending ?? 0) ||
+    settled < (totals?.pending ?? 0) ||
+    companyShare > (totals?.pending ?? 0) ||
     (externalReferenceRequired && !externalReference.trim());
   const checkoutButtonDisabled = checkoutBlocked || checkingOut;
 
@@ -1046,14 +1067,54 @@ export function CheckOutView() {
                       </FormField>
                     )}
                   </div>
-                  {amountReceived > totals.pending && (
+                  {selected.companyId && (
+                    <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50/60 p-3">
+                      <div className="flex flex-wrap items-end gap-3">
+                        <FormField label={`Bill to ${selected.companyName ?? "company"}`} className="min-w-[180px] flex-1">
+                          <TextInput
+                            type="number"
+                            min={0}
+                            max={totals.pending}
+                            value={billToCompany}
+                            onChange={(e) => {
+                              const next = Math.max(0, Number(e.target.value) || 0);
+                              setBillToCompany(next);
+                              setAmountReceived(Math.max(0, Math.round((totals.pending - next) * 100) / 100));
+                            }}
+                            className="rounded-xl bg-white"
+                          />
+                        </FormField>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl bg-white text-xs"
+                          onClick={() => {
+                            setBillToCompany(totals.pending);
+                            setAmountReceived(0);
+                          }}
+                        >
+                          Bill full balance
+                        </Button>
+                      </div>
+                      <p className="mt-2 text-[11px] text-teal-800">
+                        Moved to the company&apos;s receivable in Accounts at Night Audit; the guest pays the rest now.
+                      </p>
+                    </div>
+                  )}
+                  {settled > totals.pending && companyShare <= totals.pending && (
                     <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
-                      Change to return: {formatINR(amountReceived - totals.pending)}
+                      Change to return: {formatINR(settled - totals.pending)}
                     </p>
                   )}
-                  {amountReceived < totals.pending && (
+                  {companyShare > totals.pending && (
+                    <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                      Bill to company cannot exceed the pending balance ({formatINR(totals.pending)}).
+                    </p>
+                  )}
+                  {settled < totals.pending && (
                     <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
-                      Remaining: {formatINR(totals.pending - amountReceived)}
+                      Remaining: {formatINR(totals.pending - settled)}
                     </p>
                   )}
                 </div>

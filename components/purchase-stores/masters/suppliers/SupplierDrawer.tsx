@@ -3,9 +3,14 @@
 import React, { useState, useEffect } from "react";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { Button } from "@/components/ui/Button";
-import { FormField, TextInput, SelectInput, TextAreaInput, FormSection } from "@/components/frontoffice/ui";
-import { Sparkles, Star } from "lucide-react";
-import { PAYMENT_TERMS_OPTIONS, type SupplierItem } from "@/app/data/purchaseStoresMastersData";
+import { FormField, TextInput, SelectInput, FormSection } from "@/components/frontoffice/ui";
+import { Sparkles } from "lucide-react";
+import {
+  PAYMENT_TERMS_OPTIONS,
+  type SupplierItem,
+  type SupplierPartyOption,
+} from "@/app/data/purchaseStoresMastersData";
+import { psSupplierService } from "@/services/purchase-stores/index";
 
 interface SupplierDrawerProps {
   open: boolean;
@@ -16,86 +21,103 @@ interface SupplierDrawerProps {
 
 const defaultSupplierState: Partial<SupplierItem> = {
   supplierCode: "",
-  supplierName: "",
-  contactPerson: "",
-  phone: "",
-  email: "",
-  gstin: "",
-  panNumber: "",
+  partyId: "",
   paymentTerms: "Net 30 Days",
-  address: "",
-  city: "",
   rating: 4,
   status: "Active",
 };
 
+function ReadOnlyField({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-0.5 text-sm text-slate-900">{value || "—"}</p>
+    </div>
+  );
+}
+
 export function SupplierDrawer({ open, onClose, onSave, initialSupplier }: SupplierDrawerProps) {
   const [formData, setFormData] = useState<Partial<SupplierItem>>(defaultSupplierState);
-  const [errors, setErrors] = useState<{ supplierName?: string; contactPerson?: string; phone?: string; email?: string }>({});
+  const [partyOptions, setPartyOptions] = useState<SupplierPartyOption[]>([]);
+  const [partyError, setPartyError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const [shownFor, setShownFor] = useState<{ open: boolean; supplier: SupplierItem | null | undefined }>({
+    open: false,
+    supplier: undefined,
+  });
 
   const isEditing = Boolean(initialSupplier);
 
-  useEffect(() => {
+  if (shownFor.open !== open || shownFor.supplier !== initialSupplier) {
+    setShownFor({ open, supplier: initialSupplier });
     if (open) {
-      if (initialSupplier) {
-        setFormData(initialSupplier);
-      } else {
-        const rand = Math.floor(100 + Math.random() * 900);
-        setFormData({
-          ...defaultSupplierState,
-          supplierCode: `SUP-NEW-${rand}`,
-        });
-      }
-      setErrors({});
+      setFormData(initialSupplier ? { ...initialSupplier, partyId: initialSupplier.partyId ?? "" } : defaultSupplierState);
+      setError(null);
     }
-  }, [open, initialSupplier]);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    psSupplierService
+      .partyOptions()
+      .then((options) => {
+        if (cancelled) return;
+        setPartyOptions(options);
+        setPartyError(null);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setPartyError(e instanceof Error ? e.message : "Failed to load Accounts parties");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const availableParties = partyOptions.filter(
+    (p) =>
+      (p.status === "Active" && !p.linkedSupplierId) ||
+      p.id === formData.partyId ||
+      p.linkedSupplierId === initialSupplier?.id,
+  );
+  const selectedParty = partyOptions.find((p) => p.id === formData.partyId);
+  const showSavedDetails = Boolean(initialSupplier && initialSupplier.partyId === formData.partyId);
+
+  const chooseParty = (id: string) => {
+    const party = partyOptions.find((p) => p.id === id);
+    setFormData((prev) => ({
+      ...prev,
+      partyId: id,
+      supplierCode: !isEditing && !prev.supplierCode?.trim() && party ? party.partyCode : prev.supplierCode,
+    }));
+  };
 
   const handleAutoGenerateCode = () => {
-    const prefix = formData.supplierName ? formData.supplierName.slice(0, 3).toUpperCase() : "SUP";
+    const name = selectedParty?.partyName ?? initialSupplier?.supplierName ?? "";
+    const prefix = name ? name.slice(0, 3).toUpperCase() : "SUP";
     const rand = Math.floor(100 + Math.random() * 900);
     setFormData((prev) => ({ ...prev, supplierCode: `SUP-${prefix}-${rand}` }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: { supplierName?: string; contactPerson?: string; phone?: string; email?: string } = {};
-
-    if (!formData.supplierName || !formData.supplierName.trim()) {
-      newErrors.supplierName = "Vendor Name is required.";
-    }
-    if (!formData.contactPerson || !formData.contactPerson.trim()) {
-      newErrors.contactPerson = "Contact Person is required.";
-    }
-    if (!formData.phone || !formData.phone.trim()) {
-      newErrors.phone = "Phone number is required.";
-    }
-    if (!formData.email || !formData.email.trim()) {
-      newErrors.email = "Email address is required.";
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    if (!formData.partyId) {
+      setError("Select the Accounts party for this vendor.");
       return;
     }
 
     const todayStr = new Date().toISOString().split("T")[0];
-
-    const finalSupplier: SupplierItem = {
+    const finalSupplier = {
       id: initialSupplier?.id ?? `sup-${Date.now()}`,
-      supplierCode: formData.supplierCode || `SUP-${Date.now().toString().slice(-4)}`,
-      supplierName: formData.supplierName?.trim() || "",
-      contactPerson: formData.contactPerson?.trim() || "",
-      phone: formData.phone?.trim() || "",
-      email: formData.email?.trim() || "",
-      gstin: formData.gstin?.trim() || undefined,
-      panNumber: formData.panNumber?.trim() || undefined,
+      partyId: formData.partyId,
+      supplierCode: formData.supplierCode?.trim().toUpperCase() ?? "",
+      supplierName: selectedParty?.partyName ?? initialSupplier?.supplierName ?? "",
       paymentTerms: formData.paymentTerms || "Net 30 Days",
-      address: formData.address?.trim() || undefined,
-      city: formData.city?.trim() || undefined,
       rating: Number(formData.rating ?? 4),
       status: formData.status || "Active",
       createdDate: initialSupplier?.createdDate ?? todayStr,
-    };
+    } as SupplierItem;
 
     onSave(finalSupplier);
     onClose();
@@ -106,7 +128,7 @@ export function SupplierDrawer({ open, onClose, onSave, initialSupplier }: Suppl
       open={open}
       onClose={onClose}
       title={isEditing ? `Edit Vendor: ${initialSupplier?.supplierCode}` : "Add Vendor"}
-      description="Register vendor contact profiles, GSTIN details, and credit payment terms."
+      description="Vendors come from the Accounts Party Master (type Vendor). Name, contact, GSTIN, PAN and address are edited in Accounts."
       width="2xl"
       className="max-w-full sm:max-w-[700px]"
       footer={
@@ -126,24 +148,65 @@ export function SupplierDrawer({ open, onClose, onSave, initialSupplier }: Suppl
       }
     >
       <form onSubmit={handleSubmit} className="space-y-6 pb-4">
-        {/* SECTION 1: Basic Vendor Info */}
-        <FormSection title="Section 1: Vendor Profile & Contact" columns={2}>
-          <FormField label="Vendor / Company Name" required className="sm:col-span-2">
-            <TextInput
-              value={formData.supplierName ?? ""}
-              onChange={(e) => setFormData((p) => ({ ...p, supplierName: e.target.value }))}
-              placeholder="e.g. Apex Linen Supplies Pvt Ltd"
-              className={errors.supplierName ? "border-red-400 focus:border-red-500" : ""}
-            />
-            {errors.supplierName && <p className="mt-1 text-[11px] font-medium text-red-500">{errors.supplierName}</p>}
+        <FormSection title="Section 1: Accounts Party" columns={2}>
+          <FormField label="Vendor Party" required className="sm:col-span-2">
+            <SelectInput
+              value={formData.partyId ?? ""}
+              onChange={(e) => chooseParty(e.target.value)}
+              className={error ? "border-red-400 focus:border-red-500" : ""}
+            >
+              <option value="">Select a Vendor party…</option>
+              {availableParties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.partyName} ({p.partyCode}){p.gstin ? ` · ${p.gstin}` : ""}
+                  {p.status !== "Active" ? ` · ${p.status}` : ""}
+                </option>
+              ))}
+            </SelectInput>
+            {error && <p className="mt-1 text-[11px] font-medium text-red-500">{error}</p>}
+            {partyError && <p className="mt-1 text-[11px] font-medium text-red-500">{partyError}</p>}
+            {!partyError && partyOptions.length > 0 && availableParties.length === 0 && (
+              <p className="mt-1 text-[11px] text-slate-500">
+                Every Vendor party is already linked. Add a new party of type Vendor in Accounts → Party Master.
+              </p>
+            )}
+            {!partyError && partyOptions.length === 0 && (
+              <p className="mt-1 text-[11px] text-slate-500">
+                No Vendor parties yet. Add one in Accounts → Party Master with party type Vendor.
+              </p>
+            )}
+            {initialSupplier && initialSupplier.linked === false && (
+              <p className="mt-1 text-[11px] font-medium text-amber-600">
+                This vendor is not linked to Accounts yet. Pick its party to link it.
+              </p>
+            )}
           </FormField>
 
+          {(selectedParty || showSavedDetails) && (
+            <div className="sm:col-span-2 grid grid-cols-2 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <ReadOnlyField label="Vendor / Company Name" value={selectedParty?.partyName ?? initialSupplier?.supplierName} />
+              <ReadOnlyField label="Party Code" value={selectedParty?.partyCode ?? initialSupplier?.partyCode} />
+              <ReadOnlyField label="GSTIN" value={selectedParty ? selectedParty.gstin : initialSupplier?.gstin} />
+              <ReadOnlyField label="City" value={selectedParty ? selectedParty.city : initialSupplier?.city} />
+              {showSavedDetails && (
+                <>
+                  <ReadOnlyField label="Contact Person" value={initialSupplier?.contactPerson} />
+                  <ReadOnlyField label="Phone" value={initialSupplier?.phone} />
+                  <ReadOnlyField label="Email" value={initialSupplier?.email} />
+                  <ReadOnlyField label="PAN" value={initialSupplier?.panNumber} />
+                </>
+              )}
+            </div>
+          )}
+        </FormSection>
+
+        <FormSection title="Section 2: Purchase Terms" columns={2}>
           <FormField label="Vendor Code">
             <div className="flex gap-2">
               <TextInput
                 value={formData.supplierCode ?? ""}
                 onChange={(e) => setFormData((p) => ({ ...p, supplierCode: e.target.value }))}
-                placeholder="e.g. SUP-APX"
+                placeholder="Defaults to the party code"
                 className="flex-1 font-mono uppercase"
               />
               <button
@@ -157,62 +220,12 @@ export function SupplierDrawer({ open, onClose, onSave, initialSupplier }: Suppl
             </div>
           </FormField>
 
-          <FormField label="Contact Person Name" required>
-            <TextInput
-              value={formData.contactPerson ?? ""}
-              onChange={(e) => setFormData((p) => ({ ...p, contactPerson: e.target.value }))}
-              placeholder="e.g. Rakesh Sharma"
-              className={errors.contactPerson ? "border-red-400 focus:border-red-500" : ""}
-            />
-            {errors.contactPerson && <p className="mt-1 text-[11px] font-medium text-red-500">{errors.contactPerson}</p>}
-          </FormField>
-
-          <FormField label="Phone Number" required>
-            <TextInput
-              value={formData.phone ?? ""}
-              onChange={(e) => setFormData((p) => ({ ...p, phone: e.target.value }))}
-              placeholder="e.g. +91 98765 43210"
-              className={errors.phone ? "border-red-400 focus:border-red-500" : ""}
-            />
-            {errors.phone && <p className="mt-1 text-[11px] font-medium text-red-500">{errors.phone}</p>}
-          </FormField>
-
-          <FormField label="Email Address" required>
-            <TextInput
-              type="email"
-              value={formData.email ?? ""}
-              onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value }))}
-              placeholder="e.g. orders@apexlinen.com"
-              className={errors.email ? "border-red-400 focus:border-red-500" : ""}
-            />
-            {errors.email && <p className="mt-1 text-[11px] font-medium text-red-500">{errors.email}</p>}
-          </FormField>
-        </FormSection>
-
-        {/* SECTION 2: Tax & Financial Info */}
-        <FormSection title="Section 2: Tax & Credit Payment Terms" columns={2}>
-          <FormField label="GSTIN Number">
-            <TextInput
-              value={formData.gstin ?? ""}
-              onChange={(e) => setFormData((p) => ({ ...p, gstin: e.target.value }))}
-              placeholder="e.g. 27AAACA12341Z5"
-              className="font-mono uppercase text-xs"
-            />
-          </FormField>
-
-          <FormField label="PAN Number">
-            <TextInput
-              value={formData.panNumber ?? ""}
-              onChange={(e) => setFormData((p) => ({ ...p, panNumber: e.target.value }))}
-              placeholder="e.g. AAACA12341"
-              className="font-mono uppercase text-xs"
-            />
-          </FormField>
-
-          <FormField label="Payment Terms" required className="sm:col-span-2">
+          <FormField label="Payment Terms" required>
             <SelectInput
               value={formData.paymentTerms ?? "Net 30 Days"}
-              onChange={(e) => setFormData((p) => ({ ...p, paymentTerms: e.target.value as any }))}
+              onChange={(e) =>
+                setFormData((p) => ({ ...p, paymentTerms: e.target.value as SupplierItem["paymentTerms"] }))
+              }
             >
               {PAYMENT_TERMS_OPTIONS.map((pt) => (
                 <option key={pt} value={pt}>
@@ -223,28 +236,7 @@ export function SupplierDrawer({ open, onClose, onSave, initialSupplier }: Suppl
           </FormField>
         </FormSection>
 
-        {/* SECTION 3: Address Details */}
-        <FormSection title="Section 3: Address & Location" columns={2}>
-          <FormField label="Registered Office Address" className="sm:col-span-2">
-            <TextAreaInput
-              value={formData.address ?? ""}
-              onChange={(e) => setFormData((p) => ({ ...p, address: e.target.value }))}
-              placeholder="Full street address, industrial estate..."
-              rows={2}
-            />
-          </FormField>
-
-          <FormField label="City / Region" className="sm:col-span-2">
-            <TextInput
-              value={formData.city ?? ""}
-              onChange={(e) => setFormData((p) => ({ ...p, city: e.target.value }))}
-              placeholder="e.g. Mumbai, New Delhi, Bengaluru"
-            />
-          </FormField>
-        </FormSection>
-
-        {/* SECTION 4: Rating & Status */}
-        <FormSection title="Section 4: Performance & Status" columns={2}>
+        <FormSection title="Section 3: Performance & Status" columns={2}>
           <FormField label="Performance Rating">
             <SelectInput
               value={formData.rating ?? 4}

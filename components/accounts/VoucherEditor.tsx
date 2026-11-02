@@ -66,6 +66,8 @@ interface JournalRow {
   taxId: string;
   /** Receipt / Payment mode: party bill settled by this line. */
   billId: string;
+  /** Party saved on this line (e.g. one company per line in a Front Office voucher); empty = voucher party. */
+  partyId: string;
 }
 
 type RpKind = "Receipt" | "Payment";
@@ -121,6 +123,7 @@ const newRow = (type: "Dr" | "Cr"): JournalRow => ({
   narration: "",
   taxId: "",
   billId: "",
+  partyId: "",
 });
 const blankRows = () => [newRow("Dr"), newRow("Cr")];
 
@@ -153,7 +156,15 @@ const journalRowsFromVoucher = (v: VoucherDetail): JournalRow[] =>
     narration: l.narration ?? "",
     taxId: "",
     billId: "",
+    partyId: l.partyId ?? "",
   }));
+
+/** Header party: the voucher's own, else the lines' party when they all share one. */
+const headerPartyOf = (v: VoucherDetail): string => {
+  if (v.partyId) return v.partyId;
+  const parties = new Set(v.lines.map((l) => l.partyId).filter(Boolean));
+  return parties.size === 1 ? String([...parties][0]) : "";
+};
 
 export const statusBadgeClass = (status: string) =>
   status === "Posted"
@@ -209,9 +220,7 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
   const [transactionDate, setTransactionDate] = useState(voucher?.voucherDate ?? todayIso());
   const [manualVoucherNo, setManualVoucherNo] = useState(voucher?.voucherNo ?? "");
   const [referenceNumber, setReferenceNumber] = useState(voucher?.referenceNo ?? "");
-  const [voucherPartyId, setVoucherPartyId] = useState(
-    voucher ? voucher.partyId ?? voucher.lines.find((l) => l.partyId)?.partyId ?? "" : "",
-  );
+  const [voucherPartyId, setVoucherPartyId] = useState(voucher ? headerPartyOf(voucher) : "");
   const [commonNarration, setCommonNarration] = useState(voucher?.narration ?? "");
   const [rows, setRows] = useState<JournalRow[]>(() => (voucher ? rowsFromVoucher(voucher) : blankRows()));
   const [bankCashAccountId, setBankCashAccountId] = useState(voucher?.bankCashAccountId ?? "");
@@ -419,7 +428,7 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
     setTransactionDate(v.voucherDate);
     setManualVoucherNo(v.voucherNo);
     setReferenceNumber(v.referenceNo ?? "");
-    setVoucherPartyId(v.partyId ?? v.lines.find((l) => l.partyId)?.partyId ?? "");
+    setVoucherPartyId(headerPartyOf(v));
     setCommonNarration(v.narration ?? "");
     setRows(rowsFromVoucher(v));
     setBankCashAccountId(v.bankCashAccountId ?? "");
@@ -573,6 +582,7 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
         entryType: r.type,
         amount: (r.type === "Dr" ? r.debit : r.credit) || 0,
         divisionId: r.divisionId || null,
+        partyId: r.partyId || null,
         chequeNo: r.chequeNo.trim(),
         chequeDate: r.chequeDate || null,
         narration: r.narration.trim() || taxNote(r),
@@ -641,6 +651,7 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
           entryType: counterSideFor(kind),
           amount: rowAmount(r),
           divisionId: r.divisionId || null,
+          partyId: r.partyId || null,
           narration: r.narration.trim() || taxNote(r),
         })),
       ],
@@ -796,17 +807,40 @@ export function VoucherEditor({ voucher = null, variant = "page", notify, onSave
     </SelectInput>
   );
 
-  const renderNarrationInput = (row: JournalRow) => (
-    <TextInput
-      value={row.narration}
-      disabled={!editable}
-      maxLength={500}
-      onChange={(e) => handleUpdateRow(row.key, "narration", e.target.value)}
-      placeholder={commonNarration.trim() || "Line narration..."}
-      title={row.narration || undefined}
-      className="h-8 text-xs"
-    />
-  );
+  const renderNarrationInput = (row: JournalRow) => {
+    const lineParty =
+      row.partyId && row.partyId !== voucherPartyId
+        ? lookups?.parties.find((p) => p.id === row.partyId)?.partyName ?? "Party"
+        : "";
+    return (
+      <div>
+        <TextInput
+          value={row.narration}
+          disabled={!editable}
+          maxLength={500}
+          onChange={(e) => handleUpdateRow(row.key, "narration", e.target.value)}
+          placeholder={commonNarration.trim() || "Line narration..."}
+          title={row.narration || undefined}
+          className="h-8 text-xs"
+        />
+        {lineParty && (
+          <p className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold text-teal-700">
+            Party: {lineParty}
+            {editable && (
+              <button
+                type="button"
+                onClick={() => handleUpdateRow(row.key, "partyId", "")}
+                className="text-slate-400 hover:text-rose-600"
+                title="Use the voucher party for this line"
+              >
+                ×
+              </button>
+            )}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const renderDeleteButton = (row: JournalRow) => (
     <button

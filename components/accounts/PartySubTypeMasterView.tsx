@@ -337,7 +337,7 @@ export function PartySubTypeMasterView() {
     <ModulePageShell
       eyebrow="Accounts & Masters"
       title="Party Sub Type Master"
-      description="Define specific accounting classifications under each Party Type."
+      description="Define specific accounting classifications under each Party Type. Party types are fixed by the system."
       breadcrumbs={[
         { label: "Accounts", href: "/accounts/dashboard" },
         { label: "Masters", href: "/accounts/masters" },
@@ -775,7 +775,7 @@ export function PartySubTypeMasterView() {
                   <span>Hotel PMS Accounting Hierarchy:</span>
                 </div>
                 <p className="leading-relaxed">
-                  <strong>Party Type</strong> (e.g. <em>Customer</em>, <em>Vendor</em>) represents broad accounting relationships.
+                  <strong>Party Type</strong> (e.g. <em>Customer</em>, <em>Vendor</em>) represents broad accounting relationships. Party types are a fixed system list shared by all properties.
                   <br />
                   <strong>Party Sub Type</strong> (e.g. <em>Individual Guest</em>, <em>Corporate Client</em>) defines granular classification within that relationship.
                   <br />

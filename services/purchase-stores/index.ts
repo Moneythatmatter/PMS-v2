@@ -1,5 +1,5 @@
 import { api, psPath } from "../api";
-import type { UnitItem, CategoryItem, SupplierItem } from "@/app/data/purchaseStoresMastersData";
+import type { UnitItem, CategoryItem, SupplierItem, SupplierPartyOption } from "@/app/data/purchaseStoresMastersData";
 import type { ProductItem } from "@/app/data/productMasterData";
 import type { WarehouseMasterItem } from "@/app/data/warehouseMasterData";
 import type { PurchaseRequisition, PRFulfillment } from "@/app/data/purchaseRequisitionsData";
@@ -43,7 +43,10 @@ export const psDashboardService = {
 
 export const psUnitService = crud<UnitItem>("/masters/units");
 export const psCategoryService = crud<CategoryItem>("/masters/categories");
-export const psSupplierService = crud<SupplierItem>("/masters/suppliers");
+export const psSupplierService = {
+  ...crud<SupplierItem>("/masters/suppliers"),
+  partyOptions: () => api.get<SupplierPartyOption[]>(psPath("/masters/suppliers/party-options")),
+};
 export const psProductService = crud<ProductItem>("/masters/products");
 export const psWarehouseService = crud<WarehouseMasterItem>("/warehouses");
 

@@ -25,6 +25,7 @@ type Draft = {
   id: string | null;
   billingPoint: string;
   revenueCategoryId: string;
+  divisionId: string;
   priceIncludesTax: boolean;
   taxRuleIds: string[];
   effectiveFrom: string;
@@ -38,6 +39,7 @@ function blankDraft(billingPoint: string): Draft {
     id: null,
     billingPoint,
     revenueCategoryId: "",
+    divisionId: "",
     priceIncludesTax: false,
     taxRuleIds: [],
     effectiveFrom: todayIso(),
@@ -77,6 +79,7 @@ export function TaxBillingPointsPanel({
   const appsQuery = useAccQuery(() => accTaxApplicationService.list(), []);
   const { lookups } = useAccLookups();
   const categories = lookups?.revenueCategories ?? [];
+  const divisions = lookups?.divisions ?? [];
   const points: TaxBillingPoint[] = useMemo(() => pointsQuery.data ?? [], [pointsQuery.data]);
   const apps: TaxApplication[] = useMemo(() => appsQuery.data ?? [], [appsQuery.data]);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -108,6 +111,7 @@ export function TaxBillingPointsPanel({
       id: a.id,
       billingPoint: a.billingPoint,
       revenueCategoryId: a.revenueCategoryId,
+      divisionId: a.divisionId ?? "",
       priceIncludesTax: a.priceIncludesTax,
       taxRuleIds: a.taxRuleIds ?? [],
       effectiveFrom: a.effectiveFrom.slice(0, 10),
@@ -126,6 +130,7 @@ export function TaxBillingPointsPanel({
     const body = {
       billingPoint: draft.billingPoint,
       revenueCategoryId: draft.revenueCategoryId,
+      divisionId: draft.divisionId || null,
       priceIncludesTax: draft.priceIncludesTax,
       taxRuleIds: draft.taxRuleIds,
       effectiveFrom: draft.effectiveFrom,
@@ -209,6 +214,7 @@ export function TaxBillingPointsPanel({
                 {current ? (
                   <span className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-800">
                     <ArrowRight className="h-3 w-3" /> {current.revenueCategoryName ?? "—"}
+                    {current.divisionName && <span className="font-medium text-emerald-700">· {current.divisionName}</span>}
                     {current.priceIncludesTax && <span className="font-medium text-emerald-700">· price incl. tax</span>}
                   </span>
                 ) : (
@@ -331,6 +337,19 @@ export function TaxBillingPointsPanel({
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.revenueCategoryName} ({c.revenueCategoryCode})
+                      </option>
+                    ))}
+                  </SelectInput>
+                </FormField>
+                <FormField label="Division" helperText="Tagged on the income line when posted to Accounts">
+                  <SelectInput
+                    value={editing.divisionId}
+                    onChange={(e) => setDraft({ ...editing, divisionId: e.target.value })}
+                  >
+                    <option value="">No division</option>
+                    {divisions.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.divisionName} ({d.divisionCode})
                       </option>
                     ))}
                   </SelectInput>
