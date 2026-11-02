@@ -479,12 +479,22 @@ export type FbPostingCounts = { bills: number; payments: number; voided: number 
 
 export type FbPostingTotals = { sales: number; tax: number; discount: number; collections: number; voided: number };
 
+export type FbOutletTotals = FbPostingTotals & {
+  outletId: string | null;
+  outletName: string;
+  divisionId: string | null;
+  divisionName?: string | null;
+  bills: number;
+};
+
 export type FbPostingPreview = {
   businessDate: string;
   postingStatus: "Draft" | "Posted";
   startDate: string | null;
   lines: FoPostingLine[];
   issues: string[];
+  warnings: string[];
+  byOutlet: FbOutletTotals[];
   counts: FbPostingCounts & { beforeStart: number };
   totals: FbPostingTotals & { debit: number; credit: number };
   canPost: boolean;
@@ -494,8 +504,34 @@ export type FbPostingResult = {
   businessDate: string;
   voucher: { id: string; voucherNo: string; status: string; totalAmount: number } | null;
   totals: FbPostingTotals;
+  byOutlet?: FbOutletTotals[];
   counts: FbPostingCounts;
 };
+
+export type OutletRuleBillingPoint = "FB_RESTAURANT_BILL" | "FB_ROOM_SERVICE";
+
+/** Per F&B outlet: Accounts division and optional income / cash ledger overrides used by posting. */
+export type OutletPostingRule = Audit & {
+  id: string;
+  outletId: string;
+  outletName: string;
+  outletType: string | null;
+  /** null = every F&B bill of the outlet. */
+  billingPoint: OutletRuleBillingPoint | null;
+  billingPointLabel: string;
+  divisionId: string | null;
+  divisionName: string | null;
+  incomeAccountId: string | null;
+  incomeAccountName: string | null;
+  incomeAccountCode: string | null;
+  cashAccountId: string | null;
+  cashAccountName: string | null;
+  cashAccountCode: string | null;
+  remarks: string;
+  status: Status;
+};
+
+export type FbOutletOption = { id: string; name: string; type: string | null; status: string | null };
 
 export type FoPostingVoucher = {
   id: string;

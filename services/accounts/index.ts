@@ -20,8 +20,10 @@ import type {
   Division,
   FiscalPeriod,
   FiscalYear,
+  FbOutletOption,
   FbPostingPreview,
   FbPostingResult,
+  OutletPostingRule,
   FoPostingPreview,
   FoPostingResult,
   FoPostingVoucher,
@@ -106,6 +108,10 @@ export const accTaxApplicationService = {
   billingPoints: () => api.get<TaxBillingPoint[]>(accPath("/masters/tax-billing-points")),
 };
 export const accBudgetService = crud<Budget>("/masters/budgets");
+export const accOutletPostingRuleService = {
+  ...crud<OutletPostingRule>("/masters/outlet-posting-rules"),
+  outlets: () => api.get<FbOutletOption[]>(accPath("/masters/outlet-posting-rules/outlets")),
+};
 
 export const accCompanySettingsService = {
   get: (companyId?: string) => api.get<CompanySettings>(accPath(`/masters/company-settings${qs({ companyId })}`)),

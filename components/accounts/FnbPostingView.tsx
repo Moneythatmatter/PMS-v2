@@ -8,6 +8,7 @@ import { ModulePageShell } from "@/components/pms";
 import { cn } from "@/lib/utils";
 import { accFbPostingService } from "@/services/accounts";
 import { accErrorMessage, formatDate, formatINR, todayIso, useAccQuery } from "@/components/accounts/accountsApi";
+import { FbOutletPostingRulesPanel } from "@/components/accounts/FbOutletPostingRulesPanel";
 
 type Toast = { message: string; variant: "success" | "error" } | null;
 
@@ -44,7 +45,7 @@ export function FnbPostingView() {
     <ModulePageShell
       eyebrow="Accounts & F&B"
       title="F&B Posting"
-      description="Restaurant, bar and room-service bills settled at the POS — sales, tax and collections posted as one Journal Voucher per business date. Bills charged to a room are posted by Front Office Posting. Night Audit does this automatically."
+      description="Restaurant, bar and room-service bills settled at the POS — one Journal Voucher per business date, with sales, tax and collections split by outlet and its division. Bills charged to a room are posted by Front Office Posting. Night Audit does this automatically."
       breadcrumbs={[
         { label: "Accounts", href: "/accounts/dashboard" },
         { label: "Transactions", href: "/accounts/transactions" },
@@ -140,6 +141,55 @@ export function FnbPostingView() {
               </div>
             )}
 
+            {(data.warnings ?? []).length > 0 && (
+              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sky-900">
+                <p className="flex items-center gap-1.5 font-bold">
+                  <AlertCircle className="h-4 w-4" /> Will post, but check these
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {data.warnings.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {(data.byOutlet ?? []).length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+                <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-900">By outlet</h3>
+                <table className="w-full text-left text-[11px]">
+                  <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="py-1.5">Outlet</th>
+                      <th className="py-1.5">Division</th>
+                      <th className="py-1.5 text-right">Bills</th>
+                      <th className="py-1.5 text-right">Sales (net)</th>
+                      <th className="py-1.5 text-right">Tax</th>
+                      <th className="py-1.5 text-right">Discount</th>
+                      <th className="py-1.5 text-right">Collections</th>
+                      <th className="py-1.5 text-right">Voided</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {data.byOutlet.map((o) => (
+                      <tr key={o.outletId ?? "none"}>
+                        <td className="py-1.5 font-semibold text-slate-800">{o.outletName}</td>
+                        <td className={cn("py-1.5", o.divisionName ? "text-slate-600" : "text-amber-700")}>
+                          {o.divisionName ?? "Not mapped"}
+                        </td>
+                        <td className="py-1.5 text-right font-mono">{o.bills}</td>
+                        <td className="py-1.5 text-right font-mono">{formatINR(o.sales)}</td>
+                        <td className="py-1.5 text-right font-mono">{formatINR(o.tax)}</td>
+                        <td className="py-1.5 text-right font-mono">{formatINR(o.discount)}</td>
+                        <td className="py-1.5 text-right font-mono">{formatINR(o.collections)}</td>
+                        <td className="py-1.5 text-right font-mono">{o.voided ? formatINR(o.voided) : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             {data.startDate ? (
               <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">
                 Posting starts from {formatDate(data.startDate)} (Company Settings).
@@ -197,6 +247,11 @@ export function FnbPostingView() {
             </div>
           </>
         ) : null}
+
+        <FbOutletPostingRulesPanel
+          onChanged={() => void preview.reload()}
+          onMessage={(message, variant) => setToast({ message, variant })}
+        />
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
           <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-900">F&amp;B vouchers</h3>

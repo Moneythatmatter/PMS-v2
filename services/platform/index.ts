@@ -9,6 +9,8 @@ export type PropertyDto = {
   timezone: string;
   isDefault: boolean;
   status: string;
+  /** Only on create: whether the Accounts basic setup ran. */
+  accountsSetup?: { seeded: boolean; message: string };
 };
 
 export type PlatformModule = {

@@ -152,7 +152,7 @@ export function PropertyPickerView() {
     if (!form.name.trim() || !form.code.trim()) return;
     setSaving(true);
     try {
-      await platformService.createProperty({
+      const created = await platformService.createProperty({
         name: form.name.trim(),
         code: form.code.trim().toLowerCase(),
         city: form.city.trim(),
@@ -161,6 +161,9 @@ export function PropertyPickerView() {
       setForm({ name: "", code: "", city: "" });
       setShowAdd(false);
       await load();
+      if (created.accountsSetup && !created.accountsSetup.seeded && created.accountsSetup.message) {
+        setError(`Property created, but Accounts setup did not run: ${created.accountsSetup.message}`);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create property");
     } finally {
