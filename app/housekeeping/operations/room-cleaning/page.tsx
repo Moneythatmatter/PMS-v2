@@ -737,7 +737,7 @@ export default function RoomCleaningOperations() {
                   </p>
                 </div>
                 <Pill className="bg-rose-100 text-rose-700">Dirty</Pill>
-              </div>
+                  </div>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-3 text-xs">
                 <RoomDetail label="FO status">{selectedDirtyRoom.foStatus || "—"}</RoomDetail>
                 <RoomDetail label="Bed type">{selectedDirtyRoom.bedType || "—"}</RoomDetail>

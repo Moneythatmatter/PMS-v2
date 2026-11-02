@@ -33,6 +33,10 @@ export const folioChargeService = {
     api.get<FolioCharge[]>(
       txnPath(`/folios/charges?bookingId=${encodeURIComponent(bookingId)}`),
     ),
+  listByFolio: (folioId: string) =>
+    api.get<FolioCharge[]>(
+      txnPath(`/folios/charges?folioId=${encodeURIComponent(folioId)}`),
+    ),
   post: (input: PostFolioChargeInput) =>
     api.post<FolioCharge>(txnPath("/folios/charges"), input),
 };

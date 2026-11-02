@@ -1227,8 +1227,8 @@ export function CheckInForm() {
         let walkInGuestId = selectedStayingGuestId || "";
         if (!walkInGuestId) {
           const guest = await guestService.create({
-            name: guestNameForApi,
-            email: walkIn.email || undefined,
+          name: guestNameForApi,
+          email: walkIn.email || undefined,
             mobile: walkIn.mobile,
             nationality: guestDetails.nationality || undefined,
             gender: guestDetails.gender || undefined,
@@ -1700,9 +1700,9 @@ export function CheckInForm() {
                                     ? `Room ${arr.roomNo}`
                                     : arr.roomType || "Room TBA";
                                 return (
-                                  <button
-                                    key={arr.id}
-                                    type="button"
+                        <button
+                          key={arr.id}
+                          type="button"
                                     onClick={() => void loadArrival(arr)}
                                     className={cn(
                                       "w-full rounded-lg border px-3 py-2.5 text-left transition-all",
@@ -1740,12 +1740,12 @@ export function CheckInForm() {
                                         </p>
                                       </div>
                                     </div>
-                                  </button>
+                        </button>
                                 );
                               })}
-                            </div>
+                    </div>
                           ) : null}
-                        </div>
+                  </div>
                       );
                     }
 
@@ -1777,7 +1777,7 @@ export function CheckInForm() {
                             )}
                           >
                             {getInitials(arr.guestName)}
-                          </div>
+              </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
                               <p className="truncate font-semibold text-slate-900">

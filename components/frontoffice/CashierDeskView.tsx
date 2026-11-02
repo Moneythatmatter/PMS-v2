@@ -627,7 +627,9 @@ function ShiftPanel({
             <p className="text-[11px] text-slate-500">
               {showCount
                 ? "Enter what you actually have for each method. Variance is worked out against the expected amount."
-                : `Amounts come from payments already posted in ${sourceLabel} during this shift.`}
+                : sourceLabel === "Front Office"
+                  ? `Amounts come from payments already posted in ${sourceLabel} during this shift.`
+                  : `Amounts come from payments you took in ${sourceLabel} during this shift, plus your room service and other-outlet payments when this is your only open shift.`}
             </p>
           </div>
           {!locked && !closingOpen && (

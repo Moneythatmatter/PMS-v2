@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { ReservationBooking } from "@/app/data/types";
 import type { FolioChargeCategory } from "@/services/billing";
 import { folioChargeService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
@@ -13,20 +12,16 @@ import {
   TextInput,
   formatINR,
 } from "@/components/frontoffice/ui";
+import { CHARGE_CATEGORY_LABELS } from "@/components/frontoffice/folio/FolioLedger";
 
-export const CHARGE_CATEGORY_LABELS: Record<FolioChargeCategory, string> = {
-  FOOD_BEVERAGE: "Food & Beverage",
-  MINIBAR: "Mini Bar",
-  LAUNDRY: "Laundry",
-  OTHER: "Other / Miscellaneous",
-};
+export { CHARGE_CATEGORY_LABELS };
 
 export function BookingAddChargeDrawer({
   booking,
   onClose,
   onPosted,
 }: {
-  booking: ReservationBooking;
+  booking: { id: string; guestName?: string | null; roomNo?: string | null };
   onClose: () => void;
   onPosted: (amount: number) => void;
 }) {

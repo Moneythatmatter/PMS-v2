@@ -14,16 +14,20 @@ import {
   LogOut,
   Mail,
   Phone,
+  PlusCircle,
   Receipt,
   User,
   Users,
   Wallet,
 } from "lucide-react";
-import type { FolioListItem, LedgerTransaction } from "@/app/data/types/billing";
+import type { FolioCharge, FolioListItem, LedgerTransaction } from "@/app/data/types/billing";
 import {
   billingFolioService,
   billingTransactionService,
+  folioChargeService,
 } from "@/services/front-office";
+import { BookingAddChargeDrawer } from "@/components/frontoffice/reservation/BookingAddChargeDrawer";
+import { buildFolioLedger, FolioLedgerTable } from "@/components/frontoffice/folio/FolioLedger";
 import { Button } from "@/components/ui/Button";
 import {
   AlertBanner,
@@ -326,6 +330,8 @@ export function GuestFolioView() {
   const [selectedTxn, setSelectedTxn] = useState<LedgerTransaction | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [paymentDrawerOpen, setPaymentDrawerOpen] = useState(false);
+  const [charges, setCharges] = useState<FolioCharge[]>([]);
+  const [chargeDrawerOpen, setChargeDrawerOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     () => new Set(),
   );
@@ -362,16 +368,26 @@ export function GuestFolioView() {
   useEffect(() => {
     if (!selected?.id || !folioDrawerOpen) {
       setTransactions([]);
+      setCharges([]);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
         setTxnLoading(true);
-        const rows = await billingTransactionService.list({ folioId: selected.id });
-        if (!cancelled) setTransactions(rows);
+        const [rows, chargeRows] = await Promise.all([
+          billingTransactionService.list({ folioId: selected.id }),
+          folioChargeService.listByFolio(selected.id).catch(() => [] as FolioCharge[]),
+        ]);
+        if (!cancelled) {
+          setTransactions(rows);
+          setCharges(chargeRows);
+        }
       } catch {
-        if (!cancelled) setTransactions([]);
+        if (!cancelled) {
+          setTransactions([]);
+          setCharges([]);
+        }
       } finally {
         if (!cancelled) setTxnLoading(false);
       }
@@ -572,16 +588,47 @@ export function GuestFolioView() {
     setFolioDrawerOpen(false);
     setSelectedTxn(null);
     setPaymentDrawerOpen(false);
+    setChargeDrawerOpen(false);
   };
 
   const refreshFolioData = useCallback(async (folioId: string) => {
     const rows = await loadFolios();
     const updated = rows.find((f) => f.id === folioId) ?? null;
     if (updated) setSelected(updated);
-    const txns = await billingTransactionService.list({ folioId });
+    const [txns, chargeRows] = await Promise.all([
+      billingTransactionService.list({ folioId }),
+      folioChargeService.listByFolio(folioId).catch(() => [] as FolioCharge[]),
+    ]);
     setTransactions(txns);
+    setCharges(chargeRows);
     return updated;
   }, [loadFolios]);
+
+  const handleChargePosted = async (amount: number) => {
+    setChargeDrawerOpen(false);
+    if (!selected?.id) return;
+    await refreshFolioData(selected.id);
+    setToast(`Charge of ${formatINR(amount)} posted to the folio.`);
+  };
+
+  const folioLedger = useMemo(() => {
+    if (!selected) return [];
+    const nights =
+      selected.checkIn && selected.checkOut
+        ? Math.max(1, Math.round((Date.parse(selected.checkOut) - Date.parse(selected.checkIn)) / 86_400_000))
+        : undefined;
+    return buildFolioLedger(
+      { ...selected, paidAmount: drawerPaidAmount, balanceAmount: drawerBalanceAmount },
+      { nights, roomNo: selected.room },
+      charges,
+      transactions,
+    );
+  }, [selected, charges, transactions, drawerPaidAmount, drawerBalanceAmount]);
+
+  const canAddCharge =
+    !!selected?.bookingId &&
+    selected.status === "OPEN" &&
+    !["Checked Out", "Cancelled", "No Show"].includes(String(selected.reservationStatus ?? ""));
 
   const handlePaymentSuccess = useCallback(
     async (txn: LedgerTransaction) => {
@@ -967,6 +1014,12 @@ export function GuestFolioView() {
                 <FileText className="mr-1.5 h-3.5 w-3.5" />
                 Print Folio
             </Button>
+              {canAddCharge && (
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setChargeDrawerOpen(true)}>
+                  <PlusCircle className="h-3.5 w-3.5" />
+                  Add Charge
+                </Button>
+              )}
               <Button
                 size="sm"
                 className="bg-emerald-700 hover:bg-emerald-800"
@@ -1047,7 +1100,7 @@ export function GuestFolioView() {
                 </p>
               )}
               <div className="divide-y divide-slate-200/80 rounded-lg border border-slate-100 bg-white px-3">
-                <SummaryRow label="Room / stay total" value={formatINR(selected.subtotal)} />
+                <SummaryRow label="Charges (before tax)" value={formatINR(selected.subtotal)} />
                 <SummaryRow label="Tax" value={formatINR(selected.taxTotal)} />
                 <SummaryRow label="Discount" value={formatINR(selected.discountTotal)} />
                 <SummaryRow label="Folio total" value={formatINR(selected.totalAmount)} />
@@ -1064,46 +1117,31 @@ export function GuestFolioView() {
           </div>
 
             <div>
-              <h3 className="mb-3 text-sm font-semibold text-slate-900">Transactions</h3>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-slate-900">Folio Ledger</h3>
+                {canAddCharge && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={() => setChargeDrawerOpen(true)}
+                  >
+                    <PlusCircle className="h-3.5 w-3.5" />
+                    Add Charge
+                  </Button>
+                )}
+              </div>
               {txnLoading ? (
-                <p className="text-sm text-slate-500">Loading transactions…</p>
-              ) : transactions.length > 0 ? (
-                <div className="max-h-64 overflow-auto rounded-lg border border-slate-100">
-                  <table className="w-full min-w-[520px] text-left text-sm">
-                    <thead className="sticky top-0 bg-white text-xs font-medium uppercase tracking-wide text-slate-500 shadow-[0_1px_0_0_rgb(241,245,249)]">
-                      <tr>
-                        {["Date", "Txn #", "Method", "External Ref", "Amount"].map((h) => (
-                          <th key={h} className="px-3 py-2.5">
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {transactions.map((txn) => (
-                        <tr
-                          key={txn.id}
-                          onClick={() => setSelectedTxn(txn)}
-                          className="cursor-pointer border-t border-slate-50 hover:bg-emerald-50/40"
-                        >
-                          <td className="px-3 py-2.5">{formatFolioDate(txn.transactionDate)}</td>
-                          <td className="px-3 py-2.5 font-medium">{txn.transactionNumber}</td>
-                          <td className="px-3 py-2.5">{formatPaymentMethod(txn.paymentMethod)}</td>
-                          <td className="px-3 py-2.5 text-xs text-slate-600">
-                            {txn.externalReference ?? "—"}
-                          </td>
-                          <td className="px-3 py-2.5 font-semibold text-emerald-700">
-                            {formatINR(txn.amount)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <p className="text-sm text-slate-500">Loading folio lines…</p>
               ) : (
-                <EmptyState
-                  title="No transactions"
-                  description="Payments appear here after reservation advance or checkout."
+                <FolioLedgerTable
+                  lines={folioLedger}
+                  balanceDue={drawerBalanceAmount}
+                  emptyText="Nothing posted to this folio yet. Room service, laundry, manual charges and payments appear here."
+                  onRowClick={(line) => {
+                    const txn = transactions.find((t) => `t-${t.id}` === line.id);
+                    if (txn) setSelectedTxn(txn);
+                  }}
                 />
               )}
             </div>
@@ -1125,6 +1163,14 @@ export function GuestFolioView() {
         onClose={() => setPaymentDrawerOpen(false)}
         onSuccess={handlePaymentSuccess}
       />
+
+      {chargeDrawerOpen && selected?.bookingId && (
+        <BookingAddChargeDrawer
+          booking={{ id: selected.bookingId, guestName: selected.guestName, roomNo: selected.room }}
+          onClose={() => setChargeDrawerOpen(false)}
+          onPosted={(amount) => void handleChargePosted(amount)}
+        />
+      )}
 
       <Drawer
         open={!!selectedTxn}

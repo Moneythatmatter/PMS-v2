@@ -43,11 +43,11 @@ import {
   billingTransactionService,
   folioChargeService,
 } from "@/services/front-office";
-import type { FolioChargeCategory } from "@/services/billing";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner, ConfirmModal, formatINR } from "@/components/frontoffice/ui";
 import { CollectPaymentDrawer } from "@/components/frontoffice/CollectPaymentDrawer";
-import { BookingAddChargeDrawer, CHARGE_CATEGORY_LABELS } from "./BookingAddChargeDrawer";
+import { BookingAddChargeDrawer } from "./BookingAddChargeDrawer";
+import { buildFolioLedger, FolioLedgerTable } from "@/components/frontoffice/folio/FolioLedger";
 import { BookingRoomTransferDrawer } from "./BookingRoomTransferDrawer";
 import { BookingExtendStayDrawer } from "./BookingExtendStayDrawer";
 import { GuestDocumentsPanel } from "@/components/frontoffice/guest-documents/GuestDocumentsPanel";
@@ -68,26 +68,6 @@ const ALL_BOOKINGS_HREF = "/frontoffice/reservation/all-bookings";
 const CLOSED_STATUSES = new Set(["Cancelled", "Checked Out", "No Show"]);
 const VOIDED_STATUSES = new Set(["Cancelled", "No Show"]);
 
-type FolioLedgerLine = {
-  id: string;
-  label: string;
-  detail: string;
-  ref?: string;
-  debit: number;
-  credit: number;
-  date: string;
-  balance: number;
-};
-
-const SOURCE_LABELS: Record<string, string> = {
-  FNB: "Food & Beverage",
-  HOUSEKEEPING: "Housekeeping",
-  FRONT_OFFICE: "Front Office",
-  RESERVATION: "Reservation",
-};
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
 function pickFolio(folios: FolioListItem[]): FolioListItem | null {
   return folios.find((f) => f.status === "OPEN") ?? folios[0] ?? null;
 }
@@ -101,120 +81,6 @@ function formatActivityDate(value?: string): string {
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  });
-}
-
-function isReversal(t: LedgerTransaction): boolean {
-  return /REVERSAL/i.test(t.sourceType ?? "") || /reversal/i.test(t.notes ?? "");
-}
-
-function describeAdjustment(t: LedgerTransaction): string {
-  const source = String(t.sourceType ?? "").toUpperCase();
-  if (source.startsWith("ROOM_SERVICE")) return isReversal(t) ? "Room service reversal" : "Room service";
-  if (source.includes("LAUNDRY") || /\[LAUNDRY\]/.test(t.notes ?? "")) return "Laundry";
-  if (isReversal(t)) return "Charge reversal";
-  return SOURCE_LABELS[String(t.sourceModule ?? "")] ?? "Folio charge";
-}
-
-/**
- * Chronological folio ledger. Room revenue on individual folios lives only in
- * the seeded subtotal, so whatever the posted lines don't explain is shown as
- * the room-charges line.
- */
-function buildFolioLedger(
-  folio: FolioListItem,
-  booking: ReservationBooking,
-  charges: FolioCharge[],
-  transactions: LedgerTransaction[],
-): FolioLedgerLine[] {
-  const lines: Omit<FolioLedgerLine, "balance">[] = [];
-
-  for (const c of charges) {
-    if (c.folioId !== folio.id) continue;
-    lines.push({
-      id: `c-${c.id}`,
-      label: c.description || "Charge",
-      detail: [
-        CHARGE_CATEGORY_LABELS[c.chargeCategory as FolioChargeCategory] ?? c.chargeCategory,
-        Number(c.quantity ?? 1) > 1 ? `${c.quantity} × ${formatINR(Number(c.unitPrice ?? 0))}` : "",
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      debit: Number(c.amount ?? 0),
-      credit: 0,
-      date: c.createdAt ?? "",
-    });
-  }
-
-  for (const t of transactions) {
-    if (t.folioId !== folio.id || t.status !== "COMPLETED") continue;
-    const amount = Number(t.amount ?? 0);
-    const method = t.paymentMethod?.replace(/_/g, " ");
-    if (t.transactionType === "PAYMENT") {
-      lines.push({
-        id: `t-${t.id}`,
-        label: "Payment received",
-        detail: [method, t.externalReference].filter(Boolean).join(" · "),
-        ref: t.transactionNumber,
-        debit: 0,
-        credit: amount,
-        date: t.transactionDate,
-      });
-    } else if (t.transactionType === "REFUND") {
-      lines.push({
-        id: `t-${t.id}`,
-        label: "Refund",
-        detail: method ?? "",
-        ref: t.transactionNumber,
-        debit: amount,
-        credit: 0,
-        date: t.transactionDate,
-      });
-    } else {
-      const reversal = isReversal(t);
-      lines.push({
-        id: `t-${t.id}`,
-        label: describeAdjustment(t),
-        detail: (t.notes ?? "").replace(/^\[[A-Z_]+\]\s*/, ""),
-        ref: t.transactionNumber,
-        debit: reversal ? 0 : amount,
-        credit: reversal ? amount : 0,
-        date: t.transactionDate,
-      });
-    }
-  }
-
-  const postedCharges = lines
-    .filter((l) => l.label !== "Payment received" && l.label !== "Refund")
-    .reduce((sum, l) => sum + l.debit - l.credit, 0);
-  const roomCharges = round2(Number(folio.subtotal ?? 0) - postedCharges);
-  if (roomCharges > 0.009) {
-    lines.push({
-      id: "room",
-      label: "Room charges",
-      detail: `${booking.nights || 1} night${(booking.nights || 1) !== 1 ? "s" : ""}${booking.roomNo ? ` · Room ${booking.roomNo}` : ""}${booking.tariffPlan ? ` · ${booking.tariffPlan}` : ""}`,
-      debit: roomCharges,
-      credit: 0,
-      date: folio.openedAt ?? "",
-    });
-  }
-  if (Number(folio.taxTotal ?? 0) > 0) {
-    lines.push({ id: "tax", label: "Tax", detail: "", debit: Number(folio.taxTotal), credit: 0, date: "~" });
-  }
-  if (Number(folio.discountTotal ?? 0) > 0) {
-    lines.push({ id: "discount", label: "Discount", detail: "", debit: 0, credit: Number(folio.discountTotal), date: "~" });
-  }
-
-  lines.sort((a, b) => {
-    if (a.id === "room") return -1;
-    if (b.id === "room") return 1;
-    return a.date.localeCompare(b.date);
-  });
-
-  let running = 0;
-  return lines.map((l) => {
-    running = round2(running + l.debit - l.credit);
-    return { ...l, balance: running };
   });
 }
 
@@ -833,71 +699,11 @@ export function BookingDetailPage({ bookingId }: { bookingId: string }) {
                   ))}
                 </div>
 
-                {folioLedger.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    Nothing posted to this folio yet.
-                    {canAddCharge ? " Use Add Charge or Add Payment above." : ""}
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="w-full min-w-[560px] text-sm">
-                      <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-medium">Date</th>
-                          <th className="px-3 py-2 text-left font-medium">Description</th>
-                          <th className="px-3 py-2 text-right font-medium">Debit</th>
-                          <th className="px-3 py-2 text-right font-medium">Credit</th>
-                          <th className="px-3 py-2 text-right font-medium">Balance</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {folioLedger.map((row) => (
-                          <tr key={row.id}>
-                            <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500">
-                              {row.date && row.date !== "~" ? formatActivityDate(row.date) : "—"}
-                            </td>
-                            <td className="px-3 py-2">
-                              <p className="font-medium text-slate-900">{row.label}</p>
-                              {(row.detail || row.ref) && (
-                                <p className="text-xs text-slate-500">
-                                  {[row.detail, row.ref].filter(Boolean).join(" · ")}
-                                </p>
-                              )}
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-right text-slate-900">
-                              {row.debit ? formatINR(row.debit) : ""}
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-right text-emerald-600">
-                              {row.credit ? formatINR(row.credit) : ""}
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-900">
-                              {formatINR(row.balance)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="bg-slate-50 text-sm font-semibold">
-                        <tr>
-                          <td className="px-3 py-2" colSpan={2}>Balance due</td>
-                          <td className="px-3 py-2 text-right">
-                            {formatINR(folioLedger.reduce((s, l) => s + l.debit, 0))}
-                          </td>
-                          <td className="px-3 py-2 text-right text-emerald-600">
-                            {formatINR(folioLedger.reduce((s, l) => s + l.credit, 0))}
-                          </td>
-                          <td
-                            className={cn(
-                              "px-3 py-2 text-right",
-                              Number(folio.balanceAmount ?? 0) > 0 ? "text-amber-600" : "text-emerald-700",
-                            )}
-                          >
-                            {formatINR(Number(folio.balanceAmount ?? 0))}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
+                <FolioLedgerTable
+                  lines={folioLedger}
+                  balanceDue={Number(folio.balanceAmount ?? 0)}
+                  emptyText={`Nothing posted to this folio yet.${canAddCharge ? " Use Add Charge or Add Payment above." : ""}`}
+                />
               </div>
             )}
           </Card>
