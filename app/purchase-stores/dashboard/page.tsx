@@ -3,7 +3,6 @@
 import Link from "next/link";
 import {
   AlertTriangle,
-  ArrowRight,
   Boxes,
   CheckCircle2,
   ClipboardCheck,
@@ -13,7 +12,6 @@ import {
   ShoppingCart,
   Users,
   Warehouse,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -100,12 +98,10 @@ export default function PurchaseStoresDashboardPage() {
   const activeContracts = counts.activeContracts ?? 0;
   const productCount = counts.products ?? 0;
   const supplierCount = counts.suppliers ?? 0;
-  const dspCount = counts.dsp ?? 0;
   const lowStockCount = counts.lowStockSkus ?? 0;
 
   const recentPrs = dashboard?.recentRequisitions ?? [];
   const recentPos = allPos.slice(0, 6);
-  const recentDsp = dashboard?.recentDsp ?? [];
   const lowStockItems = dashboard?.lowStockItems ?? [];
   const stockPreview = dashboard?.stockPreview ?? [];
 
@@ -141,15 +137,6 @@ export default function PurchaseStoresDashboardPage() {
       title: `${lowStockCount} item${lowStockCount === 1 ? "" : "s"} below reorder`,
       detail: lowStockItems.map((p) => p.productName).join(", ") || "Review stock levels",
       href: "/purchase-stores/inventory/stock",
-    },
-    dspCount > 0 && {
-      id: "dsp",
-      tone: "info" as const,
-      title: `${dspCount} direct store purchase${dspCount === 1 ? "" : "s"} active`,
-      detail: recentDsp[0]
-        ? `${recentDsp[0].dspNumber} · ${recentDsp[0].department}`
-        : "Spot buys",
-      href: "/purchase-stores/procurement/dsp",
     },
   ].filter(Boolean) as {
     id: string;
@@ -358,50 +345,7 @@ export default function PurchaseStoresDashboardPage() {
           </Card>
         </div>
 
-        <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 lg:gap-8">
-          <Card className="flex h-full min-w-0 flex-col border-amber-200/80 bg-amber-50/40">
-            <CardHeader
-              title="Direct store purchases"
-              subtitle={`${dspCount} active DSP`}
-              action={
-                <Link
-                  href="/purchase-stores/procurement/dsp"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 hover:underline"
-                >
-                  Manage
-                  <ArrowRight className="h-3 w-3" />
-                </Link>
-              }
-            />
-            <ul className="flex flex-1 flex-col space-y-2">
-              {recentDsp.map((dsp) => (
-                <li
-                  key={dsp.id}
-                  className="rounded-lg border border-amber-100 bg-white p-3"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900">
-                        {dsp.dspNumber}
-                        <span className="font-normal text-slate-500"> · {dsp.department}</span>
-                      </p>
-                      <p className="mt-0.5 truncate text-xs text-slate-400">
-                        {dsp.vendorName} · ₹{dsp.totalAmount.toLocaleString("en-IN")}
-                      </p>
-                    </div>
-                    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-800">
-                      <Zap className="h-3.5 w-3.5" />
-                      {dsp.status}
-                    </span>
-                  </div>
-                </li>
-              ))}
-              {recentDsp.length === 0 && (
-                <li className="py-6 text-center text-sm text-slate-500">No direct purchases yet</li>
-              )}
-            </ul>
-          </Card>
-
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-2 lg:gap-8">
           <Card className="flex h-full min-w-0 flex-col">
             <CardHeader
               title="Stock health"

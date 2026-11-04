@@ -33,8 +33,15 @@ import {
   PurchaseAttachmentList,
   AttachmentItem,
 } from "@/components/purchase-stores/ui/PurchaseAttachmentList";
-import type { PORecord, POLineItem } from "@/app/data/purchaseOrdersData";
-import { PODetailDrawer } from "@/components/purchase-stores/procurement/PODetailDrawer";
+import {
+  PO_PAYMENT_MODES,
+  isDirectPo,
+  poPaymentSummary,
+  type PORecord,
+  type POLineItem,
+  type POPayment,
+} from "@/app/data/purchaseOrdersData";
+import { PODetailDrawer, paymentStatusBadge } from "@/components/purchase-stores/procurement/PODetailDrawer";
 import type { InvoiceRecord } from "@/app/data/invoiceVerificationData";
 import { usePsList } from "@/hooks/usePsResource";
 import {
@@ -42,7 +49,9 @@ import {
   psInvoiceService,
   psRequisitionService,
   psProductService,
+  psSupplierService,
 } from "@/services/purchase-stores/index";
+import type { SupplierItem } from "@/app/data/purchaseStoresMastersData";
 import {
   remainingByPrItemId,
   type PRFulfillment,
@@ -63,13 +72,23 @@ function prOptionLabel(pr: PurchaseRequisition): string {
   return `${pr.prNumber} — ${pr.department}`;
 }
 
+/** Terms that have no input on the form but are stored on the PO. */
+const PO_FORM_DEFAULTS = {
+  buyerName: "Purchase Executive",
+  freightTerms: "As agreed with vendor",
+  paymentTerms: "Net 30 days",
+  paymentDueDays: 30,
+  currency: "INR (₹)",
+  taxTerms: "GST as per item",
+};
+
 function openPoCreateDefaults() {
   return {
     formDate: new Date().toISOString().slice(0, 10),
     formLinkedPR: NO_LINKED_PR,
     formLinkedRFQ: "",
     formDepartment: "",
-    formBuyerName: "Purchase Executive",
+    formBuyerName: PO_FORM_DEFAULTS.buyerName,
     formItems: [] as POLineItem[],
     formAttachments: [] as AttachmentItem[],
   };
@@ -92,6 +111,14 @@ export default function PurchaseOrdersPage() {
   );
   const reloadPos = () => Promise.all([reloadPoList(), reloadFulfillment()]);
   const { data: products, loading: loadingProducts } = usePsList(() => psProductService.list(), []);
+  const { data: suppliersRaw, loading: loadingSuppliers } = usePsList(() => psSupplierService.list(), []);
+  const activeSuppliers = useMemo(
+    () =>
+      (suppliersRaw ?? [])
+        .filter((s) => s.status === "Active")
+        .sort((a, b) => a.supplierName.localeCompare(b.supplierName)),
+    [suppliersRaw],
+  );
   const productCatalog = useMemo(() => productsToCatalog(products), [products]);
   const poList = useMemo(
     () =>
@@ -126,22 +153,27 @@ export default function PurchaseOrdersPage() {
   const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [formLinkedPR, setFormLinkedPR] = useState(NO_LINKED_PR);
   const [formLinkedRFQ, setFormLinkedRFQ] = useState("");
-  const [formDepartment, setFormDepartment] = useState("Housekeeping");
-  const [formBuyerName, setFormBuyerName] = useState("Amit Sharma");
-  const [formVendorName, setFormVendorName] = useState("ABC Linen Pvt Ltd");
-  const [formContactPerson, setFormContactPerson] = useState("Rajesh Mittal");
-  const [formGstin, setFormGstin] = useState("07AAACB1234F1Z8");
-  const [formVendorAddress, setFormVendorAddress] = useState("Okhla Industrial Area Phase 3, New Delhi");
-  const [formVendorPhone, setFormVendorPhone] = useState("+91 98765 43210");
-  const [formShipToWarehouse, setFormShipToWarehouse] = useState("Central Linen Warehouse");
-  const [formDockGate, setFormDockGate] = useState("Receiving Dock 2");
-  const [formExpectedDelivery, setFormExpectedDelivery] = useState("2026-07-28");
-  const [formFreightTerms, setFormFreightTerms] = useState("FOB Destination (Supplier Paid)");
-  const [formPaymentTerms, setFormPaymentTerms] = useState("Net 30 Days post GRN & 3-Way Match");
-  const [formPaymentDueDays, setFormPaymentDueDays] = useState<number>(30);
-  const [formDiscountPercent, setFormDiscountPercent] = useState<number>(2);
-  const [formCurrency, setFormCurrency] = useState("INR (₹)");
-  const [formTaxTerms, setFormTaxTerms] = useState("18% GST Included");
+  const [formDepartment, setFormDepartment] = useState("");
+  const [formBuyerName, setFormBuyerName] = useState(PO_FORM_DEFAULTS.buyerName);
+  const [formVendorName, setFormVendorName] = useState("");
+  const [formContactPerson, setFormContactPerson] = useState("");
+  const [formGstin, setFormGstin] = useState("");
+  const [formVendorAddress, setFormVendorAddress] = useState("");
+  const [formVendorPhone, setFormVendorPhone] = useState("");
+  const [formShipToWarehouse, setFormShipToWarehouse] = useState("");
+  const [formDockGate, setFormDockGate] = useState("");
+  const [formExpectedDelivery, setFormExpectedDelivery] = useState("");
+  const [formFreightTerms, setFormFreightTerms] = useState(PO_FORM_DEFAULTS.freightTerms);
+  const [formPaymentTerms, setFormPaymentTerms] = useState(PO_FORM_DEFAULTS.paymentTerms);
+  const [formPaymentDueDays, setFormPaymentDueDays] = useState<number>(PO_FORM_DEFAULTS.paymentDueDays);
+  const [formDiscountPercent, setFormDiscountPercent] = useState<number>(0);
+  const [formCurrency, setFormCurrency] = useState(PO_FORM_DEFAULTS.currency);
+  const [formTaxTerms, setFormTaxTerms] = useState(PO_FORM_DEFAULTS.taxTerms);
+  const [formPayOption, setFormPayOption] = useState<"unpaid" | "full" | "partial">("unpaid");
+  const [formPayAmount, setFormPayAmount] = useState<number>(0);
+  const [formPayMode, setFormPayMode] = useState<string>(PO_PAYMENT_MODES[0]);
+  const [formPayRef, setFormPayRef] = useState("");
+  const [formPayDate, setFormPayDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   // Form Items State
   const [formItems, setFormItems] = useState<POLineItem[]>([]);
@@ -214,6 +246,25 @@ export default function PurchaseOrdersPage() {
     setFormLinkedRFQ(defaults.formLinkedRFQ);
     setFormDepartment(defaults.formDepartment);
     setFormBuyerName(defaults.formBuyerName);
+    setFormVendorName("");
+    setFormContactPerson("");
+    setFormGstin("");
+    setFormVendorAddress("");
+    setFormVendorPhone("");
+    setFormShipToWarehouse("");
+    setFormDockGate("");
+    setFormExpectedDelivery("");
+    setFormFreightTerms(PO_FORM_DEFAULTS.freightTerms);
+    setFormPaymentTerms(PO_FORM_DEFAULTS.paymentTerms);
+    setFormPaymentDueDays(PO_FORM_DEFAULTS.paymentDueDays);
+    setFormDiscountPercent(0);
+    setFormCurrency(PO_FORM_DEFAULTS.currency);
+    setFormTaxTerms(PO_FORM_DEFAULTS.taxTerms);
+    setFormPayOption("unpaid");
+    setFormPayAmount(0);
+    setFormPayMode(PO_PAYMENT_MODES[0]);
+    setFormPayRef("");
+    setFormPayDate(new Date().toISOString().slice(0, 10));
     const first = products.find((p) => p.status === "Active");
     setFormItems(first ? [poLineFromProduct(first)] : defaults.formItems);
     setFormAttachments(defaults.formAttachments);
@@ -244,6 +295,17 @@ export default function PurchaseOrdersPage() {
         setCreateDrawerOpen(true);
       })
       .catch(() => setToast({ message: `Could not load ${fromPR}.`, variant: "info" }));
+  }, []);
+
+  // Direct PO (no requisition): /orders?new=1 — also where the old Direct Purchases page points.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("new") !== "1") return;
+    void Promise.resolve().then(() => {
+      setEditPO(null);
+      resetCreateForm();
+      setCreateDrawerOpen(true);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // "View PO" from the RFQ page: /orders?po=PO-…
@@ -303,6 +365,8 @@ export default function PurchaseOrdersPage() {
   const subTotal = useMemo(() => formItems.reduce((acc, i) => acc + i.totalAmount, 0), [formItems]);
   const taxTotal = useMemo(() => Math.round(subTotal * 0.18), [subTotal]);
   const grandTotal = subTotal + taxTotal;
+  const isDirectForm = !editPO && isDirectPo({ linkedPR: formLinkedPR, linkedRFQ: formLinkedRFQ });
+  const sectionCount = isDirectForm ? 6 : 5;
 
   // Dynamic KPIs
   const metrics = useMemo(() => {
@@ -349,6 +413,29 @@ export default function PurchaseOrdersPage() {
     });
   }, [poList, search, deptFilter, statusFilter]);
 
+  const selectedSupplierId =
+    activeSuppliers.find((s) => s.supplierName.trim().toLowerCase() === formVendorName.trim().toLowerCase())?.id ?? "";
+
+  const applySupplier = (supplier: SupplierItem | undefined) => {
+    if (!supplier) {
+      setFormVendorName("");
+      setFormGstin("");
+      setFormContactPerson("");
+      setFormVendorPhone("");
+      setFormVendorAddress("");
+      return;
+    }
+    setFormVendorName(supplier.supplierName);
+    setFormGstin(supplier.gstin ?? "");
+    setFormContactPerson(supplier.contactPerson ?? "");
+    setFormVendorPhone(supplier.phone ?? "");
+    setFormVendorAddress([supplier.address, supplier.city].filter(Boolean).join(", "));
+    const days = supplier.creditDays ?? Number(/\d+/.exec(supplier.paymentTerms ?? "")?.[0] ?? NaN);
+    if (supplier.paymentTerms) setFormPaymentTerms(supplier.paymentTerms);
+    if (Number.isFinite(days)) setFormPaymentDueDays(days);
+    else if (supplier.paymentTerms === "Immediate" || supplier.paymentTerms === "Advance") setFormPaymentDueDays(0);
+  };
+
   // Save PO Handler
   const handleSavePO = async (isSubmit: boolean) => {
     const missing = poLinesMissingMaterial(formItems);
@@ -363,10 +450,55 @@ export default function PurchaseOrdersPage() {
       setToast({ message: "Add at least one line item from Product Master.", variant: "info" });
       return;
     }
+    if (isSubmit) {
+      const required: [string, string][] = [
+        ["Department", formDepartment],
+        ["Buyer Name", formBuyerName],
+        ["Vendor Name", formVendorName],
+        ["GSTIN", formGstin],
+        ["Contact Person", formContactPerson],
+        ["Phone Number", formVendorPhone],
+        ["Ship-to Warehouse", formShipToWarehouse],
+        ["Dock / Gate", formDockGate],
+        ["Expected Delivery Date", formExpectedDelivery],
+      ];
+      const blank = required.filter(([, v]) => !v.trim()).map(([label]) => label);
+      if (blank.length) {
+        setToast({ message: `Fill in: ${blank.join(", ")}.`, variant: "info" });
+        return;
+      }
+    }
 
     const normalizedItems = formItems.map((item, i) =>
       normalizePoLineItem(item as Parameters<typeof normalizePoLineItem>[0], i, products),
     );
+
+    let initialPayments: POPayment[] = [];
+    if (isDirectForm && formPayOption !== "unpaid") {
+      const amount = formPayOption === "full" ? grandTotal : Number(formPayAmount) || 0;
+      if (amount <= 0) {
+        setToast({ message: "Enter the amount paid.", variant: "info" });
+        return;
+      }
+      if (amount > grandTotal + 0.5) {
+        setToast({ message: "Amount paid cannot exceed the PO total.", variant: "info" });
+        return;
+      }
+      if (formPayMode !== "Cash" && !formPayRef.trim()) {
+        setToast({ message: `Enter the ${formPayMode} transaction reference.`, variant: "info" });
+        return;
+      }
+      initialPayments = [
+        {
+          id: `PAY-${Date.now()}`,
+          paymentDate: formPayDate,
+          amount,
+          paymentMode: formPayMode,
+          reference: formPayRef.trim() || undefined,
+          paidBy: formBuyerName,
+        },
+      ];
+    }
 
     const newRecord: Partial<PORecord> = {
       orderDate: formDate,
@@ -394,6 +526,7 @@ export default function PurchaseOrdersPage() {
       status: isSubmit ? "Pending Approval" : "Draft",
       items: normalizedItems,
       attachments: formAttachments,
+      ...(editPO ? {} : { payments: initialPayments }),
       approvalHistory: [
         { level: "Level 1", approver: formBuyerName, action: "Submitted", timestamp: "Today", comments: "PO generated" },
         ...(isSubmit ? [{ level: "Level 2", approver: "Finance Manager", action: "Pending", timestamp: "Today", comments: "Awaiting approval" }] : []),
@@ -411,12 +544,19 @@ export default function PurchaseOrdersPage() {
         setEditPO(null);
         setToast({ message: "Purchase Order Updated Successfully", variant: "success" });
       } else {
-        await psPurchaseOrderService.create(newRecord);
+        const created = await psPurchaseOrderService.create(newRecord);
         setCreateDrawerOpen(false);
-        setToast({
-          message: isSubmit ? "Purchase Order submitted for approval" : "Purchase Order Saved as Draft",
-          variant: "success",
-        });
+        if (initialPayments.length > 0 && !Array.isArray(created?.payments)) {
+          setToast({
+            message: "PO saved, but the payment was not stored — run sql/ps-po-payments.sql in Supabase.",
+            variant: "info",
+          });
+        } else {
+          setToast({
+            message: isSubmit ? "Purchase Order submitted for approval" : "Purchase Order Saved as Draft",
+            variant: "success",
+          });
+        }
       }
       await reloadPos();
     } catch (e) {
@@ -436,6 +576,18 @@ export default function PurchaseOrdersPage() {
     } catch (e) {
       setToast({ message: e instanceof Error ? e.message : "Approve failed", variant: "info" });
     }
+  };
+
+  const handleRecordPayment = async (payment: POPayment) => {
+    if (!selectedPO) return;
+    const payments = [...(selectedPO.payments ?? []), payment];
+    const updated = await psPurchaseOrderService.update(selectedPO.id, { payments });
+    if (!updated || !Array.isArray(updated.payments)) {
+      throw new Error("Payments are not enabled yet — run sql/ps-po-payments.sql in Supabase.");
+    }
+    await reloadPos();
+    setSelectedPO((prev) => (prev ? { ...prev, ...updated } : null));
+    setToast({ message: `Payment of ₹${payment.amount.toLocaleString("en-IN")} recorded.`, variant: "success" });
   };
 
   const handleRejectPO = async () => {
@@ -544,6 +696,17 @@ export default function PurchaseOrdersPage() {
       render: (r: PORecord) => renderStatusBadge(r.status),
     },
     {
+      key: "paymentStatus",
+      header: "Payment",
+      align: "center",
+      render: (r: PORecord) =>
+        isDirectPo(r) || (r.payments?.length ?? 0) > 0 ? (
+          paymentStatusBadge(poPaymentSummary(r).status)
+        ) : (
+          <span className="text-[11px] text-slate-400">Via invoice</span>
+        ),
+    },
+    {
       key: "buyerName",
       header: "Buyer Name",
       render: (r: PORecord) => <span className="text-slate-600">{r.buyerName}</span>,
@@ -574,7 +737,7 @@ export default function PurchaseOrdersPage() {
             }}
             className="h-9 px-4 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
           >
-            <Plus className="h-4 w-4" /> Create Purchase Order
+            <Plus className="h-4 w-4" /> Create Direct Purchase Order
           </Button>
         }
       />
@@ -702,7 +865,7 @@ export default function PurchaseOrdersPage() {
           }}
           className="flex-1 h-11 text-xs font-bold !bg-emerald-600 hover:!bg-emerald-700 text-white rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
         >
-          <Plus className="h-4 w-4" /> + Create
+          <Plus className="h-4 w-4" /> Direct PO
         </Button>
       </div>
 
@@ -747,7 +910,7 @@ export default function PurchaseOrdersPage() {
           setCreateDrawerOpen(false);
           setEditPO(null);
         }}
-        title={editPO ? `Edit Purchase Order: ${editPO.poNumber}` : "Create Purchase Order (PO)"}
+        title={editPO ? `Edit Purchase Order: ${editPO.poNumber}` : isDirectForm ? "Create Direct Purchase Order" : "Create Purchase Order (PO)"}
         width="responsive"
         footer={
           <div className="flex items-center justify-end gap-2.5 w-full">
@@ -782,7 +945,7 @@ export default function PurchaseOrdersPage() {
       >
         <form onSubmit={(e) => { e.preventDefault(); handleSavePO(true); }} className="space-y-5 py-1">
           {/* SECTION 1: BASIC INFORMATION */}
-          <PurchaseFormCard title="Basic Information" sectionNumber="Section 1 of 5">
+          <PurchaseFormCard title="Basic Information" sectionNumber={`Section 1 of ${sectionCount}`}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField label="Order Date" required>
                 <TextInput
@@ -833,8 +996,33 @@ export default function PurchaseOrdersPage() {
           </PurchaseFormCard>
 
           {/* SECTION 2: VENDOR DETAILS */}
-          <PurchaseFormCard title="Vendor Information" sectionNumber="Section 2 of 5">
+          <PurchaseFormCard title="Vendor Information" sectionNumber={`Section 2 of ${sectionCount}`}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="Select Existing Vendor" className="md:col-span-2">
+                <SelectInput
+                  value={selectedSupplierId}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                    applySupplier(activeSuppliers.find((s) => s.id === e.target.value))
+                  }
+                  className="h-11 md:h-9 text-xs font-medium"
+                  disabled={loadingSuppliers}
+                >
+                  <option value="">
+                    {loadingSuppliers
+                      ? "Loading vendors…"
+                      : activeSuppliers.length
+                        ? "New vendor — enter details below"
+                        : "No vendors in Supplier Master — enter details below"}
+                  </option>
+                  {activeSuppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.supplierName}
+                      {s.supplierCode ? ` (${s.supplierCode})` : ""}
+                      {s.city ? ` · ${s.city}` : ""}
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
               <FormField label="Vendor Name" required>
                 <TextInput
                   value={formVendorName}
@@ -869,7 +1057,7 @@ export default function PurchaseOrdersPage() {
           {/* SECTION 3: ORDERED LINE ITEMS */}
           <PurchaseFormCard
             title={`Ordered Line Items (${formItems.length})`}
-            sectionNumber="Section 3 of 5"
+            sectionNumber={`Section 3 of ${sectionCount}`}
             actionSlot={
               <Button
                 type="button"
@@ -962,7 +1150,7 @@ export default function PurchaseOrdersPage() {
           </PurchaseFormCard>
 
           {/* SECTION 4: DELIVERY & LOGISTICS */}
-          <PurchaseFormCard title="Delivery & Logistics" sectionNumber="Section 4 of 5">
+          <PurchaseFormCard title="Delivery & Logistics" sectionNumber={`Section 4 of ${sectionCount}`}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <FormField label="Ship-to Warehouse" required>
                 <TextInput
@@ -989,12 +1177,84 @@ export default function PurchaseOrdersPage() {
             </div>
           </PurchaseFormCard>
 
-          {/* SECTION 5: ATTACHMENTS */}
-          <PurchaseFormCard title="Vendor Quotations & Attachments" sectionNumber="Section 5 of 5">
+          {isDirectForm && (
+            <PurchaseFormCard title="Payment Record" sectionNumber={`Section 5 of ${sectionCount}`}>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField label="Payment Status" required>
+                  <SelectInput
+                    value={formPayOption}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                      setFormPayOption(e.target.value as "unpaid" | "full" | "partial")
+                    }
+                    className="h-11 md:h-9 text-xs font-medium"
+                  >
+                    <option value="unpaid">Not paid yet — pay later</option>
+                    <option value="full">Paid in full</option>
+                    <option value="partial">Partly paid / advance</option>
+                  </SelectInput>
+                </FormField>
+                {formPayOption !== "unpaid" && (
+                  <>
+                    <FormField label="Amount Paid (₹)" required>
+                      <TextInput
+                        type="number"
+                        min={0}
+                        value={formPayOption === "full" ? grandTotal : formPayAmount || ""}
+                        disabled={formPayOption === "full"}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayAmount(Number(e.target.value))}
+                        className="h-11 md:h-9 text-xs font-bold"
+                      />
+                    </FormField>
+                    <FormField label="Payment Date" required>
+                      <TextInput
+                        type="date"
+                        value={formPayDate}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayDate(e.target.value)}
+                        className="h-11 md:h-9 text-xs"
+                      />
+                    </FormField>
+                    <FormField label="Payment Mode" required>
+                      <SelectInput
+                        value={formPayMode}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormPayMode(e.target.value)}
+                        className="h-11 md:h-9 text-xs font-medium"
+                      >
+                        {PO_PAYMENT_MODES.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </SelectInput>
+                    </FormField>
+                    <FormField label="Transaction / Receipt Ref" required={formPayMode !== "Cash"} className="md:col-span-2">
+                      <TextInput
+                        value={formPayRef}
+                        placeholder={formPayMode === "Cash" ? "Receipt no. (optional)" : "UTR / cheque no. / txn id"}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayRef(e.target.value)}
+                        className="h-11 md:h-9 text-xs font-mono"
+                      />
+                    </FormField>
+                  </>
+                )}
+              </div>
+              {formPayOption === "partial" && grandTotal > 0 && (
+                <p className="mt-3 text-[11px] text-slate-500">
+                  Balance due: ₹{Math.max(0, grandTotal - (Number(formPayAmount) || 0)).toLocaleString("en-IN")} — record
+                  later payments from the PO details → Payments tab.
+                </p>
+              )}
+            </PurchaseFormCard>
+          )}
+
+          {/* ATTACHMENTS */}
+          <PurchaseFormCard title="Vendor Quotations & Attachments" sectionNumber={`Section ${sectionCount} of ${sectionCount}`}>
             <PurchaseAttachmentList
               attachments={formAttachments}
               onAddAttachment={(att) => setFormAttachments([...formAttachments, att])}
               onRemoveAttachment={(id) => setFormAttachments(formAttachments.filter((a) => a.id !== id))}
+              allowedTypes={["pdf", "jpg", "jpeg", "png"]}
+              maxSizeMB={5}
+              maxFiles={5}
             />
           </PurchaseFormCard>
         </form>
@@ -1006,6 +1266,7 @@ export default function PurchaseOrdersPage() {
         onClose={() => setSelectedPO(null)}
         renderStatusBadge={renderStatusBadge}
         onApprovePO={handleApprovePO}
+        onRecordPayment={handleRecordPayment}
         onRejectPO={handleRejectPO}
         onApproveInvoice={handleApproveInvoice}
         onRejectInvoice={handleRejectInvoice}

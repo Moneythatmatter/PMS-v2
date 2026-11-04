@@ -11,7 +11,7 @@ export const purchaseStoresNavItems: ModuleNavItem[] = [
       { label: "RFQs", href: "/purchase-stores/procurement/rfq", icon: "file-spreadsheet" },
       { label: "Vendors", href: "/purchase-stores/vendors", icon: "users" },
       { label: "Purchase Orders", href: "/purchase-stores/procurement/orders", icon: "shopping-cart" },
-      { label: "Direct Purchases", href: "/purchase-stores/procurement/dsp", icon: "zap" },
+      { label: "Payments", href: "/purchase-stores/procurement/payments", icon: "wallet" },
       // V1: hidden — keep route /procurement/contracts
       // { label: "Rate Contracts", href: "/purchase-stores/procurement/contracts", icon: "award" },
       // V1: hidden — keep route /procurement/invoice-matching (future work queue)

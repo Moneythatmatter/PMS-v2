@@ -2,18 +2,26 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardCheck, FileText, Loader2, Upload } from "lucide-react";
+import { ClipboardCheck, FileText, Loader2, Plus, Upload, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { DocumentApprovalFooter } from "@/components/purchase-stores/ui/DocumentApprovalFooter";
 import { cn } from "@/lib/utils";
-import type { PORecord } from "@/app/data/purchaseOrdersData";
+import {
+  PO_PAYMENT_MODES,
+  isDirectPo,
+  poPaymentSummary,
+  type PORecord,
+  type POPayment,
+  type POPaymentStatus,
+} from "@/app/data/purchaseOrdersData";
+import { FormField, SelectInput, TextInput } from "@/components/frontoffice/ui";
 import type { GRNRecord } from "@/app/data/grnData";
 import type { InvoiceRecord } from "@/app/data/invoiceVerificationData";
 import { usePsList } from "@/hooks/usePsResource";
 import { psGrnService } from "@/services/purchase-stores/index";
 
-type POTab = "details" | "items" | "grns" | "invoices";
+type POTab = "details" | "items" | "payments" | "grns" | "invoices";
 
 export type POMatchStatus = "Not Received" | "Partially Received" | "Received" | "Invoice Pending" | "Matched" | "Mismatch";
 
@@ -30,6 +38,129 @@ function deriveMatchStatus(invoices: InvoiceRecord[], grns: GRNRecord[]): POMatc
   if (allMatched) return "Matched";
 
   return "Invoice Pending";
+}
+
+const PAYMENT_STATUS_STYLES: Record<POPaymentStatus, string> = {
+  Unpaid: "bg-red-50 text-red-700",
+  "Partially Paid": "bg-amber-50 text-amber-700",
+  Paid: "bg-emerald-50 text-emerald-700",
+};
+
+export function paymentStatusBadge(status: POPaymentStatus) {
+  return (
+    <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold", PAYMENT_STATUS_STYLES[status])}>
+      {status}
+    </span>
+  );
+}
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+function RecordPaymentForm({
+  balance,
+  onSave,
+  onCancel,
+}: {
+  balance: number;
+  onSave: (payment: POPayment) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [amount, setAmount] = useState<number>(balance);
+  const [date, setDate] = useState(todayIso);
+  const [mode, setMode] = useState<string>(PO_PAYMENT_MODES[0]);
+  const [reference, setReference] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    if (!(amount > 0)) return setError("Enter the amount paid.");
+    if (amount > balance + 0.5) return setError(`Amount cannot exceed the balance of ₹${balance.toLocaleString("en-IN")}.`);
+    if (mode !== "Cash" && !reference.trim()) return setError(`Enter the ${mode} transaction reference.`);
+    setError("");
+    setSaving(true);
+    try {
+      await onSave({
+        id: `PAY-${Date.now()}`,
+        paymentDate: date,
+        amount,
+        paymentMode: mode,
+        reference: reference.trim() || undefined,
+        remarks: remarks.trim() || undefined,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not record payment");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="Amount (₹)" required>
+          <TextInput
+            type="number"
+            min={0}
+            value={amount || ""}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAmount(Number(e.target.value))}
+            className="h-9 text-xs font-bold"
+          />
+        </FormField>
+        <FormField label="Payment Date" required>
+          <TextInput
+            type="date"
+            value={date}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDate(e.target.value)}
+            className="h-9 text-xs"
+          />
+        </FormField>
+        <FormField label="Payment Mode" required>
+          <SelectInput
+            value={mode}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMode(e.target.value)}
+            className="h-9 text-xs"
+          >
+            {PO_PAYMENT_MODES.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </SelectInput>
+        </FormField>
+        <FormField label="Transaction / Receipt Ref" required={mode !== "Cash"}>
+          <TextInput
+            value={reference}
+            placeholder={mode === "Cash" ? "Optional" : "UTR / cheque no."}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReference(e.target.value)}
+            className="h-9 text-xs font-mono"
+          />
+        </FormField>
+        <FormField label="Remarks" className="col-span-2">
+          <TextInput
+            value={remarks}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRemarks(e.target.value)}
+            className="h-9 text-xs"
+          />
+        </FormField>
+      </div>
+      {error && <p className="text-[11px] font-medium text-red-600">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" size="sm" className="h-8" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5"
+          onClick={submit}
+          disabled={saving}
+        >
+          {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save Payment
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function matchStatusBadge(status: POMatchStatus) {
@@ -57,6 +188,8 @@ interface PODetailDrawerProps {
   onRejectPO: () => void;
   onApproveInvoice: (invoiceId: string) => void;
   onRejectInvoice: (invoiceId: string) => void;
+  onRecordPayment?: (payment: POPayment) => Promise<void>;
+  initialTab?: POTab;
 }
 
 export function PODetailDrawer({
@@ -68,8 +201,11 @@ export function PODetailDrawer({
   onRejectPO,
   onApproveInvoice,
   onRejectInvoice,
+  onRecordPayment,
+  initialTab = "details",
 }: PODetailDrawerProps) {
-  const [tab, setTab] = useState<POTab>("details");
+  const [tab, setTab] = useState<POTab>(initialTab);
+  const [recording, setRecording] = useState(false);
 
   const { data: grns, loading: grnsLoading } = usePsList(
     () => (po ? psGrnService.listByPo(po.poNumber) : Promise.resolve([])),
@@ -80,9 +216,14 @@ export function PODetailDrawer({
 
   if (!po) return null;
 
+  const direct = isDirectPo(po);
+  const pay = poPaymentSummary(po);
+  const canRecordPayment = direct && Boolean(onRecordPayment) && po.status !== "Cancelled" && pay.balance > 0.5;
+
   const tabs: { id: POTab; label: string }[] = [
     { id: "details", label: "Details" },
     { id: "items", label: "Items" },
+    ...(direct || pay.paid > 0 ? [{ id: "payments" as const, label: "Payments" }] : []),
     { id: "grns", label: "Goods Receipts" },
     { id: "invoices", label: "Vendor Invoices" },
   ];
@@ -125,7 +266,10 @@ export function PODetailDrawer({
           </div>
           <h3 className="text-base font-extrabold text-slate-900 mt-1">{po.vendorName}</h3>
           <p className="text-xs text-slate-500">{po.department} · Buyer: {po.buyerName}</p>
-          <p className="text-sm font-bold text-emerald-800 mt-2">₹{po.totalAmount.toLocaleString("en-IN")}</p>
+          <div className="flex items-center gap-2 mt-2">
+            <p className="text-sm font-bold text-emerald-800">₹{po.totalAmount.toLocaleString("en-IN")}</p>
+            {direct && paymentStatusBadge(pay.status)}
+          </div>
         </div>
 
         <div className="flex gap-1 border-b border-slate-200 overflow-x-auto">
@@ -142,6 +286,7 @@ export function PODetailDrawer({
               {t.label}
               {t.id === "grns" && grns.length > 0 && ` (${grns.length})`}
               {t.id === "invoices" && invoices.length > 0 && ` (${invoices.length})`}
+              {t.id === "payments" && (po.payments?.length ?? 0) > 0 && ` (${po.payments?.length})`}
             </button>
           ))}
         </div>
@@ -171,6 +316,71 @@ export function PODetailDrawer({
                 <span className="font-bold text-emerald-800">₹{i.totalAmount.toLocaleString("en-IN")}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {tab === "payments" && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              {[
+                { label: "PO Total", value: pay.total, tone: "text-slate-900" },
+                { label: "Paid", value: pay.paid, tone: "text-emerald-700" },
+                { label: "Balance", value: pay.balance, tone: pay.balance > 0.5 ? "text-red-600" : "text-slate-900" },
+              ].map((c) => (
+                <div key={c.label} className="rounded-lg border border-slate-200 p-2.5">
+                  <span className="text-slate-400 block text-[10px] uppercase font-semibold">{c.label}</span>
+                  <span className={cn("font-bold", c.tone)}>₹{c.value.toLocaleString("en-IN")}</span>
+                </div>
+              ))}
+            </div>
+
+            {recording && onRecordPayment ? (
+              <RecordPaymentForm
+                balance={pay.balance}
+                onCancel={() => setRecording(false)}
+                onSave={async (p) => {
+                  await onRecordPayment(p);
+                  setRecording(false);
+                }}
+              />
+            ) : (
+              canRecordPayment && (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="w-full h-9 gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white"
+                  onClick={() => setRecording(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" /> Record Payment
+                </Button>
+              )
+            )}
+
+            {(po.payments ?? []).length === 0 ? (
+              <div className="py-6 text-center text-sm text-slate-500">
+                <Wallet className="h-5 w-5 mx-auto text-slate-300 mb-2" />
+                No payments recorded yet.
+              </div>
+            ) : (
+              [...(po.payments ?? [])]
+                .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate))
+                .map((p) => (
+                  <div key={p.id} className="flex justify-between items-start gap-2 rounded-lg border border-slate-200 p-3 text-xs">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {p.paymentMode}
+                        {p.reference && <span className="font-mono text-slate-500"> · {p.reference}</span>}
+                      </p>
+                      <p className="text-slate-500">
+                        {p.paymentDate}
+                        {p.paidBy ? ` · ${p.paidBy}` : ""}
+                        {p.remarks ? ` · ${p.remarks}` : ""}
+                      </p>
+                    </div>
+                    <span className="font-bold text-emerald-800">₹{Number(p.amount).toLocaleString("en-IN")}</span>
+                  </div>
+                ))
+            )}
           </div>
         )}
 

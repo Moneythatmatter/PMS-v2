@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useRef } from "react";
-import { Paperclip, Trash2, Eye, Plus, FileText } from "lucide-react";
-import { Button } from "@/components/ui/Button";
+import React, { useRef, useState } from "react";
+import { Trash2, Plus, FileText, AlertCircle } from "lucide-react";
 
 export interface AttachmentItem {
   id: string;
@@ -11,30 +10,87 @@ export interface AttachmentItem {
   fileType: string;
 }
 
+export const DEFAULT_ATTACHMENT_TYPES = ["pdf", "jpg", "jpeg", "png"];
+export const DEFAULT_ATTACHMENT_MAX_MB = 5;
+export const DEFAULT_ATTACHMENT_MAX_FILES = 5;
+
+const MIME_BY_EXT: Record<string, string> = {
+  pdf: "application/pdf",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+function formatSize(bytes: number) {
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 export interface PurchaseAttachmentListProps {
   attachments: AttachmentItem[];
   onAddAttachment?: (file: AttachmentItem) => void;
   onRemoveAttachment?: (id: string) => void;
+  /** Allowed file extensions (lowercase, no dot). */
+  allowedTypes?: string[];
+  maxSizeMB?: number;
+  maxFiles?: number;
 }
 
 export function PurchaseAttachmentList({
   attachments,
   onAddAttachment,
   onRemoveAttachment,
+  allowedTypes = DEFAULT_ATTACHMENT_TYPES,
+  maxSizeMB = DEFAULT_ATTACHMENT_MAX_MB,
+  maxFiles = DEFAULT_ATTACHMENT_MAX_FILES,
 }: PurchaseAttachmentListProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState("");
+
+  const types = allowedTypes.map((t) => t.toLowerCase().replace(/^\./, ""));
+  const accept = [...types.map((t) => `.${t}`), ...types.map((t) => MIME_BY_EXT[t]).filter(Boolean)].join(",");
+  const typeLabel = [...new Set(types.map((t) => (t === "jpeg" ? "jpg" : t).toUpperCase()))].join(", ");
+  const canAddMore = attachments.length < maxFiles;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const newAtt: AttachmentItem = {
-        id: `att-${Date.now()}`,
-        fileName: file.name,
-        fileSize: `${Math.round(file.size / 1024)} KB`,
-        fileType: file.name.split(".").pop() || "doc",
-      };
-      if (onAddAttachment) onAddAttachment(newAtt);
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !onAddAttachment) return;
+
+    const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+    const mimeOk = !file.type || types.some((t) => MIME_BY_EXT[t] === file.type);
+    if (!types.includes(ext) || !mimeOk) {
+      setError(`"${file.name}" is not allowed. Upload ${typeLabel} files only.`);
+      return;
     }
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      setError(`"${file.name}" is ${formatSize(file.size)}. Maximum size is ${maxSizeMB} MB.`);
+      return;
+    }
+    if (file.size === 0) {
+      setError(`"${file.name}" is empty.`);
+      return;
+    }
+    if (!canAddMore) {
+      setError(`You can attach up to ${maxFiles} files.`);
+      return;
+    }
+    if (attachments.some((a) => a.fileName.toLowerCase() === file.name.toLowerCase())) {
+      setError(`"${file.name}" is already attached.`);
+      return;
+    }
+
+    setError("");
+    onAddAttachment({
+      id: `att-${Date.now()}`,
+      fileName: file.name,
+      fileSize: formatSize(file.size),
+      fileType: ext,
+    });
   };
 
   return (
@@ -42,6 +98,7 @@ export function PurchaseAttachmentList({
       <input
         type="file"
         ref={fileInputRef}
+        accept={accept}
         onChange={handleFileChange}
         className="hidden"
       />
@@ -66,7 +123,10 @@ export function PurchaseAttachmentList({
               {onRemoveAttachment && (
                 <button
                   type="button"
-                  onClick={() => onRemoveAttachment(att.id)}
+                  onClick={() => {
+                    setError("");
+                    onRemoveAttachment(att.id);
+                  }}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                   title="Remove Attachment"
                 >
@@ -77,7 +137,7 @@ export function PurchaseAttachmentList({
           </div>
         ))}
 
-        {onAddAttachment && (
+        {onAddAttachment && canAddMore && (
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -87,6 +147,17 @@ export function PurchaseAttachmentList({
           </button>
         )}
       </div>
+
+      {onAddAttachment && (
+        <p className="text-[11px] text-slate-500">
+          Allowed: {typeLabel} · Max {maxSizeMB} MB per file · Up to {maxFiles} files ({attachments.length}/{maxFiles})
+        </p>
+      )}
+      {error && (
+        <p className="flex items-center gap-1.5 text-[11px] font-medium text-red-600">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
+        </p>
+      )}
     </div>
   );
 }

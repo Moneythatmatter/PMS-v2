@@ -49,4 +49,33 @@ export interface PORecord {
   attachments: { id: string; fileName: string; fileSize: string; fileType: string }[];
   approvalHistory: { level: string; approver: string; action: string; timestamp: string; comments: string }[];
   activityTimeline: { stage: string; timestamp: string; note: string; author: string }[];
+  payments?: POPayment[];
+  paidAmount?: number;
+  paymentStatus?: POPaymentStatus;
+}
+
+export type POPaymentStatus = "Unpaid" | "Partially Paid" | "Paid";
+
+export const PO_PAYMENT_MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card"] as const;
+
+export interface POPayment {
+  id: string;
+  paymentDate: string;
+  amount: number;
+  paymentMode: string;
+  reference?: string;
+  paidBy?: string;
+  remarks?: string;
+}
+
+export function isDirectPo(po: Pick<PORecord, "linkedPR" | "linkedRFQ">): boolean {
+  return !po.linkedPR?.trim() && !po.linkedRFQ?.trim();
+}
+
+export function poPaymentSummary(po: Pick<PORecord, "totalAmount" | "payments">) {
+  const paid = (po.payments ?? []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const total = Number(po.totalAmount) || 0;
+  const balance = Math.max(0, Math.round((total - paid) * 100) / 100);
+  const status: POPaymentStatus = paid <= 0 ? "Unpaid" : balance <= 0.5 ? "Paid" : "Partially Paid";
+  return { paid, total, balance, status };
 }
