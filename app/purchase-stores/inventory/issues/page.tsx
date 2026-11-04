@@ -27,13 +27,21 @@ import {
 } from "@/components/frontoffice/ui";
 import { DocumentApprovalFooter } from "@/components/purchase-stores/ui/DocumentApprovalFooter";
 import { cn } from "@/lib/utils";
+import { downloadXlsx } from "@/lib/xlsx";
 import {
   ISSUE_DEPARTMENT_OPTIONS,
   type IssueStatus,
   type StockIssueRecord,
 } from "@/app/data/stockIssuesData";
 import { usePsList } from "@/hooks/usePsResource";
-import { psStockIssueService, psWarehouseService } from "@/services/purchase-stores/index";
+import { psProductService, psStockBalanceService, psStockIssueService, psWarehouseService } from "@/services/purchase-stores/index";
+import {
+  StockLinePicker,
+  newPickerLine,
+  pickerLinesProblem,
+  pickerLinesToPayload,
+  type PickerLine,
+} from "@/components/purchase-stores/ui/StockLinePicker";
 
 function issueStatusBadge(status: IssueStatus) {
   const styles: Record<IssueStatus, string> = {
@@ -53,6 +61,8 @@ function issueStatusBadge(status: IssueStatus) {
 export default function StockIssuesPage() {
   const { data: issues, loading, reload } = usePsList(() => psStockIssueService.list());
   const { data: warehouses, loading: warehousesLoading } = usePsList(() => psWarehouseService.list());
+  const { data: balances, reload: reloadBalances } = usePsList(() => psStockBalanceService.list());
+  const { data: products } = usePsList(() => psProductService.list());
 
   const warehouseOptions = useMemo(() => warehouses.map((w) => w.name), [warehouses]);
 
@@ -71,6 +81,9 @@ export default function StockIssuesPage() {
   const [formStore, setFormStore] = useState("");
   const [formPurpose, setFormPurpose] = useState("");
   const [formRequestedBy, setFormRequestedBy] = useState("");
+  const [formLines, setFormLines] = useState<PickerLine[]>([]);
+  const [editingIssue, setEditingIssue] = useState<StockIssueRecord | null>(null);
+  const formWarehouseId = warehouses.find((w) => w.name === formWarehouse)?.id;
 
   const [toastMessage, setToastMessage] = useState<{ text: string; variant: "success" | "info" | "error" } | null>(null);
 
@@ -115,39 +128,60 @@ export default function StockIssuesPage() {
     setFormStore("");
     setFormPurpose("");
     setFormRequestedBy("");
+    setFormLines([newPickerLine()]);
+    setEditingIssue(null);
   };
 
-  const handleCreateIssue = async () => {
+  const openEditIssue = (issue: StockIssueRecord) => {
+    setEditingIssue(issue);
+    setFormDepartment(issue.department);
+    setFormWarehouse(issue.warehouse);
+    setFormStore(issue.store);
+    setFormPurpose(issue.purpose);
+    setFormRequestedBy(issue.requestedBy);
+    setFormLines(
+      issue.lineItems.length
+        ? issue.lineItems.map((l) => ({ key: l.id, materialId: l.materialId ?? "", qty: String(l.requestedQty) }))
+        : [newPickerLine()],
+    );
+    setViewingIssue(null);
+    setIsCreateOpen(true);
+  };
+
+  const handleSaveIssue = async (submit: boolean) => {
     if (!formPurpose.trim() || !formRequestedBy.trim() || !formStore.trim()) {
       showToast("Purpose, store, and requested by are required.", "error");
       return;
     }
+    const problem = pickerLinesProblem(formLines, balances, formWarehouseId);
+    if (problem) return showToast(problem, "error");
+    const lineItems = pickerLinesToPayload(formLines, "requestedQty");
+    if (submit && lineItems.length === 0) return showToast("Add at least one material before submitting.", "error");
+
+    const header = {
+      department: formDepartment,
+      warehouse: formWarehouse,
+      store: formStore.trim(),
+      requestedBy: formRequestedBy.trim(),
+      purpose: formPurpose.trim(),
+      status: submit ? "Pending Approval" : "Draft",
+      lineItems,
+    } as unknown as Partial<StockIssueRecord>;
 
     setSaving(true);
     try {
-      const created = await psStockIssueService.create({
-        issueDate: new Date().toLocaleString("en-IN", {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        department: formDepartment,
-        warehouse: formWarehouse,
-        store: formStore.trim(),
-        requestedBy: formRequestedBy.trim(),
-        status: "Draft",
-        purpose: formPurpose.trim(),
-        lineItems: [],
-        totalValue: 0,
-      });
+      const saved = editingIssue
+        ? await psStockIssueService.update(editingIssue.id, header)
+        : await psStockIssueService.create({
+            ...header,
+            issueDate: new Date().toLocaleString("en-IN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
+          });
       setIsCreateOpen(false);
       resetCreateForm();
       await reload();
-      showToast(`Issue slip ${created.issueNo} created as draft. Add line items to complete.`);
+      showToast(`Issue slip ${saved.issueNo} ${submit ? "submitted for approval" : "saved as draft"}.`);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Failed to create issue.", "error");
+      showToast(e instanceof Error ? e.message : "Failed to save issue.", "error");
     } finally {
       setSaving(false);
     }
@@ -157,7 +191,7 @@ export default function StockIssuesPage() {
     if (!viewingIssue) return;
     setSaving(true);
     try {
-      await psStockIssueService.update(viewingIssue.id, { ...viewingIssue, status: "Pending Approval" });
+      await psStockIssueService.update(viewingIssue.id, { status: "Pending Approval" });
       showToast(`${viewingIssue.issueNo} submitted for approval.`);
       setViewingIssue(null);
       await reload();
@@ -173,18 +207,13 @@ export default function StockIssuesPage() {
     setSaving(true);
     try {
       await psStockIssueService.update(viewingIssue.id, {
-        ...viewingIssue,
         status: "Issued",
         approvedBy: "Store Manager",
         issuedBy: "Store Keeper",
-        lineItems: viewingIssue.lineItems.map((line) => ({
-          ...line,
-          issuedQty: line.requestedQty,
-        })),
       });
-      showToast(`${viewingIssue.issueNo} approved and issued.`);
+      showToast(`${viewingIssue.issueNo} issued — stock reduced and posted to the ledger.`);
       setViewingIssue(null);
-      await reload();
+      await Promise.all([reload(), reloadBalances()]);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Failed to approve issue.", "error");
     } finally {
@@ -196,7 +225,7 @@ export default function StockIssuesPage() {
     if (!viewingIssue) return;
     setSaving(true);
     try {
-      await psStockIssueService.update(viewingIssue.id, { ...viewingIssue, status: "Cancelled" });
+      await psStockIssueService.update(viewingIssue.id, { status: "Cancelled" });
       showToast(`${viewingIssue.issueNo} rejected.`, "error");
       setViewingIssue(null);
       await reload();
@@ -222,40 +251,45 @@ export default function StockIssuesPage() {
     }
   };
 
-  const handleExportCSV = () => {
+  const handleExportExcel = () => {
     const headers = ["Issue No", "Date", "Department", "Warehouse", "Store", "Requested By", "Status", "Purpose", "Items"];
     const rows = filteredIssues.map((i) => [
-      `"${i.issueNo}"`,
-      `"${i.issueDate}"`,
-      `"${i.department}"`,
-      `"${i.warehouse}"`,
-      `"${i.store}"`,
-      `"${i.requestedBy}"`,
-      `"${i.status}"`,
-      `"${i.purpose}"`,
+      i.issueNo,
+      i.issueDate,
+      i.department,
+      i.warehouse,
+      i.store,
+      i.requestedBy,
+      i.status,
+      i.purpose,
       i.lineItems.length,
     ]);
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Stock_Issues_${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showToast(`Exported ${filteredIssues.length} issue records.`, "info");
+    downloadXlsx(`stock-issues-${new Date().toISOString().slice(0, 10)}`, [
+      {
+        name: "Stock Issues",
+        title: "Stock Issues",
+        meta: [["Generated", new Date().toLocaleString("en-IN")], ["Records", rows.length]],
+        header: headers,
+        rows,
+      },
+    ]);
+    showToast(`Exported ${filteredIssues.length} issue records to Excel.`, "info");
   };
 
   if (loading || warehousesLoading) {
     return (
-      <div className="min-h-screen p-8 text-sm text-slate-600">
-        Loading...
+      <div className="space-y-4">
+        <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}
+        </div>
+        <div className="h-80 animate-pulse rounded-2xl bg-slate-100" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen space-y-6 bg-slate-50/50 p-4 sm:p-6 md:p-8">
+    <div className="space-y-6">
       {toastMessage && (
         <AlertBanner variant={toastMessage.variant} message={toastMessage.text} onDismiss={() => setToastMessage(null)} />
       )}
@@ -266,8 +300,8 @@ export default function StockIssuesPage() {
         description="Issue materials from stores and warehouses to hotel departments."
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100">
-              <Download className="h-4 w-4" /> Export CSV
+            <Button type="button" variant="outline" size="sm" onClick={handleExportExcel} className="gap-1.5 border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100">
+              <Download className="h-4 w-4" /> Export Excel
             </Button>
             <Button
               type="button"
@@ -290,7 +324,10 @@ export default function StockIssuesPage() {
         <StatMiniCard label="Pending / Draft" value={stats.pending} sublabel="Awaiting action" accent="#d97706" icon={Clock} />
       </div>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+      
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        <div className="border-b border-slate-100 bg-slate-50/40 p-3">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
           <div className="relative lg:col-span-2">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -330,9 +367,7 @@ export default function StockIssuesPage() {
             )}
           </div>
         </div>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -358,7 +393,7 @@ export default function StockIssuesPage() {
                   <tr
                     key={issue.id}
                     onClick={() => setViewingIssue(issue)}
-                    className="cursor-pointer transition-colors hover:bg-slate-50/80"
+                    className="cursor-pointer transition-colors hover:bg-emerald-50/40"
                   >
                     <td className="py-3.5 px-4 font-bold text-emerald-800 whitespace-nowrap">{issue.issueNo}</td>
                     <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">{issue.issueDate}</td>
@@ -376,7 +411,7 @@ export default function StockIssuesPage() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setViewingIssue(issue);
+                              openEditIssue(issue);
                             }}
                             className="rounded-lg p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600"
                             title="Edit Issue"
@@ -421,9 +456,14 @@ export default function StockIssuesPage() {
               approveLabel="Approve & Issue"
               extraActions={
                 viewingIssue.status === "Draft" ? (
-                  <Button type="button" size="sm" onClick={handleSubmitIssueForApproval} disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                    Submit for Approval
-                  </Button>
+                  <>
+                    <Button type="button" size="sm" variant="outline" onClick={() => openEditIssue(viewingIssue)} disabled={saving}>
+                      Edit Items
+                    </Button>
+                    <Button type="button" size="sm" onClick={handleSubmitIssueForApproval} disabled={saving || viewingIssue.lineItems.length === 0} className="bg-amber-600 hover:bg-amber-700 text-white">
+                      Submit for Approval
+                    </Button>
+                  </>
                 ) : undefined
               }
             />
@@ -483,13 +523,16 @@ export default function StockIssuesPage() {
           setIsCreateOpen(false);
           resetCreateForm();
         }}
-        title="New Issue Slip"
-        description="Create a draft issue slip to issue materials to a department."
-        width="xl"
+        title={editingIssue ? `Edit ${editingIssue.issueNo}` : "New Issue Slip"}
+        description="Pick the materials to issue. Stock is reduced only when the slip is approved."
+        width="2xl"
         footer={
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-            <Button type="button" size="sm" onClick={handleCreateIssue} disabled={saving} className="bg-emerald-700 hover:bg-emerald-800 text-white">Create Draft</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => { setIsCreateOpen(false); resetCreateForm(); }}>Cancel</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => void handleSaveIssue(false)} disabled={saving}>Save Draft</Button>
+            <Button type="button" size="sm" onClick={() => void handleSaveIssue(true)} disabled={saving} className="bg-emerald-700 hover:bg-emerald-800 text-white">
+              {saving ? "Saving…" : "Submit for Approval"}
+            </Button>
           </div>
         }
       >
@@ -502,7 +545,13 @@ export default function StockIssuesPage() {
             </SelectInput>
           </FormField>
           <FormField label="Warehouse" required>
-            <SelectInput value={formWarehouse} onChange={(e) => setFormWarehouse(e.target.value)}>
+            <SelectInput
+              value={formWarehouse}
+              onChange={(e) => {
+                setFormWarehouse(e.target.value);
+                setFormLines([newPickerLine()]);
+              }}
+            >
               {warehouseOptions.map((w) => (
                 <option key={w} value={w}>{w}</option>
               ))}
@@ -517,6 +566,15 @@ export default function StockIssuesPage() {
           <FormField label="Purpose" required className="sm:col-span-2">
             <TextAreaInput value={formPurpose} onChange={(e) => setFormPurpose(e.target.value)} placeholder="Reason for issue..." rows={2} />
           </FormField>
+        </FormSection>
+        <FormSection title="Materials" columns={1}>
+          <StockLinePicker
+            warehouseId={formWarehouseId}
+            balances={balances}
+            products={products}
+            lines={formLines}
+            onChange={setFormLines}
+          />
         </FormSection>
       </Drawer>
 

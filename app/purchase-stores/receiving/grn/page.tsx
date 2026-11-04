@@ -72,6 +72,7 @@ import {
   updateLineBatch,
   syncLineTotals,
 } from "./grnFormHelpers";
+import { PoPickerModal } from "@/components/purchase-stores/receiving/PoPickerModal";
 
 function PoSummaryItem({
   icon,
@@ -104,6 +105,28 @@ function PoSummaryItem({
   );
 }
 
+type LifecycleState = "done" | "current" | "failed" | "upcoming";
+
+/** Derives the receiving stepper from the GRN's status and QC result. */
+function grnLifecycle(grn: GRNRecord): Array<{ label: string; state: LifecycleState }> {
+  const returned = grn.status === "Return" || grn.inspectionStatus === "Rejected";
+  const stocked =
+    grn.status === "Completed" ||
+    grn.status === "Approved" ||
+    grn.inspectionStatus === "Passed" ||
+    grn.inspectionStatus === "Partially Accepted";
+  const qcLabel = grn.inspectionStatus === "Under QC" ? "Quality Inspection (in progress)" : "Quality Inspection";
+  return [
+    { label: `PO Approved (${grn.poNumber || "—"})`, state: "done" },
+    { label: "Goods Received (GRN)", state: "done" },
+    { label: returned ? "QC Rejected" : qcLabel, state: returned ? "failed" : stocked ? "done" : "current" },
+    {
+      label: returned ? "Returned to Vendor (RGP)" : "Posted to Stock Ledger",
+      state: returned ? (grn.status === "Return" ? "done" : "upcoming") : stocked ? "done" : "upcoming",
+    },
+  ];
+}
+
 export default function GoodsReceiptNotePage() {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
@@ -129,6 +152,10 @@ export default function GoodsReceiptNotePage() {
     () => purchaseOrders.filter((po) => po.status === "Approved" || po.status === "Issued"),
     [purchaseOrders],
   );
+  const posWithGrn = useMemo(() => new Set(grnList.map((g) => g.poNumber).filter(Boolean)), [grnList]);
+  /** One GRN per PO — anything already received is not offered again. */
+  const receivablePOs = useMemo(() => approvedPOs.filter((po) => !posWithGrn.has(po.poNumber)), [approvedPOs, posWithGrn]);
+  const [poPickerOpen, setPoPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   /** Sync lock — React state alone cannot block rapid double-clicks before re-render. */
   const savingLockRef = useRef(false);
@@ -181,8 +208,8 @@ export default function GoodsReceiptNotePage() {
   // Selected Purchase Order for auto-fetch
   const [selectedPoNumber, setSelectedPoNumber] = useState("");
   const currentPO = useMemo(
-    () => approvedPOs.find((po) => po.poNumber === selectedPoNumber) ?? null,
-    [approvedPOs, selectedPoNumber],
+    () => receivablePOs.find((po) => po.poNumber === selectedPoNumber) ?? null,
+    [receivablePOs, selectedPoNumber],
   );
 
   // STORE EXECUTIVE DELIVERIES FORM INPUTS (Physical Receipt Only — no vendor invoice)
@@ -250,6 +277,10 @@ export default function GoodsReceiptNotePage() {
     if (savingLockRef.current) return;
     if (!currentPO) {
       alert("Select an approved Purchase Order.");
+      return;
+    }
+    if (posWithGrn.has(currentPO.poNumber)) {
+      alert(`A GRN already exists for ${currentPO.poNumber}. A purchase order can have only one GRN.`);
       return;
     }
     const missing = [
@@ -672,6 +703,17 @@ export default function GoodsReceiptNotePage() {
           </div>
         }
       >
+        <PoPickerModal
+          open={poPickerOpen}
+          onClose={() => setPoPickerOpen(false)}
+          purchaseOrders={receivablePOs}
+          selectedPoNumber={selectedPoNumber}
+          hiddenCount={approvedPOs.length - receivablePOs.length}
+          onSelect={(poNumber) => {
+            setSelectedPoNumber(poNumber);
+            setPoPickerOpen(false);
+          }}
+        />
         <form className="space-y-5 py-2">
           {/* SECTION 1: PURCHASE ORDER */}
           <PurchaseFormCard title="Purchase Order" sectionNumber="Step 1 of 4">
@@ -684,30 +726,32 @@ export default function GoodsReceiptNotePage() {
                   <p className="mt-0.5 text-[11px] text-slate-500">
                     {loadingPOs
                       ? "Loading approved purchase orders…"
-                      : `${approvedPOs.length} approved PO${approvedPOs.length === 1 ? "" : "s"} available for receiving`}
+                      : `${receivablePOs.length} approved PO${receivablePOs.length === 1 ? "" : "s"} waiting for goods receipt`}
                   </p>
                 </div>
-                <div className="relative">
-                  <FileText className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <SelectInput
-                    value={selectedPoNumber}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedPoNumber(e.target.value)}
-                    className={cn(
-                      "block h-11 pl-9 text-sm",
-                      selectedPoNumber ? "font-semibold text-slate-900" : "text-slate-500",
-                    )}
-                    disabled={loadingPOs || approvedPOs.length === 0}
-                  >
-                    <option value="">
-                      {loadingPOs ? "Loading POs…" : approvedPOs.length === 0 ? "No approved POs" : "Select a purchase order…"}
-                    </option>
-                    {approvedPOs.map((po) => (
-                      <option key={po.id} value={po.poNumber}>
-                        {po.poNumber} · {po.vendorName} · ₹{po.totalAmount.toLocaleString("en-IN")}
-                      </option>
-                    ))}
-                  </SelectInput>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setPoPickerOpen(true)}
+                  disabled={loadingPOs}
+                  className={cn(
+                    "flex h-11 w-full items-center gap-2 rounded-xl border bg-white px-3 text-left text-sm transition-colors disabled:opacity-60",
+                    selectedPoNumber ? "border-emerald-300 font-semibold text-slate-900" : "border-slate-200 text-slate-500 hover:border-emerald-300",
+                  )}
+                >
+                  <FileText className="h-4 w-4 shrink-0 text-slate-400" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {currentPO
+                      ? `${currentPO.poNumber} · ${currentPO.vendorName} · ₹${currentPO.totalAmount.toLocaleString("en-IN")}`
+                      : loadingPOs
+                        ? "Loading POs…"
+                        : receivablePOs.length === 0
+                          ? "No POs waiting for receipt"
+                          : "Select a purchase order…"}
+                  </span>
+                  <span className="shrink-0 rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800">
+                    {currentPO ? "Change" : "Browse"}
+                  </span>
+                </button>
               </div>
 
               {currentPO ? (
@@ -1116,22 +1160,47 @@ export default function GoodsReceiptNotePage() {
               </div>
 
               {/* Workflow Diagram */}
-              <div className="border-t border-amber-200/80 pt-3">
-                <h5 className="text-[11px] font-bold text-amber-950 uppercase tracking-wider mb-2">Procurement to Payment Lifecycle</h5>
-                <div className="flex items-center justify-between text-[10px] font-bold overflow-x-auto pb-1 scrollbar-none gap-1">
-                  <span className="px-2 py-1 bg-white rounded border border-amber-300 text-slate-700 shrink-0">PO Approved ({selectedGRN.poNumber})</span>
-                  <ArrowRight className="h-3 w-3 text-amber-500 shrink-0" />
-                  <span className="px-2 py-1 bg-amber-600 text-white rounded shrink-0">Goods Received (GRN)</span>
-                  <ArrowRight className="h-3 w-3 text-amber-500 shrink-0" />
-                  <span className="px-2 py-1 bg-white rounded border border-amber-300 text-slate-700 shrink-0">Quality Inspection</span>
-                  <ArrowRight className="h-3 w-3 text-amber-500 shrink-0" />
-                  <span className="px-2 py-1 bg-white rounded border border-amber-300 text-slate-700 shrink-0">
-                    {selectedGRN.status === "Return" ? "Return (RGP)" : "Inventory Stock Ledger"}
-                  </span>
-                  <ArrowRight className="h-3 w-3 text-amber-500 shrink-0" />
-                  <span className="px-2 py-1 bg-white rounded border border-amber-300 text-slate-700 shrink-0">3-Way Invoice Match</span>
-                </div>
-              </div>
+              {(() => {
+                const steps = grnLifecycle(selectedGRN);
+                const current = steps.find((step) => step.state === "current");
+                return (
+                  <div className="border-t border-amber-200/80 pt-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <h5 className="text-[11px] font-bold uppercase tracking-wider text-amber-950">Receiving Lifecycle</h5>
+                      <span className="text-[11px] font-semibold text-amber-900">
+                        Current stage: <strong>{current
+                          ? current.label
+                          : steps.some((step) => step.state === "failed")
+                            ? steps[3].state === "done" ? "Returned to vendor" : "Awaiting return to vendor"
+                            : "Completed — stock posted"}</strong>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[10px] font-bold scrollbar-none">
+                      {steps.map((step, i) => (
+                        <React.Fragment key={step.label}>
+                          {i > 0 && (
+                            <div className={cn("h-0.5 min-w-4 flex-1 rounded", step.state === "upcoming" ? "bg-amber-200" : "bg-emerald-400")} />
+                          )}
+                          <span
+                            className={cn(
+                              "flex shrink-0 items-center gap-1 rounded-md border px-2 py-1",
+                              step.state === "done" && "border-emerald-300 bg-emerald-50 text-emerald-800",
+                              step.state === "current" && "border-amber-600 bg-amber-600 text-white shadow-sm",
+                              step.state === "failed" && "border-rose-600 bg-rose-600 text-white shadow-sm",
+                              step.state === "upcoming" && "border-slate-200 bg-white text-slate-400",
+                            )}
+                          >
+                            {step.state === "done" && <Check className="h-3 w-3" />}
+                            {step.state === "current" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />}
+                            {step.state === "failed" && <XCircle className="h-3 w-3" />}
+                            {step.label}
+                          </span>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* GENERAL INFORMATION */}

@@ -1,7 +1,34 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  BedDouble,
+  Building2,
+  CalendarCheck,
+  CalendarDays,
+  ChefHat,
+  ChevronRight,
+  Clock,
+  Download,
+  IndianRupee,
+  Info,
+  LogOut,
+  Percent,
+  RefreshCw,
+  ShoppingCart,
+  TrendingDown,
+  TrendingUp,
+  UserX,
+  Users,
+  Wallet,
+  Wrench,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -59,17 +86,40 @@ function sumBy(rows: PortfolioProperty[], pick: (row: PortfolioProperty) => numb
   return rows.reduce((total, row) => total + pick(row), 0);
 }
 
-function Delta({ current, previous }: { current: number; previous: number }) {
-  if (!previous) return <p className="mt-1 text-xs text-slate-400">No previous period to compare</p>;
+function Delta({ current, previous, inverse = false }: { current: number; previous: number; inverse?: boolean }) {
+  if (!previous) return <span className="text-[11px] text-slate-400">No previous period</span>;
   const pct = ((current - previous) / previous) * 100;
   const up = pct >= 0;
+  const good = inverse ? !up : up;
+  const Icon = up ? TrendingUp : TrendingDown;
   return (
-    <p className={cn("mt-1 text-xs font-semibold", up ? "text-emerald-700" : "text-rose-700")}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+        good ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700",
+      )}
+    >
+      <Icon className="h-3 w-3" />
       {up ? "+" : ""}
-      {pct.toFixed(1)}% vs previous period
-    </p>
+      {pct.toFixed(1)}%
+    </span>
   );
 }
+
+const CARD_ICONS: Record<string, { icon: LucideIcon; tone: string; bar?: string; wash?: string }> = {
+  "Total revenue": { icon: IndianRupee, tone: "bg-emerald-50 text-emerald-700", bar: "bg-emerald-500", wash: "from-emerald-50" },
+  "Room revenue": { icon: BedDouble, tone: "bg-emerald-50 text-emerald-700", bar: "bg-emerald-500", wash: "from-emerald-50" },
+  Occupancy: { icon: Percent, tone: "bg-sky-50 text-sky-700", bar: "bg-sky-500", wash: "from-sky-50" },
+  "Operating expenses": { icon: Wallet, tone: "bg-amber-50 text-amber-700", bar: "bg-amber-500", wash: "from-amber-50" },
+  "Operating profit": { icon: TrendingUp, tone: "bg-violet-50 text-violet-700", bar: "bg-violet-500", wash: "from-violet-50" },
+  ADR: { icon: IndianRupee, tone: "bg-sky-50 text-sky-700", bar: "bg-sky-500", wash: "from-sky-50" },
+  RevPAR: { icon: TrendingUp, tone: "bg-violet-50 text-violet-700", bar: "bg-violet-500", wash: "from-violet-50" },
+  "F&B sales": { icon: ChefHat, tone: "bg-emerald-50 text-emerald-700", bar: "bg-emerald-500", wash: "from-emerald-50" },
+  Orders: { icon: ShoppingCart, tone: "bg-sky-50 text-sky-700", bar: "bg-sky-500", wash: "from-sky-50" },
+  "Purchase spend": { icon: ShoppingCart, tone: "bg-emerald-50 text-emerald-700", bar: "bg-emerald-500", wash: "from-emerald-50" },
+  "Payroll cost": { icon: Users, tone: "bg-emerald-50 text-emerald-700", bar: "bg-emerald-500", wash: "from-emerald-50" },
+  Employees: { icon: Users, tone: "bg-sky-50 text-sky-700", bar: "bg-sky-500", wash: "from-sky-50" },
+};
 
 export function GroupOverview({
   onOpen,
@@ -88,6 +138,7 @@ export function GroupOverview({
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const dates = periodDates(period, customFrom, customTo);
 
@@ -119,7 +170,7 @@ export function GroupOverview({
     return () => {
       cancelled = true;
     };
-  }, [dates.from, dates.to, period, customFrom, customTo]);
+  }, [dates.from, dates.to, period, customFrom, customTo, reloadKey]);
 
   const properties = snapshot?.properties ?? [];
   const scoped = propertyFilter === "ALL" ? properties : properties.filter((row) => row.id === propertyFilter);
@@ -255,164 +306,333 @@ export function GroupOverview({
     ]);
   };
 
-  const selectClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600";
+  const selectClass =
+    "h-9 rounded-lg border border-slate-200 bg-white pl-3 pr-8 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600";
+  const busy = loading && !snapshot;
+  const fmtDay = (iso: string) =>
+    new Date(`${iso}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const refresh = () => {
+    setLoading(true);
+    setReloadKey((k) => k + 1);
+  };
+  const maxRevenue = Math.max(1, ...sorted.map((row) => rowFigures(row).revenue ?? 0));
+
+  const tiles: { label: string; value: string; icon: LucideIcon; tone: string }[] = [
+    { label: "Arrivals", value: String(sumBy(scoped, (row) => row.arrivals)), icon: CalendarCheck, tone: "bg-sky-50 text-sky-600" },
+    { label: "Departures", value: String(sumBy(scoped, (row) => row.departures)), icon: LogOut, tone: "bg-indigo-50 text-indigo-600" },
+    { label: "In house now", value: String(sumBy(scoped, (row) => row.inHouse)), icon: BedDouble, tone: "bg-emerald-50 text-emerald-600" },
+    { label: "Average stay", value: `${avgLos} nights`, icon: Clock, tone: "bg-violet-50 text-violet-600" },
+    { label: "Cancellations", value: String(sumBy(scoped, (row) => num(row.cancellations))), icon: XCircle, tone: "bg-rose-50 text-rose-600" },
+    { label: "No-shows", value: String(sumBy(scoped, (row) => num(row.noShows))), icon: UserX, tone: "bg-amber-50 text-amber-600" },
+    { label: "Room revenue", value: inr(earned), icon: BedDouble, tone: "bg-teal-50 text-teal-600" },
+    { label: "F&B revenue", value: inr(fb), icon: ChefHat, tone: "bg-lime-50 text-lime-700" },
+  ];
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-5">
       {error && <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-3">
-          <label className="block text-xs font-semibold text-slate-500">
-            Property
-            <select className={cn(selectClass, "mt-1.5")} value={propertyFilter} onChange={(e) => setPropertyFilter(e.target.value)}>
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm xl:flex-row xl:items-center">
+        <div className="flex min-w-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+          {DEPARTMENTS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setDepartment(item.id)}
+              className={cn(
+                "shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                department === item.id ? "bg-white text-emerald-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/60 hover:text-slate-800",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 xl:ml-auto">
+          <span className="hidden items-center gap-1.5 whitespace-nowrap rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 2xl:inline-flex">
+            <CalendarDays className="h-3.5 w-3.5" />
+            {dates.from === dates.to ? fmtDay(dates.from) : `${fmtDay(dates.from)} – ${fmtDay(dates.to)}`}
+          </span>
+          <label className="relative">
+            <Building2 className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <select aria-label="Property" className={cn(selectClass, "max-w-[220px] pl-8")} value={propertyFilter} onChange={(e) => setPropertyFilter(e.target.value)}>
               <option value="ALL">All properties</option>
               {properties.map((property) => (
                 <option key={property.id} value={property.id}>{property.name}</option>
               ))}
             </select>
           </label>
-          <label className="block text-xs font-semibold text-slate-500">
-            Reporting period
-            <select className={cn(selectClass, "mt-1.5")} value={period} onChange={(e) => {
-              const next = e.target.value as PeriodId;
-              if (next !== "custom") setLoading(true);
-              setPeriod(next);
-            }}>
+          <label className="relative">
+            <CalendarDays className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <select
+              aria-label="Reporting period"
+              className={cn(selectClass, "pl-8")}
+              value={period}
+              onChange={(e) => {
+                const next = e.target.value as PeriodId;
+                if (next !== "custom") setLoading(true);
+                setPeriod(next);
+              }}
+            >
               {PERIODS.map((item) => (
                 <option key={item.id} value={item.id}>{item.label}</option>
               ))}
             </select>
           </label>
-          <label className="block text-xs font-semibold text-slate-500">
-            Department
-            <select className={cn(selectClass, "mt-1.5")} value={department} onChange={(e) => setDepartment(e.target.value as DeptId)}>
-              {DEPARTMENTS.map((item) => (
-                <option key={item.id} value={item.id}>{item.label}</option>
-              ))}
-            </select>
-          </label>
+          {period === "custom" && (
+            <div className="flex items-center gap-1.5">
+              <input type="date" aria-label="Start date" className={cn(selectClass, "pr-3")} value={customFrom} onChange={(e) => { setCustomFrom(e.target.value); if (e.target.value && customTo) setLoading(true); }} />
+              <span className="text-xs text-slate-400">to</span>
+              <input type="date" aria-label="End date" className={cn(selectClass, "pr-3")} value={customTo} onChange={(e) => { setCustomTo(e.target.value); if (customFrom && e.target.value) setLoading(true); }} />
+            </div>
+          )}
+          <button
+            type="button"
+            disabled={loading}
+            onClick={refresh}
+            title="Refresh"
+            aria-label="Refresh"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </button>
         </div>
-        {period === "custom" && (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="block text-xs font-semibold text-slate-500">
-              Start
-              <input type="date" className={cn(selectClass, "mt-1.5")} value={customFrom} onChange={(e) => { setCustomFrom(e.target.value); if (e.target.value && customTo) setLoading(true); }} />
-            </label>
-            <label className="block text-xs font-semibold text-slate-500">
-              End
-              <input type="date" className={cn(selectClass, "mt-1.5")} value={customTo} onChange={(e) => { setCustomTo(e.target.value); if (customFrom && e.target.value) setLoading(true); }} />
-            </label>
-          </div>
-        )}
-        <p className="mt-3 text-xs text-slate-500">{propertyName} · {dates.from} to {dates.to}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {cards.map((card) => (
-          <Card key={card.label} className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{card.label}</p>
-            <p className="mt-2 truncate text-2xl font-bold tracking-tight text-slate-900">{loading && !snapshot ? "…" : card.value}</p>
-            {card.current !== null && card.previous !== null ? <Delta current={card.current} previous={card.previous} /> : null}
-            <p className="mt-2 text-xs leading-relaxed text-slate-500">{card.note}</p>
-          </Card>
-        ))}
+        {cards.map((card) => {
+          const meta = CARD_ICONS[card.label];
+          const Icon = meta?.icon ?? IndianRupee;
+          return (
+            <div
+              key={card.label}
+              className={cn(
+                "relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br to-white to-60% p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
+                meta?.wash ?? "from-slate-50",
+              )}
+            >
+              <span className={cn("pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-[0.08]", meta?.bar ?? "bg-slate-400")} />
+              <div className="relative flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-1">
+                  <p className="truncate text-xs font-medium text-slate-500">{card.label}</p>
+                  <span title={card.note} className="shrink-0 cursor-help text-slate-300 hover:text-slate-500">
+                    <Info className="h-3 w-3" />
+                  </span>
+                </div>
+                <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-sm", meta?.bar ?? "bg-slate-500")}>
+                  <Icon className="h-4 w-4" />
+                </span>
+              </div>
+              <p className={cn("relative -mt-1 truncate text-[28px] font-bold leading-tight tracking-tight text-slate-900 tabular-nums", busy && "animate-pulse text-slate-300")}>
+                {busy ? "₹ ——" : card.value}
+              </p>
+              <div className="relative mt-3 flex min-h-[22px] items-center gap-2">
+                {card.current !== null && card.previous !== null ? (
+                  <>
+                    <Delta current={card.current} previous={card.previous} inverse={card.label === "Operating expenses"} />
+                    {card.previous ? (
+                      <span className="truncate text-[11px] text-slate-400">prev. {inr(card.previous)}</span>
+                    ) : null}
+                  </>
+                ) : (
+                  <span className="line-clamp-1 text-[11px] text-slate-400" title={card.note}>{card.note}</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {department === "all" || department === "front-office" ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {[
-            ["Arrivals", String(sumBy(scoped, (row) => row.arrivals))],
-            ["Departures", String(sumBy(scoped, (row) => row.departures))],
-            ["In house now", String(sumBy(scoped, (row) => row.inHouse))],
-            ["Average stay", `${avgLos} nights`],
-            ["Cancellations", String(sumBy(scoped, (row) => num(row.cancellations)))],
-            ["No-shows", String(sumBy(scoped, (row) => num(row.noShows)))],
-            ["Room revenue", inr(earned)],
-            ["F&B revenue", inr(fb)],
-          ].map(([label, value]) => (
-            <Card key={label} className="p-3 sm:p-4">
-              <p className="text-[11px] font-medium text-slate-500">{label}</p>
-              <p className="mt-1 text-lg font-bold text-slate-900">{loading && !snapshot ? "…" : value}</p>
-            </Card>
+        <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-4 xl:grid-cols-8">
+          {tiles.map((tile) => (
+            <div key={tile.label} className="flex min-w-0 items-center gap-2.5 border-b border-r border-slate-100 px-3 py-3">
+              <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", tile.tone)}>
+                <tile.icon className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-[11px] font-medium text-slate-500">{tile.label}</p>
+                <p className="truncate text-base font-bold text-slate-900 tabular-nums">{busy ? "…" : tile.value}</p>
+              </div>
+            </div>
           ))}
         </div>
       ) : null}
 
-      <Card>
-        <CardHeader title="Revenue trend" subtitle={department === "fb" ? "F&B sales" : department === "front-office" ? "Room revenue" : "Room revenue and F&B sales"} />
-        <div className="h-56">
-          {trend.length === 0 ? (
-            <p className="py-16 text-center text-sm text-slate-500">No revenue in this period.</p>
+      <div className="grid gap-3 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <CardHeader title="Revenue trend" subtitle={department === "fb" ? "F&B sales" : department === "front-office" ? "Room revenue" : "Room revenue and F&B sales"} />
+          <div className="h-64">
+            {trend.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-slate-500">
+                <TrendingUp className="h-6 w-6 text-slate-300" />
+                No revenue in this period.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={trend} margin={{ top: 5, right: 8, left: -8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
+                    tickFormatter={(v: number) => (v >= 100000 ? `${(v / 100000).toFixed(1)}L` : v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
+                  />
+                  <Tooltip formatter={(value) => inr(Number(value ?? 0))} cursor={{ fill: "#f1f5f9" }} contentStyle={{ borderRadius: 12, borderColor: "#e2e8f0", fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
+                  {department !== "fb" && <Bar dataKey="room" name="Room revenue" fill="#0f766e" radius={[6, 6, 0, 0]} maxBarSize={26} />}
+                  {department !== "front-office" && department !== "purchase" && department !== "hr" && (
+                    <Bar dataKey="fb" name="F&B sales" fill="#86efac" radius={[6, 6, 0, 0]} maxBarSize={26} />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Card>
+
+        <Card className="flex min-h-0 flex-col">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Needs attention</h2>
+              <p className="text-xs text-slate-500">Open an item to jump to that property</p>
+            </div>
+            {alerts.length > 0 && (
+              <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-700">{alerts.length}</span>
+            )}
+          </div>
+          {alerts.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 py-8 text-sm text-slate-500">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">✓</span>
+              All clear in this view.
+            </div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={trend} margin={{ top: 5, right: 8, left: -8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                <Tooltip formatter={(value) => inr(Number(value ?? 0))} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                {department !== "fb" && <Bar dataKey="room" name="Room revenue" fill="#1e293b" radius={[4, 4, 0, 0]} maxBarSize={22} />}
-                {department !== "front-office" && department !== "purchase" && department !== "hr" && (
-                  <Bar dataKey="fb" name="F&B sales" fill="#16a34a" radius={[4, 4, 0, 0]} maxBarSize={22} />
-                )}
-              </BarChart>
-            </ResponsiveContainer>
+            <ul className="-mx-2 max-h-64 space-y-1 overflow-y-auto">
+              {alerts.map((alert) => (
+                <li key={alert.id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-start gap-3 rounded-xl px-2 py-2 text-left hover:bg-slate-50"
+                    onClick={() => {
+                      const property = properties.find((row) => row.id === alert.propertyId);
+                      if (property) onOpenAt(property, alert.href);
+                    }}
+                  >
+                    <span
+                      className={cn(
+                        "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+                        alert.severity === "high" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600",
+                      )}
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-slate-900">{alert.title}</p>
+                      <p className="truncate text-xs text-slate-500">{alert.propertyName} · {alert.detail}</p>
+                    </div>
+                    <ChevronRight className="mt-1.5 h-4 w-4 shrink-0 text-slate-300" />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
-      </Card>
+        </Card>
+      </div>
 
       <Card className="overflow-hidden p-0 sm:p-0">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Property comparison</h2>
-            <p className="mt-0.5 text-xs text-slate-500">Same definitions for every property. Open a row for that property dashboard.</p>
+            <p className="mt-0.5 text-xs text-slate-500">Same definitions for every property. Click a row to open that property.</p>
           </div>
-          <Button type="button" variant="outline" className="h-9 px-3" disabled={!snapshot} onClick={exportComparison}>
-            <Download className="mr-1.5 h-3.5 w-3.5" />
-            Export
+          <Button type="button" variant="outline" className="h-9 gap-1.5 rounded-full px-3" disabled={!snapshot} onClick={exportComparison}>
+            <Download className="h-3.5 w-3.5" />
+            Export Excel
           </Button>
         </div>
-        <div className="overflow-x-auto px-4 py-2 sm:px-5">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               <tr className="border-b border-slate-200">
+                <th className="w-10 py-2.5 pl-5 pr-2">#</th>
                 {([
                   ["name", "Property"],
                   ["revenue", "Revenue"],
                   ["occupancy", "Occupancy"],
                   ["expenses", "Expenses"],
                   ["profit", "Profit"],
-                ] as [SortKey, string][]).map(([key, label]) => (
-                  <th key={key} className={cn("py-2 pr-3", key !== "name" && "text-right")}>
-                    <button type="button" className="font-semibold hover:text-slate-900" onClick={() => toggleSort(key)}>{label}</button>
-                  </th>
-                ))}
-                <th className="py-2 text-right" />
+                ] as [SortKey, string][]).map(([key, label]) => {
+                  const SortIcon = sortKey !== key ? ArrowUpDown : sortAsc ? ArrowUp : ArrowDown;
+                  return (
+                    <th key={key} className={cn("py-2.5 pr-4", key !== "name" && "text-right")}>
+                      <button
+                        type="button"
+                        className={cn("inline-flex items-center gap-1 font-semibold hover:text-slate-900", sortKey === key && "text-slate-900")}
+                        onClick={() => toggleSort(key)}
+                      >
+                        {label}
+                        <SortIcon className={cn("h-3 w-3", sortKey !== key && "opacity-40")} />
+                      </button>
+                    </th>
+                  );
+                })}
+                <th className="w-10 py-2.5 pr-5" />
               </tr>
             </thead>
-            <tbody>
-              {sorted.map((row) => {
+            <tbody className="divide-y divide-slate-100">
+              {sorted.map((row, idx) => {
                 const figures = rowFigures(row);
+                const occ = num(row.periodOccupancyPct);
                 return (
-                  <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="py-2.5 pr-3">
-                      <p className="font-semibold text-slate-900">{row.name}</p>
-                      <p className="text-[10px] text-slate-500">{row.city || "No city"} · {row.rooms} rooms</p>
+                  <tr key={row.id} className="group cursor-pointer hover:bg-emerald-50/40" onClick={() => onOpen(row)}>
+                    <td className="py-3 pl-5 pr-2 text-xs font-semibold text-slate-400">{idx + 1}</td>
+                    <td className="py-3 pr-4">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-[11px] font-bold text-white">
+                          {row.name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("")}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-900">{row.name}</p>
+                          <p className="text-[11px] text-slate-500">{row.city || "No city"} · {row.rooms} rooms</p>
+                        </div>
+                      </div>
                     </td>
-                    <td className="py-2.5 pr-3 text-right font-medium">{figures.revenue === null ? "—" : inr(figures.revenue)}</td>
-                    <td className="py-2.5 pr-3 text-right">{num(row.periodOccupancyPct)}%</td>
-                    <td className="py-2.5 pr-3 text-right">{figures.expenses === null ? "—" : inr(figures.expenses)}</td>
-                    <td className="py-2.5 pr-3 text-right font-semibold">{figures.profit === null ? "—" : inr(figures.profit)}</td>
-                    <td className="py-2.5 text-right">
-                      <button type="button" onClick={() => onOpen(row)} className="font-semibold text-emerald-800 hover:underline">View property</button>
+                    <td className="py-3 pr-4 text-right">
+                      {figures.revenue === null ? (
+                        <span className="text-slate-400">—</span>
+                      ) : (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="font-semibold text-slate-900">{inr(figures.revenue)}</span>
+                          <span className="h-1 w-20 overflow-hidden rounded-full bg-slate-100">
+                            <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${(figures.revenue / maxRevenue) * 100}%` }} />
+                          </span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 pr-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
+                          <span
+                            className={cn("block h-full rounded-full", occ >= 70 ? "bg-emerald-500" : occ >= 40 ? "bg-amber-400" : "bg-rose-400")}
+                            style={{ width: `${Math.min(100, occ)}%` }}
+                          />
+                        </span>
+                        <span className="w-12 font-semibold text-slate-700">{occ}%</span>
+                      </div>
+                    </td>
+                    <td className="py-3 pr-4 text-right text-slate-700">{figures.expenses === null ? <span className="text-slate-400">—</span> : inr(figures.expenses)}</td>
+                    <td className={cn("py-3 pr-4 text-right font-bold", figures.profit === null ? "text-slate-400" : figures.profit >= 0 ? "text-emerald-700" : "text-rose-600")}>
+                      {figures.profit === null ? "—" : inr(figures.profit)}
+                    </td>
+                    <td className="py-3 pr-5 text-right">
+                      <ChevronRight className="ml-auto h-4 w-4 text-slate-300 transition-colors group-hover:text-emerald-700" />
                     </td>
                   </tr>
                 );
               })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-sm text-slate-500">No properties in this view.</td>
+                  <td colSpan={7} className="py-10 text-center text-sm text-slate-500">No properties in this view.</td>
                 </tr>
               )}
             </tbody>
@@ -420,88 +640,81 @@ export function GroupOverview({
         </div>
       </Card>
 
-      {(department === "all" || department === "purchase" || department === "fb" || department === "hr" || department === "front-office") && (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {(department === "all" || department === "purchase") && (
-            <Card>
-              <CardHeader title="Purchase & Stores" subtitle={snapshot?.coverage?.purchases ? "Orders and requisitions stored on a property" : "Waiting for property-linked purchase records"} />
-              <OpsList items={[
-                ["Pending requisitions", String(sumBy(scoped, (row) => num(row.pendingPurchases)))],
-                ["Purchase spend", inr(purchase)],
-              ]} />
-            </Card>
-          )}
-          {(department === "all" || department === "fb") && (
-            <Card>
-              <CardHeader title="Food & Beverage" subtitle={snapshot?.coverage?.fb ? "Orders stored on a property" : "F&B is not linked to properties yet"} />
-              <OpsList items={[
-                ["Sales", inr(fb)],
-                ["Orders", String(sumBy(scoped, (row) => num(row.fbOrders)))],
-                ["Open orders now", String(sumBy(scoped, (row) => row.openOrders))],
-              ]} />
-            </Card>
-          )}
-          {(department === "all" || department === "hr") && (
-            <Card>
-              <CardHeader title="HR & Payroll" subtitle="Headcount is current. Payroll follows the months in this period." />
-              <OpsList items={[
-                ["Employees", String(sumBy(scoped, (row) => row.employees))],
-                ["Absent today", String(sumBy(scoped, (row) => num(row.absentToday)))],
-                ["Pending leave", String(sumBy(scoped, (row) => num(row.pendingLeaves)))],
-                ["Payroll cost", inr(payroll)],
-              ]} />
-            </Card>
-          )}
-          {(department === "all" || department === "front-office") && (
-            <Card>
-              <CardHeader title="Property operations" subtitle="Current room and maintenance status" />
-              <OpsList items={[
-                ["Out of order", String(sumBy(scoped, (row) => num(row.oooRooms)))],
-                ["Dirty or cleaning", String(sumBy(scoped, (row) => row.dirtyRooms))],
-                ["Open work orders", String(sumBy(scoped, (row) => row.openWorkOrders))],
-                ["Overdue work orders", String(sumBy(scoped, (row) => num(row.overdueWorkOrders)))],
-              ]} />
-            </Card>
-          )}
-        </div>
-      )}
-
-      <Card>
-        <CardHeader title="Needs attention" subtitle="Each item names the property and where to open it" />
-        {alerts.length === 0 ? (
-          <p className="text-sm text-slate-500">Nothing waiting in this view.</p>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {alerts.map((alert) => (
-              <li key={alert.id} className="flex flex-wrap items-center gap-3 py-3">
-                <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase", alert.severity === "high" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800")}>
-                  {alert.severity}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-900">{alert.title}</p>
-                  <p className="text-xs text-slate-500">{alert.propertyName} · {alert.detail} · {alert.owner}</p>
-                </div>
-                <button
-                  type="button"
-                  className="text-sm font-semibold text-emerald-800 hover:underline"
-                  onClick={() => {
-                    const property = properties.find((row) => row.id === alert.propertyId);
-                    if (property) onOpenAt(property, alert.href);
-                  }}
-                >
-                  Open
-                </button>
-              </li>
-            ))}
-          </ul>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {(department === "all" || department === "purchase") && (
+          <OpsCard
+            icon={ShoppingCart}
+            title="Purchase & Stores"
+            subtitle={snapshot?.coverage?.purchases ? "Orders and requisitions on a property" : "Waiting for property-linked records"}
+            items={[
+              ["Pending requisitions", String(sumBy(scoped, (row) => num(row.pendingPurchases)))],
+              ["Purchase spend", inr(purchase)],
+            ]}
+          />
         )}
-      </Card>
+        {(department === "all" || department === "fb") && (
+          <OpsCard
+            icon={ChefHat}
+            title="Food & Beverage"
+            subtitle={snapshot?.coverage?.fb ? "Orders stored on a property" : "Not linked to properties yet"}
+            items={[
+              ["Sales", inr(fb)],
+              ["Orders", String(sumBy(scoped, (row) => num(row.fbOrders)))],
+              ["Open now", String(sumBy(scoped, (row) => row.openOrders))],
+            ]}
+          />
+        )}
+        {(department === "all" || department === "hr") && (
+          <OpsCard
+            icon={Users}
+            title="HR & Payroll"
+            subtitle="Headcount now · payroll for the period"
+            items={[
+              ["Employees", String(sumBy(scoped, (row) => row.employees))],
+              ["Absent today", String(sumBy(scoped, (row) => num(row.absentToday)))],
+              ["Pending leave", String(sumBy(scoped, (row) => num(row.pendingLeaves)))],
+              ["Payroll cost", inr(payroll)],
+            ]}
+          />
+        )}
+        {(department === "all" || department === "front-office") && (
+          <OpsCard
+            icon={Wrench}
+            title="Property operations"
+            subtitle="Current room and maintenance status"
+            items={[
+              ["Out of order", String(sumBy(scoped, (row) => num(row.oooRooms)))],
+              ["Dirty / cleaning", String(sumBy(scoped, (row) => row.dirtyRooms))],
+              ["Open work orders", String(sumBy(scoped, (row) => row.openWorkOrders))],
+              ["Overdue", String(sumBy(scoped, (row) => num(row.overdueWorkOrders)))],
+            ]}
+          />
+        )}
+      </div>
 
-      <p className="text-xs leading-relaxed text-slate-500">
-        Cash and bank balances, budget versus actual, and vendor payable aging are not shown. Those need reconciled accounting entries, which this workspace does not treat as a closed ledger.
-        Guest balances above are open folio amounts, not a full accounts-receivable aging.
+      <p className="flex items-start gap-2 rounded-xl bg-slate-100/70 px-3 py-2.5 text-[11px] leading-relaxed text-slate-500">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        Cash and bank balances, budget versus actual, and vendor payable aging are not shown — they need reconciled accounting entries.
+        Guest balances are open folio amounts, not a full receivables aging.
       </p>
     </div>
+  );
+}
+
+function OpsCard({ icon: Icon, title, subtitle, items }: { icon: LucideIcon; title: string; subtitle: string; items: [string, string][] }) {
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-start gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+          <Icon className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+          <p className="truncate text-[11px] text-slate-500" title={subtitle}>{subtitle}</p>
+        </div>
+      </div>
+      <OpsList items={items} />
+    </Card>
   );
 }
 

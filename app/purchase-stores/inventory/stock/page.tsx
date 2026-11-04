@@ -3,10 +3,12 @@
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  Boxes,
+  AlertTriangle,
   Download,
+  IndianRupee,
   Minus,
   Package,
+  PackageX,
   Plus,
   RotateCcw,
   Search,
@@ -22,6 +24,7 @@ import {
   SelectInput,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { downloadXlsx } from "@/lib/xlsx";
 import {
   getMaterialById,
   getMaterialDetails,
@@ -46,6 +49,17 @@ import {
 } from "@/services/purchase-stores/index";
 
 type DetailTab = "overview" | "movements" | "batch";
+type LevelFilter = "all" | "out" | "reorder" | "par" | "ok";
+type Level = Exclude<LevelFilter, "all">;
+
+const LEVELS: Record<Level, { label: string; badge: string; bar: string }> = {
+  out: { label: "Out of stock", badge: "bg-red-50 text-red-700 ring-red-200", bar: "bg-red-500" },
+  reorder: { label: "Below reorder", badge: "bg-orange-50 text-orange-700 ring-orange-200", bar: "bg-orange-500" },
+  par: { label: "Below par", badge: "bg-amber-50 text-amber-700 ring-amber-200", bar: "bg-amber-400" },
+  ok: { label: "Healthy", badge: "bg-emerald-50 text-emerald-700 ring-emerald-200", bar: "bg-emerald-500" },
+};
+
+const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 function stockStatusBadge(status: StockBalanceStatus) {
   const styles: Record<StockBalanceStatus, string> = {
@@ -68,6 +82,8 @@ function movementBadge(type: LedgerMovementType) {
     "Transfer In": "bg-teal-50 text-teal-700",
     "Transfer Out": "bg-amber-50 text-amber-800",
     Adjustment: "bg-slate-100 text-slate-600",
+    "Opening Stock": "bg-indigo-50 text-indigo-700",
+    "Transfer Return": "bg-teal-50 text-teal-700",
   };
   return (
     <span className={cn("inline-flex rounded-md px-2 py-0.5 text-[10px] font-semibold", styles[type])}>
@@ -95,6 +111,7 @@ export default function StockBalancePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [levelFilter, setLevelFilter] = useState<LevelFilter>("all");
 
   const [selectedRecord, setSelectedRecord] = useState<StockBalanceRecord | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
@@ -128,14 +145,24 @@ export default function StockBalancePage() {
       const material = getMaterialDetails(products, categories, b.materialId);
       const warehouse = getWarehouseById(warehouses, b.warehouseId);
       const par = getParStatusLabel(b.materialId, b.quantity);
+      const master = getMaterialById(products, b.materialId);
+      const qty = Number(b.quantity) || 0;
+      const reorder = Number(master?.reorderLevel ?? 0);
+      const parQty = Number(master?.parStock ?? 0);
+      const level: Level = qty <= 0 ? "out" : master && qty <= reorder ? "reorder" : master && qty < parQty ? "par" : "ok";
       return {
         ...b,
         materialCode: material?.productCode ?? b.materialId,
         materialName: material?.productName ?? "Unknown Material",
+        category: material?.category ?? "",
         unit: material?.unit ?? "—",
         warehouseName: warehouse?.name ?? "Unknown Warehouse",
         parStatus: par.label,
         parTone: par.tone,
+        level,
+        parQty,
+        reorder,
+        value: qty * (Number(b.averageCost) || 0),
       };
     });
   }, [balances, products, categories, warehouses]);
@@ -148,22 +175,34 @@ export default function StockBalancePage() {
         b.materialCode.toLowerCase().includes(q) ||
         b.materialName.toLowerCase().includes(q) ||
         b.materialId.toLowerCase().includes(q) ||
+        b.category.toLowerCase().includes(q) ||
         b.warehouseName.toLowerCase().includes(q);
       const matchWarehouse = warehouseFilter === "all" || b.warehouseId === warehouseFilter;
       const matchStatus = statusFilter === "all" || b.status === statusFilter;
-      return matchSearch && matchWarehouse && matchStatus;
+      const matchLevel = levelFilter === "all" || b.level === levelFilter;
+      return matchSearch && matchWarehouse && matchStatus && matchLevel;
     });
-  }, [enrichedBalances, searchQuery, warehouseFilter, statusFilter]);
+  }, [enrichedBalances, searchQuery, warehouseFilter, statusFilter, levelFilter]);
+
+  const levelCounts = useMemo(() => {
+    const counts: Record<LevelFilter, number> = { all: 0, out: 0, reorder: 0, par: 0, ok: 0 };
+    for (const b of enrichedBalances) {
+      if (warehouseFilter !== "all" && b.warehouseId !== warehouseFilter) continue;
+      counts.all += 1;
+      counts[b.level] += 1;
+    }
+    return counts;
+  }, [enrichedBalances, warehouseFilter]);
+
+  const filteredValue = filteredBalances.reduce((sum, b) => sum + b.value, 0);
 
   const stats = useMemo(() => {
-    const skuLocations = balances.length;
-    const totalQty = balances.reduce((sum, b) => sum + b.quantity, 0);
-    const lowStock = enrichedBalances.filter((b) => {
-      const material = getMaterialById(products, b.materialId);
-      return material && b.quantity <= material.reorderLevel;
-    }).length;
-    return { skuLocations, totalQty, lowStock };
-  }, [balances, enrichedBalances, products]);
+    const skuLocations = enrichedBalances.length;
+    const stockValue = enrichedBalances.reduce((sum, b) => sum + b.value, 0);
+    const lowStock = enrichedBalances.filter((b) => b.level === "reorder").length;
+    const outOfStock = enrichedBalances.filter((b) => b.level === "out").length;
+    return { skuLocations, stockValue, lowStock, outOfStock };
+  }, [enrichedBalances]);
 
   const selectedMovements = useMemo(() => {
     if (!selectedRecord) return [];
@@ -191,29 +230,41 @@ export default function StockBalancePage() {
     setSearchQuery("");
     setWarehouseFilter("all");
     setStatusFilter("all");
+    setLevelFilter("all");
   };
 
-  const handleExportCSV = () => {
-    const headers = ["Material ID", "Material", "Warehouse", "Quantity", "Unit", "Avg Cost", "Status", "Par Status"];
-    const rows = filteredBalances.map((b) => [
-      `"${b.materialId}"`,
-      `"${b.materialName}"`,
-      `"${b.warehouseName}"`,
-      b.quantity,
-      `"${b.unit}"`,
-      b.averageCost,
-      `"${b.status}"`,
-      `"${b.parStatus}"`,
+  const handleExportExcel = () => {
+    const warehouseLabel = warehouseFilter === "all" ? "All warehouses" : getWarehouseById(warehouses, warehouseFilter)?.name ?? warehouseFilter;
+    downloadXlsx(`stock-balances-${new Date().toISOString().slice(0, 10)}`, [
+      {
+        name: "Stock",
+        title: "Stock balances",
+        meta: [
+          ["Generated", new Date().toLocaleString("en-IN")],
+          ["Warehouse", warehouseLabel],
+          ["Stock level", levelFilter === "all" ? "All" : LEVELS[levelFilter].label],
+          ["Records", filteredBalances.length],
+          ["Stock value (₹)", Math.round(filteredValue * 100) / 100],
+        ],
+        header: ["Material Code", "Material", "Category", "Warehouse", "Quantity", "Unit", "Reorder Level", "Par Stock", "Avg Cost (₹)", "Stock Value (₹)", "Stock Level", "Status", "Last Movement"],
+        rows: filteredBalances.map((b) => [
+          b.materialCode,
+          b.materialName,
+          b.category,
+          b.warehouseName,
+          Number(b.quantity),
+          b.unit,
+          b.reorder,
+          b.parQty,
+          Number(b.averageCost),
+          Math.round(b.value * 100) / 100,
+          LEVELS[b.level].label,
+          b.status,
+          b.lastMovementAt ? String(b.lastMovementAt).slice(0, 10) : "",
+        ]),
+      },
     ]);
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Stock_Balances_${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showToast(`Exported ${filteredBalances.length} stock balance records.`, "info");
+    showToast(`Exported ${filteredBalances.length} stock records to Excel.`, "info");
   };
 
   const detailMaterial = selectedRecord ? getMaterialDetails(products, categories, selectedRecord.materialId) : null;
@@ -223,14 +274,18 @@ export default function StockBalancePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen p-8 text-sm text-slate-600">
-        Loading...
+      <div className="space-y-4">
+        <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}
+        </div>
+        <div className="h-80 animate-pulse rounded-2xl bg-slate-100" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen space-y-6 bg-slate-50/50 p-4 sm:p-6 md:p-8">
+    <div className="space-y-6">
       {toastMessage && (
         <AlertBanner variant={toastMessage.variant} message={toastMessage.text} onDismiss={() => setToastMessage(null)} />
       )}
@@ -238,97 +293,160 @@ export default function StockBalancePage() {
       <FOPageHeader
         eyebrow="Purchase & Stores · Inventory"
         title="Stock"
-        description="Current on-hand balances by material and warehouse. Quantities change only through GRN, Issue, Transfer, or Adjustment."
+        description="On-hand balances by material and warehouse. Quantities change only through GRN, Issue, Transfer or Adjustment."
         action={
-          <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100">
-            <Download className="h-4 w-4" /> Export CSV
+          <Button type="button" size="sm" onClick={handleExportExcel} disabled={filteredBalances.length === 0} className="gap-1.5 bg-emerald-700 text-white hover:bg-emerald-800">
+            <Download className="h-4 w-4" /> Export Excel
           </Button>
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatMiniCard label="SKU Locations" value={stats.skuLocations} sublabel="Material × warehouse" accent="#0f766e" icon={Package} />
-        <StatMiniCard label="Total On Hand" value={stats.totalQty.toLocaleString("en-IN")} sublabel="All locations" accent="#16a34a" icon={Boxes} />
-        <StatMiniCard label="Below Reorder" value={stats.lowStock} sublabel="Needs attention" accent="#d97706" icon={ShieldAlert} />
+        <StatMiniCard label="Stock Value" value={inr(Math.round(stats.stockValue))} sublabel="Qty × average cost" accent="#16a34a" icon={IndianRupee} />
+        <StatMiniCard label="Below Reorder" value={stats.lowStock} sublabel="Reorder soon" accent="#ea580c" icon={ShieldAlert} />
+        <StatMiniCard label="Out of Stock" value={stats.outOfStock} sublabel="Zero on hand" accent="#dc2626" icon={PackageX} />
       </div>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-          <div className="relative lg:col-span-2">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search material ID, name, warehouse..."
-              className="h-9.5 w-full rounded-xl border border-slate-200 bg-white pl-9.5 pr-3 text-xs sm:text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-            />
-          </div>
-          <SelectInput value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)} className="h-9.5 text-xs sm:text-sm">
-            <option value="all">All Warehouses</option>
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>{w.name}</option>
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-3 xl:flex-row xl:items-center">
+          <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+            {(["all", "out", "reorder", "par", "ok"] as LevelFilter[]).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setLevelFilter(key)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                  levelFilter === key ? "bg-white text-emerald-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-800",
+                )}
+              >
+                {key !== "all" && <span className={cn("h-2 w-2 rounded-full", LEVELS[key].bar)} />}
+                {key === "all" ? "All" : LEVELS[key].label}
+                <span className={cn("rounded-full px-1.5 text-[10px] tabular-nums", levelFilter === key ? "bg-emerald-100 text-emerald-800" : "bg-slate-200/70 text-slate-500")}>
+                  {levelCounts[key]}
+                </span>
+              </button>
             ))}
-          </SelectInput>
-          <div className="flex items-center gap-2">
-            <SelectInput value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9.5 flex-1 text-xs sm:text-sm">
+          </div>
+          <div className="flex flex-1 flex-wrap items-center gap-2 xl:justify-end">
+            <div className="relative min-w-[220px] flex-1 xl:max-w-xs">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search material, code, category…"
+                className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 sm:text-sm"
+              />
+            </div>
+            <SelectInput value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)} className="!h-9 !w-48 text-xs sm:text-sm">
+              <option value="all">All Warehouses</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </SelectInput>
+            <SelectInput value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="!h-9 !w-40 text-xs sm:text-sm">
               <option value="all">All Statuses</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
               <option value="Blocked">Blocked</option>
               <option value="Quarantine">Quarantine</option>
             </SelectInput>
-            {(searchQuery || warehouseFilter !== "all" || statusFilter !== "all") && (
-              <Button type="button" variant="outline" size="sm" onClick={handleResetFilters} className="h-9.5 shrink-0 px-2.5 text-xs">
-                <RotateCcw className="h-3.5 w-3.5 mr-1" /> Reset
+            {(searchQuery || warehouseFilter !== "all" || statusFilter !== "all" || levelFilter !== "all") && (
+              <Button type="button" variant="outline" size="sm" onClick={handleResetFilters} className="h-9 shrink-0 px-2.5 text-xs">
+                <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset
               </Button>
             )}
           </div>
         </div>
-      </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] text-left text-sm">
+          <table className="w-full min-w-[960px] text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="py-3.5 px-4">Material ID</th>
-                <th className="py-3.5 px-4">Material</th>
-                <th className="py-3.5 px-4">Warehouse</th>
-                <th className="py-3.5 px-4 text-right">Qty</th>
-                <th className="py-3.5 px-4 text-right">Avg Cost</th>
-                <th className="py-3.5 px-4 text-center">Status</th>
+                <th className="px-4 py-3">Material</th>
+                <th className="px-4 py-3">Warehouse</th>
+                <th className="px-4 py-3 text-right">On Hand</th>
+                <th className="w-40 px-4 py-3">Level vs Par</th>
+                <th className="px-4 py-3 text-right">Avg Cost</th>
+                <th className="px-4 py-3 text-right">Value</th>
+                <th className="px-4 py-3 text-center">Stock Level</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {filteredBalances.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-500">
-                    No stock balances match your filters.
+                  <td colSpan={7} className="py-14 text-center">
+                    <Package className="mx-auto h-8 w-8 text-slate-300" />
+                    <p className="mt-2 text-sm font-semibold text-slate-600">No stock matches these filters</p>
+                    <p className="text-xs text-slate-400">Try another stock level, warehouse or search.</p>
                   </td>
                 </tr>
               ) : (
-                filteredBalances.map((row) => (
-                  <tr
-                    key={row.id}
-                    onClick={() => openDetail(row)}
-                    className="cursor-pointer transition-colors hover:bg-slate-50/80"
-                  >
-                    <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500">{row.materialId}</td>
-                    <td className="py-3.5 px-4">
-                      <p className="font-semibold text-slate-900">{row.materialName}</p>
-                      <p className="text-[10px] text-emerald-700 font-mono">{row.materialCode}</p>
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-700">{row.warehouseName}</td>
-                    <td className="py-3.5 px-4 text-right font-bold text-slate-900 tabular-nums">
-                      {row.quantity} <span className="font-normal text-slate-400">{row.unit}</span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right text-slate-600">₹{row.averageCost.toLocaleString("en-IN")}</td>
-                    <td className="py-3.5 px-4 text-center">{stockStatusBadge(row.status)}</td>
-                  </tr>
-                ))
+                filteredBalances.map((row) => {
+                  const qty = Number(row.quantity) || 0;
+                  const pct = row.parQty > 0 ? Math.min(100, (qty / row.parQty) * 100) : qty > 0 ? 100 : 0;
+                  return (
+                    <tr key={row.id} onClick={() => openDetail(row)} className="cursor-pointer transition-colors hover:bg-emerald-50/40">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[11px] font-bold text-slate-600">
+                            {row.materialName.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("")}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-900">{row.materialName}</p>
+                            <p className="truncate text-[11px] text-slate-500">
+                              <span className="font-mono text-emerald-700">{row.materialCode}</span>
+                              {row.category && <> · {row.category}</>}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-700">{row.warehouseName}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                        <span className="text-sm font-bold text-slate-900">{qty.toLocaleString("en-IN")}</span>{" "}
+                        <span className="font-normal text-slate-400">{row.unit}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                          <div className={cn("h-full rounded-full", LEVELS[row.level].bar)} style={{ width: `${pct}%` }} />
+                        </div>
+                        <p className="mt-1 text-[10px] text-slate-400">
+                          {row.parQty > 0 ? `Par ${row.parQty} · Reorder ${row.reorder}` : "No par set"}
+                        </p>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-600">{inr(Number(row.averageCost) || 0)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{inr(Math.round(row.value))}</td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className={cn("inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset", LEVELS[row.level].badge)}>
+                            {LEVELS[row.level].label}
+                          </span>
+                          {row.status !== "Active" && stockStatusBadge(row.status)}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
+            {filteredBalances.length > 0 && (
+              <tfoot className="border-t border-slate-200 bg-slate-50/70 text-xs">
+                <tr>
+                  <td className="px-4 py-3 font-semibold text-slate-600" colSpan={5}>
+                    {filteredBalances.length} of {enrichedBalances.length} locations
+                    {(levelCounts.out > 0 || levelCounts.reorder > 0) && (
+                      <span className="ml-3 inline-flex items-center gap-1 text-orange-700">
+                        <AlertTriangle className="h-3.5 w-3.5" /> {levelCounts.out + levelCounts.reorder} need restocking
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right font-bold tabular-nums text-slate-900">{inr(Math.round(filteredValue))}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

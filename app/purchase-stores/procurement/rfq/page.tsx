@@ -1478,9 +1478,6 @@ export default function RequestForQuotationsPage() {
         const termRows: { label: string; value?: string; wide?: boolean }[] = [
           { label: "Delivery Location", value: terms.deliveryLocation },
           { label: "Expected Delivery", value: terms.expectedDelivery ? formatShortDate(terms.expectedDelivery) : "" },
-          { label: "Payment Terms", value: terms.paymentTerms },
-          { label: "Tax Terms", value: terms.tax },
-          { label: "Currency", value: terms.currency },
           { label: "Delivery Address", value: terms.deliveryAddress, wide: true },
           ...(terms.remarks ? [{ label: "Remarks", value: terms.remarks, wide: true }] : []),
         ];
@@ -2252,35 +2249,11 @@ export default function RequestForQuotationsPage() {
                     />
                   </FormField>
                 </div>
-                <FormField label="Payment Terms">
-                  <TextInput
-                    value={formPayTerms}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayTerms(e.target.value)}
-                    placeholder="Net 30 days after GRN"
-                    className="h-10 text-sm"
-                  />
-                </FormField>
                 <FormField label="Expected Delivery">
                   <TextInput
                     value={formExpDelivery}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormExpDelivery(e.target.value)}
                     placeholder="7 days from PO"
-                    className="h-10 text-sm"
-                  />
-                </FormField>
-                <FormField label="Currency">
-                  <TextInput
-                    value={formCurrency}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormCurrency(e.target.value)}
-                    placeholder="INR (₹)"
-                    className="h-10 text-sm"
-                  />
-                </FormField>
-                <FormField label="Tax Terms">
-                  <TextInput
-                    value={formTax}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormTax(e.target.value)}
-                    placeholder="GST extra as applicable (18%)"
                     className="h-10 text-sm"
                   />
                 </FormField>

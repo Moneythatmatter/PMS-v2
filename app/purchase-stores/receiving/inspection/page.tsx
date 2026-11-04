@@ -235,7 +235,7 @@ export default function QualityInspectionPage() {
     receivedQty: number;
     acceptedQty: number;
     rejectedQty: number;
-    qualityResult: "Passed" | "Partially Accepted" | "Rejected";
+    qualityResult: "Passed" | "Rejected";
     rejectionReason: string;
     vendorReturnRequired: boolean;
     remarks: string;
@@ -361,7 +361,7 @@ export default function QualityInspectionPage() {
 
   // Has Any Rejected Item?
   const hasRejectedItems = useMemo(() => {
-    return formItems.some((i) => i.qualityResult === "Rejected" || i.qualityResult === "Partially Accepted" || i.rejectedQty > 0);
+    return formItems.some((i) => i.qualityResult === "Rejected");
   }, [formItems]);
 
   // Save / Complete Quality Inspection
@@ -370,21 +370,14 @@ export default function QualityInspectionPage() {
 
     // BUSINESS RULES VALIDATION
     for (const item of formItems) {
-      if (item.acceptedQty + item.rejectedQty !== item.receivedQty) {
-        alert(`[Validation Error]: Accepted Qty (${item.acceptedQty}) + Rejected Qty (${item.rejectedQty}) must equal Received Qty (${item.receivedQty}) for ${item.productName}`);
-        return;
-      }
-      if ((item.qualityResult === "Rejected" || item.qualityResult === "Partially Accepted") && !item.rejectionReason) {
+      if (item.qualityResult === "Rejected" && !item.rejectionReason) {
         alert(`[Validation Error]: Rejection Reason is mandatory for ${item.productName}`);
         return;
       }
     }
 
-    const overallResult: "Passed" | "Partial" | "Rejected" = hasRejectedItems
-      ? formItems.every((i) => i.qualityResult === "Rejected")
-        ? "Rejected"
-        : "Partial"
-      : "Passed";
+    const overallResult: "Passed" | "Rejected" =
+      formItems.length > 0 && formItems.every((i) => i.qualityResult === "Rejected") ? "Rejected" : "Passed";
 
     const updatePayload: Partial<QualityInspectionRecord> = {
       status: isComplete ? "Completed" : "In Progress",
@@ -404,8 +397,8 @@ export default function QualityInspectionPage() {
         productName: i.productName,
         receivedQty: i.receivedQty,
         inspectedQty: i.receivedQty,
-        acceptedQty: i.acceptedQty,
-        rejectedQty: i.rejectedQty,
+        acceptedQty: i.qualityResult === "Passed" ? i.receivedQty : 0,
+        rejectedQty: i.qualityResult === "Rejected" ? i.receivedQty : 0,
         qualityResult: i.qualityResult as QIItem["qualityResult"],
         rejectionReason: i.rejectionReason,
         remarks: i.remarks,
@@ -712,7 +705,6 @@ export default function QualityInspectionPage() {
               <option value="all">All Results</option>
               <option value="Pending">Pending</option>
               <option value="Passed">Passed</option>
-              <option value="Partially Accepted">Partially Accepted</option>
               <option value="Rejected">Rejected</option>
             </SelectInput>
           </FormField>
@@ -1052,7 +1044,7 @@ export default function QualityInspectionPage() {
           </PurchaseFormCard>
 
           {/* SECTION 3: ITEM LEVEL QUALITY DECISIONS & DYNAMIC REJECTION FIELDS */}
-          <PurchaseFormCard title="Step 3: Item Quality Results & Quantity Splitting" sectionNumber="Section 3 of 4">
+          <PurchaseFormCard title="Step 3: Item Quality Results" sectionNumber="Section 3 of 4">
             <div className="space-y-4 text-xs">
               {formItems.map((item, idx) => (
                 <div key={item.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-4">
@@ -1092,15 +1084,15 @@ export default function QualityInspectionPage() {
                       <SelectInput
                         value={item.qualityResult}
                         onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                          const res = e.target.value as any;
+                          const res = e.target.value as "Passed" | "Rejected";
                           setFormItems(
                             formItems.map((i) =>
                               i.id === item.id
                                 ? {
                                     ...i,
                                     qualityResult: res,
-                                    rejectedQty: res === "Passed" ? 0 : res === "Rejected" ? i.receivedQty : i.rejectedQty,
-                                    acceptedQty: res === "Passed" ? i.receivedQty : res === "Rejected" ? 0 : i.acceptedQty,
+                                    rejectedQty: res === "Rejected" ? i.receivedQty : 0,
+                                    acceptedQty: res === "Passed" ? i.receivedQty : 0,
                                   }
                                 : i
                             )
@@ -1109,56 +1101,27 @@ export default function QualityInspectionPage() {
                         className="h-9 text-xs font-extrabold"
                       >
                         <option value="Passed">Passed (Accepted 100%)</option>
-                        <option value="Partially Accepted">Partially Accepted (Split Qty)</option>
                         <option value="Rejected">Rejected (Return to Vendor)</option>
                       </SelectInput>
                     </FormField>
 
-                    {/* DYNAMIC FIELD: ACCEPTED QTY */}
                     <div>
                       <span className="text-[10px] font-bold text-emerald-800 block mb-1">Accepted Quantity</span>
-                      <TextInput
-                        type="number"
-                        value={item.acceptedQty}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const acc = Number(e.target.value);
-                          setFormItems(
-                            formItems.map((i) =>
-                              i.id === item.id
-                                ? { ...i, acceptedQty: acc, rejectedQty: Math.max(0, i.receivedQty - acc) }
-                                : i
-                            )
-                          );
-                        }}
-                        className="h-9 text-xs text-center font-bold text-emerald-800 bg-emerald-50 border-emerald-300"
-                      />
+                      <div className="flex h-9 items-center justify-center rounded-lg border border-emerald-300 bg-emerald-50 text-xs font-bold text-emerald-800">
+                        {item.qualityResult === "Passed" ? item.receivedQty : 0}
+                      </div>
                     </div>
 
-                    {/* DYNAMIC FIELD: REJECTED QTY */}
-                    {(item.qualityResult === "Partially Accepted" || item.qualityResult === "Rejected") && (
-                      <div>
-                        <span className="text-[10px] font-bold text-red-600 block mb-1">Rejected Quantity</span>
-                        <TextInput
-                          type="number"
-                          value={item.rejectedQty}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                            const rej = Number(e.target.value);
-                            setFormItems(
-                              formItems.map((i) =>
-                                i.id === item.id
-                                  ? { ...i, rejectedQty: rej, acceptedQty: Math.max(0, i.receivedQty - rej) }
-                                  : i
-                              )
-                            );
-                          }}
-                          className="h-9 text-xs text-center font-bold text-red-600 bg-red-50 border-red-300"
-                        />
+                    <div>
+                      <span className="text-[10px] font-bold text-red-600 block mb-1">Rejected Quantity</span>
+                      <div className="flex h-9 items-center justify-center rounded-lg border border-red-300 bg-red-50 text-xs font-bold text-red-600">
+                        {item.qualityResult === "Rejected" ? item.receivedQty : 0}
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {/* DYNAMIC REJECTION REASON & REMARKS */}
-                  {(item.qualityResult === "Partially Accepted" || item.qualityResult === "Rejected") && (
+                  {item.qualityResult === "Rejected" && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-red-50/70 rounded-lg border border-red-200">
                       <FormField label="Reason for Rejection" required>
                         <SelectInput

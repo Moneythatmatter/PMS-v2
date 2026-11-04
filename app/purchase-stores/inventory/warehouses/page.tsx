@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Building2, CheckCircle2, Plus, RotateCcw, Search } from "lucide-react";
+import { Building2, CheckCircle2, Download, Plus, RotateCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import {
@@ -15,6 +15,7 @@ import {
   TextInput,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { downloadXlsx } from "@/lib/xlsx";
 import {
   WAREHOUSE_TYPE_OPTIONS,
   type WarehouseMasterItem,
@@ -80,6 +81,19 @@ export default function WarehousesPage() {
     stores: warehouses.filter((w) => w.type === "Store").length,
   }), [warehouses]);
 
+  const handleExportExcel = () => {
+    downloadXlsx(`warehouses-${new Date().toISOString().slice(0, 10)}`, [
+      {
+        name: "Warehouses",
+        title: "Warehouses",
+        meta: [["Generated", new Date().toLocaleString("en-IN")], ["Records", filtered.length]],
+        header: ["Code", "Name", "Type", "Location", "Status"],
+        rows: filtered.map((w) => [w.code, w.name, w.type, w.location ?? "", w.status]),
+      },
+    ]);
+    showToast(`Exported ${filtered.length} warehouses to Excel.`, "info");
+  };
+
   const openAdd = () => {
     setEditing(null);
     setFormCode("");
@@ -144,14 +158,18 @@ export default function WarehousesPage() {
 
   if (loading) {
         return (
-      <div className="min-h-screen p-8 text-sm text-slate-600">
-        Loading...
-          </div>
+      <div className="space-y-4">
+        <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}
+        </div>
+        <div className="h-80 animate-pulse rounded-2xl bg-slate-100" />
+      </div>
         );
   }
 
   return (
-    <div className="min-h-screen space-y-6 bg-slate-50/50 p-4 sm:p-6 md:p-8">
+    <div className="space-y-6">
       {toastMessage && (
         <AlertBanner variant={toastMessage.variant} message={toastMessage.text} onDismiss={() => setToastMessage(null)} />
       )}
@@ -161,9 +179,14 @@ export default function WarehousesPage() {
         title="Warehouses"
         description="Storage locations referenced by Stock, Issues, Transfers, and GRN."
         action={
-          <Button type="button" size="sm" onClick={openAdd} className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white">
-            <Plus className="h-4 w-4" /> Add Warehouse
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={handleExportExcel} disabled={filtered.length === 0} className="gap-1.5 border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100">
+              <Download className="h-4 w-4" /> Export Excel
             </Button>
+            <Button type="button" size="sm" onClick={openAdd} className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white">
+              <Plus className="h-4 w-4" /> Add Warehouse
+            </Button>
+          </div>
         }
       />
 
@@ -173,7 +196,10 @@ export default function WarehousesPage() {
         <StatMiniCard label="Stores" value={stats.stores} sublabel="Sub-store locations" accent="#2563eb" icon={Building2} />
       </div>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+      
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        <div className="border-b border-slate-100 bg-slate-50/40 p-3">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
           <div className="relative lg:col-span-2">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -204,9 +230,7 @@ export default function WarehousesPage() {
             )}
                   </div>
                   </div>
-                </div>
-
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        </div>
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <tr>

@@ -8,8 +8,11 @@ import { isPlatformAdmin } from "@/lib/auth";
 import { useProperty } from "@/components/platform/PropertyProvider";
 import { WorkspaceShell } from "@/components/platform/WorkspaceShell";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/frontoffice/ui/Modal";
 import { cn } from "@/lib/utils";
 import { platformService, type PropertyDto } from "@/services/platform";
+
+const EMPTY_FORM = { name: "", code: "", city: "", timezone: "Asia/Kolkata" };
 
 function initials(name: string) {
   return name
@@ -43,10 +46,12 @@ function PropertyCard({
   property,
   canEdit,
   onOpen,
+  onEdit,
 }: {
   property: PropertyDto;
   canEdit: boolean;
   onOpen: () => void;
+  onEdit: () => void;
 }) {
   return (
     <article
@@ -76,7 +81,9 @@ function PropertyCard({
           {canEdit && (
             <button
               type="button"
-              className="rounded-lg p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-600 sm:text-slate-300 sm:opacity-0 sm:group-hover:opacity-100"
+              onClick={onEdit}
+              title="Edit property"
+              className="rounded-lg p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-emerald-700 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
               aria-label={`Edit ${property.name}`}
             >
               <Pencil className="h-4 w-4" />
@@ -115,9 +122,25 @@ export function PropertyPickerView() {
   const [properties, setProperties] = useState<PropertyDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: "", code: "", city: "" });
+  const [editing, setEditing] = useState<PropertyDto | "new" | null>(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const openForm = (property: PropertyDto | "new") => {
+    setEditing(property);
+    setFormError(null);
+    setForm(
+      property === "new"
+        ? EMPTY_FORM
+        : {
+            name: property.name,
+            code: property.code,
+            city: property.city ?? "",
+            timezone: property.timezone || "Asia/Kolkata",
+          },
+    );
+  };
 
   const load = async () => {
     try {
@@ -148,24 +171,31 @@ export function PropertyPickerView() {
     router.push("/dashboard");
   };
 
-  const handleCreate = async () => {
-    if (!form.name.trim() || !form.code.trim()) return;
+  const handleSave = async () => {
+    if (!form.name.trim()) return setFormError("Property name is required.");
+    if (!form.code.trim()) return setFormError("Code is required.");
+    if (!/^[a-z0-9-]+$/i.test(form.code.trim())) return setFormError("Code can only use letters, numbers and hyphens.");
     setSaving(true);
+    setFormError(null);
     try {
-      const created = await platformService.createProperty({
+      const body = {
         name: form.name.trim(),
         code: form.code.trim().toLowerCase(),
         city: form.city.trim(),
-        isDefault: properties.length === 0,
-      });
-      setForm({ name: "", code: "", city: "" });
-      setShowAdd(false);
-      await load();
-      if (created.accountsSetup && !created.accountsSetup.seeded && created.accountsSetup.message) {
-        setError(`Property created, but Accounts setup did not run: ${created.accountsSetup.message}`);
+        timezone: form.timezone.trim() || "Asia/Kolkata",
+      };
+      if (editing === "new") {
+        const created = await platformService.createProperty({ ...body, isDefault: properties.length === 0 });
+        if (created.accountsSetup && !created.accountsSetup.seeded && created.accountsSetup.message) {
+          setError(`Property created, but Accounts setup did not run: ${created.accountsSetup.message}`);
+        }
+      } else if (editing) {
+        await platformService.updateProperty(editing.id, body);
       }
+      setEditing(null);
+      await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create property");
+      setFormError(e instanceof Error ? e.message : "Failed to save property");
     } finally {
       setSaving(false);
     }
@@ -189,7 +219,7 @@ export function PropertyPickerView() {
           {isPlatformAdmin(user) && (
             <Button
               className="min-w-0 flex-1 whitespace-nowrap bg-emerald-700 hover:bg-emerald-800 sm:flex-none"
-              onClick={() => setShowAdd(true)}
+              onClick={() => openForm("new")}
             >
               <Plus className="mr-2 h-4 w-4" />
               Add property
@@ -214,48 +244,6 @@ export function PropertyPickerView() {
         </div>
       )}
 
-      {showAdd && isPlatformAdmin(user) && (
-        <div className="mt-4 rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm sm:mt-6 sm:p-5">
-          <h2 className="text-sm font-semibold text-slate-900">New property</h2>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              placeholder="Property name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              placeholder="Code (e.g. bbsr)"
-              value={form.code}
-              onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-            />
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              placeholder="City"
-              value={form.city}
-              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-            />
-          </div>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-            <Button
-              className="w-full bg-emerald-700 hover:bg-emerald-800 sm:w-auto"
-              onClick={() => void handleCreate()}
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Create property"}
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full sm:w-auto"
-              onClick={() => setShowAdd(false)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-
       <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-8 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
         {loading &&
           Array.from({ length: 3 }).map((_, i) => <PropertyCardSkeleton key={i} />)}
@@ -267,6 +255,7 @@ export function PropertyPickerView() {
               property={property}
               canEdit={isPlatformAdmin(user)}
               onOpen={() => openWorkspace(property)}
+              onEdit={() => openForm(property)}
             />
           ))}
 
@@ -282,6 +271,48 @@ export function PropertyPickerView() {
           </div>
         )}
       </div>
+
+      <Modal
+        open={editing !== null}
+        onClose={() => !saving && setEditing(null)}
+        title={editing === "new" ? "Add property" : "Edit property"}
+        description={editing === "new" ? "Each property gets its own workspace, bookings, reports and settings." : "Update the property details shown across the PMS."}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setEditing(null)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button className="bg-emerald-700 hover:bg-emerald-800" onClick={() => void handleSave()} disabled={saving}>
+              {saving ? "Saving…" : editing === "new" ? "Create property" : "Save changes"}
+            </Button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {formError && (
+            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">
+              {formError}
+            </p>
+          )}
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">Property name <span className="text-red-500">*</span></span>
+            <input autoFocus className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20" placeholder="e.g. Shaw Hotel" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">Code <span className="text-red-500">*</span></span>
+            <input className={cn("h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20", "font-mono uppercase")} placeholder="e.g. bbsr" maxLength={12} value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))} />
+            <span className="mt-1 block text-[11px] text-slate-400">Short unique code: letters, numbers or hyphens.</span>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">City</span>
+            <input className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20" placeholder="e.g. Bhubaneswar" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">Time zone</span>
+            <input className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20" placeholder="Asia/Kolkata" value={form.timezone} onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))} />
+          </label>
+        </div>
+      </Modal>
     </WorkspaceShell>
   );
 }

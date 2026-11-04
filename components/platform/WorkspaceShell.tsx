@@ -5,19 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { createContext, useEffect, useState } from "react";
 import {
   BarChart3,
-  BedDouble,
   Building2,
-  CalendarCheck,
-  ChevronDown,
   ConciergeBell,
-  DoorOpen,
   LayoutDashboard,
   LogOut,
   Menu,
-  TrendingUp,
-  UserCircle,
   Users,
-  Wallet,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isPlatformAdmin } from "@/lib/auth";
@@ -25,36 +18,16 @@ import { cn } from "@/lib/utils";
 
 export const WorkspaceActionSlotContext = createContext<HTMLDivElement | null>(null);
 
-type WorkspaceNavChild = {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-};
-
 type WorkspaceNavItem = {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   adminOnly?: boolean;
-  children?: WorkspaceNavChild[];
 };
 
 const navItems: WorkspaceNavItem[] = [
   { href: "/properties/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  {
-    href: "/properties/reports",
-    label: "Reports",
-    icon: BarChart3,
-    children: [
-      { href: "/properties/reports/arrivals", label: "Daily Arrival", icon: CalendarCheck },
-      { href: "/properties/reports/departures", label: "Departure Report", icon: LogOut },
-      { href: "/properties/reports/occupancy", label: "Occupancy Report", icon: BedDouble },
-      { href: "/properties/reports/revenue", label: "Revenue Report", icon: TrendingUp },
-      { href: "/properties/reports/in-house", label: "Guest Report", icon: UserCircle },
-      { href: "/properties/reports/rooms", label: "Room Report", icon: DoorOpen },
-      { href: "/properties/reports/outstanding", label: "Outstanding", icon: Wallet },
-    ],
-  },
+  { href: "/properties/reports", label: "Reports", icon: BarChart3 },
   { href: "/properties", label: "Properties", icon: Building2 },
   { href: "/properties/users", label: "User management", icon: Users, adminOnly: true },
 ];
@@ -65,32 +38,32 @@ function WorkspaceSidebar({
   onNavigate,
   onLogout,
   className,
+  collapsed = false,
 }: {
   pathname: string | null;
   user: ReturnType<typeof useAuth>["user"];
   onNavigate?: () => void;
   onLogout: () => void;
   className?: string;
+  collapsed?: boolean;
 }) {
-  const reportsActive = pathname?.startsWith("/properties/reports") ?? false;
-  const [reportsToggle, setReportsToggle] = useState<boolean | null>(null);
-  const reportsOpen = reportsToggle ?? reportsActive;
-
   return (
     <aside className={cn("flex flex-col bg-black", className)}>
-      <div className="border-b border-slate-800 px-4 py-4">
-        <div className="flex items-start gap-2">
+      <div className={cn("border-b border-slate-800 py-4", collapsed ? "px-2" : "px-4")}>
+        <div className={cn("flex items-center gap-2", collapsed && "flex-col")}>
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-700/20 text-emerald-500">
             <ConciergeBell className="h-4 w-4" />
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold uppercase tracking-tight text-white">
-              Impact <span className="text-emerald-500">PMS</span>
-            </p>
-            <p className="truncate text-[10px] font-medium uppercase tracking-widest text-slate-500">
-              Workspace
-            </p>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold uppercase tracking-tight text-white">
+                Impact <span className="text-emerald-500">PMS</span>
+              </p>
+              <p className="truncate text-[10px] font-medium uppercase tracking-widest text-slate-500">
+                Workspace
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -98,88 +71,58 @@ function WorkspaceSidebar({
         {navItems.map((item) => {
           if (item.adminOnly && !isPlatformAdmin(user)) return null;
           const Icon = item.icon;
-          if (item.children) {
-            return (
-              <div key={item.label}>
-                <button
-                  type="button"
-                  onClick={() => setReportsToggle(!reportsOpen)}
-                  className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                    reportsActive
-                      ? "bg-emerald-950/70 text-white"
-                      : "text-slate-400 hover:bg-white/5 hover:text-white",
-                  )}
-                >
-                  <Icon className={cn("h-4 w-4 shrink-0", reportsActive && "text-emerald-400")} />
-                  <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-                  <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform", reportsOpen && "rotate-180")} />
-                </button>
-                {reportsOpen && (
-                  <ul className="ml-3 mt-1 space-y-1 border-l border-slate-700 pl-2">
-                    {item.children.map((child) => {
-                      const ChildIcon = child.icon;
-                      const childActive = pathname === child.href;
-                      return (
-                        <li key={child.href}>
-                          <Link
-                            href={child.href}
-                            onClick={onNavigate}
-                            className={cn(
-                              "flex items-center gap-2.5 rounded-full px-3 py-2 text-sm transition-colors",
-                              childActive
-                                ? "bg-emerald-700 text-white"
-                                : "text-slate-400 hover:bg-white/5 hover:text-white",
-                            )}
-                          >
-                            <ChildIcon className="h-3.5 w-3.5 shrink-0" />
-                            <span className="min-w-0 flex-1 leading-snug">{child.label}</span>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            );
-          }
-          const active = pathname === item.href;
+          const active =
+            pathname === item.href ||
+            (item.href === "/properties/reports" && (pathname?.startsWith("/properties/reports/") ?? false));
           return (
             <Link
               key={item.href}
               href={item.href}
               onClick={onNavigate}
+              title={collapsed ? item.label : undefined}
+              aria-label={collapsed ? item.label : undefined}
               className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                "flex items-center gap-2.5 rounded-lg py-2.5 text-sm font-medium transition-colors",
+                collapsed ? "justify-center px-0" : "px-3",
                 active
                   ? "bg-emerald-950/70 text-white"
                   : "text-slate-400 hover:bg-white/5 hover:text-white",
               )}
             >
               <Icon className={cn("h-4 w-4 shrink-0", active && "text-emerald-400")} />
-              {item.label}
+              {!collapsed && item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t border-slate-800 p-3">
-        <div className="mb-2 flex items-center gap-2 rounded-lg px-2 py-2">
+      <div className={cn("border-t border-slate-800", collapsed ? "p-2" : "p-3")}>
+        <div
+          className={cn("mb-2 flex items-center gap-2 rounded-lg py-2", collapsed ? "justify-center px-0" : "px-2")}
+          title={collapsed ? `${user?.name ?? ""} · ${user?.role ?? ""}` : undefined}
+        >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-xs font-bold text-white">
             {user?.initials ?? "U"}
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-white">{user?.name}</p>
-            <p className="truncate text-xs text-slate-500">{user?.role}</p>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-white">{user?.name}</p>
+              <p className="truncate text-xs text-slate-500">{user?.role}</p>
+            </div>
+          )}
         </div>
         <button
           type="button"
           onClick={onLogout}
-          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+          title={collapsed ? "Sign out" : undefined}
+          aria-label="Sign out"
+          className={cn(
+            "flex w-full items-center gap-2 rounded-lg py-2 text-sm text-slate-400 transition-colors hover:bg-white/5 hover:text-white",
+            collapsed ? "justify-center px-0" : "px-2",
+          )}
         >
           <LogOut className="h-4 w-4" />
-          Sign out
+          {!collapsed && "Sign out"}
         </button>
       </div>
     </aside>
@@ -199,13 +142,14 @@ export function WorkspaceShell({
   actions?: React.ReactNode;
   wide?: boolean;
 }) {
-  const containerWidth = wide ? "max-w-7xl" : "max-w-5xl";
+  const containerWidth = wide ? "max-w-[1536px]" : "max-w-5xl";
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [navPath, setNavPath] = useState(pathname);
   const [actionSlot, setActionSlot] = useState<HTMLDivElement | null>(null);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
   if (pathname !== navPath) {
     setNavPath(pathname);
     setMobileNavOpen(false);
@@ -227,14 +171,31 @@ export function WorkspaceShell({
 
   return (
     <WorkspaceActionSlotContext.Provider value={actionSlot}>
-    <div className="group/shell flex min-h-screen min-w-0 bg-[#f7f8f7]" data-workspace-sidebar="">
-      {/* Desktop sidebar */}
-      <WorkspaceSidebar
-        pathname={pathname}
-        user={user}
-        onLogout={handleLogout}
-        className="hidden w-64 shrink-0 border-r border-slate-800 lg:flex"
-      />
+    <div className="group/shell flex h-dvh min-w-0 overflow-hidden bg-[#f7f8f7]" data-workspace-sidebar="">
+      {/* Desktop — collapsed rail; hover expands as an overlapping panel */}
+      <div
+        className="relative z-[55] hidden h-full w-16 shrink-0 lg:block"
+        onMouseEnter={() => setSidebarHovered(true)}
+        onMouseLeave={() => setSidebarHovered(false)}
+      >
+        <WorkspaceSidebar
+          pathname={pathname}
+          user={user}
+          onLogout={handleLogout}
+          collapsed
+          className="h-full w-16 border-r border-slate-800"
+        />
+        <WorkspaceSidebar
+          pathname={pathname}
+          user={user}
+          onLogout={handleLogout}
+          onNavigate={() => setSidebarHovered(false)}
+          className={cn(
+            "absolute left-0 top-0 z-50 h-full w-64 border-r border-slate-800 shadow-2xl transition-[opacity,transform] duration-200 ease-out",
+            sidebarHovered ? "pointer-events-auto translate-x-0 opacity-100" : "pointer-events-none -translate-x-1 opacity-0",
+          )}
+        />
+      </div>
 
       {/* Mobile drawer */}
       {mobileNavOpen && (
@@ -255,9 +216,9 @@ export function WorkspaceShell({
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         {/* Mobile top bar */}
-        <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-slate-800 bg-black px-3 py-3 lg:hidden">
+        <header className="z-40 flex shrink-0 items-center gap-3 border-b border-slate-800 bg-black px-3 py-3 lg:hidden">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
@@ -284,28 +245,28 @@ export function WorkspaceShell({
           </button>
         </header>
 
-        <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
           {(title || actions) && (
-            <div className="border-b border-slate-200/80 bg-white px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+            <div className="border-b border-slate-200/80 bg-white px-4 py-3 sm:px-6 lg:px-8">
               <div
                 className={cn(
-                  "mx-auto flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between",
+                  "mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
                   containerWidth,
                 )}
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   {title && (
-                    <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">
+                    <h1 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
                       {title}
                     </h1>
                   )}
                   {description && (
-                    <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-slate-500 sm:mt-2">
+                    <p className="mt-0.5 truncate text-xs text-slate-500 sm:text-sm">
                       {description}
                     </p>
                   )}
                 </div>
-                <div ref={setActionSlot} className="flex w-full shrink-0 flex-row flex-wrap gap-2 empty:hidden sm:w-auto">
+                <div ref={setActionSlot} className="flex w-full shrink-0 flex-row gap-2 empty:hidden sm:w-auto">
                   {actions}
                 </div>
               </div>

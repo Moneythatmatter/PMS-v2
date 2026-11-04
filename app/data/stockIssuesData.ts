@@ -4,6 +4,7 @@ export type IssueStatus = "Draft" | "Pending Approval" | "Issued" | "Partially I
 
 export interface StockIssueLineItem {
   id: string;
+  materialId?: string;
   itemCode: string;
   itemName: string;
   unit: string;

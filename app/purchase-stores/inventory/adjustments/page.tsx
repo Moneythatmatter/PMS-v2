@@ -24,6 +24,7 @@ import {
 } from "@/components/frontoffice/ui";
 import { DocumentApprovalFooter } from "@/components/purchase-stores/ui/DocumentApprovalFooter";
 import { cn } from "@/lib/utils";
+import { downloadXlsx } from "@/lib/xlsx";
 import {
   ADJUSTMENT_REASON_OPTIONS,
   type AdjustmentStatus,
@@ -58,7 +59,7 @@ function statusBadge(status: AdjustmentStatus) {
 
 export default function StockAdjustmentsPage() {
   const { data: adjustments, loading: adjustmentsLoading, reload: reloadAdjustments } = usePsList(() => psStockAdjustmentService.list());
-  const { data: balances, loading: balancesLoading } = usePsList(() => psStockBalanceService.list());
+  const { data: balances, loading: balancesLoading, reload: reloadBalances } = usePsList(() => psStockBalanceService.list());
   const { data: products, loading: productsLoading } = usePsList(() => psProductService.list());
   const { data: categories, loading: categoriesLoading } = usePsList(() => psCategoryService.list());
   const { data: warehouses, loading: warehousesLoading } = usePsList(() => psWarehouseService.list());
@@ -181,9 +182,13 @@ export default function StockAdjustmentsPage() {
         approvedBy: "Store Manager",
         ledgerRef: selectedAdjustment.adjustmentNo,
       });
-      showToast(`${selectedAdjustment.adjustmentNo} approved — stock & ledger updated.`, "success");
+      const diff = selectedAdjustment.difference;
+      showToast(
+        `${selectedAdjustment.adjustmentNo} approved — stock ${diff > 0 ? "increased" : "reduced"} by ${Math.abs(diff)} and posted to the ledger.`,
+        "success",
+      );
       setSelectedAdjustment(null);
-      await reloadAdjustments();
+      await Promise.all([reloadAdjustments(), reloadBalances()]);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Failed to approve adjustment.", "error");
     } finally {
@@ -209,40 +214,46 @@ export default function StockAdjustmentsPage() {
     }
   };
 
-  const handleExportCSV = () => {
-    const headers = ["Adjustment No", "Date", "Material ID", "Warehouse", "System Qty", "Actual Qty", "Difference", "Reason", "Status"];
+  const handleExportExcel = () => {
+    const headers = ["Adjustment No", "Date", "Material Code", "Material", "Warehouse", "System Qty", "Actual Qty", "Difference", "Reason", "Status"];
     const rows = filtered.map((a) => [
-      `"${a.adjustmentNo}"`,
-      `"${a.adjustmentDate}"`,
-      `"${a.materialId}"`,
-      `"${getWarehouseById(warehouses, a.warehouseId)?.name ?? a.warehouseId}"`,
+      a.adjustmentNo,
+      a.adjustmentDate,
+      getMaterialDetails(products, categories, a.materialId)?.productCode ?? a.materialId,
+      getMaterialDetails(products, categories, a.materialId)?.productName ?? "",
+      getWarehouseById(warehouses, a.warehouseId)?.name ?? a.warehouseId,
       a.systemQty,
       a.actualQty,
       a.difference,
-      `"${a.reason}"`,
-      `"${a.status}"`,
+      a.reason,
+      a.status,
     ]);
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Stock_Adjustments_${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showToast(`Exported ${filtered.length} adjustments.`, "info");
+    downloadXlsx(`stock-adjustments-${new Date().toISOString().slice(0, 10)}`, [
+      {
+        name: "Stock Adjustments",
+        title: "Stock Adjustments",
+        meta: [["Generated", new Date().toLocaleString("en-IN")], ["Records", rows.length]],
+        header: headers,
+        rows,
+      },
+    ]);
+    showToast(`Exported ${filtered.length} adjustments to Excel.`, "info");
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen p-8 text-sm text-slate-600">
-        Loading...
+      <div className="space-y-4">
+        <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}
+        </div>
+        <div className="h-80 animate-pulse rounded-2xl bg-slate-100" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen space-y-6 bg-slate-50/50 p-4 sm:p-6 md:p-8">
+    <div className="space-y-6">
       {toastMessage && (
         <AlertBanner variant={toastMessage.variant} message={toastMessage.text} onDismiss={() => setToastMessage(null)} />
       )}
@@ -253,8 +264,8 @@ export default function StockAdjustmentsPage() {
         description="Correct stock after physical counts or write-offs. Each adjustment creates a ledger movement — stock is never edited directly."
         action={
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-1.5">
-              <Download className="h-4 w-4" /> Export CSV
+            <Button type="button" variant="outline" size="sm" onClick={handleExportExcel} className="gap-1.5 border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100">
+              <Download className="h-4 w-4" /> Export Excel
             </Button>
             <Button type="button" size="sm" onClick={openCreateDrawer} className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white">
               <Plus className="h-4 w-4" /> New Adjustment
@@ -269,7 +280,10 @@ export default function StockAdjustmentsPage() {
         <StatMiniCard label="Approved" value={stats.approved} sublabel="Posted to ledger" accent="#16a34a" icon={CheckCircle2} />
       </div>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+      
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        <div className="border-b border-slate-100 bg-slate-50/40 p-3">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
           <div className="relative lg:col-span-2">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -289,9 +303,7 @@ export default function StockAdjustmentsPage() {
             <option value="Rejected">Rejected</option>
           </SelectInput>
         </div>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        </div>
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <tr>

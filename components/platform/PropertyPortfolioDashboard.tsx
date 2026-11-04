@@ -4,6 +4,7 @@ import { useContext, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle,
+  BarChart3,
   BedDouble,
   Building2,
   CalendarCheck,
@@ -11,6 +12,7 @@ import {
   DoorOpen,
   Download,
   LogOut,
+  RefreshCw,
   Search,
   Percent,
   TrendingUp,
@@ -20,7 +22,8 @@ import {
 } from "lucide-react";
 import { FODatePicker, SelectInput, StatMiniCard } from "@/components/frontoffice/ui";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { ReportExcelGrid } from "@/components/frontoffice/ReportExcelGrid";
+import type { ReportColumn, ReportRow } from "@/app/data/frontoffice/reports";
 import { downloadXlsx } from "@/lib/xlsx";
 import { cn } from "@/lib/utils";
 import { GroupOverview } from "@/components/platform/GroupOverview";
@@ -31,6 +34,8 @@ import {
   type PortfolioProperty,
   type PortfolioSnapshot,
 } from "@/services/platform";
+
+type GridData = { columns: ReportColumn[]; rows: ReportRow[] };
 
 type RangeId = "today" | "7d" | "30d" | "mtd" | "custom";
 export type ReportId = "occupancy" | "arrivals" | "departures" | "revenue" | "in-house" | "rooms" | "outstanding";
@@ -74,26 +79,18 @@ function rangeToDates(range: RangeId) {
 const inr = (n: number) =>
   `₹${(Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
-function StatusPill({ status }: { status: string }) {
-  const tone =
-    status === "Checked In" || status === "In-House"
-      ? "bg-emerald-50 text-emerald-800"
-      : status === "Checked Out"
-        ? "bg-slate-100 text-slate-600"
-        : "bg-violet-50 text-violet-800";
-  return <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", tone)}>{status || "—"}</span>;
-}
-
 export function PropertyPortfolioDashboard({
   mode,
   report = "occupancy",
   onOpen,
   onOpenAt,
+  onReportChange,
 }: {
   mode: "dashboard" | "reports";
   report?: ReportId;
   onOpen: (property: PortfolioProperty) => void;
   onOpenAt?: (property: PortfolioProperty, href: string) => void;
+  onReportChange?: (report: ReportId) => void;
 }) {
   const [range, setRange] = useState<RangeId>("today");
   const initialDates = rangeToDates("today");
@@ -104,6 +101,7 @@ export function PropertyPortfolioDashboard({
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const actionSlot = useContext(WorkspaceActionSlotContext);
 
   useEffect(() => {
@@ -133,7 +131,12 @@ export function PropertyPortfolioDashboard({
     return () => {
       cancelled = true;
     };
-  }, [fromDate, toDate, mode]);
+  }, [fromDate, toDate, mode, reloadKey]);
+
+  const refresh = () => {
+    setLoading(true);
+    setReloadKey((k) => k + 1);
+  };
 
   const applyRange = (next: RangeId) => {
     setRange(next);
@@ -282,6 +285,103 @@ export function PropertyPortfolioDashboard({
                     { label: "Open balance", value: inr(listedProperties.reduce((s, p) => s + p.outstanding, 0)), icon: Wallet },
                     { label: "Guests in house", value: listedProperties.reduce((s, p) => s + p.inHouse, 0), icon: Users },
                   ];
+  const outstandingProperties = listedProperties.filter((p) => p.outstanding > 0);
+  const movementGrid = (rows: PortfolioMovement[], amountKey: "amount" | "balance"): GridData => ({
+    columns: [
+      { key: "guest", header: "Guest" },
+      { key: "property", header: "Property" },
+      { key: "booking", header: "Booking" },
+      { key: "room", header: "Room" },
+      { key: "status", header: "Status" },
+      { key: amountKey, header: amountKey === "amount" ? "Amount" : "Balance", format: "currency" },
+    ],
+    rows: rows.map((r) => ({
+      id: r.id,
+      guest: r.guest,
+      property: r.propertyName,
+      booking: r.bookingNo,
+      room: r.room,
+      status: r.status,
+      [amountKey]: Number(r[amountKey]) || 0,
+    })),
+  });
+  const propertyBase = (p: PortfolioProperty) => ({ id: p.id, property: p.name, city: p.city || "—" });
+  const grid: GridData =
+    report === "arrivals"
+      ? movementGrid(listedArrivals, "amount")
+      : report === "departures"
+        ? movementGrid(listedDepartures, "balance")
+        : report === "in-house"
+          ? movementGrid(listedStaying, "balance")
+          : report === "occupancy"
+            ? {
+                columns: [
+                  { key: "property", header: "Property" },
+                  { key: "city", header: "City" },
+                  { key: "rooms", header: "Rooms" },
+                  { key: "occupied", header: "Occupied" },
+                  { key: "vacant", header: "Vacant" },
+                  { key: "occupancy", header: "Occupancy", format: "percent" },
+                  { key: "inHouse", header: "In-house" },
+                ],
+                rows: listedProperties.map((p) => ({
+                  ...propertyBase(p),
+                  rooms: p.rooms,
+                  occupied: p.occupied,
+                  vacant: Math.max(0, p.rooms - p.occupied),
+                  occupancy: p.occupancyPct,
+                  inHouse: p.inHouse,
+                })),
+              }
+            : report === "revenue"
+              ? {
+                  columns: [
+                    { key: "property", header: "Property" },
+                    { key: "city", header: "City" },
+                    { key: "arrivals", header: "Arrivals" },
+                    { key: "roomRevenue", header: "Room Revenue", format: "currency" },
+                    { key: "outstanding", header: "Open Balance", format: "currency" },
+                  ],
+                  rows: listedProperties.map((p) => ({
+                    ...propertyBase(p),
+                    arrivals: p.arrivals,
+                    roomRevenue: p.roomRevenue,
+                    outstanding: p.outstanding,
+                  })),
+                }
+              : report === "rooms"
+                ? {
+                    columns: [
+                      { key: "property", header: "Property" },
+                      { key: "city", header: "City" },
+                      { key: "rooms", header: "Rooms" },
+                      { key: "occupied", header: "Occupied" },
+                      { key: "vacant", header: "Vacant" },
+                      { key: "dirty", header: "Dirty" },
+                      { key: "occupancy", header: "Occupancy", format: "percent" },
+                    ],
+                    rows: listedProperties.map((p) => ({
+                      ...propertyBase(p),
+                      rooms: p.rooms,
+                      occupied: p.occupied,
+                      vacant: Math.max(0, p.rooms - p.occupied),
+                      dirty: p.dirtyRooms,
+                      occupancy: p.occupancyPct,
+                    })),
+                  }
+                : {
+                    columns: [
+                      { key: "property", header: "Property" },
+                      { key: "city", header: "City" },
+                      { key: "inHouse", header: "In-house" },
+                      { key: "outstanding", header: "Open Balance", format: "currency" },
+                    ],
+                    rows: outstandingProperties.map((p) => ({
+                      ...propertyBase(p),
+                      inHouse: p.inHouse,
+                      outstanding: p.outstanding,
+                    })),
+                  };
   const fieldClass = "h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100";
   const shownCount = report === "arrivals" ? listedArrivals.length : report === "departures" ? listedDepartures.length : report === "in-house" ? listedStaying.length : report === "outstanding" ? listedProperties.filter((p) => p.outstanding > 0).length : listedProperties.length;
   const totalCount = report === "arrivals" ? scopedArrivals.length : report === "departures" ? scopedDepartures.length : report === "in-house" ? scopedStaying.length : report === "outstanding" ? scopedProperties.filter((p) => p.outstanding > 0).length : scopedProperties.length;
@@ -358,149 +458,36 @@ export function PropertyPortfolioDashboard({
 
       {actionSlot
         ? createPortal(
-            <Button type="button" size="sm" variant="outline" className="gap-1" disabled={!snapshot || loading} onClick={exportReport}>
-              <Download className="h-3.5 w-3.5" />
-              Export Excel
-            </Button>,
+            <>
+              {onReportChange && (
+                <div className="relative">
+                  <BarChart3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-700" />
+                  <SelectInput
+                    value={report}
+                    onChange={(e) => onReportChange(e.target.value as ReportId)}
+                    className="!h-9 !w-auto min-w-[13rem] pl-9 text-sm font-semibold"
+                    aria-label="Report"
+                  >
+                    {REPORTS.map((item) => (
+                      <option key={item.id} value={item.id}>{item.label}</option>
+                    ))}
+                  </SelectInput>
+                </div>
+              )}
+              <Button type="button" size="sm" variant="outline" className="gap-1" disabled={loading} onClick={refresh}>
+                <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+                Refresh
+              </Button>
+              <Button type="button" size="sm" variant="outline" className="gap-1" disabled={!snapshot || loading} onClick={exportReport}>
+                <Download className="h-3.5 w-3.5" />
+                Export Excel
+              </Button>
+            </>,
             actionSlot,
           )
         : null}
 
-      <Card className="overflow-hidden p-0 sm:p-0">
-        <div className="px-4 py-2 sm:px-5">
-          {loading && !snapshot ? (
-            <div className="space-y-2 py-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-10 animate-pulse rounded-xl bg-slate-100" />
-              ))}
-            </div>
-          ) : report === "arrivals" || report === "departures" || report === "in-house" ? (
-            <MovementTable
-              rows={report === "arrivals" ? listedArrivals : report === "departures" ? listedDepartures : listedStaying}
-              showAmount={report === "arrivals"}
-              empty={report === "in-house" ? "No guests in house." : undefined}
-            />
-          ) : (
-            <PropertyTable report={report} properties={listedProperties} totals={propertyFilter === "ALL" && !needle ? totals : undefined} onOpen={onOpen} />
-          )}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function MovementTable({ rows, showAmount, empty = "Nothing in this date range." }: { rows: PortfolioMovement[]; showAmount: boolean; empty?: string }) {
-  if (!rows.length) return <p className="py-8 text-center text-sm text-slate-500">{empty}</p>;
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-left text-sm">
-        <thead>
-          <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
-            <th className="pb-2 pr-3 font-semibold">Guest</th>
-            <th className="pb-2 pr-3 font-semibold">Property</th>
-            <th className="pb-2 pr-3 font-semibold">Booking</th>
-            <th className="pb-2 pr-3 font-semibold">Room</th>
-            <th className="pb-2 pr-3 font-semibold">Status</th>
-            <th className="pb-2 text-right font-semibold">{showAmount ? "Amount" : "Balance"}</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-50">
-          {rows.map((row) => (
-            <tr key={row.id} className="hover:bg-emerald-50/40">
-              <td className="py-2.5 pr-3 font-medium text-slate-900">{row.guest}</td>
-              <td className="py-2.5 pr-3 text-slate-700">{row.propertyName}</td>
-              <td className="py-2.5 pr-3 text-slate-600">{row.bookingNo}</td>
-              <td className="py-2.5 pr-3">{row.room}</td>
-              <td className="py-2.5 pr-3"><StatusPill status={row.status} /></td>
-              <td className="py-2.5 text-right font-semibold">{inr(showAmount ? row.amount : row.balance)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function PropertyTable({
-  report,
-  properties,
-  totals,
-  onOpen,
-}: {
-  report: ReportId;
-  properties: PortfolioProperty[];
-  totals: PortfolioSnapshot["totals"] | undefined;
-  onOpen: (property: PortfolioProperty) => void;
-}) {
-  const rows = report === "outstanding" ? properties.filter((p) => p.outstanding > 0) : properties;
-  if (!rows.length) return <p className="py-8 text-center text-sm text-slate-500">Nothing to show.</p>;
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-left text-sm text-slate-700">
-        <thead className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          <tr className="border-b border-slate-200">
-            <th className="py-2 pr-3">Property</th>
-            {report === "rooms" && <th className="py-2 pr-3 text-right">Rooms</th>}
-            {report === "rooms" && <th className="py-2 pr-3 text-right">Occupied</th>}
-            {report !== "outstanding" && report !== "revenue" && <th className="py-2 pr-3">Occupancy</th>}
-            {report === "occupancy" && <th className="py-2 pr-3 text-right">In-house</th>}
-            {(report === "occupancy" || report === "rooms") && <th className="py-2 pr-3 text-right">Vacant</th>}
-            {report === "rooms" && <th className="py-2 pr-3 text-right">Dirty</th>}
-            {report === "revenue" && <th className="py-2 pr-3 text-right">Arrivals</th>}
-            {(report === "revenue" || report === "outstanding") && <th className="py-2 pr-3 text-right">Open balance</th>}
-            {report === "revenue" && <th className="py-2 pr-3 text-right">Revenue</th>}
-            <th className="py-2 text-right" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((property) => (
-            <tr key={property.id} className="border-b border-slate-100 hover:bg-slate-50">
-              <td className="py-2.5 pr-3">
-                <p className="font-semibold text-slate-900">{property.name}</p>
-                <p className="text-[10px] text-slate-500">{property.city || "No city"}{report === "rooms" ? "" : ` · ${property.rooms} rooms`}</p>
-              </td>
-              {report === "rooms" && <td className="py-2.5 pr-3 text-right">{property.rooms}</td>}
-              {report === "rooms" && <td className="py-2.5 pr-3 text-right">{property.occupied}</td>}
-              {report !== "outstanding" && report !== "revenue" && (
-                <td className="py-2.5 pr-3">
-                  <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, property.occupancyPct)}%` }} />
-                    </div>
-                    <span className="font-semibold">{property.occupancyPct}%</span>
-                  </div>
-                </td>
-              )}
-              {report === "occupancy" && <td className="py-2.5 pr-3 text-right">{property.inHouse}</td>}
-              {(report === "occupancy" || report === "rooms") && <td className="py-2.5 pr-3 text-right">{Math.max(0, property.rooms - property.occupied)}</td>}
-              {report === "rooms" && <td className="py-2.5 pr-3 text-right">{property.dirtyRooms}</td>}
-              {report === "revenue" && <td className="py-2.5 pr-3 text-right">{property.arrivals}</td>}
-              {(report === "revenue" || report === "outstanding") && <td className="py-2.5 pr-3 text-right text-amber-800">{inr(property.outstanding)}</td>}
-              {report === "revenue" && <td className="py-2.5 pr-3 text-right font-semibold text-slate-900">{inr(property.roomRevenue)}</td>}
-              <td className="py-2.5 text-right">
-                <button type="button" onClick={() => onOpen(property)} className="font-semibold text-emerald-800 hover:underline">Open</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-        {totals && report !== "outstanding" && (
-          <tfoot>
-            <tr className="border-t border-slate-200 font-bold text-slate-900">
-              <td className="py-2.5 pr-3">All properties</td>
-              {report === "rooms" && <td className="py-2.5 pr-3 text-right">{totals.rooms}</td>}
-              {report === "rooms" && <td className="py-2.5 pr-3 text-right">{totals.occupied}</td>}
-              {report !== "revenue" && <td className="py-2.5 pr-3">{totals.occupancyPct}%</td>}
-              {report === "occupancy" && <td className="py-2.5 pr-3 text-right">{totals.inHouse}</td>}
-              {(report === "occupancy" || report === "rooms") && <td className="py-2.5 pr-3 text-right">{Math.max(0, totals.rooms - totals.occupied)}</td>}
-              {report === "rooms" && <td className="py-2.5 pr-3 text-right">{totals.dirtyRooms}</td>}
-              {report === "revenue" && <td className="py-2.5 pr-3 text-right">{totals.arrivals}</td>}
-              {report === "revenue" && <td className="py-2.5 pr-3 text-right text-amber-800">{inr(totals.outstanding)}</td>}
-              {report === "revenue" && <td className="py-2.5 pr-3 text-right">{inr(totals.roomRevenue)}</td>}
-              <td />
-            </tr>
-          </tfoot>
-        )}
-      </table>
+      <ReportExcelGrid columns={grid.columns} rows={grid.rows} loading={loading && !snapshot} />
     </div>
   );
 }

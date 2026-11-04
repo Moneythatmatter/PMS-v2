@@ -23,6 +23,7 @@ import {
   TextInput,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { downloadXlsx } from "@/lib/xlsx";
 import {
   type ParStockRecord,
   type ParStockStatus,
@@ -160,43 +161,48 @@ export default function ParStockPage() {
     }
   };
 
-  const handleExportCSV = () => {
+  const handleExportExcel = () => {
     const headers = ["Item Code", "Item Name", "Category", "Warehouse", "Store", "Current", "Par", "Min", "Max", "Reorder", "Status", "Unit"];
     const rows = filteredRecords.map((r) => [
-      `"${r.itemCode}"`,
-      `"${r.itemName}"`,
-      `"${r.category}"`,
-      `"${r.warehouse}"`,
-      `"${r.store}"`,
+      r.itemCode,
+      r.itemName,
+      r.category,
+      r.warehouse,
+      r.store,
       r.currentStock,
       r.parLevel,
       r.minLevel,
       r.maxLevel,
       r.reorderLevel,
-      `"${r.status}"`,
-      `"${r.unit}"`,
+      r.status,
+      r.unit,
     ]);
-    const csv = [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Par_Stock_${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showToast(`Exported ${filteredRecords.length} par stock records.`, "info");
+    downloadXlsx(`par-stock-${new Date().toISOString().slice(0, 10)}`, [
+      {
+        name: "Par Stock",
+        title: "Par Stock",
+        meta: [["Generated", new Date().toLocaleString("en-IN")], ["Records", rows.length]],
+        header: headers,
+        rows,
+      },
+    ]);
+    showToast(`Exported ${filteredRecords.length} par stock records to Excel.`, "info");
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen p-8 text-sm text-slate-600">
-        Loading...
+      <div className="space-y-4">
+        <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}
+        </div>
+        <div className="h-80 animate-pulse rounded-2xl bg-slate-100" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen space-y-6 bg-slate-50/50 p-4 sm:p-6 md:p-8">
+    <div className="space-y-6">
       {toastMessage && (
         <AlertBanner variant={toastMessage.variant} message={toastMessage.text} onDismiss={() => setToastMessage(null)} />
       )}
@@ -206,8 +212,8 @@ export default function ParStockPage() {
       title="Par Stock"
         description="Monitor and maintain minimum stock levels by item, warehouse, and store location."
         action={
-          <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100">
-            <Download className="h-4 w-4" /> Export CSV
+          <Button type="button" variant="outline" size="sm" onClick={handleExportExcel} className="gap-1.5 border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100">
+            <Download className="h-4 w-4" /> Export Excel
           </Button>
         }
       />
@@ -219,7 +225,10 @@ export default function ParStockPage() {
         <StatMiniCard label="Critical / Over" value={stats.critical} sublabel="Immediate attention" accent="#dc2626" icon={AlertTriangle} />
       </div>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+      
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        <div className="border-b border-slate-100 bg-slate-50/40 p-3">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
           <div className="relative lg:col-span-2">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -258,9 +267,7 @@ export default function ParStockPage() {
             )}
           </div>
         </div>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1000px] text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -289,7 +296,7 @@ export default function ParStockPage() {
                     <tr
                       key={record.id}
                       onClick={() => openEditDrawer(record)}
-                      className="cursor-pointer transition-colors hover:bg-slate-50/80"
+                      className="cursor-pointer transition-colors hover:bg-emerald-50/40"
                     >
                       <td className="py-3.5 px-4">
                         <p className="font-semibold text-slate-900">{record.itemName}</p>

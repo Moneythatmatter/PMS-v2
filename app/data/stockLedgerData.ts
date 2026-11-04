@@ -1,7 +1,7 @@
 import type { ProductItem } from "./productMasterData";
 import type { WarehouseMasterItem } from "./warehouseMasterData";
 
-export type LedgerMovementType = "GRN" | "Issue" | "Transfer In" | "Transfer Out" | "Adjustment";
+export type LedgerMovementType = "GRN" | "Issue" | "Transfer In" | "Transfer Out" | "Transfer Return" | "Adjustment" | "Opening Stock";
 
 export type LedgerTypeFilter = "all" | "GRN" | "Issues" | "Transfers" | "Adjustments";
 

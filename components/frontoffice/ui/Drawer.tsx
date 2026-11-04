@@ -97,7 +97,7 @@ export function Drawer({
       <div
         className={cn(
           "fixed inset-0 z-50 m-0 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-300 h-full",
-          isBottom && "lg:group-data-[workspace-sidebar]/shell:left-64",
+          isBottom && "lg:group-data-[workspace-sidebar]/shell:left-16",
           open ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         onClick={onClose}
@@ -123,7 +123,7 @@ export function Drawer({
           fullScreen
             ? "inset-0 border-0"
             : isBottom
-              ? "inset-x-0 bottom-0 h-[80vh] overflow-hidden rounded-t-2xl border-t border-slate-200 lg:group-data-[module-sidebar]/shell:left-16 lg:group-data-[workspace-sidebar]/shell:left-64"
+              ? "inset-x-0 bottom-0 h-[80vh] overflow-hidden rounded-t-2xl border-t border-slate-200 lg:group-data-[module-sidebar]/shell:left-16 lg:group-data-[workspace-sidebar]/shell:left-16"
               : cn(
               "inset-y-0 right-0 border-l border-slate-200",
               !canResize && width === "sm" && "w-full max-w-sm",

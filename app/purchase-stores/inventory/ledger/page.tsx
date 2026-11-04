@@ -20,6 +20,7 @@ import {
   StatMiniCard,
 } from "@/components/frontoffice/ui";
 import { cn } from "@/lib/utils";
+import { downloadXlsx } from "@/lib/xlsx";
 import {
   enrichLedgerRows,
   LEDGER_TYPE_FILTERS,
@@ -41,6 +42,8 @@ function movementBadge(type: LedgerMovementType) {
     "Transfer In": "bg-teal-50 text-teal-700",
     "Transfer Out": "bg-amber-50 text-amber-800",
     Adjustment: "bg-slate-100 text-slate-600",
+    "Opening Stock": "bg-indigo-50 text-indigo-700",
+    "Transfer Return": "bg-teal-50 text-teal-700",
   };
   return (
     <span className={cn("inline-flex rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", styles[type])}>
@@ -118,44 +121,41 @@ export default function StockLedgerPage() {
     setTypeFilter("all");
   };
 
-  const handleExportCSV = () => {
-    const headers = ["Date", "Time", "Transaction", "Type", "Material ID", "Material", "Warehouse", "In / Out", "Balance"];
-    const rows = filteredRecords.map((r) => {
-      const change =
-        r.quantityIn > 0 ? `+${r.quantityIn} ${r.unit}` : r.quantityOut > 0 ? `-${r.quantityOut} ${r.unit}` : "—";
-      return [
-        `"${r.date}"`,
-        `"${r.time}"`,
-        `"${r.transactionNo}"`,
-        `"${r.movementType}"`,
-        `"${r.materialId}"`,
-        `"${r.materialName}"`,
-        `"${r.warehouseName}"`,
-        `"${change}"`,
-        `${r.balanceQty} ${r.unit}`,
-      ];
-    });
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Movement_History_${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showToast(`Exported ${filteredRecords.length} movement records.`, "info");
+  const handleExportExcel = () => {
+    downloadXlsx(`stock-movements-${new Date().toISOString().slice(0, 10)}`, [
+      {
+        name: "Movements",
+        title: "Stock movement history",
+        meta: [["Generated", new Date().toLocaleString("en-IN")], ["Records", filteredRecords.length]],
+        header: ["Date", "Time", "Transaction", "Type", "Material", "Warehouse", "Qty In", "Qty Out", "Balance", "Unit"],
+        rows: filteredRecords.map((r) => [
+          r.date,
+          r.time,
+          r.transactionNo,
+          r.movementType,
+          r.materialName,
+          r.warehouseName,
+          Number(r.quantityIn) || 0,
+          Number(r.quantityOut) || 0,
+          Number(r.balanceQty) || 0,
+          r.unit,
+        ]),
+      },
+    ]);
+    showToast(`Exported ${filteredRecords.length} movement records to Excel.`, "info");
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen p-8 text-sm text-slate-600">
-        Loading...
+      <div className="space-y-4">
+        <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="h-80 animate-pulse rounded-2xl bg-slate-100" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen space-y-6 bg-slate-50/50 p-4 sm:p-6 md:p-8">
+    <div className="space-y-6">
       {toastMessage && (
         <AlertBanner variant={toastMessage.variant} message={toastMessage.text} onDismiss={() => setToastMessage(null)} />
       )}
@@ -171,8 +171,8 @@ export default function StockLedgerPage() {
                 <Package className="h-4 w-4" /> Current Stock
               </Button>
             </Link>
-            <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100">
-              <Download className="h-4 w-4" /> Export CSV
+            <Button type="button" variant="outline" size="sm" onClick={handleExportExcel} className="gap-1.5 border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100">
+              <Download className="h-4 w-4" /> Export Excel
             </Button>
           </div>
         }
@@ -184,7 +184,10 @@ export default function StockLedgerPage() {
         <StatMiniCard label="Stock Out" value={stats.stockOut.toLocaleString("en-IN")} sublabel="Units issued" accent="#dc2626" icon={ArrowUpRight} />
       </div>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+      
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        <div className="border-b border-slate-100 bg-slate-50/40 p-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -220,9 +223,7 @@ export default function StockLedgerPage() {
             )}
           </div>
         </div>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        </div>
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
           <p className="text-xs font-medium text-slate-500">
             {filteredRecords.length} movement{filteredRecords.length !== 1 ? "s" : ""}

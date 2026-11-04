@@ -31,18 +31,24 @@ function StatCard({
   value: string;
   sub: string;
   icon: React.ElementType;
-  tone: string;
+  tone: { wash: string; solid: string };
 }) {
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-sm">
-      <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-        <p className="text-2xl font-extrabold leading-tight text-slate-900">{value}</p>
-        <p className="truncate text-[11px] text-slate-500">{sub}</p>
+    <div
+      className={cn(
+        "relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br to-white to-60% p-4 shadow-sm",
+        tone.wash,
+      )}
+    >
+      <span className={cn("pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-[0.08]", tone.solid)} />
+      <div className="relative flex items-start justify-between gap-3">
+        <p className="truncate text-xs font-medium text-slate-500">{label}</p>
+        <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-sm", tone.solid)}>
+          <Icon className="h-4 w-4" />
+        </span>
       </div>
-      <span className={cn("rounded-xl p-2.5", tone)}>
-        <Icon className="h-5 w-5" />
-      </span>
+      <p className="relative -mt-1 text-[28px] font-bold leading-tight tracking-tight text-slate-900 tabular-nums">{value}</p>
+      <p className="relative mt-1 truncate text-[11px] text-slate-500">{sub}</p>
     </div>
   );
 }
@@ -180,32 +186,32 @@ export function UserManagementView() {
           value={loading ? "—" : String(stats.total)}
           sub={`${stats.active} active`}
           icon={Users}
-          tone="bg-emerald-50 text-emerald-700"
+          tone={{ wash: "from-emerald-50", solid: "bg-emerald-500" }}
         />
         <StatCard
           label="Super admins"
           value={loading ? "—" : String(stats.superAdmins)}
           sub="All properties & modules"
           icon={ShieldCheck}
-          tone="bg-violet-50 text-violet-700"
+          tone={{ wash: "from-violet-50", solid: "bg-violet-500" }}
         />
         <StatCard
           label="Standard users"
           value={loading ? "—" : String(stats.standard)}
           sub="Access set per module"
           icon={UserCog}
-          tone="bg-sky-50 text-sky-700"
+          tone={{ wash: "from-sky-50", solid: "bg-sky-500" }}
         />
         <StatCard
           label="Linked to HR"
           value={loading ? "—" : String(stats.linked)}
-          sub="Can use Employee Portal"
+          sub={`${stats.total ? Math.round((stats.linked / stats.total) * 100) : 0}% of users · Employee Portal`}
           icon={Link2}
-          tone="bg-amber-50 text-amber-700"
+          tone={{ wash: "from-amber-50", solid: "bg-amber-500" }}
         />
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
             {(
@@ -222,11 +228,11 @@ export function UserManagementView() {
                 onClick={() => setTab(t.id)}
                 className={cn(
                   "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition",
-                  tab === t.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+                  tab === t.id ? "bg-white text-emerald-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/60 hover:text-slate-800",
                 )}
               >
                 {t.label}
-                <span className={cn("tabular-nums", tab === t.id ? "text-emerald-700" : "text-slate-400")}>{counts[t.id]}</span>
+                <span className={cn("rounded-full px-1.5 text-[10px] tabular-nums", tab === t.id ? "bg-emerald-100 text-emerald-800" : "bg-slate-200/70 text-slate-500")}>{counts[t.id]}</span>
               </button>
             ))}
           </div>
@@ -246,7 +252,7 @@ export function UserManagementView() {
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-2.5">User</th>
+                <th className="px-5 py-2.5">User</th>
                 <th className="px-4 py-2.5">Role</th>
                 <th className="px-4 py-2.5">Access</th>
                 <th className="px-4 py-2.5">Properties</th>
@@ -303,9 +309,9 @@ export function UserManagementView() {
                         }
                       }}
                       tabIndex={0}
-                      className="group cursor-pointer transition-colors hover:bg-emerald-50/40 focus:bg-emerald-50/40 focus:outline-none"
+                      className={cn("group cursor-pointer transition-colors hover:bg-emerald-50/40 focus:bg-emerald-50/40 focus:outline-none", !active && "opacity-60")}
                     >
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
                           <Avatar name={u.name} seed={u.id} />
                           <div className="min-w-0">
@@ -314,7 +320,7 @@ export function UserManagementView() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-700">{u.role || "—"}</td>
+                      <td className="px-4 py-3">{u.role ? <span className="whitespace-nowrap rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{u.role}</span> : <span className="text-slate-400">—</span>}</td>
                       <td className="px-4 py-3">
                         {u.isSuperAdmin ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-200">

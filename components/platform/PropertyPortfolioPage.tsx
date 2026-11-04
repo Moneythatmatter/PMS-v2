@@ -57,15 +57,21 @@ export function PropertyPortfolioPage({
 
   return (
     <WorkspaceShell
-      wide={mode === "reports"}
-      title={mode === "dashboard" ? "Dashboard" : (REPORTS.find((item) => item.id === report)?.label ?? "Reports")}
+      wide
+      title={mode === "dashboard" ? "Dashboard" : "Property Reports"}
       description={
         mode === "dashboard"
           ? "Revenue, occupancy, recorded expenses, and property comparison for the selected period."
-          : REPORTS.find((item) => item.id === report)?.hint ?? "Property reports"
+          : `${REPORTS.find((item) => item.id === report)?.label ?? "Report"} · ${REPORTS.find((item) => item.id === report)?.hint ?? "Property reports"}`
       }
     >
-      <PropertyPortfolioDashboard mode={mode} report={report} onOpen={openProperty} onOpenAt={openAt} />
+      <PropertyPortfolioDashboard
+        mode={mode}
+        report={report}
+        onOpen={openProperty}
+        onOpenAt={openAt}
+        onReportChange={mode === "reports" ? (next) => router.replace(`/properties/reports?type=${next}`) : undefined}
+      />
     </WorkspaceShell>
   );
 }

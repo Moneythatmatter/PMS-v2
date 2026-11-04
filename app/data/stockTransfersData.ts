@@ -2,6 +2,7 @@ export type TransferStatus = "Draft" | "Pending Approval" | "In Transit" | "Comp
 
 export interface StockTransferLineItem {
   id: string;
+  materialId?: string;
   itemCode: string;
   itemName: string;
   unit: string;
