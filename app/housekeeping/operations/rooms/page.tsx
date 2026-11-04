@@ -38,6 +38,7 @@ import {
   FOPageHeader,
   FOSearchToolbar,
 } from "@/components/frontoffice/ui";
+import { FILE_RULES, fileAccept, fileRuleHint, validateFile } from "@/lib/fileRules";
 
 function compareFloorLabel(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -372,9 +373,15 @@ export default function RoomStatusOperations() {
     setUploadedPhotos(rm.photos || []);
   };
 
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file || !selectedRoom) return;
+    const problem = validateFile(file, FILE_RULES.photo);
+    setPhotoError(problem);
+    if (problem) return;
     const reader = new FileReader();
     reader.onload = (event) => {
       const resultUrl = event.target?.result as string;
@@ -627,9 +634,11 @@ export default function RoomStatusOperations() {
             {!selectedRoomActiveTask && selectedRoom.status === "Cleaning" && (
               <div className="border-t pt-4">
                 <label className="cursor-pointer flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 p-4 text-xs text-slate-500">
-                  <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                  <input type="file" accept={fileAccept(FILE_RULES.photo)} onChange={handlePhotoUpload} className="hidden" />
                   <Camera className="h-4 w-4 mb-1" /> Add photo evidence
+                  <span className="mt-0.5 text-[10px] text-slate-400">{fileRuleHint(FILE_RULES.photo)}</span>
                 </label>
+                {photoError && <p className="mt-1.5 text-[11px] font-medium text-red-600">{photoError}</p>}
               </div>
             )}
 

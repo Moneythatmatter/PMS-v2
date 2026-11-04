@@ -6,7 +6,6 @@ import type { GuestDocument } from "@/app/data/frontoffice/modules";
 import { guestDocumentService } from "@/services/front-office";
 import { Button } from "@/components/ui/Button";
 import {
-  MAX_ATTACHMENT_BYTES,
   formatAttachmentSize,
   readFileAsDataUrl,
 } from "@/app/data/purchaseAttachmentUtils";
@@ -15,8 +14,10 @@ import {
   GuestDocumentPreviewModal,
   type PreviewableFile,
 } from "./GuestDocumentPreviewModal";
+import { FILE_RULES, fileAccept, fileRuleHint, validateFile } from "@/lib/fileRules";
 
-export const GUEST_DOCUMENT_ACCEPT = "image/*,application/pdf";
+export const GUEST_DOCUMENT_ACCEPT = fileAccept(FILE_RULES.idDocument);
+export const GUEST_DOCUMENT_HINT = fileRuleHint(FILE_RULES.idDocument);
 
 function formatUploadedAt(value?: string) {
   if (!value) return "";
@@ -127,8 +128,9 @@ export function GuestDocumentsPanel({
 
   const handleFile = async (file: File) => {
     if (!guestId) return;
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      setError("File is too large. Maximum size is 5 MB.");
+    const problem = validateFile(file, FILE_RULES.idDocument);
+    if (problem) {
+      setError(problem);
       return;
     }
     setUploading(true);
@@ -246,6 +248,7 @@ export function GuestDocumentsPanel({
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
+              e.target.value = "";
               if (file) void handleFile(file);
             }}
           />
@@ -264,6 +267,7 @@ export function GuestDocumentsPanel({
             )}
             {uploading ? "Uploading…" : "Upload Document"}
           </Button>
+          <span className="ml-2 text-[11px] text-slate-400">{GUEST_DOCUMENT_HINT}</span>
         </>
       )}
 

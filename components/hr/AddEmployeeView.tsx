@@ -45,6 +45,7 @@ import {
   mapDocumentTypeFromApi,
   mapEmployeeToApi,
 } from "@/lib/hr/api-mappers";
+import { FILE_RULES, fileAccept, fileRuleHint, formatFileSize, validateFile } from "@/lib/fileRules";
 
 const inputClass = "rounded-xl h-10 text-sm";
 
@@ -461,16 +462,21 @@ export function AddEmployeeView() {
 
   // Mock File Upload Handler
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const file = files[0];
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const problem = validateFile(file, FILE_RULES.hrDocument);
+    if (problem) {
+      setToastMessage(`⚠️ ${problem}`);
+      return;
+    }
 
     const newDoc: UploadedDocument = {
       id: `doc-${Date.now()}`,
       type: selectedDocType,
       fileName: file.name,
       uploadDate: new Date().toLocaleDateString("en-GB"),
-      size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+      size: formatFileSize(file.size),
     };
 
     setDocuments((prev) => [...prev, newDoc]);
@@ -572,10 +578,19 @@ export function AddEmployeeView() {
                 className={inputClass}
               />
             </FormField>
-            <FormField label="Profile Photo Upload">
+            <FormField label={`Profile Photo Upload (${fileRuleHint(FILE_RULES.photo)})`}>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept={fileAccept(FILE_RULES.photo)}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const problem = validateFile(file, FILE_RULES.photo);
+                    if (problem) {
+                      e.target.value = "";
+                      setToastMessage(`⚠️ ${problem}`);
+                    }
+                  }}
                 className="h-10 w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-emerald-800 hover:file:bg-emerald-100"
                 />
             </FormField>
@@ -807,9 +822,10 @@ export function AddEmployeeView() {
                 aria-label="Document type"
               />
             </FormField>
-            <FormField label="Choose File to Upload" className="sm:col-span-2">
+            <FormField label={`Choose File to Upload (${fileRuleHint(FILE_RULES.hrDocument)})`} className="sm:col-span-2">
                 <input
                   type="file"
+                  accept={fileAccept(FILE_RULES.hrDocument)}
                   onChange={handleFileUpload}
                 className="h-10 w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-700 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-emerald-800"
                 />

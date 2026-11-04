@@ -38,6 +38,7 @@ import {
 } from "@/lib/hr/api-mappers";
 import type { EmployeeItem } from "@/app/data/hr/employeeListData";
 import { HREmployeeCell } from "@/components/hr/shared/HREmployeeCell";
+import { FILE_RULES, fileAccept, fileRuleHint, validateFile } from "@/lib/fileRules";
 
 export type GrievanceStatus = "Open" | "In Review" | "Resolved" | "Escalated" | "Closed";
 export type GrievancePriority = "Low" | "Medium" | "High" | "Critical";
@@ -644,9 +645,21 @@ export function RaiseComplaintView() {
                 <Upload className="h-5 w-5 text-slate-400" />
                 <input
                   type="file"
-                  onChange={(e) => setFormAttachment(e.target.files ? e.target.files[0] : null)}
+                  accept={fileAccept(FILE_RULES.complaintProof)}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    const problem = file ? validateFile(file, FILE_RULES.complaintProof) : null;
+                    if (problem) {
+                      e.target.value = "";
+                      setFormAttachment(null);
+                      setToastMessage(`⚠️ ${problem}`);
+                      return;
+                    }
+                    setFormAttachment(file);
+                  }}
                   className="text-xs text-slate-600 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 cursor-pointer"
                 />
+                <span className="ml-auto text-[10px] text-slate-400">{fileRuleHint(FILE_RULES.complaintProof)}</span>
               </div>
             </div>
 

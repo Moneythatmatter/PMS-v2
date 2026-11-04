@@ -57,6 +57,7 @@ import { currentUser } from "@/app/data/user";
 import { usePsList } from "@/hooks/usePsResource";
 import { mntWorkOrderService, mntRequestService, mntVendorService, mntProblemCategoryService, mntSparePartService } from "@/services/maintenance";
 import { compressImageFile } from "./MaintenanceRequestsView";
+import { FILE_RULES, fileAccept, fileRuleHint, validateFile } from "@/lib/fileRules";
 
 // Legacy fallback if spare-parts master is empty (until seeded).
 export const STORES_SPARE_PARTS_CATALOG = [
@@ -272,9 +273,11 @@ export function MaintenanceWorkOrdersView() {
 
   const handleProgressFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+    const problem = validateFile(file, FILE_RULES.photo);
+    if (problem) {
+      setToastMessage(`⚠️ ${problem}`);
       return;
     }
     try {
@@ -288,9 +291,11 @@ export function MaintenanceWorkOrdersView() {
 
   const handleCompletionFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+    const problem = validateFile(file, FILE_RULES.photo);
+    if (problem) {
+      setToastMessage(`⚠️ ${problem}`);
       return;
     }
     try {
@@ -304,9 +309,11 @@ export function MaintenanceWorkOrdersView() {
 
   const handleVerifyFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+    const problem = validateFile(file, FILE_RULES.photo);
+    if (problem) {
+      setToastMessage(`⚠️ ${problem}`);
       return;
     }
     try {
@@ -320,9 +327,11 @@ export function MaintenanceWorkOrdersView() {
 
   const handleCreateFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+    const problem = validateFile(file, FILE_RULES.photo);
+    if (problem) {
+      setToastMessage(`⚠️ ${problem}`);
       return;
     }
     try {
@@ -1895,11 +1904,12 @@ export function MaintenanceWorkOrdersView() {
                   <span>{createAttachmentName ? "Change Photo" : "Upload Photo"}</span>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept={fileAccept(FILE_RULES.photo)}
                     className="hidden"
                     onChange={handleCreateFileChange}
                   />
                 </label>
+                <span className="text-[10px] text-slate-400">{fileRuleHint(FILE_RULES.photo)}</span>
                 {createAttachmentName && (
                   <button
                     type="button"
@@ -2963,11 +2973,12 @@ export function MaintenanceWorkOrdersView() {
                   <span>{progressAttachmentName ? "Change Photo" : "Upload Photo"}</span>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept={fileAccept(FILE_RULES.photo)}
                     className="hidden"
                     onChange={handleProgressFileChange}
                   />
                 </label>
+                <span className="text-[10px] text-slate-400">{fileRuleHint(FILE_RULES.photo)}</span>
                 {progressAttachmentName && (
                   <button
                     type="button"
@@ -3084,11 +3095,12 @@ export function MaintenanceWorkOrdersView() {
                   <span>{completionAttachmentName ? "Change Completion Photo" : "Upload Completion Photo"}</span>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept={fileAccept(FILE_RULES.photo)}
                     className="hidden"
                     onChange={handleCompletionFileChange}
                   />
                 </label>
+                <span className="text-[10px] text-slate-400">{fileRuleHint(FILE_RULES.photo)}</span>
                 {completionAttachmentName && (
                   <button
                     type="button"
@@ -3211,11 +3223,12 @@ export function MaintenanceWorkOrdersView() {
                   <span>{verifyAttachmentName ? "Change Photo" : "Upload Inspection Photo"}</span>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept={fileAccept(FILE_RULES.photo)}
                     className="hidden"
                     onChange={handleVerifyFileChange}
                   />
                 </label>
+                <span className="text-[10px] text-slate-400">{fileRuleHint(FILE_RULES.photo)}</span>
                 {verifyAttachmentName && (
                   <button
                     type="button"

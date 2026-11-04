@@ -12,7 +12,6 @@ import {
   GUEST_DOCUMENT_ACCEPT,
   GuestDocumentsPanel,
 } from "@/components/frontoffice/guest-documents/GuestDocumentsPanel";
-import { MAX_ATTACHMENT_BYTES } from "@/app/data/purchaseAttachmentUtils";
 import { cn } from "@/lib/utils";
 import {
   countries,
@@ -21,6 +20,7 @@ import {
   nationalities,
   states,
 } from "@/app/data/frontoffice/constants";
+import { FILE_RULES, fileRuleHint, validateFile } from "@/lib/fileRules";
 
 const inputClass = "rounded-xl";
 const errorClass = "border-red-400 bg-red-50/40 focus:border-red-500 focus:ring-red-100";
@@ -325,8 +325,9 @@ export function GuestDetailsSection({
                 const file = e.target.files?.[0];
                 e.target.value = "";
                 if (!file) return;
-                if (file.size > MAX_ATTACHMENT_BYTES) {
-                  setFileError("File is too large. Maximum size is 5 MB.");
+                const problem = validateFile(file, FILE_RULES.idDocument);
+                if (problem) {
+                  setFileError(problem);
                   return;
                 }
                 setFileError(null);
@@ -339,6 +340,7 @@ export function GuestDetailsSection({
             >
               {idFile ? "Change File" : "Choose File"}
             </label>
+            <span className="text-[11px] text-slate-400">{fileRuleHint(FILE_RULES.idDocument)}</span>
             {idFile ? (
               <>
                 <button

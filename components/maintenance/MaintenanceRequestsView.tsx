@@ -68,6 +68,7 @@ import {
   getFoRoomStatusListBadge,
 } from "@/lib/frontoffice/room-status-colors";
 import { isActiveRoomBookingStatus } from "@/lib/frontoffice/active-booking";
+import { FILE_RULES, fileAccept, fileRuleHint, validateFile } from "@/lib/fileRules";
 
 type RequestLocationType = "Guest Room" | "Public Area";
 
@@ -2065,16 +2066,18 @@ export function MaintenanceRequestsView() {
                 ) : (
                   <label className="cursor-pointer block">
                     <span className="text-xs text-slate-600 font-medium block">Click or drag photo to attach issue evidence</span>
-                    <span className="text-[10px] text-slate-400 block mt-0.5">JPG, PNG, or PDF up to 2MB</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">{fileRuleHint(FILE_RULES.evidence)}</span>
                     <input
                       type="file"
-                      accept="image/*,.pdf"
+                      accept={fileAccept(FILE_RULES.evidence)}
                       className="hidden"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
+                        e.target.value = "";
                         if (!file) return;
-                        if (file.size > 2 * 1024 * 1024) {
-                          setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+                        const problem = validateFile(file, FILE_RULES.evidence);
+                        if (problem) {
+                          setToastMessage(`⚠️ ${problem}`);
                           return;
                         }
                         try {
@@ -2844,16 +2847,18 @@ export function MaintenanceRequestsView() {
                 ) : (
                   <label className="cursor-pointer block">
                     <span className="text-xs text-slate-600 font-medium block">Click or drag photo to attach inspection evidence</span>
-                    <span className="text-[10px] text-slate-400 block mt-0.5">JPG, PNG or PDF up to 2MB</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">{fileRuleHint(FILE_RULES.evidence)}</span>
                     <input
                       type="file"
-                      accept="image/*,.pdf"
+                      accept={fileAccept(FILE_RULES.evidence)}
                       className="hidden"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
+                        e.target.value = "";
                         if (!file) return;
-                        if (file.size > 2 * 1024 * 1024) {
-                          setToastMessage("⚠️ File size exceeds 2MB limit. Please select an image under 2MB.");
+                        const problem = validateFile(file, FILE_RULES.evidence);
+                        if (problem) {
+                          setToastMessage(`⚠️ ${problem}`);
                           return;
                         }
                         try {

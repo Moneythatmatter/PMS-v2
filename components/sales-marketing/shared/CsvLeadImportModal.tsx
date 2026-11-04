@@ -5,6 +5,7 @@ import { FileSpreadsheet, Save, Upload, Check, AlertCircle } from "lucide-react"
 import { Button, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { LeadRecordItem, LeadSource, BookingType } from "../LeadsInquiriesView";
+import { FILE_RULES, fileAccept, validateFile } from "@/lib/fileRules";
 
 export interface CsvLeadImportModalProps {
   isOpen: boolean;
@@ -108,8 +109,9 @@ export function CsvLeadImportModal({
     const file = e.target.files?.[0];
     if (!file) return; // User cancelled file picker -> remain on Step 1
 
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      setErrorMessage("⚠️ Invalid file format! Please select a valid .csv file.");
+    const problem = validateFile(file, FILE_RULES.csv);
+    if (problem) {
+      setErrorMessage(`⚠️ ${problem}`);
       e.target.value = "";
       return;
     }
@@ -293,7 +295,7 @@ export function CsvLeadImportModal({
         <input
           type="file"
           ref={fileInputRef}
-          accept=".csv"
+          accept={fileAccept(FILE_RULES.csv)}
           onChange={handleFileChange}
           className="hidden"
         />
@@ -346,7 +348,7 @@ export function CsvLeadImportModal({
           <div className="space-y-4 text-center py-4">
             <div className="border-2 border-dashed border-slate-300 rounded-2xl p-8 bg-slate-50 flex flex-col items-center justify-center space-y-2">
               <FileSpreadsheet className="h-10 w-10 text-emerald-700" />
-              <h4 className="font-bold text-slate-800 text-xs">Upload Lead Export File (.csv)</h4>
+              <h4 className="font-bold text-slate-800 text-xs">Upload Lead Export File (CSV · max {FILE_RULES.csv.maxMB} MB)</h4>
               <p className="text-[11px] text-slate-500 max-w-xs">
                 Select a .csv lead list file from your device exported from Google Ads, Meta Ads, or webform.
               </p>
