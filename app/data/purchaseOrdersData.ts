@@ -68,6 +68,20 @@ export interface POPayment {
   remarks?: string;
 }
 
+export type POSource = "direct" | "rfq" | "requisition";
+
+export const PO_SOURCE_LABELS: Record<POSource, string> = {
+  direct: "Direct",
+  rfq: "From RFQ",
+  requisition: "From Requisition",
+};
+
+export function poSource(po: Pick<PORecord, "linkedPR" | "linkedRFQ">): POSource {
+  if (po.linkedRFQ?.trim()) return "rfq";
+  if (po.linkedPR?.trim()) return "requisition";
+  return "direct";
+}
+
 export function isDirectPo(po: Pick<PORecord, "linkedPR" | "linkedRFQ">): boolean {
   return !po.linkedPR?.trim() && !po.linkedRFQ?.trim();
 }

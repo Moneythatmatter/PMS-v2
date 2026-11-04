@@ -37,6 +37,9 @@ import {
   PO_PAYMENT_MODES,
   isDirectPo,
   poPaymentSummary,
+  poSource,
+  PO_SOURCE_LABELS,
+  type POSource,
   type PORecord,
   type POLineItem,
   type POPayment,
@@ -137,6 +140,7 @@ export default function PurchaseOrdersPage() {
   // Search & Filter State
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | POSource>("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
@@ -387,11 +391,18 @@ export default function PurchaseOrdersPage() {
   }), [poList]);
 
   const activeFilterCount = useMemo(() => {
-    return deptFilter !== "all" ? 1 : 0;
-  }, [deptFilter]);
+    return (deptFilter !== "all" ? 1 : 0) + (sourceFilter !== "all" ? 1 : 0);
+  }, [deptFilter, sourceFilter]);
+
+  const sourceCounts = useMemo(() => {
+    const counts: Record<"all" | POSource, number> = { all: poList.length, direct: 0, rfq: 0, requisition: 0 };
+    for (const p of poList) counts[poSource(p)] += 1;
+    return counts;
+  }, [poList]);
 
   const handleResetFilters = () => {
     setDeptFilter("all");
+    setSourceFilter("all");
   };
 
   // Filtered PO Records
@@ -404,14 +415,15 @@ export default function PurchaseOrdersPage() {
         p.buyerName.toLowerCase().includes(search.toLowerCase());
 
       const matchDept = deptFilter === "all" || p.department.toLowerCase().includes(deptFilter.toLowerCase());
+      const matchSource = sourceFilter === "all" || poSource(p) === sourceFilter;
       const matchStatus =
         statusFilter === "all" ||
         (statusFilter === "Approved" && (p.status === "Approved" || p.status === "Issued")) ||
         p.status === statusFilter;
 
-      return matchSearch && matchDept && matchStatus;
+      return matchSearch && matchDept && matchSource && matchStatus;
     });
-  }, [poList, search, deptFilter, statusFilter]);
+  }, [poList, search, deptFilter, sourceFilter, statusFilter]);
 
   const selectedSupplierId =
     activeSuppliers.find((s) => s.supplierName.trim().toLowerCase() === formVendorName.trim().toLowerCase())?.id ?? "";
@@ -667,6 +679,33 @@ export default function PurchaseOrdersPage() {
       render: (r: PORecord) => <span className="font-mono font-bold text-emerald-800">{r.poNumber}</span>,
     },
     {
+      key: "source",
+      header: "PO Type",
+      render: (r: PORecord) => {
+        const src = poSource(r);
+        return (
+          <div className="leading-tight">
+            <span
+              className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                src === "direct"
+                  ? "bg-violet-50 text-violet-700"
+                  : src === "rfq"
+                    ? "bg-sky-50 text-sky-700"
+                    : "bg-slate-100 text-slate-700"
+              }`}
+            >
+              {PO_SOURCE_LABELS[src]}
+            </span>
+            {src !== "direct" && (
+              <span className="block font-mono text-[10px] text-slate-400 mt-0.5">
+                {src === "rfq" ? r.linkedRFQ : r.linkedPR}
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       key: "vendorName",
       header: "Vendor Name",
       render: (r: PORecord) => <span className="font-bold text-slate-900">{r.vendorName}</span>,
@@ -789,6 +828,19 @@ export default function PurchaseOrdersPage() {
         ]}
         activeStatusTab={statusFilter}
         onStatusTabChange={setStatusFilter}
+        toolbarExtras={
+          <SelectInput
+            value={sourceFilter}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSourceFilter(e.target.value as "all" | POSource)}
+            className="!h-10 !w-52 shrink-0 !rounded-full text-xs bg-white font-semibold"
+            aria-label="PO type"
+          >
+            <option value="all">All PO Types ({sourceCounts.all})</option>
+            <option value="direct">Direct Purchase ({sourceCounts.direct})</option>
+            <option value="rfq">From RFQ ({sourceCounts.rfq})</option>
+            <option value="requisition">From Requisition ({sourceCounts.requisition})</option>
+          </SelectInput>
+        }
         selectionBar={
           <ModuleSelectionBar
             count={selectedIds.size}
@@ -824,6 +876,18 @@ export default function PurchaseOrdersPage() {
         activeFilterCount={activeFilterCount}
         onReset={handleResetFilters}
       >
+        <FormField label="PO Type">
+          <SelectInput
+            value={sourceFilter}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSourceFilter(e.target.value as "all" | POSource)}
+            className="w-full text-xs rounded-xl h-9 bg-white"
+          >
+            <option value="all">All PO Types</option>
+            <option value="direct">Direct Purchase</option>
+            <option value="rfq">From RFQ</option>
+            <option value="requisition">From Requisition</option>
+          </SelectInput>
+        </FormField>
         <FormField label="Department">
           <SelectInput
             value={deptFilter}

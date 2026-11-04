@@ -1,5 +1,17 @@
 import type { ModuleNavItem } from "../types";
 
+export const purchaseStoresQuickNavItems = [
+  { label: "Dashboard", href: "/purchase-stores/dashboard", icon: "layout-grid" },
+  { label: "Requisitions", href: "/purchase-stores/procurement/requisitions", icon: "file-text" },
+  { label: "RFQs", href: "/purchase-stores/procurement/rfq", icon: "file-spreadsheet" },
+  { label: "Purchase Orders", href: "/purchase-stores/procurement/orders", icon: "shopping-cart" },
+  { label: "Payments", href: "/purchase-stores/procurement/payments", icon: "wallet" },
+  { label: "Goods Receipt", href: "/purchase-stores/receiving/grn", icon: "clipboard-check" },
+  { label: "Stock", href: "/purchase-stores/inventory/stock", icon: "layers" },
+  { label: "Issues", href: "/purchase-stores/inventory/issues", icon: "arrow-up-right" },
+  { label: "Reports", href: "/purchase-stores/reports", icon: "bar-chart" },
+] as const;
+
 export const purchaseStoresNavItems: ModuleNavItem[] = [
   { label: "Dashboard", href: "/purchase-stores/dashboard", icon: "layout-grid" },
   {

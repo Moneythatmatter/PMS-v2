@@ -2,6 +2,7 @@ import { navItems, currentUser, purchaseStoresNavItems } from "@/app/data";
 import { AppShell } from "@/components/layout/AppShell";
 import { ModuleSidebar } from "@/components/layout/ModuleSidebar";
 import { PurchaseStoresMobileBottomNav } from "@/components/purchase-stores/PurchaseStoresMobileBottomNav";
+import { PurchaseStoresSubNav } from "@/components/purchase-stores/PurchaseStoresSubNav";
 
 export default function PurchaseStoresLayout({
   children,
@@ -12,6 +13,7 @@ export default function PurchaseStoresLayout({
     <AppShell
       navItems={navItems}
       user={currentUser}
+      subNav={<PurchaseStoresSubNav />}
       moduleSidebar={
         <ModuleSidebar
           title="Purchase & Stores"

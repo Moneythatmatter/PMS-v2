@@ -103,6 +103,12 @@ function prOptionLabel(pr: PurchaseRequisition): string {
   return `${pr.prNumber} (${pr.department} • ${categoryHint})`;
 }
 
+function bidDeliveryKey(bid: VendorQuotationComparison): number {
+  if (bid.deliveryDate) return new Date(`${bid.deliveryDate}T00:00:00`).getTime();
+  if (bid.deliveryDays) return Date.now() + bid.deliveryDays * 86_400_000;
+  return Number.POSITIVE_INFINITY;
+}
+
 function formatBidDelivery(bid: VendorQuotationComparison): string {
   if (bid.deliveryDate) {
     return new Date(`${bid.deliveryDate}T00:00:00`).toLocaleDateString("en-GB", {
@@ -184,12 +190,19 @@ export default function RequestForQuotationsPage() {
 
   const vendorOptions = useMemo(
     () =>
-      suppliers.map((s) => ({
-        id: s.id,
-        name: s.supplierName,
-        email: s.email,
-        phone: s.phone,
-      })),
+      suppliers
+        .filter((s) => s.status !== "Inactive")
+        .map((s) => ({
+          id: s.id,
+          name: s.supplierName,
+          code: s.supplierCode,
+          contactPerson: s.contactPerson,
+          city: s.city,
+          rating: s.rating,
+          email: s.email,
+          phone: s.phone,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [suppliers],
   );
 
@@ -237,6 +250,7 @@ export default function RequestForQuotationsPage() {
   const [compareModalRFQ, setCompareModalRFQ] = useState<RFQRecord | null>(null);
   const [selectVendorModalRFQ, setSelectVendorModalRFQ] = useState<RFQRecord | null>(null);
   const [vendorModalOpen, setVendorModalOpen] = useState(false);
+  const [vendorSearch, setVendorSearch] = useState("");
 
   // PO Creation & Viewing States
   const [convertPOModalRFQ, setConvertPOModalRFQ] = useState<RFQRecord | null>(null);
@@ -2137,6 +2151,7 @@ export default function RequestForQuotationsPage() {
                     type="button"
                     onClick={() => {
                       setSelectedVendorIds(formVendors.map((v) => v.id));
+                      setVendorSearch("");
                       setVendorModalOpen(true);
                     }}
                     className="h-8 px-3 text-xs font-semibold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer inline-flex items-center gap-1"
@@ -2157,6 +2172,7 @@ export default function RequestForQuotationsPage() {
                     type="button"
                     onClick={() => {
                       setSelectedVendorIds([]);
+                      setVendorSearch("");
                       setVendorModalOpen(true);
                     }}
                     className="mt-1 h-9 px-4 text-xs font-semibold !bg-emerald-700 hover:!bg-emerald-800 text-white rounded-lg cursor-pointer inline-flex items-center gap-1.5"
@@ -2325,67 +2341,175 @@ export default function RequestForQuotationsPage() {
       </Drawer>
 
       {/* VENDOR SELECTION MODAL */}
-      <Modal
-        open={vendorModalOpen}
-        onClose={() => setVendorModalOpen(false)}
-        title="Select Vendors for RFQ"
-        description="Choose static vendors to invite for quotation submissions."
-        size="md"
-        footer={
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setVendorModalOpen(false)}
-              className="h-9 px-4 text-xs font-bold !bg-slate-100 text-slate-700 rounded-xl cursor-pointer"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleConfirmVendorModal}
-              className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl cursor-pointer"
-            >
-              Add Selected Vendors
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-3 py-1 text-xs">
-          {vendorOptions.map((v) => {
-            const isChecked = selectedVendorIds.includes(v.id);
-
-            return (
-              <label
-                key={v.id}
-                className={cn(
-                  "flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-colors",
-                  isChecked ? "bg-emerald-50/70 border-emerald-300" : "bg-white border-slate-200 hover:bg-slate-50"
-                )}
-              >
-                <div className="flex items-center gap-2.5">
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedVendorIds([...selectedVendorIds, v.id]);
-                      } else {
-                        setSelectedVendorIds(selectedVendorIds.filter((id) => id !== v.id));
-                      }
-                    }}
-                    className="accent-emerald-700 cursor-pointer"
-                  />
-                  <div>
-                    <p className="font-extrabold text-slate-900">{v.name}</p>
-                    <p className="text-[10px] text-slate-400">{v.email} · {v.phone}</p>
-                  </div>
+      {(() => {
+        const q = vendorSearch.trim().toLowerCase();
+        const visibleVendors = vendorOptions.filter(
+          (v) =>
+            !q ||
+            [v.name, v.code, v.contactPerson, v.city, v.email, v.phone]
+              .filter(Boolean)
+              .some((f) => String(f).toLowerCase().includes(q)),
+        );
+        const allVisibleSelected =
+          visibleVendors.length > 0 && visibleVendors.every((v) => selectedVendorIds.includes(v.id));
+        const toggleVendor = (id: string) =>
+          setSelectedVendorIds(
+            selectedVendorIds.includes(id)
+              ? selectedVendorIds.filter((x) => x !== id)
+              : [...selectedVendorIds, id],
+          );
+        return (
+          <Modal
+            open={vendorModalOpen}
+            onClose={() => setVendorModalOpen(false)}
+            title="Invite Vendors"
+            description="Pick the suppliers who should receive this RFQ and submit a quotation."
+            size="lg"
+            footer={
+              <div className="flex w-full items-center justify-between gap-3">
+                <span className="text-xs text-slate-500">
+                  <span className="font-bold text-slate-900">{selectedVendorIds.length}</span> vendor(s) selected
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setVendorModalOpen(false)}
+                    className="h-9 px-4 text-xs font-bold rounded-xl cursor-pointer"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleConfirmVendorModal}
+                    disabled={selectedVendorIds.length === 0}
+                    className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl cursor-pointer gap-1.5 disabled:opacity-50"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    {selectedVendorIds.length > 0 ? `Invite ${selectedVendorIds.length} Vendor(s)` : "Invite Vendors"}
+                  </Button>
                 </div>
-              </label>
-            );
-          })}
-        </div>
-      </Modal>
+              </div>
+            }
+          >
+            <div className="space-y-3 select-none">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <TextInput
+                    value={vendorSearch}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVendorSearch(e.target.value)}
+                    placeholder="Search vendor, code, contact or city…"
+                    className="h-9 !rounded-full pl-9 text-xs"
+                    autoFocus
+                  />
+                </div>
+                {visibleVendors.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedVendorIds(
+                        allVisibleSelected
+                          ? selectedVendorIds.filter((id) => !visibleVendors.some((v) => v.id === id))
+                          : [...new Set([...selectedVendorIds, ...visibleVendors.map((v) => v.id)])],
+                      )
+                    }
+                    className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                  >
+                    {allVisibleSelected ? "Clear all" : "Select all"}
+                  </button>
+                )}
+              </div>
+
+              {vendorOptions.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center space-y-2">
+                  <Building2 className="mx-auto h-6 w-6 text-slate-300" />
+                  <p className="text-sm font-semibold text-slate-600">No active vendors yet</p>
+                  <Link href="/purchase-stores/vendors" className="text-xs font-semibold text-emerald-700 hover:underline">
+                    Add vendors in the Vendors master →
+                  </Link>
+                </div>
+              ) : visibleVendors.length === 0 ? (
+                <p className="py-8 text-center text-xs text-slate-500">No vendors match &ldquo;{vendorSearch}&rdquo;.</p>
+              ) : (
+                <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+                  {visibleVendors.map((v) => {
+                    const isChecked = selectedVendorIds.includes(v.id);
+                    const initials = v.name
+                      .split(/\s+/)
+                      .slice(0, 2)
+                      .map((w) => w[0]?.toUpperCase() ?? "")
+                      .join("");
+                    const contact = [v.email, v.phone].filter((x) => x && String(x).trim()).join(" · ");
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        role="checkbox"
+                        aria-checked={isChecked}
+                        onClick={() => toggleVendor(v.id)}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all cursor-pointer",
+                          isChecked
+                            ? "border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-100"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors",
+                            isChecked ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 bg-white",
+                          )}
+                        >
+                          {isChecked && <Check className="h-3 w-3" strokeWidth={3} />}
+                        </span>
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">
+                          {initials || "V"}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-bold text-slate-900">{v.name}</p>
+                            {v.code && (
+                              <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
+                                {v.code}
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
+                            {v.contactPerson && (
+                              <span className="inline-flex items-center gap-1">
+                                <User className="h-3 w-3" /> {v.contactPerson}
+                              </span>
+                            )}
+                            {v.city && (
+                              <span className="inline-flex items-center gap-1">
+                                <Building2 className="h-3 w-3" /> {v.city}
+                              </span>
+                            )}
+                            {contact && (
+                              <span className="inline-flex items-center gap-1">
+                                <Phone className="h-3 w-3" /> {contact}
+                              </span>
+                            )}
+                            {!v.contactPerson && !v.city && !contact && (
+                              <span className="text-slate-400">No contact details on file</span>
+                            )}
+                          </p>
+                        </div>
+                        {v.rating > 0 && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                            <Star className="h-3 w-3 fill-current" /> {Number(v.rating).toFixed(1)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </Modal>
+        );
+      })()}
 
       {/* RECORD VENDOR QUOTATION MODAL */}
       {recordQuoteRFQ && recordQuoteVendor && (
@@ -2482,103 +2606,165 @@ export default function RequestForQuotationsPage() {
       )}
 
       {/* COMPARE QUOTATIONS MODAL */}
-      {compareModalRFQ && (
+      {compareModalRFQ && (() => {
+        const bids = [...(compareModalRFQ.comparisonData ?? [])].sort((a, b) => a.totalAmount - b.totalAmount);
+        const lowest = bids[0]?.totalAmount ?? 0;
+        const highest = bids[bids.length - 1]?.totalAmount ?? 0;
+        const fastestKey = Math.min(...bids.map(bidDeliveryKey));
+        const picked = bids.find((b) => b.vendorId === pickedVendorId);
+        return (
         <Modal
           open={!!compareModalRFQ}
           onClose={() => setCompareModalRFQ(null)}
-          title={`Quotation Comparison Matrix: ${compareModalRFQ.rfqNumber}`}
-          description={`Comparing vendor bids for ${compareModalRFQ.department} Department requisition.`}
-          size="lg"
+          title={`Compare Quotations · ${compareModalRFQ.rfqNumber}`}
+          description={`${bids.length} vendor bid(s) for the ${compareModalRFQ.department} requisition. Pick the winning vendor.`}
+          size="xl"
           footer={
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCompareModalRFQ(null)}
-                className="h-9 px-4 text-xs font-bold !bg-slate-100 text-slate-700 rounded-xl cursor-pointer"
-              >
-                Close Comparison
-              </Button>
-              <Button
-                type="button"
-                disabled={(compareModalRFQ.comparisonData?.length ?? 0) === 0 || !pickedVendorId}
-                onClick={() => {
-                  setVendorSelectReason("");
-                  setSelectVendorModalRFQ(compareModalRFQ);
-                  setCompareModalRFQ(null);
-                }}
-                className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl cursor-pointer disabled:opacity-50"
-              >
-                Select Vendor
-              </Button>
+            <div className="flex w-full flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0 text-xs">
+                {picked ? (
+                  <span className="text-slate-600">
+                    Selected:{" "}
+                    <span className="font-bold text-slate-900">{resolveVendorName(picked.vendorId, picked.vendorName)}</span>
+                    <span className="font-bold text-emerald-700"> · ₹{picked.totalAmount.toLocaleString("en-IN")}</span>
+                  </span>
+                ) : (
+                  <span className="text-slate-400">Click a vendor card to select it</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCompareModalRFQ(null)}
+                  className="h-9 px-4 text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={bids.length === 0 || !pickedVendorId}
+                  onClick={() => {
+                    setVendorSelectReason("");
+                    setSelectVendorModalRFQ(compareModalRFQ);
+                    setCompareModalRFQ(null);
+                  }}
+                  className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl cursor-pointer disabled:opacity-50 gap-1.5"
+                >
+                  <Award className="h-3.5 w-3.5" /> Select Vendor
+                </Button>
+              </div>
             </div>
           }
         >
-          <div className="space-y-4 select-none py-1">
-            {(compareModalRFQ.comparisonData?.length ?? 0) > 0 ? (
-              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                      <th className="px-3.5 py-3">Vendor</th>
-                      <th className="px-3.5 py-3">Quoted Rate</th>
-                      <th className="px-3.5 py-3">Delivery By</th>
-                      <th className="px-3.5 py-3">Payment Terms</th>
-                      <th className="px-3.5 py-3">Warranty</th>
-                      <th className="px-3.5 py-3">Total Amount</th>
-                      <th className="px-3.5 py-3 text-right">Recommendation</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {(compareModalRFQ.comparisonData ?? []).map((bid) => {
-                      const bidName = resolveVendorName(bid.vendorId, bid.vendorName);
-                      return (
-                      <tr
-                        key={bid.vendorId}
-                        onClick={() => setPickedVendorId(bid.vendorId)}
-                        className={cn(
-                          "transition-colors cursor-pointer",
-                          pickedVendorId === bid.vendorId
-                            ? "bg-emerald-50/80 border-l-4 border-l-emerald-600"
-                            : bid.isRecommended
-                              ? "bg-emerald-50/40 hover:bg-slate-50/50"
-                              : "hover:bg-slate-50/50",
-                        )}
-                      >
-                        <td className="px-3.5 py-3 font-extrabold text-slate-900">{bidName}</td>
-                        <td className="px-3.5 py-3 font-bold text-slate-800">₹{bid.unitPrice}</td>
-                        <td className="px-3.5 py-3 text-slate-600">{formatBidDelivery(bid)}</td>
-                        <td className="px-3.5 py-3 text-slate-600">{bid.paymentTerms}</td>
-                        <td className="px-3.5 py-3 text-slate-600">{bid.warranty}</td>
-                        <td className="px-3.5 py-3 font-extrabold text-slate-900 text-sm">
-                          ₹{bid.totalAmount.toLocaleString("en-IN")}
-                        </td>
-                        <td className="px-3.5 py-3 text-right">
-                          {bid.isRecommended ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[9px] font-extrabold uppercase rounded-full bg-emerald-600 text-white shadow-2xs">
-                              <Star className="h-3 w-3 fill-current" /> Recommended
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 text-[10px]">—</span>
+          {bids.length > 0 ? (
+            <div className="space-y-4 select-none">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  { label: "Quotes received", value: String(bids.length) },
+                  { label: "Lowest bid", value: `₹${lowest.toLocaleString("en-IN")}`, tone: "text-emerald-700" },
+                  { label: "Highest bid", value: `₹${highest.toLocaleString("en-IN")}` },
+                  { label: "Max saving", value: `₹${(highest - lowest).toLocaleString("en-IN")}`, tone: "text-emerald-700" },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{s.label}</p>
+                    <p className={cn("mt-0.5 text-sm font-extrabold text-slate-900", s.tone)}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div role="radiogroup" aria-label="Vendor bids" className="space-y-2.5">
+                {bids.map((bid, idx) => {
+                  const bidName = resolveVendorName(bid.vendorId, bid.vendorName);
+                  const isPicked = pickedVendorId === bid.vendorId;
+                  const isLowest = bid.totalAmount === lowest;
+                  const isFastest = bids.length > 1 && bidDeliveryKey(bid) === fastestKey;
+                  const diff = bid.totalAmount - lowest;
+                  return (
+                    <button
+                      key={bid.vendorId}
+                      type="button"
+                      role="radio"
+                      aria-checked={isPicked}
+                      onClick={() => setPickedVendorId(bid.vendorId)}
+                      className={cn(
+                        "w-full rounded-xl border bg-white p-3.5 text-left transition-all cursor-pointer",
+                        isPicked
+                          ? "border-emerald-500 ring-2 ring-emerald-100 bg-emerald-50/40"
+                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50",
+                      )}
+                    >
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span
+                          className={cn(
+                            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
+                            isPicked ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300",
                           )}
-                        </td>
-                      </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                        >
+                          {isPicked && <Check className="h-3 w-3" strokeWidth={3} />}
+                        </span>
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[11px] font-bold text-slate-500">
+                          #{idx + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-slate-900">{bidName}</p>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {bid.isRecommended && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                                <Star className="h-2.5 w-2.5 fill-current" /> Recommended
+                              </span>
+                            )}
+                            {isLowest && (
+                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                                Lowest price
+                              </span>
+                            )}
+                            {isFastest && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 ring-1 ring-inset ring-sky-200">
+                                <Zap className="h-2.5 w-2.5" /> Fastest delivery
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-base font-extrabold text-slate-900">₹{bid.totalAmount.toLocaleString("en-IN")}</p>
+                          <p className={cn("text-[11px] font-semibold", diff > 0 ? "text-rose-600" : "text-emerald-600")}>
+                            {diff > 0 ? `+₹${diff.toLocaleString("en-IN")} vs lowest` : "Best price"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs sm:grid-cols-4 sm:pl-[60px]">
+                        {[
+                          { label: "Unit rate", value: `₹${bid.unitPrice.toLocaleString("en-IN")}` },
+                          { label: "Delivery by", value: formatBidDelivery(bid) },
+                          { label: "Payment terms", value: bid.paymentTerms || "—" },
+                          { label: "Warranty", value: bid.warranty || "—" },
+                        ].map((f) => (
+                          <div key={f.label} className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{f.label}</p>
+                            <p className="truncate font-semibold text-slate-700" title={f.value}>
+                              {f.value}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center space-y-2">
-                <p className="text-xs text-slate-500 font-medium">No quotations recorded yet.</p>
-                <p className="text-[11px] text-slate-400">
-                  Open the RFQ detail drawer and use <strong>Record Quote</strong> on each vendor row.
-                </p>
-              </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center space-y-2">
+              <FileSpreadsheet className="mx-auto h-6 w-6 text-slate-300" />
+              <p className="text-sm font-semibold text-slate-600">No quotations recorded yet</p>
+              <p className="text-xs text-slate-400">
+                Open the RFQ details and use <strong>Record Quote</strong> on each vendor row.
+              </p>
+            </div>
+          )}
         </Modal>
-      )}
+        );
+      })()}
 
       {/* SELECT VENDOR CONFIRMATION MODAL */}
       {selectVendorModalRFQ && (

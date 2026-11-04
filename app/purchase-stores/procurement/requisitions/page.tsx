@@ -378,7 +378,7 @@ export default function PurchaseRequisitionsPage() {
                   ? "bg-red-50 text-red-700 ring-red-200"
                   : "bg-slate-100 text-slate-600 ring-slate-200";
     return (
-      <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset", tone)}>
+      <span className={cn("inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset", tone)}>
         {status}
       </span>
     );
@@ -394,7 +394,7 @@ export default function PurchaseRequisitionsPage() {
             ? "bg-blue-50 text-blue-700 ring-blue-200"
             : "bg-slate-100 text-slate-600 ring-slate-200";
     return (
-      <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset", tone)}>
+      <span className={cn("inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset", tone)}>
         {priority}
       </span>
     );
@@ -405,9 +405,9 @@ export default function PurchaseRequisitionsPage() {
     if (!canCreateRfq && !canCreatePo) {
       return compact ? <span className="text-slate-400">—</span> : null;
     }
-    const size = compact ? "h-7 px-2 text-[11px]" : "h-8 px-3 text-xs";
+    const size = compact ? "h-7 px-2.5 text-[11px] whitespace-nowrap" : "h-8 px-3 text-xs whitespace-nowrap";
     return (
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-nowrap items-center gap-1.5">
         {canCreateRfq && (
           <Button
             type="button"
@@ -418,7 +418,7 @@ export default function PurchaseRequisitionsPage() {
             }}
             className={cn("gap-1 rounded-lg font-bold !bg-white !text-sky-700 !border-sky-200 hover:!bg-sky-50", size)}
           >
-            <Send className="h-3 w-3" /> Create RFQ
+            <Send className="h-3 w-3 shrink-0" /> Create RFQ
           </Button>
         )}
         {canCreatePo && (
@@ -430,34 +430,34 @@ export default function PurchaseRequisitionsPage() {
             }}
             className={cn("gap-1 rounded-lg font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white", size)}
           >
-            <ShoppingCart className="h-3 w-3" /> Create PO
+            <ShoppingCart className="h-3 w-3 shrink-0" /> Create PO
           </Button>
         )}
       </div>
     );
   };
 
-  const columns: ModuleColumn[] = [
+  const columns: ModuleColumn[] = ([
     {
       key: "prNumber",
-      header: "PR number",
+      header: "PR Number",
       render: (pr: PurchaseRequisition) => (
-        <span className="font-mono text-sm font-semibold text-slate-900">{pr.prNumber}</span>
+        <span className="font-mono text-xs font-bold text-emerald-800">{pr.prNumber}</span>
       ),
     },
     {
       key: "department",
       header: "Department",
       render: (pr: PurchaseRequisition) => (
-        <div>
-          <span className="font-medium text-slate-900">{pr.department}</span>
-          <p className="text-xs text-slate-500">via {pr.sourceModule ?? "Purchase & Stores"}</p>
-        </div>
+        <span title={`Raised via ${pr.sourceModule ?? "Purchase & Stores"}`}>
+          <span className="font-semibold text-slate-900">{pr.department}</span>
+          <span className="text-[11px] text-slate-400"> · {pr.sourceModule ?? "Purchase & Stores"}</span>
+        </span>
       ),
     },
     {
       key: "requestedBy",
-      header: "Requested by",
+      header: "Requested By",
       render: (pr: PurchaseRequisition) => <span className="text-slate-700">{pr.requestedBy}</span>,
     },
     {
@@ -472,7 +472,7 @@ export default function PurchaseRequisitionsPage() {
     },
     {
       key: "estimatedAmount",
-      header: "Estimated Amount",
+      header: "Est. Amount",
       align: "right",
       render: (pr: PurchaseRequisition) => (
         <span className="font-semibold text-slate-900">{formatINR(pr.estimatedAmount)}</span>
@@ -504,9 +504,11 @@ export default function PurchaseRequisitionsPage() {
     {
       key: "sourcingActions",
       header: "Actions",
+      className:
+        "sticky right-0 z-10 bg-white [tr:hover_&]:bg-slate-50 [th&]:bg-slate-50 shadow-[-10px_0_12px_-10px_rgba(15,23,42,0.25)]",
       render: (pr: PurchaseRequisition) => renderSourcingButtons(pr, true),
     },
-  ];
+  ] as ModuleColumn[]).map((col) => ({ ...col, className: cn("whitespace-nowrap", col.className) }));
 
   // Row Action Handlers
   const handleDuplicatePR = async (pr: PurchaseRequisition) => {
@@ -1234,50 +1236,7 @@ export default function PurchaseRequisitionsPage() {
               </div>
             </div>
 
-            {/* SECTION 4: APPROVAL TIMELINE */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
-                Approval Timeline
-              </h4>
-              <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-3">
-                {selectedPR.approvalTimeline.map((step, idx) => {
-                  const isCompleted = step.status === "Completed";
-                  const isCurrent = step.status === "Current";
-
-                  return (
-                    <div key={step.stage} className="flex items-start gap-3 relative">
-                      {idx !== selectedPR.approvalTimeline.length - 1 && (
-                        <div className="absolute left-3 top-6 bottom-0 w-0.5 bg-slate-200 -mb-3" />
-                      )}
-                      <div
-                        className={cn(
-                          "h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold z-10 shrink-0",
-                          isCompleted
-                            ? "bg-emerald-600 text-white"
-                            : isCurrent
-                            ? "bg-amber-500 text-white ring-4 ring-amber-100 animate-pulse"
-                            : "bg-slate-100 text-slate-400 border border-slate-200"
-                        )}
-                      >
-                        {isCompleted ? "✓" : idx + 1}
-                      </div>
-
-                      <div className="flex-1 pb-1">
-                        <div className="flex items-center justify-between">
-                          <span className={cn("text-xs font-extrabold", isCurrent ? "text-amber-800" : "text-slate-800")}>
-                            {step.stage}
-                          </span>
-                          {step.timestamp && <span className="text-[10px] text-slate-400">{step.timestamp}</span>}
-                        </div>
-                        <p className="text-[11px] text-slate-500 font-medium">Approver: {step.approverName}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* SECTION 5: ATTACHMENTS */}
+            {/* SECTION 4: ATTACHMENTS */}
             {(selectedPR.attachments?.length ?? 0) > 0 && (
             <div className="space-y-2">
               <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
@@ -1484,7 +1443,7 @@ export default function PurchaseRequisitionsPage() {
                         <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                           <tr className="border-b border-slate-200">
                             <th className="px-3 py-2.5">Item</th>
-                            <th className="w-24 px-3 py-2.5 text-center">Qty</th>
+                            <th className="w-40 px-3 py-2.5 text-center">Qty</th>
                             <th className="w-32 px-3 py-2.5 text-right">Est. Price (₹)</th>
                             <th className="w-28 px-3 py-2.5 text-right">Est. Total</th>
                             <th className="px-3 py-2.5">Remarks</th>
@@ -1507,9 +1466,11 @@ export default function PurchaseRequisitionsPage() {
                                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                                       handleItemFieldChange(item.id, "quantity", e.target.value)
                                     }
-                                    className="h-8 text-center text-xs font-semibold"
+                                    className="h-8 !w-20 shrink-0 !px-2 text-center text-xs font-semibold"
                                   />
-                                  <span className="shrink-0 text-[11px] text-slate-500">{item.unit || "Pcs"}</span>
+                                  <span className="min-w-0 truncate text-[11px] text-slate-500" title={item.unit || "Pcs"}>
+                                    {item.unit || "Pcs"}
+                                  </span>
                                 </div>
                               </td>
                               <td className="px-2 py-2">
