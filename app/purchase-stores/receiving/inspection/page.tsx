@@ -16,6 +16,7 @@ import {
   XCircle,
   RotateCcw,
   Check,
+  X,
   FileText,
   Layers,
   Building2,
@@ -48,109 +49,20 @@ import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import { ModuleColumn } from "@/components/pms/module-types";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
 import { PurchaseFormCard } from "@/components/purchase-stores/ui/PurchaseFormCard";
-import {
-  PurchaseAttachmentList,
-  AttachmentItem,
-} from "@/components/purchase-stores/ui/PurchaseAttachmentList";
 import type { QualityInspectionRecord, QIItem, QIChecklistItem } from "@/app/data/qualityInspectionData";
 import { usePsList } from "@/hooks/usePsResource";
-import { psQualityInspectionService } from "@/services/purchase-stores/index";
+import { psGrnService, psQualityInspectionService, psVendorReturnService } from "@/services/purchase-stores/index";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { createPortal } from "react-dom";
+import { Modal } from "@/components/ui/Modal";
+import { normalizeGrnRecord } from "@/app/data/grnData";
 
 // SAMPLE GRN DATABASE FOR AUTO-LOADING INSPECTIONS
-const SAMPLE_GRN_QC_DATABASE: Record<string, {
-  grnNumber: string;
-  poNumber: string;
-  supplierName: string;
-  warehouse: string;
-  receiptDate: string;
-  items: Array<{
-    productCode: string;
-    productName: string;
-    batchNumber: string;
-    mfgDate: string;
-    expiryDate: string;
-    storageLocation: string;
-    receivedQty: number;
-    unit: string;
-  }>;
-}> = {
-  "GRN-2026-012": {
-    grnNumber: "GRN-2026-012",
-    poNumber: "PO-2026-042",
-    supplierName: "Fresh Farms India Pvt. Ltd.",
-    warehouse: "Main Kitchen Store",
-    receiptDate: "2026-07-25",
-    items: [
-      {
-        productCode: "FNB-VEG-09",
-        productName: "Exotic Baby Spinach (500g)",
-        batchNumber: "B-FF-1120",
-        mfgDate: "2026-07-22",
-        expiryDate: "2026-07-26",
-        storageLocation: "Main Kitchen Store → BIN-VEG-02",
-        receivedQty: 70,
-        unit: "Packs",
-      },
-    ],
-  },
-  "GRN-2026-014": {
-    grnNumber: "GRN-2026-014",
-    poNumber: "PO-2026-044",
-    supplierName: "ABC Linen Pvt Ltd",
-    warehouse: "Central Linen Warehouse",
-    receiptDate: "2026-07-24",
-    items: [
-      {
-        productCode: "HK-LIN-01",
-        productName: "King Bed Sheets 300TC Cotton",
-        batchNumber: "B-LNN-9941",
-        mfgDate: "2026-06-15",
-        expiryDate: "2030-01-01",
-        storageLocation: "Central Linen Warehouse → BIN-LIN-04",
-        receivedQty: 150,
-        unit: "Sheets",
-      },
-    ],
-  },
-  "GRN-2026-011": {
-    grnNumber: "GRN-2026-011",
-    poNumber: "PO-2026-041",
-    supplierName: "Amul Dairy Products Ltd.",
-    warehouse: "Central Cold Storage",
-    receiptDate: "2026-07-15",
-    items: [
-      {
-        productCode: "FNB-DRY-01",
-        productName: "Full Cream Fresh Milk 1L",
-        batchNumber: "B-AML-8821",
-        mfgDate: "2026-07-20",
-        expiryDate: "2026-07-28",
-        storageLocation: "Central Cold Storage → BIN-CHILL-D1-01",
-        receivedQty: 500,
-        unit: "Litres",
-      },
-    ],
-  },
-  "GRN-2026-013": {
-    grnNumber: "GRN-2026-013",
-    poNumber: "PO-2026-043",
-    supplierName: "EcoClean Hygiene Solutions Ltd.",
-    warehouse: "Housekeeping Store",
-    receiptDate: "2026-07-20",
-    items: [
-      {
-        productCode: "HK-CHM-05",
-        productName: "Taski R2 All Surface Cleaner 5L",
-        batchNumber: "B-ECO-7741",
-        mfgDate: "2026-06-01",
-        expiryDate: "2028-06-01",
-        storageLocation: "Housekeeping Store → BIN-CHEM-01",
-        receivedQty: 15,
-        unit: "Canisters",
-      },
-    ],
-  },
-};
+/** Saved checklist entry name for the single Step 2 decision. */
+const QC_CHECK_NAME = "Quality Checklist";
+
+
 
 export default function QualityInspectionPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -160,6 +72,27 @@ export default function QualityInspectionPage() {
 
   // Main Dataset State
   const { data: qiList, loading, reload } = usePsList(() => psQualityInspectionService.list(), []);
+  const { data: grnListRaw } = usePsList(() => psGrnService.list(), []);
+  const { data: vendorReturns, reload: reloadReturns } = usePsList(() => psVendorReturnService.list(), []);
+  const router = useRouter();
+  const { user } = useAuth();
+  const loggedInName = user?.name?.trim() || user?.email || "";
+
+  const returnByInspection = useMemo(
+    () => new Map(vendorReturns.filter((v) => v.status !== "Cancelled").map((v) => [v.inspectionNumber, v])),
+    [vendorReturns],
+  );
+  const rejectedUnits = (qi: Pick<QualityInspectionRecord, "items">) =>
+    (qi.items ?? []).reduce((sum, i) => sum + (Number(i.rejectedQty) || 0), 0);
+  /** Opens the existing vendor return for this inspection, or starts a new one pre-filled from it. */
+  const goToVendorReturn = (inspectionNumber: string) => {
+    const existing = returnByInspection.get(inspectionNumber);
+    router.push(
+      existing
+        ? `/purchase-stores/receiving/returns?view=${encodeURIComponent(existing.returnNumber)}`
+        : `/purchase-stores/receiving/returns?inspection=${encodeURIComponent(inspectionNumber)}`,
+    );
+  };
   const [saving, setSaving] = useState(false);
 
   // Search & Filter State
@@ -200,11 +133,20 @@ export default function QualityInspectionPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Automation Feedback Modal State
-  const [automationLog, setAutomationLog] = useState<{ isPassed: boolean; logs: string[] } | null>(null);
+  const [automationLog, setAutomationLog] = useState<{ isPassed: boolean; logs: string[]; inspectionNumber?: string; rejectedUnits?: number } | null>(null);
 
-  // Current Active GRN Details for Perform Inspection Drawer
-  const activeGRNKey = activeInspectionRecord?.grnNumber || "GRN-2026-012";
-  const currentFetchedGRN = SAMPLE_GRN_QC_DATABASE[activeGRNKey] || SAMPLE_GRN_QC_DATABASE["GRN-2026-012"];
+  // GRN behind the inspection being performed
+  const activeGrn = useMemo(() => {
+    if (!activeInspectionRecord) return null;
+    const raw = grnListRaw.find((g) => g.grnNumber === activeInspectionRecord.grnNumber);
+    return raw ? normalizeGrnRecord(raw) : null;
+  }, [grnListRaw, activeInspectionRecord]);
+  const currentFetchedGRN = {
+    grnNumber: activeInspectionRecord?.grnNumber ?? "",
+    poNumber: activeGrn?.poNumber || activeInspectionRecord?.poNumber || "",
+    supplierName: activeGrn?.supplierName || activeInspectionRecord?.supplierName || "",
+    warehouse: activeGrn?.warehouse || activeInspectionRecord?.warehouse || "",
+  };
 
   // Header Inspection State
   const [formInspectionType, setFormInspectionType] = useState<"Incoming GRN Receipt" | "Random Audit" | "Expiry Verification">("Incoming GRN Receipt");
@@ -213,19 +155,16 @@ export default function QualityInspectionPage() {
   const [formRemarks, setFormRemarks] = useState("Visual inspection, cold dock temperature test, and seal verification conducted.");
 
   // Inspection Checklist Items (8 Enterprise Criteria)
-  const [checklist, setChecklist] = useState({
-    packagingCondition: "Good",
-    sealVerification: "Passed",
-    quantityVerification: "Correct",
-    expiryVerification: "Valid",
-    temperatureCheck: "Passed",
-    visualInspection: "Passed",
-    productQuality: "Accepted",
-  });
+  const [qcResult, setQcResult] = useState<"" | "Pass" | "Fail">("");
+  const [qcFailReason, setQcFailReason] = useState("");
+  const [failReasonModalOpen, setFailReasonModalOpen] = useState(false);
+  const [failReasonDraft, setFailReasonDraft] = useState("");
 
   // Items Inspection Grid State
   const [formItems, setFormItems] = useState<Array<{
     id: string;
+    materialId: string;
+    unit: string;
     productCode: string;
     productName: string;
     batchNumber: string;
@@ -243,38 +182,78 @@ export default function QualityInspectionPage() {
 
   // Load Active Inspection Data into Form
   useEffect(() => {
-    if (activeInspectionRecord) {
-      setFormInspector(activeInspectionRecord.inspectorName || "Quality Auditor Anand");
-      setFormInspectionDate(activeInspectionRecord.inspectionDate || "2026-07-25");
-      setFormRemarks(activeInspectionRecord.generalRemarks || activeInspectionRecord.remarks || "Cold dock inspection in progress.");
+    if (!activeInspectionRecord) return;
+    setFormInspector(
+      loggedInName ||
+        (activeInspectionRecord.inspectorName !== "Awaiting Assignment" ? activeInspectionRecord.inspectorName : "") ||
+        "",
+    );
+    setFormInspectionDate(activeInspectionRecord.inspectionDate || new Date().toISOString().slice(0, 10));
+    setFormRemarks(activeInspectionRecord.generalRemarks || activeInspectionRecord.remarks || "");
 
-      if (currentFetchedGRN) {
-        const mapped = currentFetchedGRN.items.map((item, idx) => ({
-          id: `qii-${idx}-${Date.now()}`,
+    const savedChecks = activeInspectionRecord.checklist ?? [];
+    const failed = savedChecks.filter((c) => c.result === "Fail");
+    if (failed.length) {
+      setQcResult("Fail");
+      setQcFailReason(failed.map((c) => c.notes).filter(Boolean).join("; "));
+    } else {
+      setQcResult(savedChecks.some((c) => c.result === "Pass") ? "Pass" : "");
+      setQcFailReason("");
+    }
+
+    const savedItems = activeInspectionRecord.items ?? [];
+    const savedResult = (code: string) => {
+      const r = savedItems.find((i) => i.productCode === code)?.qualityResult;
+      return r === "Passed" || r === "Rejected" ? r : null;
+    };
+    const savedReason = (code: string) => savedItems.find((i) => i.productCode === code)?.rejectionReason ?? "";
+
+    const lines = activeGrn?.items?.length
+      ? activeGrn.items.map((line) => {
+          const lots = line.batchAllocations ?? [];
+          return {
+            materialId: line.materialId ?? "",
+            productCode: line.productCode,
+            productName: line.productName,
+            unit: line.unit ?? "",
+            batchNumber: lots.map((b) => b.batchNumber).filter(Boolean).join(", ") || "—",
+            mfgDate: lots.find((b) => b.mfgDate)?.mfgDate || "—",
+            expiryDate: lots.map((b) => b.expiryDate).filter(Boolean).sort()[0] || "—",
+            storageLocation:
+              [...new Set(lots.map((b) => [b.storageWarehouse, b.storageLocation].filter(Boolean).join(" → ")).filter(Boolean))].join(", ") ||
+              activeGrn.warehouse ||
+              "—",
+            receivedQty: Number(line.receivedQty) || 0,
+          };
+        })
+      : savedItems.map((item) => ({
+          materialId: (item as { materialId?: string }).materialId ?? "",
           productCode: item.productCode,
           productName: item.productName,
-          batchNumber: item.batchNumber,
-          mfgDate: item.mfgDate,
-          expiryDate: item.expiryDate,
-          storageLocation: item.storageLocation,
-          receivedQty: item.receivedQty,
-          acceptedQty: item.receivedQty,
-          rejectedQty: 0,
-          qualityResult: "Passed" as const,
-          rejectionReason: "",
-          vendorReturnRequired: false,
-          remarks: "Sample passed laboratory check.",
+          unit: "",
+          batchNumber: "—",
+          mfgDate: "—",
+          expiryDate: "—",
+          storageLocation: activeInspectionRecord.warehouse || "—",
+          receivedQty: Number(item.receivedQty) || 0,
         }));
-        setFormItems(mapped);
-      }
-    }
-  }, [activeInspectionRecord]);
 
-  // Documents / Photos Attachments State
-  const [formAttachments, setFormAttachments] = useState<AttachmentItem[]>([
-    { id: "att-qc-1", fileName: "Cold_Dock_Temp_Log_25Jul.pdf", fileSize: "1.1 MB", fileType: "pdf" },
-    { id: "att-qc-2", fileName: "Lab_Quality_Certificate.pdf", fileSize: "2.3 MB", fileType: "pdf" },
-  ]);
+    setFormItems(
+      lines.map((line, idx) => {
+        const result = savedResult(line.productCode) ?? "Passed";
+        return {
+          id: `qii-${idx}`,
+          ...line,
+          acceptedQty: result === "Passed" ? line.receivedQty : 0,
+          rejectedQty: result === "Rejected" ? line.receivedQty : 0,
+          qualityResult: result,
+          rejectionReason: savedReason(line.productCode),
+          vendorReturnRequired: result === "Rejected",
+          remarks: "",
+        };
+      }),
+    );
+  }, [activeInspectionRecord, activeGrn, loggedInName]);
 
   // Advanced filters only (status pills + search are separate)
   const activeFilterCount = useMemo(() => {
@@ -361,14 +340,56 @@ export default function QualityInspectionPage() {
 
   // Has Any Rejected Item?
   const hasRejectedItems = useMemo(() => {
-    return formItems.some((i) => i.qualityResult === "Rejected");
-  }, [formItems]);
+    return qcResult === "Fail" || formItems.some((i) => i.qualityResult === "Rejected");
+  }, [formItems, qcResult]);
+
+  /** A failed checklist rejects the whole delivery; passing it again restores the auto-rejected lines. */
+  const applyChecklistResult = (result: "Pass" | "Fail") => {
+    setFormItems((items) =>
+      items.map((i) => {
+        if (result === "Fail") {
+          return {
+            ...i,
+            qualityResult: "Rejected" as const,
+            acceptedQty: 0,
+            rejectedQty: i.receivedQty,
+            rejectionReason: i.rejectionReason || "Poor Quality",
+            vendorReturnRequired: true,
+          };
+        }
+        if (qcResult !== "Fail") return i;
+        return { ...i, qualityResult: "Passed" as const, acceptedQty: i.receivedQty, rejectedQty: 0, rejectionReason: "", vendorReturnRequired: false };
+      }),
+    );
+  };
 
   // Save / Complete Quality Inspection
   const handleSaveInspection = async (isComplete: boolean) => {
     if (!activeInspectionRecord) return;
 
     // BUSINESS RULES VALIDATION
+    if (isComplete) {
+      if (!qcResult) {
+        alert("Mark the quality checklist as Pass or Fail.");
+        return;
+      }
+      if (qcResult === "Fail" && !qcFailReason.trim()) {
+        alert("Enter the reason the quality checklist failed.");
+        return;
+      }
+      if (qcResult === "Fail" && formItems.some((i) => i.qualityResult === "Passed")) {
+        alert("The quality checklist failed, so no item can be accepted into stock.");
+        return;
+      }
+      if (!formInspector.trim()) {
+        alert("Enter the inspector name.");
+        return;
+      }
+      if (formItems.length === 0) {
+        alert("This inspection has no items to inspect.");
+        return;
+      }
+    }
     for (const item of formItems) {
       if (item.qualityResult === "Rejected" && !item.rejectionReason) {
         alert(`[Validation Error]: Rejection Reason is mandatory for ${item.productName}`);
@@ -385,14 +406,20 @@ export default function QualityInspectionPage() {
       inspectorName: formInspector,
       generalRemarks: formRemarks,
       remarks: formRemarks,
-      checklist: [
-        { id: "c1", category: "Packaging & Seal Verification", checkItem: "Packaging Condition", result: checklist.packagingCondition === "Good" ? "Pass" : "Fail" },
-        { id: "c2", category: "Packaging & Seal Verification", checkItem: "Seal Integrity", result: checklist.sealVerification === "Passed" ? "Pass" : "Fail" },
-        { id: "c3", category: "Expiry & Storage", checkItem: "Expiry & FEFO Check", result: checklist.expiryVerification === "Valid" ? "Pass" : "Fail" },
-        { id: "c4", category: "Temperature & Quality", checkItem: "Cold Chain Temperature", result: checklist.temperatureCheck === "Passed" ? "Pass" : "Fail" },
-      ],
+      checklist: qcResult
+        ? [
+            {
+              id: "c1",
+              category: "Quality",
+              checkItem: QC_CHECK_NAME,
+              result: qcResult,
+              ...(qcResult === "Fail" ? { notes: qcFailReason.trim() } : {}),
+            },
+          ]
+        : [],
       items: formItems.map((i) => ({
         id: i.id,
+        materialId: i.materialId,
         productCode: i.productCode,
         productName: i.productName,
         receivedQty: i.receivedQty,
@@ -411,33 +438,27 @@ export default function QualityInspectionPage() {
       await reload();
       setPerformInspectionDrawerOpen(false);
 
-    // AUTOMATION LOGS FEEDBACK
+    // COMPLETION SUMMARY
     if (isComplete) {
-      if (overallResult === "Passed") {
-        setAutomationLog({
-          isPassed: true,
-          logs: [
-            `✓ Quality Inspection ${activeInspectionRecord.inspectionNumber} Passed & Completed`,
-            `✓ Accepted Quantity (${formItems[0]?.acceptedQty} ${formItems[0]?.productName}) moved to Available Inventory`,
-            `✓ Warehouse Stock & Storage Bin updated`,
-            `✓ Batch "${formItems[0]?.batchNumber}" status set to ACTIVE in Batch & FEFO Module`,
-            `✓ Stock Ledger updated (GRN ${currentFetchedGRN.grnNumber} Approved)`,
-            `✓ Items available for Department Stock Issues`,
-          ],
-        });
-      } else {
-        setAutomationLog({
-          isPassed: false,
-          logs: [
-            `✓ Quality Inspection ${activeInspectionRecord.inspectionNumber} Completed with Rejections (${overallResult})`,
-            `✓ Accepted Quantity (${formItems[0]?.acceptedQty}) moved to Available Inventory`,
-            `✓ Rejected Quantity (${formItems[0]?.rejectedQty}) transferred to Vendor Return (RGP Gate Pass Draft)`,
-            `✓ Stock Ledger & Batch Quantities updated`,
-            `✓ Vendor Return RGP Draft created automatically`,
-            `✓ Purchase Order history updated`,
-          ],
-        });
+      void reloadReturns();
+      const accepted = formItems.filter((i) => i.qualityResult === "Passed");
+      const rejected = formItems.filter((i) => i.qualityResult === "Rejected");
+      const acceptedUnits = accepted.reduce((sum, i) => sum + i.receivedQty, 0);
+      const rejectedTotal = rejected.reduce((sum, i) => sum + i.receivedQty, 0);
+      const logs = [`✓ Quality Inspection ${activeInspectionRecord.inspectionNumber} completed`];
+      if (accepted.length) {
+        logs.push(`✓ ${acceptedUnits} unit(s) across ${accepted.length} item(s) accepted and posted to stock (${currentFetchedGRN.grnNumber})`);
       }
+      if (rejected.length) {
+        logs.push(`✗ ${rejectedTotal} unit(s) rejected: ${rejected.map((i) => `${i.productName} (${i.rejectionReason})`).join(", ")}`);
+        logs.push("Rejected goods are not added to stock. Create a vendor return to send them back to the supplier.");
+      }
+      setAutomationLog({
+        isPassed: rejected.length === 0,
+        logs,
+        inspectionNumber: activeInspectionRecord.inspectionNumber,
+        rejectedUnits: rejectedTotal,
+      });
     } else {
       alert("Inspection status saved as 'In Progress'.");
     }
@@ -660,7 +681,16 @@ export default function QualityInspectionPage() {
                     },
                   ];
                 }
-                return [{ label: "View", onClick: () => setSelectedQI(first) }];
+                const view = { label: "View", onClick: () => setSelectedQI(first) };
+                if (rejectedUnits(first) === 0) return [view];
+                return [
+                  view,
+                  {
+                    label: returnByInspection.has(first.inspectionNumber) ? "View Vendor Return" : "Create Vendor Return",
+                    icon: <RotateCcw className="h-3.5 w-3.5" />,
+                    onClick: () => goToVendorReturn(first.inspectionNumber),
+                  },
+                ];
               })(),
               {
                 label: "Print",
@@ -879,7 +909,7 @@ export default function QualityInspectionPage() {
                   onClick={() => handleSaveInspection(true)}
                   className="h-9 px-4 text-xs font-bold !bg-red-700 hover:!bg-red-800 text-white rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
-                  <AlertTriangle className="h-4 w-4" /> Complete & Create Vendor Return
+                  <AlertTriangle className="h-4 w-4" /> Complete with Rejections
                 </Button>
               ) : (
                 <Button
@@ -896,7 +926,7 @@ export default function QualityInspectionPage() {
       >
         <form className="space-y-6 py-2 select-none">
           {/* SECTION 1: AUTO-LOADED GRN DETAILS */}
-          <PurchaseFormCard title="Step 1: Auto-Loaded GRN Reference & Header Details" sectionNumber="Section 1 of 4">
+          <PurchaseFormCard title="Step 1: Auto-Loaded GRN Reference & Header Details" sectionNumber="Section 1 of 3">
             <div className="space-y-4">
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-950 font-semibold">
                 <span className="flex items-center gap-2">
@@ -926,8 +956,9 @@ export default function QualityInspectionPage() {
                 <FormField label="Inspector Name" required>
                   <TextInput
                     value={formInspector}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormInspector(e.target.value)}
-                    className="h-9 text-xs font-bold"
+                    readOnly
+                    title="Taken from the logged-in user"
+                    className="h-9 text-xs font-bold bg-slate-50"
                   />
                 </FormField>
 
@@ -962,90 +993,85 @@ export default function QualityInspectionPage() {
           </PurchaseFormCard>
 
           {/* SECTION 2: 8-POINT ENTERPRISE QUALITY CHECKLIST */}
-          <PurchaseFormCard title="Step 2: 8-Point Enterprise Quality Checklist Verification" sectionNumber="Section 2 of 4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-              <FormField label="Packaging Condition">
-                <SelectInput
-                  value={checklist.packagingCondition}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setChecklist({ ...checklist, packagingCondition: e.target.value })}
-                  className="h-9 text-xs font-bold"
-                >
-                  <option value="Good">Good Condition</option>
-                  <option value="Damaged">Damaged Packaging</option>
-                </SelectInput>
-              </FormField>
-
-              <FormField label="Seal Verification">
-                <SelectInput
-                  value={checklist.sealVerification}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setChecklist({ ...checklist, sealVerification: e.target.value })}
-                  className="h-9 text-xs font-bold"
-                >
-                  <option value="Passed">Passed / Intact</option>
-                  <option value="Failed">Failed / Broken Seal</option>
-                </SelectInput>
-              </FormField>
-
-              <FormField label="Quantity Verification">
-                <SelectInput
-                  value={checklist.quantityVerification}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setChecklist({ ...checklist, quantityVerification: e.target.value })}
-                  className="h-9 text-xs font-bold"
-                >
-                  <option value="Correct">Correct Quantity</option>
-                  <option value="Mismatch">Quantity Mismatch</option>
-                </SelectInput>
-              </FormField>
-
-              <FormField label="Expiry Verification">
-                <SelectInput
-                  value={checklist.expiryVerification}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setChecklist({ ...checklist, expiryVerification: e.target.value })}
-                  className="h-9 text-xs font-bold"
-                >
-                  <option value="Valid">Valid Expiry Date</option>
-                  <option value="Expired">Expired Product</option>
-                </SelectInput>
-              </FormField>
-
-              <FormField label="Cold Chain Temperature Check">
-                <SelectInput
-                  value={checklist.temperatureCheck}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setChecklist({ ...checklist, temperatureCheck: e.target.value })}
-                  className="h-9 text-xs font-bold"
-                >
-                  <option value="Passed">Passed (+3°C - +5°C)</option>
-                  <option value="Failed">Failed / Temperature Breach</option>
-                </SelectInput>
-              </FormField>
-
-              <FormField label="Visual Inspection">
-                <SelectInput
-                  value={checklist.visualInspection}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setChecklist({ ...checklist, visualInspection: e.target.value })}
-                  className="h-9 text-xs font-bold"
-                >
-                  <option value="Passed">Passed Clean</option>
-                  <option value="Failed">Contaminated / Flawed</option>
-                </SelectInput>
-              </FormField>
-
-              <FormField label="Overall Product Quality" className="sm:col-span-2">
-                <SelectInput
-                  value={checklist.productQuality}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setChecklist({ ...checklist, productQuality: e.target.value })}
-                  className="h-9 text-xs font-black text-emerald-800"
-                >
-                  <option value="Accepted">Accepted Quality Grade A</option>
-                  <option value="Rejected">Rejected Quality Standards</option>
-                </SelectInput>
-              </FormField>
+          <PurchaseFormCard title="Step 2: Quality Checklist Verification" sectionNumber="Section 2 of 3">
+            <div
+              className={cn(
+                "space-y-3 rounded-xl border p-4 text-xs transition-colors",
+                qcResult === "Pass" && "border-emerald-200 bg-emerald-50/40",
+                qcResult === "Fail" && "border-red-200 bg-red-50/40",
+                !qcResult && "border-slate-200 bg-white",
+              )}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-bold text-slate-900">
+                    Packaging, seal, quantity, expiry and visual check <span className="text-red-500">*</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500">Did the delivery pass the quality checklist?</p>
+                </div>
+                <div className="flex shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      applyChecklistResult("Pass");
+                      setQcResult("Pass");
+                      setQcFailReason("");
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-5 py-2 text-xs font-bold transition-colors",
+                      qcResult === "Pass" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    <Check className="h-3.5 w-3.5" /> Pass
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFailReasonDraft(qcFailReason);
+                      setFailReasonModalOpen(true);
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 border-l border-slate-200 px-5 py-2 text-xs font-bold transition-colors",
+                      qcResult === "Fail" ? "bg-red-600 text-white" : "text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    <X className="h-3.5 w-3.5" /> Fail
+                  </button>
+                </div>
+              </div>
+              {qcResult === "Fail" && (
+                <div className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-white p-2.5">
+                  <p className="text-red-900">
+                    <span className="font-bold">Reason: </span>
+                    {qcFailReason}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFailReasonDraft(qcFailReason);
+                      setFailReasonModalOpen(true);
+                    }}
+                    className="shrink-0 text-[11px] font-bold text-red-700 hover:underline"
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
             </div>
           </PurchaseFormCard>
 
           {/* SECTION 3: ITEM LEVEL QUALITY DECISIONS & DYNAMIC REJECTION FIELDS */}
-          <PurchaseFormCard title="Step 3: Item Quality Results" sectionNumber="Section 3 of 4">
+          <PurchaseFormCard title="Step 3: Item Quality Results" sectionNumber="Section 3 of 3">
             <div className="space-y-4 text-xs">
+              {qcResult === "Fail" && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-red-900">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                  <span>
+                    The quality checklist failed, so every item is rejected and nothing will be added to stock. Choose the
+                    rejection reason for each item below, or mark the checklist as Pass to inspect items individually.
+                  </span>
+                </div>
+              )}
               {formItems.map((item, idx) => (
                 <div key={item.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
@@ -1083,6 +1109,8 @@ export default function QualityInspectionPage() {
                     <FormField label="Quality Result" required>
                       <SelectInput
                         value={item.qualityResult}
+                        disabled={qcResult === "Fail"}
+                        title={qcResult === "Fail" ? "Quality checklist failed — all items are rejected" : undefined}
                         onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                           const res = e.target.value as "Passed" | "Rejected";
                           setFormItems(
@@ -1144,19 +1172,12 @@ export default function QualityInspectionPage() {
                         </SelectInput>
                       </FormField>
 
-                      <div className="flex items-center gap-2 pt-5">
-                        <input
-                          type="checkbox"
-                          id={`vr-${item.id}`}
-                          checked={item.vendorReturnRequired}
-                          onChange={(e) =>
-                            setFormItems(formItems.map((i) => (i.id === item.id ? { ...i, vendorReturnRequired: e.target.checked } : i)))
-                          }
-                          className="h-4 w-4 text-red-600 rounded cursor-pointer"
-                        />
-                        <label htmlFor={`vr-${item.id}`} className="font-bold text-red-900 cursor-pointer">
-                          Generate Vendor Return Draft (RGP Gate Pass)
-                        </label>
+                      <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-white p-2.5 text-[11px] text-red-900 sm:mt-5">
+                        <RotateCcw className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600" />
+                        <span>
+                          <strong>{item.receivedQty} {item.unit}</strong> will be kept out of stock. After completing, you can create a
+                          vendor return to send it back to the supplier.
+                        </span>
                       </div>
                     </div>
                   )}
@@ -1165,30 +1186,49 @@ export default function QualityInspectionPage() {
             </div>
           </PurchaseFormCard>
 
-          {/* SECTION 4: PHOTOS, LAB REPORTS & AUDIT REMARKS */}
-          <PurchaseFormCard title="Step 4: Quality Certificates, Lab Reports & Inspector Remarks" sectionNumber="Section 4 of 4">
-            <div className="space-y-4 text-xs">
-              <FormField label="Inspector Sign-off Remarks" required>
-                <TextInput
-                  value={formRemarks}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormRemarks(e.target.value)}
-                  placeholder="Detailed inspector notes on quality compliance..."
-                  className="h-9 text-xs"
-                />
-              </FormField>
-
-              <div>
-                <span className="font-extrabold text-slate-900 block mb-2">Upload Inspection Photos, Lab Reports & Quality Certificates</span>
-                <PurchaseAttachmentList
-                  attachments={formAttachments}
-                  onAddAttachment={(att) => setFormAttachments([...formAttachments, att])}
-                  onRemoveAttachment={(id) => setFormAttachments(formAttachments.filter((a) => a.id !== id))}
-                />
-              </div>
-            </div>
-          </PurchaseFormCard>
         </form>
       </Drawer>
+
+      {failReasonModalOpen &&
+        createPortal(
+          <Modal
+            isOpen
+            onClose={() => setFailReasonModalOpen(false)}
+            title="Quality checklist failed"
+            description="Describe what failed — this is saved with the inspection."
+            maxWidth="md"
+            footer={
+              <>
+                <Button type="button" variant="outline" onClick={() => setFailReasonModalOpen(false)} className="h-9 text-xs">
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!failReasonDraft.trim()}
+                  onClick={() => {
+                    applyChecklistResult("Fail");
+                    setQcResult("Fail");
+                    setQcFailReason(failReasonDraft.trim());
+                    setFailReasonModalOpen(false);
+                  }}
+                  className="h-9 text-xs !bg-red-700 hover:!bg-red-800 text-white"
+                >
+                  Mark as Failed
+                </Button>
+              </>
+            }
+          >
+            <textarea
+              value={failReasonDraft}
+              onChange={(e) => setFailReasonDraft(e.target.value)}
+              rows={4}
+              autoFocus
+              placeholder="e.g. Outer cartons damaged, 3 seals broken"
+              className="w-full rounded-xl border border-slate-200 p-3 text-sm text-slate-900 focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-100"
+            />
+          </Modal>,
+          document.body,
+        )}
 
       {/* AUTOMATION & SUCCESS FLOW MODAL */}
       {automationLog && (
@@ -1200,14 +1240,14 @@ export default function QualityInspectionPage() {
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-slate-900">
-                  {automationLog.isPassed ? "Quality Inspection Completed (PASSED)" : "Inspection Completed (PARTIAL / REJECTED)"}
+                  {automationLog.isPassed ? "Quality Inspection Completed (Passed)" : "Inspection Completed with Rejections"}
                 </h3>
-                <p className="text-xs text-slate-500 font-medium">Inventory & Stock Ledger Automation Triggered</p>
+                <p className="text-xs text-slate-500 font-medium">Stock ledger updated for accepted items</p>
               </div>
             </div>
 
             <div className={cn("p-3 rounded-xl border text-xs space-y-1.5 font-medium", automationLog.isPassed ? "bg-emerald-50 border-emerald-200 text-emerald-950" : "bg-red-50 border-red-200 text-red-950")}>
-              <span className="font-bold block border-b pb-1">Automated System Executions:</span>
+              <span className="font-bold block border-b pb-1">Summary</span>
               {automationLog.logs.map((log, idx) => (
                 <p key={idx}>{log}</p>
               ))}
@@ -1216,11 +1256,24 @@ export default function QualityInspectionPage() {
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button
                 type="button"
+                variant={automationLog.rejectedUnits ? "outline" : undefined}
                 onClick={() => setAutomationLog(null)}
-                className="h-9 px-4 text-xs font-bold !bg-slate-900 text-white rounded-xl shadow-xs cursor-pointer"
+                className={cn(
+                  "h-9 px-4 text-xs font-bold rounded-xl shadow-xs cursor-pointer",
+                  !automationLog.rejectedUnits && "!bg-slate-900 text-white",
+                )}
               >
-                Close Summary
+                {automationLog.rejectedUnits ? "Later" : "Close Summary"}
               </Button>
+              {!!automationLog.rejectedUnits && automationLog.inspectionNumber && (
+                <Button
+                  type="button"
+                  onClick={() => goToVendorReturn(automationLog.inspectionNumber!)}
+                  className="h-9 gap-1.5 px-4 text-xs font-bold !bg-red-700 hover:!bg-red-800 text-white rounded-xl shadow-xs cursor-pointer"
+                >
+                  <RotateCcw className="h-4 w-4" /> Create Vendor Return
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -1330,6 +1383,32 @@ export default function QualityInspectionPage() {
                 </table>
               </div>
             </div>
+
+            {rejectedUnits(selectedQI) > 0 && (
+              <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-2.5">
+                  <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                  <div>
+                    <p className="font-extrabold text-red-900">
+                      {rejectedUnits(selectedQI)} unit(s) rejected in this inspection
+                    </p>
+                    <p className="text-[11px] text-red-800">
+                      {returnByInspection.get(selectedQI.inspectionNumber)
+                        ? `Vendor return ${returnByInspection.get(selectedQI.inspectionNumber)!.returnNumber} is ${returnByInspection.get(selectedQI.inspectionNumber)!.status}.`
+                        : "No vendor return has been raised yet."}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => goToVendorReturn(selectedQI.inspectionNumber)}
+                  className="h-9 shrink-0 gap-1.5 px-4 text-xs font-bold !bg-red-700 hover:!bg-red-800 text-white rounded-xl"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  {returnByInspection.get(selectedQI.inspectionNumber) ? "View Vendor Return" : "Create Vendor Return"}
+                </Button>
+              </div>
+            )}
 
             {/* CLOSE BUTTON */}
             <Button

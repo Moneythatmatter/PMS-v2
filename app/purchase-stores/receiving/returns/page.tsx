@@ -315,6 +315,30 @@ export default function VendorReturnsPage() {
     );
   };
 
+  /** Deep links from Quality Inspection: ?inspection=QI-… starts a return, ?view=VR-… opens one. */
+  const deepLinkHandled = React.useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || loading || loadingInspections) return;
+    const params = new URLSearchParams(window.location.search);
+    const inspectionNum = params.get("inspection");
+    const viewNum = params.get("view");
+    if (!inspectionNum && !viewNum) return;
+    deepLinkHandled.current = true;
+    window.history.replaceState(null, "", window.location.pathname);
+    if (viewNum) {
+      const vr = vrList.find((v) => v.returnNumber === viewNum);
+      if (vr) setSelectedVR(vr);
+      return;
+    }
+    const existing = vrList.find((v) => v.inspectionNumber === inspectionNum && v.status !== "Cancelled");
+    if (existing) {
+      setSelectedVR(existing);
+      return;
+    }
+    openCreateDrawer();
+    if (inspectionNum) handleInspectionChange(inspectionNum);
+  }, [loading, loadingInspections, vrList, inspections, grns]);
+
   // Filtered Vendor Return Records
   const filteredVRs = useMemo(() => {
     return vrList.filter((v) => {
