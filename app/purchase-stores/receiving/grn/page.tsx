@@ -105,6 +105,12 @@ function PoSummaryItem({
   );
 }
 
+/** "Completed" groups every accepted end state; other tabs match the status directly. */
+function matchesGrnStatusTab(grn: GRNRecord, tab: string): boolean {
+  if (tab === "Completed") return grn.status === "Completed" || grn.status === "Approved" || grn.status === "Received";
+  return grn.status === tab;
+}
+
 type LifecycleState = "done" | "current" | "failed" | "upcoming";
 
 /** Derives the receiving stepper from the GRN's status and QC result. */
@@ -171,10 +177,25 @@ export default function GoodsReceiptNotePage() {
 
   const statusTabCounts = useMemo(() => ({
     all: grnList.length,
-    Approved: grnList.filter((g) => g.status === "Approved").length,
-    Pending: grnList.filter((g) => g.status === "Pending").length,
-    Return: grnList.filter((g) => g.status === "Return").length,
+    Completed: grnList.filter((g) => matchesGrnStatusTab(g, "Completed")).length,
+    Pending: grnList.filter((g) => matchesGrnStatusTab(g, "Pending")).length,
+    Return: grnList.filter((g) => matchesGrnStatusTab(g, "Return")).length,
   }), [grnList]);
+
+  const grnKpis = useMemo(() => {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const todays = grnList.filter((g) => g.receiptDate.slice(0, 10) === today);
+    return {
+      today: todays.length,
+      todayValue: todays.reduce((sum, g) => sum + g.totalAmount, 0),
+      pendingQc: grnList.filter((g) => g.inspectionStatus === "Pending" || g.inspectionStatus === "Under QC").length,
+      rejected: grnList.filter((g) => g.status === "Return" || g.inspectionStatus === "Rejected").length,
+      totalValue: grnList
+        .filter((g) => g.status !== "Return" && g.inspectionStatus !== "Rejected")
+        .reduce((sum, g) => sum + g.totalAmount, 0),
+    };
+  }, [grnList]);
 
   const activeFilterCount = useMemo(() => {
     let n = 0;
@@ -258,7 +279,7 @@ export default function GoodsReceiptNotePage() {
 
       const matchSupplier = supplierFilter === "all" || g.supplierName.toLowerCase().includes(supplierFilter.toLowerCase());
       const matchWarehouse = warehouseFilter === "all" || g.warehouse.toLowerCase().includes(warehouseFilter.toLowerCase());
-      const matchStatus = statusFilter === "all" || g.status === statusFilter;
+      const matchStatus = statusFilter === "all" || matchesGrnStatusTab(g, statusFilter);
       const matchInspection = inspectionFilter === "all" || g.inspectionStatus === inspectionFilter;
       const matchDate = !dateFilter || g.receiptDate.includes(dateFilter);
 
@@ -518,29 +539,29 @@ export default function GoodsReceiptNotePage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatMiniCard
           label="Today's Receipts"
-          value="18"
-          sublabel="Goods received today"
+          value={String(grnKpis.today)}
+          sublabel={grnKpis.today ? `₹${grnKpis.todayValue.toLocaleString("en-IN")} received today` : "No goods received today"}
           icon={Package}
           accent="#0f8a5f"
         />
         <StatMiniCard
-          label="Pending"
-          value="5"
-          sublabel="Awaiting QC check"
+          label="Pending QC"
+          value={String(grnKpis.pendingQc)}
+          sublabel="Awaiting quality check"
           icon={ClipboardCheck}
           accent="#d97706"
         />
         <StatMiniCard
           label="Rejected Goods"
-          value="2"
-          sublabel="Returned to vendor"
+          value={String(grnKpis.rejected)}
+          sublabel="Rejected in QC / returned to vendor"
           icon={AlertTriangle}
           accent="#dc2626"
         />
         <StatMiniCard
           label="Total Value Received"
-          value="₹4,85,000"
-          sublabel="Value of goods received"
+          value={`₹${grnKpis.totalValue.toLocaleString("en-IN")}`}
+          sublabel={`Across ${grnList.length} GRN${grnList.length === 1 ? "" : "s"} (excl. returns)`}
           icon={IndianRupee}
           accent="#2563eb"
         />
@@ -554,7 +575,7 @@ export default function GoodsReceiptNotePage() {
         onOpenFilters={() => setFilterDrawerOpen(true)}
         statusTabs={[
           { id: "all", label: `All ${statusTabCounts.all}` },
-          { id: "Approved", label: `Approved ${statusTabCounts.Approved}` },
+          { id: "Completed", label: `Completed ${statusTabCounts.Completed}` },
           { id: "Pending", label: `Pending ${statusTabCounts.Pending}` },
           { id: "Return", label: `Return ${statusTabCounts.Return}` },
         ]}
