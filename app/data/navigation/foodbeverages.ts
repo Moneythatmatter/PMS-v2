@@ -52,6 +52,7 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
       { label: "Items", href: "/food-beverages/menu/items", icon: "utensils" },
       { label: "Modifiers", href: "/food-beverages/menu/modifiers", icon: "plus-circle" },
       { label: "Recipes", href: "/food-beverages/menu/recipes", icon: "file-text" },
+      { label: "Conversion Items", href: "/food-beverages/menu/conversion-items", icon: "repeat" },
     ],
   },
   {
@@ -60,6 +61,7 @@ export const foodBeveragesNavItems: ModuleNavItem[] = [
     icon: "package-search",
     children: [
       { label: "Ingredients", href: "/food-beverages/inventory/ingredients", icon: "utensils" },
+      { label: "Conversion Stock", href: "/food-beverages/inventory/conversion", icon: "package" },
       { label: "Wastage", href: "/food-beverages/inventory/wastage", icon: "alert-triangle" },
       { label: "Adjustments", href: "/food-beverages/inventory/adjustments", icon: "percent" },
     ],

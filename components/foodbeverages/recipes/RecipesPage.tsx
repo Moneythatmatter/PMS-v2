@@ -30,7 +30,13 @@ import {
   psStockBalanceService,
   psWarehouseService,
 } from "@/services/purchase-stores/index";
-import { menuCategoryService, menuItemService, recipeService } from "@/services/food-beverages";
+import {
+  conversionItemService,
+  menuCategoryService,
+  menuItemService,
+  recipeService,
+} from "@/services/food-beverages";
+import type { ProductItem } from "@/app/data/productMasterData";
 import { TARGET_FOOD_COST_PERCENT, yieldUnitLabel, type Recipe } from "@/app/data/foodbeverages/recipes";
 import { FoodCostBadge, RecipeFormDrawer } from "./RecipeFormDrawer";
 import { RecipeConsumeModal } from "./RecipeConsumeModal";
@@ -117,6 +123,7 @@ export function RecipesPage() {
   const recipes = usePsList(() => recipeService.list(), []);
   const consumptions = usePsList(() => recipeService.consumptions(), []);
   const products = usePsList(() => psProductService.list(), []);
+  const conversionItems = usePsList(() => conversionItemService.list(), []);
   const categories = usePsList(() => psCategoryService.list(), []);
   const balances = usePsList(() => psStockBalanceService.list(), []);
   const warehouses = usePsList(() => psWarehouseService.list(), []);
@@ -172,6 +179,35 @@ export function RecipesPage() {
     const active = warehouses.data.filter((w) => w.status !== "Inactive");
     return (active.find((w) => /kitchen/i.test(w.name)) ?? active[0])?.id ?? "";
   }, [warehouses.data]);
+
+  /** Converted items as recipe-pickable materials (linked PS products). */
+  const convertedProducts = useMemo((): ProductItem[] => {
+    const productById = new Map(products.data.map((p) => [p.id, p]));
+    const out: ProductItem[] = [];
+    for (const item of conversionItems.data) {
+      if (item.status !== "Active" || !item.psProductId) continue;
+      const existing = productById.get(item.psProductId);
+      if (existing) {
+        out.push(existing);
+        continue;
+      }
+      out.push({
+        id: item.psProductId,
+        productCode: item.code || item.psProductId,
+        productName: item.name,
+        category: "Prepared Item",
+        unit: item.yieldUom || "Kg",
+        minimumStock: 0,
+        maximumStock: 0,
+        parStock: 0,
+        reorderLevel: 0,
+        storageType: "Cold Room",
+        status: "Active",
+        createdDate: item.createdAt?.slice(0, 10) || "",
+      });
+    }
+    return out;
+  }, [conversionItems.data, products.data]);
 
   const warehouseName = useMemo(() => new Map(warehouses.data.map((w) => [w.id, w.name])), [warehouses.data]);
   const recipeById = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
@@ -540,6 +576,7 @@ export function RecipesPage() {
           onClose={() => setFormOpen(false)}
           initial={editing}
           products={products.data}
+          convertedProducts={convertedProducts}
           fbCategoryNames={fbCategoryNames}
           avgCostByMaterial={avgCostByMaterial}
           onHandByStore={onHandByStore}

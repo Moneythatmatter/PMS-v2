@@ -303,7 +303,13 @@ function normalizeRow(path: string, row: Record<string, unknown>): ModuleRow {
     if (value === null || value === undefined) continue;
     if (typeof value === "object") continue;
     if (
-      (key === "amount" || key === "sales" || key === "revenue" || key === "rate" || key === "price" || key === "balance") &&
+      (key === "amount" ||
+        key === "sales" ||
+        key === "revenue" ||
+        key === "rate" ||
+        key === "price" ||
+        key === "balance" ||
+        key === "value") &&
       typeof value === "number"
     ) {
       base[key] = `₹${value.toLocaleString("en-IN")}`;
@@ -351,7 +357,7 @@ function toApiPayload(path: string, row: ModuleRow): Record<string, unknown> {
     if (
       typeof value === "string" &&
       (value.includes("₹") ||
-        ["amount", "price", "rate", "cost", "balance", "sales", "revenue", "total", "tax", "discount"].includes(key))
+        ["amount", "price", "rate", "cost", "balance", "sales", "revenue", "total", "tax", "discount", "value"].includes(key))
     ) {
       const cleaned = value.replace(/₹/g, "").replace(/,/g, "").replace(/\s/g, "").trim();
       const num = Number(cleaned);
@@ -404,12 +410,60 @@ function toModuleDefinition(
 
   const calculatedStats = path.includes("/reports/")
     ? buildReportStats(path, rows, reportSummary, definition.stats)
+    : path.endsWith("/inventory/wastage")
+      ? (() => {
+          const today = new Date().toLocaleDateString("sv-SE");
+          const isToday = (r: ModuleRow) => {
+            const raw = String(r.createdAt ?? r.entryDate ?? "");
+            return raw.slice(0, 10) === today;
+          };
+          const spoilage = rows
+            .filter((r) => String(r.type).toLowerCase() === "spoilage")
+            .reduce((sum, r) => sum + parseDisplayMoney(r.value), 0);
+          const breakage = rows
+            .filter((r) => String(r.type).toLowerCase() === "breakage")
+            .reduce((sum, r) => sum + parseDisplayMoney(r.value), 0);
+          const pending = rows.filter((r) => String(r.status).toLowerCase() === "pending").length;
+          return definition.stats.map((stat) => {
+            if (stat.label === "Today") {
+              return { ...stat, value: rows.filter(isToday).length };
+            }
+            if (stat.label === "Spoilage MTD") {
+              return { ...stat, value: formatCompactInr(spoilage) };
+            }
+            if (stat.label === "Breakage MTD") {
+              return { ...stat, value: formatCompactInr(breakage) };
+            }
+            if (stat.label === "Pending") {
+              return { ...stat, value: pending };
+            }
+            return { ...stat, value: typeof stat.value === "number" ? 0 : "—" };
+          });
+        })()
     : definition.stats.map((stat) => {
         if (stat.label === "Outlets" || stat.label === "Venues") {
           return { ...stat, value: rows.length };
         }
-        if (stat.label === "Items" || stat.label === "Categories") {
+        if (stat.label === "Items" || stat.label === "Categories" || stat.label === "SKUs") {
           return { ...stat, value: rows.length };
+        }
+        if (stat.label === "Low Stock" && path.includes("/inventory/ingredients")) {
+          return {
+            ...stat,
+            value: rows.filter((r) => Number(r.onHand) <= Number(r.reorder)).length,
+          };
+        }
+        if (stat.label === "Prepared" && path.includes("/inventory/ingredients")) {
+          return {
+            ...stat,
+            value: rows.filter((r) => String(r.kind ?? "raw").toLowerCase() === "prepared").length,
+          };
+        }
+        if (stat.label === "Raw" && path.includes("/inventory/ingredients")) {
+          return {
+            ...stat,
+            value: rows.filter((r) => String(r.kind ?? "raw").toLowerCase() !== "prepared").length,
+          };
         }
         if (stat.label === "Active") {
           return { ...stat, value: rows.filter(rowIsActive).length };

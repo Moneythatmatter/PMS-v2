@@ -5,6 +5,12 @@ import type {
   RecipeConsumption,
   RecipeInput,
 } from "@/app/data/foodbeverages/recipes";
+import type {
+  Conversion,
+  ConversionInput,
+  ConversionItem,
+  ConversionItemInput,
+} from "@/app/data/foodbeverages/conversions";
 import type { ModifierGroup, ModifierGroupInput } from "@/app/data/foodbeverages/modifiers";
 import type { CashierSession, CashierSessionDetail } from "../front-office/cashier-sessions";
 import type {
@@ -512,6 +518,27 @@ export const reservationSettingsService = {
     api.put<ReservationSettingsBundle>(fbPath(`/reservation-settings/${encodeURIComponent(scopeKey)}`), body),
   remove: (scopeKey: string) =>
     api.delete<ReservationSettingsBundle>(fbPath(`/reservation-settings/${encodeURIComponent(scopeKey)}`)),
+};
+
+export const conversionItemService = {
+  list: () => api.get<ConversionItem[]>(fbPath("/inventory/conversion-items")),
+  get: (id: string) => api.get<ConversionItem>(fbPath(`/inventory/conversion-items/${id}`)),
+  create: (body: ConversionItemInput) =>
+    api.post<ConversionItem>(fbPath("/inventory/conversion-items"), body),
+  update: (id: string, body: ConversionItemInput) =>
+    api.put<ConversionItem>(fbPath(`/inventory/conversion-items/${id}`), body),
+  remove: (id: string) => api.delete<{ id: string }>(fbPath(`/inventory/conversion-items/${id}`)),
+};
+
+export const conversionService = {
+  list: () => api.get<Conversion[]>(fbPath("/inventory/conversions")),
+  get: (id: string) => api.get<Conversion>(fbPath(`/inventory/conversions/${id}`)),
+  create: (body: ConversionInput) => api.post<Conversion>(fbPath("/inventory/conversions"), body),
+  update: (id: string, body: ConversionInput) =>
+    api.put<Conversion>(fbPath(`/inventory/conversions/${id}`), body),
+  complete: (id: string, body?: { completedBy?: string }) =>
+    api.post<Conversion>(fbPath(`/inventory/conversions/${id}/complete`), body ?? {}),
+  remove: (id: string) => api.delete<{ id: string }>(fbPath(`/inventory/conversions/${id}`)),
 };
 
 export const recipeService = {

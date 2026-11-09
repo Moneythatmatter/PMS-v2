@@ -48,6 +48,7 @@ export function RecipeFormDrawer({
   onClose,
   initial,
   products,
+  convertedProducts = [],
   fbCategoryNames,
   avgCostByMaterial,
   onHandByStore,
@@ -62,6 +63,8 @@ export function RecipeFormDrawer({
   onClose: () => void;
   initial: Recipe | null;
   products: ProductItem[];
+  /** Prepared conversion items exposed as PS materials for the recipe picker. */
+  convertedProducts?: ProductItem[];
   fbCategoryNames: Set<string>;
   avgCostByMaterial: Map<string, number>;
   onHandByStore: Map<string, number>;
@@ -72,7 +75,15 @@ export function RecipeFormDrawer({
   defaultStoreId: string;
   onSaved: (recipe: Recipe, message: string) => void;
 }) {
-  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  const allProducts = useMemo(() => {
+    const byId = new Map(products.map((p) => [p.id, p]));
+    for (const p of convertedProducts) {
+      if (!byId.has(p.id)) byId.set(p.id, p);
+    }
+    return [...byId.values()];
+  }, [products, convertedProducts]);
+  const productById = useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const convertedIds = useMemo(() => new Set(convertedProducts.map((p) => p.id)), [convertedProducts]);
   const menuItemById = useMemo(() => new Map(menuItems.map((m) => [m.id, m])), [menuItems]);
 
   const [name, setName] = useState(initial?.name ?? "");
@@ -128,12 +139,15 @@ export function RecipeFormDrawer({
 
   const pickable = useMemo(() => {
     const chosen = new Set(lines.map((l) => l.materialId));
-    const active = products.filter((p) => p.status !== "Inactive" && !chosen.has(p.id));
+    const active = allProducts.filter((p) => p.status !== "Inactive" && !chosen.has(p.id));
+    const converted = active.filter((p) => convertedIds.has(p.id));
+    const raw = active.filter((p) => !convertedIds.has(p.id));
     return {
-      own: active.filter((p) => fbCategoryNames.has(p.category)),
-      other: showAllMaterials ? active.filter((p) => !fbCategoryNames.has(p.category)) : [],
+      converted,
+      own: raw.filter((p) => fbCategoryNames.has(p.category)),
+      other: showAllMaterials ? raw.filter((p) => !fbCategoryNames.has(p.category)) : [],
     };
-  }, [products, lines, fbCategoryNames, showAllMaterials]);
+  }, [allProducts, lines, fbCategoryNames, showAllMaterials, convertedIds]);
 
   const availableMenuItems = menuItems.filter((m) => m.id === initial?.menuItemId || !linkedMenuItemIds.has(m.id));
 
@@ -239,7 +253,7 @@ export function RecipeFormDrawer({
               {initial ? `Edit Recipe · ${initial.recipeCode}` : "New Recipe"}
             </h2>
             <p className="truncate text-xs text-slate-500">
-              Build the recipe from Purchase &amp; Stores materials. Saving does not move any stock.
+              Build the recipe from raw materials and converted items. Saving does not move any stock.
             </p>
           </div>
         </div>
@@ -402,7 +416,7 @@ export function RecipeFormDrawer({
           <ProcurementFormSection
             step={2}
             title="Ingredients"
-            subtitle="Raw materials from the Purchase & Stores master, with the quantity one batch needs."
+            subtitle="Add raw materials and converted items (dough, gravy, batter). One batch’s quantities."
             action={
               fbCategoryNames.size > 0 ? <AllMaterialsSwitch checked={showAllMaterials} onChange={setShowAllMaterials} /> : null
             }
@@ -410,13 +424,14 @@ export function RecipeFormDrawer({
             <RecipeIngredientsEditor
               rows={computed}
               pickGroups={[
+                { label: "Converted / prepared items", items: pickable.converted },
                 { label: "Food & Beverage materials", items: pickable.own },
                 { label: "Other materials", items: pickable.other },
               ]}
               emptyPickerHint={
-                !showAllMaterials && fbCategoryNames.size > 0
-                  ? "Turn on “All materials” to search outside Food & Beverage categories."
-                  : "Add new materials in Purchase & Stores → Product Master."
+                pickable.converted.length === 0 && !showAllMaterials && fbCategoryNames.size > 0
+                  ? "Add converted items under Menu → Conversion Items, or turn on “All materials”."
+                  : "Add raw materials in Purchase & Stores, or converted items under Menu → Conversion Items."
               }
               onAdd={addMaterial}
               onUpdate={updateLine}
@@ -514,7 +529,7 @@ export function RecipeFormDrawer({
             </h3>
             <ul className="list-disc space-y-1 pl-4">
               <li>Creating or editing a recipe never changes stock.</li>
-              <li>When the linked menu item is billed and paid in POS, its ingredients are deducted from the issue store.</li>
+              <li>When the linked menu item is billed and paid in POS, raw materials and converted items on the recipe are both deducted from the issue store (and conversion stock stays in sync).</li>
               <li>Batch prep, staff meals or banquets can be recorded with &ldquo;Record Consumption&rdquo;.</li>
             </ul>
           </section>

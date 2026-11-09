@@ -13,6 +13,13 @@ import {
   Search,
   Filter,
   ArrowUpDown,
+  Building2,
+  CalendarDays,
+  User,
+  Package,
+  Paperclip,
+  IndianRupee,
+  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
@@ -28,11 +35,15 @@ import { ModuleDataTable } from "@/components/pms/ModuleDataTable";
 import { ModuleSelectionBar } from "@/components/pms/ModuleSelectionBar";
 import { ModuleColumn } from "@/components/pms/module-types";
 import { OperationsToolbar, OperationsFilterDrawer } from "@/components/housekeeping/OperationsToolbar";
-import { PurchaseFormCard } from "@/components/purchase-stores/ui/PurchaseFormCard";
+import {
+  ProcurementFormSection,
+  ProcurementSummaryRow,
+} from "@/components/purchase-stores/ui/ProcurementFormParts";
 import {
   PurchaseAttachmentList,
   AttachmentItem,
 } from "@/components/purchase-stores/ui/PurchaseAttachmentList";
+import { cn } from "@/lib/utils";
 import {
   PO_PAYMENT_MODES,
   isDirectPo,
@@ -370,7 +381,7 @@ export default function PurchaseOrdersPage() {
   const taxTotal = useMemo(() => Math.round(subTotal * 0.18), [subTotal]);
   const grandTotal = subTotal + taxTotal;
   const isDirectForm = !editPO && isDirectPo({ linkedPR: formLinkedPR, linkedRFQ: formLinkedRFQ });
-  const sectionCount = isDirectForm ? 6 : 5;
+  const formStepAttachments = isDirectForm ? 5 : 4;
 
   // Dynamic KPIs
   const metrics = useMemo(() => {
@@ -470,9 +481,6 @@ export default function PurchaseOrdersPage() {
         ["GSTIN", formGstin],
         ["Contact Person", formContactPerson],
         ["Phone Number", formVendorPhone],
-        ["Ship-to Warehouse", formShipToWarehouse],
-        ["Dock / Gate", formDockGate],
-        ["Expected Delivery Date", formExpectedDelivery],
       ];
       const blank = required.filter(([, v]) => !v.trim()).map(([label]) => label);
       if (blank.length) {
@@ -1007,320 +1015,426 @@ export default function PurchaseOrdersPage() {
           </div>
         }
       >
-        <form onSubmit={(e) => { e.preventDefault(); handleSavePO(true); }} className="space-y-5 py-1">
-          {/* SECTION 1: BASIC INFORMATION */}
-          <PurchaseFormCard title="Basic Information" sectionNumber={`Section 1 of ${sectionCount}`}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField label="Order Date" required>
-                <TextInput
-                  type="date"
-                  value={formDate}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDate(e.target.value)}
-                  className="h-11 md:h-9 text-xs"
-                />
-              </FormField>
-              <FormField label="Linked PR (Optional)">
-                <SelectInput
-                  value={formLinkedPR}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleLinkedPRChange(e.target.value)}
-                  className="h-11 md:h-9 text-xs font-medium"
-                  disabled={loadingPRs}
-                >
-                  <option value={NO_LINKED_PR}>No linked PR — Direct Procurement</option>
-                  {linkablePRs.map((pr) => (
-                    <option key={pr.id} value={pr.prNumber}>
-                      {prOptionLabel(pr)}
-                    </option>
-                  ))}
-                </SelectInput>
-              </FormField>
-              <FormField label="Linked RFQ (Optional)">
-                <TextInput
-                  value={formLinkedRFQ}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormLinkedRFQ(e.target.value)}
-                  placeholder="e.g. RFQ-2026-001 (if converted from RFQ)"
-                  className="h-11 md:h-9 text-xs font-mono"
-                />
-              </FormField>
-              <FormField label="Department" required>
-                <TextInput
-                  value={formDepartment}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDepartment(e.target.value)}
-                  className="h-11 md:h-9 text-xs"
-                />
-              </FormField>
-              <FormField label="Buyer Name" required>
-                <TextInput
-                  value={formBuyerName}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormBuyerName(e.target.value)}
-                  className="h-11 md:h-9 text-xs font-bold"
-                />
-              </FormField>
-            </div>
-          </PurchaseFormCard>
-
-          {/* SECTION 2: VENDOR DETAILS */}
-          <PurchaseFormCard title="Vendor Information" sectionNumber={`Section 2 of ${sectionCount}`}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField label="Select Existing Vendor" className="md:col-span-2">
-                <SelectInput
-                  value={selectedSupplierId}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                    applySupplier(activeSuppliers.find((s) => s.id === e.target.value))
-                  }
-                  className="h-11 md:h-9 text-xs font-medium"
-                  disabled={loadingSuppliers}
-                >
-                  <option value="">
-                    {loadingSuppliers
-                      ? "Loading vendors…"
-                      : activeSuppliers.length
-                        ? "New vendor — enter details below"
-                        : "No vendors in Supplier Master — enter details below"}
-                  </option>
-                  {activeSuppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.supplierName}
-                      {s.supplierCode ? ` (${s.supplierCode})` : ""}
-                      {s.city ? ` · ${s.city}` : ""}
-                    </option>
-                  ))}
-                </SelectInput>
-              </FormField>
-              <FormField label="Vendor Name" required>
-                <TextInput
-                  value={formVendorName}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormVendorName(e.target.value)}
-                  className="h-11 md:h-9 text-xs font-bold"
-                />
-              </FormField>
-              <FormField label="GSTIN" required>
-                <TextInput
-                  value={formGstin}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormGstin(e.target.value)}
-                  className="h-11 md:h-9 text-xs font-mono"
-                />
-              </FormField>
-              <FormField label="Contact Person" required>
-                <TextInput
-                  value={formContactPerson}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormContactPerson(e.target.value)}
-                  className="h-11 md:h-9 text-xs"
-                />
-              </FormField>
-              <FormField label="Phone Number" required>
-                <TextInput
-                  value={formVendorPhone}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormVendorPhone(e.target.value)}
-                  className="h-11 md:h-9 text-xs"
-                />
-              </FormField>
-            </div>
-          </PurchaseFormCard>
-
-          {/* SECTION 3: ORDERED LINE ITEMS */}
-          <PurchaseFormCard
-            title={`Ordered Line Items (${formItems.length})`}
-            sectionNumber={`Section 3 of ${sectionCount}`}
-            actionSlot={
-              <Button
-                type="button"
-                onClick={handleAddPoLine}
-                disabled={loadingProducts || products.length === 0 || Boolean(formLinkedPR)}
-                title={formLinkedPR ? `Lines are limited to items on ${formLinkedPR}` : undefined}
-                className="h-8 px-3 text-xs font-bold !bg-emerald-700 text-white rounded-lg cursor-pointer flex items-center gap-1"
-              >
-                <Plus className="h-3.5 w-3.5" /> Add Line Item
-              </Button>
-            }
-          >
-            <div className="space-y-3">
-              {formItems.map((item) => (
-                <div key={item.id} className="p-3 rounded-xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-6 gap-3 items-center text-xs">
-                  <div className="sm:col-span-2">
-                    <span className="text-[10px] text-slate-400 block font-medium mb-1">Material (Product Master)</span>
-                    <SelectInput
-                      value={item.materialId}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                        handlePoLineMaterialChange(item.id, e.target.value)
-                      }
-                      className="h-9 text-xs font-bold"
-                    >
-                      <option value="">Select material…</option>
-                      {productCatalog.map((p) => (
-                        <option key={p.materialId} value={p.materialId}>
-                          {catalogItemLabel(p)}
-                        </option>
-                      ))}
-                    </SelectInput>
-                    {item.productCode && (
-                      <span className="text-[10px] text-slate-400 font-mono mt-1 block">{item.productCode}</span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-medium mb-1">Qty ({item.unit})</span>
-                    <TextInput
-                      type="number"
-                      value={item.quantity}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const q = Number(e.target.value);
-                        setFormItems(formItems.map((i) => (i.id === item.id ? { ...i, quantity: q, totalAmount: q * i.unitRate } : i)));
-                      }}
-                      className="h-9 text-xs text-center font-bold"
-                    />
-                    {item.prItemId && remainingForForm?.[item.prItemId] !== undefined && (
-                      <span
-                        className={
-                          item.quantity > remainingForForm[item.prItemId]
-                            ? "mt-1 block text-[10px] font-semibold text-red-600"
-                            : "mt-1 block text-[10px] text-slate-400"
-                        }
-                      >
-                        Remaining on PR: {remainingForForm[item.prItemId]}
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-medium mb-1">Unit Rate (₹)</span>
-                    <TextInput
-                      type="number"
-                      value={item.unitRate}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const r = Number(e.target.value);
-                        setFormItems(formItems.map((i) => (i.id === item.id ? { ...i, unitRate: r, totalAmount: i.quantity * r } : i)));
-                      }}
-                      className="h-9 text-xs text-right font-bold"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-0 border-slate-100">
-                    <span className="font-extrabold text-emerald-800 text-xs">₹{item.totalAmount.toLocaleString("en-IN")}</span>
-                    <button
-                      type="button"
-                      onClick={() => setFormItems(formItems.filter((i) => i.id !== item.id))}
-                      disabled={formItems.length <= 1}
-                      className="p-1 rounded-lg text-slate-400 hover:text-red-600 disabled:opacity-30"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold">
-                <span className="text-emerald-950">Grand Total PO Amount (Incl GST)</span>
-                <span className="text-emerald-900 text-base">₹{grandTotal.toLocaleString("en-IN")}</span>
-              </div>
-            </div>
-          </PurchaseFormCard>
-
-          {/* SECTION 4: DELIVERY & LOGISTICS */}
-          <PurchaseFormCard title="Delivery & Logistics" sectionNumber={`Section 4 of ${sectionCount}`}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <FormField label="Ship-to Warehouse" required>
-                <TextInput
-                  value={formShipToWarehouse}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormShipToWarehouse(e.target.value)}
-                  className="h-11 md:h-9 text-xs"
-                />
-              </FormField>
-              <FormField label="Dock / Gate" required>
-                <TextInput
-                  value={formDockGate}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDockGate(e.target.value)}
-                  className="h-11 md:h-9 text-xs"
-                />
-              </FormField>
-              <FormField label="Expected Delivery Date" required>
-                <TextInput
-                  type="date"
-                  value={formExpectedDelivery}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormExpectedDelivery(e.target.value)}
-                  className="h-11 md:h-9 text-xs"
-                />
-              </FormField>
-            </div>
-          </PurchaseFormCard>
-
-          {isDirectForm && (
-            <PurchaseFormCard title="Payment Record" sectionNumber={`Section 5 of ${sectionCount}`}>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormField label="Payment Status" required>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSavePO(true);
+          }}
+          className="grid gap-5 pb-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start"
+        >
+          <div className="min-w-0 space-y-5">
+            <ProcurementFormSection step={1} title="Order Details" subtitle="Date, source and who is buying">
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+                <FormField label="Order Date" required>
+                  <TextInput
+                    type="date"
+                    value={formDate}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDate(e.target.value)}
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+                <FormField label="Department" required>
+                  <TextInput
+                    value={formDepartment}
+                    placeholder="e.g. Housekeeping"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormDepartment(e.target.value)}
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+                <FormField label="Buyer Name" required>
+                  <TextInput
+                    value={formBuyerName}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormBuyerName(e.target.value)}
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+                <FormField label="Linked PR">
                   <SelectInput
-                    value={formPayOption}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                      setFormPayOption(e.target.value as "unpaid" | "full" | "partial")
-                    }
-                    className="h-11 md:h-9 text-xs font-medium"
+                    value={formLinkedPR}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleLinkedPRChange(e.target.value)}
+                    className={cn("block h-10 text-sm", !formLinkedPR && "text-slate-400")}
+                    disabled={loadingPRs}
                   >
-                    <option value="unpaid">Not paid yet — pay later</option>
-                    <option value="full">Paid in full</option>
-                    <option value="partial">Partly paid / advance</option>
+                    <option value={NO_LINKED_PR}>No linked PR — Direct Procurement</option>
+                    {linkablePRs.map((pr) => (
+                      <option key={pr.id} value={pr.prNumber}>
+                        {prOptionLabel(pr)}
+                      </option>
+                    ))}
                   </SelectInput>
                 </FormField>
-                {formPayOption !== "unpaid" && (
-                  <>
-                    <FormField label="Amount Paid (₹)" required>
-                      <TextInput
-                        type="number"
-                        min={0}
-                        value={formPayOption === "full" ? grandTotal : formPayAmount || ""}
-                        disabled={formPayOption === "full"}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayAmount(Number(e.target.value))}
-                        className="h-11 md:h-9 text-xs font-bold"
-                      />
-                    </FormField>
-                    <FormField label="Payment Date" required>
-                      <TextInput
-                        type="date"
-                        value={formPayDate}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayDate(e.target.value)}
-                        className="h-11 md:h-9 text-xs"
-                      />
-                    </FormField>
-                    <FormField label="Payment Mode" required>
-                      <SelectInput
-                        value={formPayMode}
-                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormPayMode(e.target.value)}
-                        className="h-11 md:h-9 text-xs font-medium"
+                <FormField label="Linked RFQ">
+                  <TextInput
+                    value={formLinkedRFQ}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormLinkedRFQ(e.target.value)}
+                    placeholder="RFQ-2026-001 (optional)"
+                    className="h-10 font-mono text-sm"
+                  />
+                </FormField>
+                <FormField label="Expected Delivery">
+                  <TextInput
+                    type="date"
+                    value={formExpectedDelivery}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormExpectedDelivery(e.target.value)}
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+              </div>
+            </ProcurementFormSection>
+
+            <ProcurementFormSection step={2} title="Vendor" subtitle="Pick from Supplier Master or enter a new vendor">
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+                <FormField label="Existing Vendor" className="sm:col-span-2">
+                  <SelectInput
+                    value={selectedSupplierId}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                      applySupplier(activeSuppliers.find((s) => s.id === e.target.value))
+                    }
+                    className={cn("block h-10 text-sm", !selectedSupplierId && "text-slate-400")}
+                    disabled={loadingSuppliers}
+                  >
+                    <option value="">
+                      {loadingSuppliers
+                        ? "Loading vendors…"
+                        : activeSuppliers.length
+                          ? "New vendor — enter details below"
+                          : "No vendors in Supplier Master — enter details below"}
+                    </option>
+                    {activeSuppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.supplierName}
+                        {s.supplierCode ? ` (${s.supplierCode})` : ""}
+                        {s.city ? ` · ${s.city}` : ""}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </FormField>
+                <FormField label="Vendor Name" required>
+                  <TextInput
+                    value={formVendorName}
+                    placeholder="Legal / trading name"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormVendorName(e.target.value)}
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+                <FormField label="GSTIN" required>
+                  <TextInput
+                    value={formGstin}
+                    placeholder="22AAAAA0000A1Z5"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormGstin(e.target.value)}
+                    className="h-10 font-mono text-sm"
+                  />
+                </FormField>
+                <FormField label="Contact Person" required>
+                  <TextInput
+                    value={formContactPerson}
+                    placeholder="Primary contact"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormContactPerson(e.target.value)}
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+                <FormField label="Phone Number" required>
+                  <TextInput
+                    value={formVendorPhone}
+                    placeholder="10-digit mobile"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormVendorPhone(e.target.value)}
+                    className="h-10 text-sm"
+                  />
+                </FormField>
+              </div>
+            </ProcurementFormSection>
+
+            <ProcurementFormSection
+              step={3}
+              title="Line Items"
+              subtitle={
+                formLinkedPR
+                  ? `Items from ${formLinkedPR}`
+                  : formItems.length
+                    ? `${formItems.length} line${formItems.length === 1 ? "" : "s"}`
+                    : "Add materials from Product Master"
+              }
+              action={
+                <Button
+                  type="button"
+                  onClick={handleAddPoLine}
+                  disabled={loadingProducts || products.length === 0 || Boolean(formLinkedPR)}
+                  title={formLinkedPR ? `Lines are limited to items on ${formLinkedPR}` : undefined}
+                  className="h-8 gap-1 rounded-lg px-3 text-xs font-bold !bg-emerald-700 text-white"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add Item
+                </Button>
+              }
+            >
+              {formItems.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center">
+                  <Package className="mx-auto mb-2 h-5 w-5 text-slate-300" />
+                  <p className="text-sm font-medium text-slate-600">No line items yet</p>
+                  <p className="mt-0.5 text-xs text-slate-400">Add materials from the product master to build this PO.</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {formItems.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50/40 p-3.5"
+                    >
+                      <div className="mb-2.5 flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          Line {idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setFormItems(formItems.filter((i) => i.id !== item.id))}
+                          disabled={formItems.length <= 1}
+                          className="rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                          aria-label="Remove line"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
+                        <div className="sm:col-span-5">
+                          <span className="mb-1 block text-[10px] font-medium text-slate-500">Material</span>
+                          <SelectInput
+                            value={item.materialId}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                              handlePoLineMaterialChange(item.id, e.target.value)
+                            }
+                            className={cn("h-9 text-xs font-medium", !item.materialId && "text-slate-400")}
+                          >
+                            <option value="">Select material…</option>
+                            {productCatalog.map((p) => (
+                              <option key={p.materialId} value={p.materialId}>
+                                {catalogItemLabel(p)}
+                              </option>
+                            ))}
+                          </SelectInput>
+                          {item.productCode && (
+                            <span className="mt-1 block font-mono text-[10px] text-slate-400">{item.productCode}</span>
+                          )}
+                        </div>
+                        <div className="sm:col-span-2">
+                          <span className="mb-1 block text-[10px] font-medium text-slate-500">
+                            Qty{item.unit ? ` (${item.unit})` : ""}
+                          </span>
+                          <TextInput
+                            type="number"
+                            min={0}
+                            value={item.quantity}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              const q = Number(e.target.value);
+                              setFormItems(
+                                formItems.map((i) =>
+                                  i.id === item.id ? { ...i, quantity: q, totalAmount: q * i.unitRate } : i,
+                                ),
+                              );
+                            }}
+                            className="h-9 text-center text-xs font-semibold"
+                          />
+                          {item.prItemId && remainingForForm?.[item.prItemId] !== undefined && (
+                            <span
+                              className={cn(
+                                "mt-1 block text-[10px]",
+                                item.quantity > remainingForForm[item.prItemId]
+                                  ? "font-semibold text-red-600"
+                                  : "text-slate-400",
+                              )}
+                            >
+                              Remaining: {remainingForForm[item.prItemId]}
+                            </span>
+                          )}
+                        </div>
+                        <div className="sm:col-span-2">
+                          <span className="mb-1 block text-[10px] font-medium text-slate-500">Rate (₹)</span>
+                          <TextInput
+                            type="number"
+                            min={0}
+                            value={item.unitRate}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              const r = Number(e.target.value);
+                              setFormItems(
+                                formItems.map((i) =>
+                                  i.id === item.id ? { ...i, unitRate: r, totalAmount: i.quantity * r } : i,
+                                ),
+                              );
+                            }}
+                            className="h-9 text-right text-xs font-semibold"
+                          />
+                        </div>
+                        <div className="flex items-end justify-between sm:col-span-3 sm:justify-end">
+                          <span className="text-[10px] font-medium text-slate-500 sm:hidden">Line total</span>
+                          <span className="text-sm font-bold text-emerald-800">
+                            ₹{item.totalAmount.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-xs">
+                    <div className="space-y-0.5 text-emerald-900">
+                      <p>
+                        Subtotal <span className="font-semibold">₹{subTotal.toLocaleString("en-IN")}</span>
+                        <span className="mx-1.5 text-emerald-400">·</span>
+                        GST (18%) <span className="font-semibold">₹{taxTotal.toLocaleString("en-IN")}</span>
+                      </p>
+                    </div>
+                    <p className="text-base font-bold text-emerald-900">
+                      ₹{grandTotal.toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </ProcurementFormSection>
+
+            {isDirectForm && (
+              <ProcurementFormSection step={4} title="Payment" subtitle="Optional — record payment now or later">
+                <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+                  <FormField label="Payment Status" required>
+                    <SelectInput
+                      value={formPayOption}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                        setFormPayOption(e.target.value as "unpaid" | "full" | "partial")
+                      }
+                      className="h-10 text-sm"
+                    >
+                      <option value="unpaid">Not paid yet — pay later</option>
+                      <option value="full">Paid in full</option>
+                      <option value="partial">Partly paid / advance</option>
+                    </SelectInput>
+                  </FormField>
+                  {formPayOption !== "unpaid" && (
+                    <>
+                      <FormField label="Amount Paid (₹)" required>
+                        <TextInput
+                          type="number"
+                          min={0}
+                          value={formPayOption === "full" ? grandTotal : formPayAmount || ""}
+                          disabled={formPayOption === "full"}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayAmount(Number(e.target.value))}
+                          className="h-10 text-sm font-semibold"
+                        />
+                      </FormField>
+                      <FormField label="Payment Date" required>
+                        <TextInput
+                          type="date"
+                          value={formPayDate}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayDate(e.target.value)}
+                          className="h-10 text-sm"
+                        />
+                      </FormField>
+                      <FormField label="Payment Mode" required>
+                        <SelectInput
+                          value={formPayMode}
+                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormPayMode(e.target.value)}
+                          className="h-10 text-sm"
+                        >
+                          {PO_PAYMENT_MODES.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </SelectInput>
+                      </FormField>
+                      <FormField
+                        label="Transaction / Receipt Ref"
+                        required={formPayMode !== "Cash"}
+                        className="sm:col-span-2"
                       >
-                        {PO_PAYMENT_MODES.map((m) => (
-                          <option key={m} value={m}>
-                            {m}
-                          </option>
-                        ))}
-                      </SelectInput>
-                    </FormField>
-                    <FormField label="Transaction / Receipt Ref" required={formPayMode !== "Cash"} className="md:col-span-2">
-                      <TextInput
-                        value={formPayRef}
-                        placeholder={formPayMode === "Cash" ? "Receipt no. (optional)" : "UTR / cheque no. / txn id"}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayRef(e.target.value)}
-                        className="h-11 md:h-9 text-xs font-mono"
-                      />
-                    </FormField>
-                  </>
+                        <TextInput
+                          value={formPayRef}
+                          placeholder={formPayMode === "Cash" ? "Receipt no. (optional)" : "UTR / cheque no. / txn id"}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormPayRef(e.target.value)}
+                          className="h-10 font-mono text-sm"
+                        />
+                      </FormField>
+                    </>
+                  )}
+                </div>
+                {formPayOption === "partial" && grandTotal > 0 && (
+                  <p className="mt-3 text-[11px] text-slate-500">
+                    Balance due: ₹{Math.max(0, grandTotal - (Number(formPayAmount) || 0)).toLocaleString("en-IN")} — record
+                    later payments from the PO details → Payments tab.
+                  </p>
+                )}
+              </ProcurementFormSection>
+            )}
+
+            <ProcurementFormSection
+              step={formStepAttachments}
+              title="Attachments"
+              subtitle="Vendor quotes, rate sheets or supporting documents"
+            >
+              <PurchaseAttachmentList
+                attachments={formAttachments}
+                onAddAttachment={(att) => setFormAttachments([...formAttachments, att])}
+                onRemoveAttachment={(id) => setFormAttachments(formAttachments.filter((a) => a.id !== id))}
+                allowedTypes={["pdf", "jpg", "jpeg", "png"]}
+                maxSizeMB={5}
+                maxFiles={5}
+              />
+            </ProcurementFormSection>
+          </div>
+
+          <aside className="space-y-4 lg:sticky lg:top-0">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Summary</p>
+              <dl className="space-y-2.5 text-xs">
+                <ProcurementSummaryRow
+                  icon={<CalendarDays className="h-3.5 w-3.5" />}
+                  label="Order date"
+                  value={formDate}
+                />
+                <ProcurementSummaryRow
+                  icon={<Building2 className="h-3.5 w-3.5" />}
+                  label="Department"
+                  value={formDepartment}
+                />
+                <ProcurementSummaryRow icon={<User className="h-3.5 w-3.5" />} label="Buyer" value={formBuyerName} />
+                <ProcurementSummaryRow
+                  icon={<Truck className="h-3.5 w-3.5" />}
+                  label="Vendor"
+                  value={formVendorName}
+                />
+                <ProcurementSummaryRow
+                  icon={<Package className="h-3.5 w-3.5" />}
+                  label="Items"
+                  value={formItems.length ? String(formItems.length) : ""}
+                />
+                <ProcurementSummaryRow
+                  icon={<CalendarDays className="h-3.5 w-3.5" />}
+                  label="Delivery"
+                  value={formExpectedDelivery}
+                />
+                {(formLinkedPR || formLinkedRFQ) && (
+                  <ProcurementSummaryRow
+                    icon={<Paperclip className="h-3.5 w-3.5" />}
+                    label="Source"
+                    value={formLinkedRFQ || formLinkedPR}
+                  />
+                )}
+              </dl>
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <p className="text-[11px] text-slate-500">Estimated total (incl. GST)</p>
+                <p className="mt-0.5 text-xl font-bold text-slate-900">
+                  ₹{grandTotal.toLocaleString("en-IN")}
+                </p>
+                {grandTotal > 0 && (
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Subtotal ₹{subTotal.toLocaleString("en-IN")} · GST ₹{taxTotal.toLocaleString("en-IN")}
+                  </p>
                 )}
               </div>
-              {formPayOption === "partial" && grandTotal > 0 && (
-                <p className="mt-3 text-[11px] text-slate-500">
-                  Balance due: ₹{Math.max(0, grandTotal - (Number(formPayAmount) || 0)).toLocaleString("en-IN")} — record
-                  later payments from the PO details → Payments tab.
-                </p>
-              )}
-            </PurchaseFormCard>
-          )}
-
-          {/* ATTACHMENTS */}
-          <PurchaseFormCard title="Vendor Quotations & Attachments" sectionNumber={`Section ${sectionCount} of ${sectionCount}`}>
-            <PurchaseAttachmentList
-              attachments={formAttachments}
-              onAddAttachment={(att) => setFormAttachments([...formAttachments, att])}
-              onRemoveAttachment={(id) => setFormAttachments(formAttachments.filter((a) => a.id !== id))}
-              allowedTypes={["pdf", "jpg", "jpeg", "png"]}
-              maxSizeMB={5}
-              maxFiles={5}
-            />
-          </PurchaseFormCard>
+            </div>
+            <div className="rounded-xl bg-emerald-50/70 p-4 text-[11px] leading-relaxed text-emerald-900">
+              {isDirectForm
+                ? "Direct PO — no requisition or RFQ linked. After approval you can receive goods against this order."
+                : formLinkedPR
+                  ? `This PO is linked to ${formLinkedPR}. Ordered quantities count toward that requisition.`
+                  : "After approval, receive goods on the GRN page against this purchase order."}
+            </div>
+          </aside>
         </form>
       </Drawer>
 

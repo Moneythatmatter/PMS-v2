@@ -721,7 +721,7 @@ export function RoomAvailabilityView() {
             <button
               type="button"
               onClick={() => setFiltersOpen(true)}
-              className={cn(
+            className={cn(
                 "inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border px-3.5 text-sm font-medium transition-colors",
                 activeFilterCount > 0
                   ? "border-emerald-600 bg-emerald-50 text-emerald-800"
@@ -745,7 +745,7 @@ export function RoomAvailabilityView() {
                 Clear
               </button>
             )}
-          </div>
+              </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
@@ -762,7 +762,7 @@ export function RoomAvailabilityView() {
                 {item.label}
               </span>
             ))}
-          </div>
+            </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 text-[11px] font-semibold">
               {WINDOW_OPTIONS.map((n) => (
@@ -802,35 +802,35 @@ export function RoomAvailabilityView() {
               />
             </label>
             <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white p-0.5">
-              <button
-                type="button"
+            <button
+              type="button"
                 onClick={goEarlier}
                 className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
                 aria-label={calendarMonth ? "Previous month" : `Back ${step} days`}
                 title={calendarMonth ? "Previous month" : `Back ${step === 7 ? "1 week" : "2 weeks"}`}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
                 onClick={goToday}
                 title={atToday ? "Showing from today" : "Back to today"}
-                className={cn(
+              className={cn(
                   "min-w-[7.5rem] rounded-md px-2.5 py-1 text-xs font-semibold",
                   atToday ? "bg-emerald-700 text-white" : "text-emerald-700 hover:bg-emerald-50",
                 )}
               >
                 {positionLabel}
-              </button>
-              <button
-                type="button"
+            </button>
+            <button
+              type="button"
                 onClick={goLater}
                 className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
                 aria-label={calendarMonth ? "Next month" : `Forward ${step} days`}
                 title={calendarMonth ? "Next month" : `Forward ${step === 7 ? "1 week" : "2 weeks"}`}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
             </div>
           </div>
         </div>
@@ -858,7 +858,7 @@ export function RoomAvailabilityView() {
                   </div>
                   {gridDays.map((d, i) => (
                     <div
-                      key={d}
+                        key={d}
                       className="flex shrink-0 items-center justify-center border-r border-white/15 text-[11px] font-semibold"
                       style={{ width: cellW, height: 22 }}
                     >
@@ -880,7 +880,7 @@ export function RoomAvailabilityView() {
                     return (
                       <div
                         key={d}
-                        className={cn(
+                          className={cn(
                           "flex shrink-0 flex-col items-center justify-center border-r border-slate-200 leading-tight",
                           isToday ? "bg-sky-500 text-white" : cn("text-slate-600", dayCellClass(d)),
                         )}
@@ -906,7 +906,7 @@ export function RoomAvailabilityView() {
                       <Layers className="h-3 w-3 text-slate-500" />
                       <span className="truncate">{group.type}</span>
                       <span className="ml-auto text-[10px] font-semibold text-slate-500">{group.rows.length}</span>
-                    </div>
+                        </div>
                     {gridDays.map((d) => {
                       const free = group.rows.filter((r) => {
                         const s = r.days[d];
@@ -915,18 +915,18 @@ export function RoomAvailabilityView() {
                       return (
                         <div
                           key={d}
-                          className={cn(
+                        className={cn(
                             "flex shrink-0 items-center justify-center border-r border-slate-300/60 text-[10px] font-semibold",
                             free === 0 ? "text-rose-600" : "text-slate-500",
-                          )}
+                        )}
                           style={{ width: cellW, height: 24 }}
                           title={`${free} ${group.type} available on ${formatDayLabel(d)}`}
-                        >
+                      >
                           {free}
-                        </div>
+                            </div>
                       );
                     })}
-                  </div>
+                            </div>
 
                   {group.rows.map((row) => {
                     const todayStatus = row.days[todayIso];
@@ -937,7 +937,7 @@ export function RoomAvailabilityView() {
                           ? "bg-slate-300 text-slate-800"
                           : group.tone;
                     const segments = buildSegments(row, gridDays);
-                    return (
+                          return (
                       <div key={row.room} className="group/row flex border-b border-slate-200">
                         <button
                           type="button"
@@ -945,7 +945,7 @@ export function RoomAvailabilityView() {
                           title={`${row.type} · ${row.floor}${row.bedType ? ` · ${row.bedType}` : ""}${
                             todayStatus === "dirty" ? " · Dirty today" : ""
                           }`}
-                          className={cn(
+                              className={cn(
                             "sticky left-0 z-20 flex shrink-0 items-center gap-2 border-r border-slate-300 px-2.5 text-left transition-[filter] hover:brightness-95",
                             labelTone,
                           )}
@@ -1004,9 +1004,9 @@ export function RoomAvailabilityView() {
                                   ? "bg-emerald-600 hover:bg-emerald-700"
                                   : "bg-sky-600 hover:bg-sky-700";
                               return (
-                                <button
+                              <button
                                   key={seg.key}
-                                  type="button"
+                                type="button"
                                   onClick={() => showDetail(row, day, seg.status)}
                                   title={[
                                     bookingLabel(b),
@@ -1048,14 +1048,14 @@ export function RoomAvailabilityView() {
                                 )}
                                 <span className="truncate">{hint}</span>
                               </button>
-                            );
-                          })}
+                          );
+                        })}
                         </div>
                       </div>
                     );
                   })}
-                </Fragment>
-              ))}
+                  </Fragment>
+                ))}
 
               {/* Footer totals */}
               <div className="sticky bottom-0 z-30 bg-[#4467ad] text-white">
@@ -1247,7 +1247,7 @@ export function RoomAvailabilityView() {
                 </p>
               </div>
             </div>
-            <p className="text-sm text-slate-600">
+              <p className="text-sm text-slate-600">
               {blockHints.get(`${detailCell.room}-${detailCell.day}`) ?? statusConfig[detailCell.status].description}
             </p>
             {(detailCell.status === "reserved" || detailCell.status === "occupied") &&

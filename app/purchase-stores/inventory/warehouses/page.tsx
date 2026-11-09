@@ -162,9 +162,9 @@ export default function WarehousesPage() {
         <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}
-        </div>
+            </div>
         <div className="h-80 animate-pulse rounded-2xl bg-slate-100" />
-      </div>
+          </div>
         );
   }
 
@@ -230,7 +230,7 @@ export default function WarehousesPage() {
             )}
                   </div>
                   </div>
-        </div>
+                  </div>
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <tr>

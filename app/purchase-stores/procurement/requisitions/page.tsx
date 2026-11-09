@@ -164,7 +164,8 @@ export default function PurchaseRequisitionsPage() {
   // Inventory Item Selection Modal State
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
   const [inventorySearch, setInventorySearch] = useState("");
-  const [selectedCatalogItem, setSelectedCatalogItem] = useState<InventoryCatalogItem | null>(null);
+  const [selectedCatalogCodes, setSelectedCatalogCodes] = useState<Set<string>>(new Set());
+  const [inventoryCategory, setInventoryCategory] = useState("all");
 
   // Pagination State
   const [rowsPerPage, setRowsPerPage] = useState("10");
@@ -218,8 +219,8 @@ export default function PurchaseRequisitionsPage() {
   // Toast State
   const [toast, setToast] = useState<{ message: string; variant: "success" | "info" } | null>(null);
 
-  // Filtered Inventory Catalog inside Selection Modal (exclude items already on the PR)
-  const filteredInventoryCatalog = useMemo(() => {
+  // Catalog items not yet on the PR
+  const availableInventoryCatalog = useMemo(() => {
     const addedKeys = new Set(
       newItems.flatMap((row) => {
         const keys: string[] = [];
@@ -229,13 +230,29 @@ export default function PurchaseRequisitionsPage() {
         return keys;
       }),
     );
-    return inventoryCatalog.filter((item) => {
-      const alreadyAdded =
-        addedKeys.has(`id:${item.materialId}`) ||
-        addedKeys.has(`code:${item.productCode.toLowerCase()}`) ||
-        addedKeys.has(`code:${item.itemCode.toLowerCase()}`) ||
-        addedKeys.has(`name:${item.itemName.trim().toLowerCase()}`);
-      if (alreadyAdded) return false;
+    return inventoryCatalog.filter(
+      (item) =>
+        !(
+          addedKeys.has(`id:${item.materialId}`) ||
+          addedKeys.has(`code:${item.productCode.toLowerCase()}`) ||
+          addedKeys.has(`code:${item.itemCode.toLowerCase()}`) ||
+          addedKeys.has(`name:${item.itemName.trim().toLowerCase()}`)
+        ),
+    );
+  }, [inventoryCatalog, newItems]);
+
+  const inventoryCategories = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of availableInventoryCatalog) {
+      const key = item.category || "Uncategorised";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [availableInventoryCatalog]);
+
+  const filteredInventoryCatalog = useMemo(() => {
+    return availableInventoryCatalog.filter((item) => {
+      if (inventoryCategory !== "all" && (item.category || "Uncategorised") !== inventoryCategory) return false;
       const query = inventorySearch.toLowerCase();
       if (!query) return true;
       return (
@@ -245,7 +262,7 @@ export default function PurchaseRequisitionsPage() {
         item.category.toLowerCase().includes(query)
       );
     });
-  }, [inventoryCatalog, inventorySearch, newItems]);
+  }, [availableInventoryCatalog, inventoryCategory, inventorySearch]);
 
   // Dynamic Summary Metrics Calculation
   const metrics = useMemo(() => {
@@ -401,11 +418,41 @@ export default function PurchaseRequisitionsPage() {
   };
 
   const renderSourcingButtons = (pr: PurchaseRequisition, compact = false) => {
+    const size = compact ? "h-7 px-2.5 text-[11px] whitespace-nowrap" : "h-8 px-3 text-xs whitespace-nowrap";
+    if (compact && pr.status === "Pending Approval") {
+      const busy = decidingPrId === pr.id;
+      return (
+        <div className="flex flex-nowrap items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation();
+              void decidePR(pr, "Rejected");
+            }}
+            className={cn("gap-1 rounded-lg font-bold !bg-white !text-red-700 !border-red-200 hover:!bg-red-50", size)}
+          >
+            <XCircle className="h-3 w-3 shrink-0" /> Reject
+          </Button>
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation();
+              void decidePR(pr, "Approved");
+            }}
+            className={cn("gap-1 rounded-lg font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white", size)}
+          >
+            <CheckCircle2 className="h-3 w-3 shrink-0" /> {busy ? "Saving…" : "Approve"}
+          </Button>
+        </div>
+      );
+    }
     const { canCreateRfq, canCreatePo } = sourcingActionsFor(pr);
     if (!canCreateRfq && !canCreatePo) {
       return compact ? <span className="text-slate-400">—</span> : null;
     }
-    const size = compact ? "h-7 px-2.5 text-[11px] whitespace-nowrap" : "h-8 px-3 text-xs whitespace-nowrap";
     return (
       <div className="flex flex-nowrap items-center gap-1.5">
         {canCreateRfq && (
@@ -543,51 +590,41 @@ export default function PurchaseRequisitionsPage() {
   // OPEN INVENTORY SELECTION MODAL
   const handleOpenInventoryModal = () => {
     setInventorySearch("");
-    const available = inventoryCatalog.filter((item) => {
-      return !newItems.some(
-        (row) =>
-          (row.materialId && row.materialId === item.materialId) ||
-          (row.productCode &&
-            row.productCode.toLowerCase() === item.productCode.toLowerCase()) ||
-          row.item.trim().toLowerCase() === item.itemName.trim().toLowerCase(),
-      );
-    });
-    setSelectedCatalogItem(available[0] ?? null);
+    setInventoryCategory("all");
+    setSelectedCatalogCodes(new Set());
     setIsInventoryModalOpen(true);
   };
 
   // CONFIRM ADD INVENTORY ITEM FROM MODAL TO TABLE
   const handleConfirmAddInventoryItem = () => {
-    if (!selectedCatalogItem) return;
-
-    const alreadyAdded = newItems.some(
-      (row) =>
-        (row.materialId && row.materialId === selectedCatalogItem.materialId) ||
-        (row.productCode &&
-          row.productCode.toLowerCase() === selectedCatalogItem.productCode.toLowerCase()) ||
-        row.item.trim().toLowerCase() === selectedCatalogItem.itemName.trim().toLowerCase(),
-    );
-    if (alreadyAdded) {
-      setToast({
-        message: `"${selectedCatalogItem.itemName}" is already in the requested items list.`,
-        variant: "info",
-      });
-      return;
-    }
-
-    const newItem = {
-      ...prItemFromCatalog(selectedCatalogItem, 1),
+    const picked = availableInventoryCatalog.filter((item) => selectedCatalogCodes.has(item.itemCode));
+    if (picked.length === 0) return;
+    const stamp = Date.now();
+    const added = picked.map((item, idx) => ({
+      ...prItemFromCatalog(item, 1),
+      id: `item-${stamp}-${idx}`,
       estimatedPrice: 0,
       total: 0,
-    };
-
-    setNewItems((prev) => [...prev, newItem]);
+    }));
+    setNewItems((prev) => [...prev, ...added]);
     setIsInventoryModalOpen(false);
+    setSelectedCatalogCodes(new Set());
     setToast({
-      message: `Added ${selectedCatalogItem.itemName} to requested items. Enter estimated price if needed.`,
+      message:
+        picked.length === 1
+          ? `Added ${picked[0].itemName} to requested items. Enter quantity and estimated price.`
+          : `Added ${picked.length} items to requested items. Enter quantities and estimated prices.`,
       variant: "success",
     });
   };
+
+  const toggleCatalogItem = (code: string) =>
+    setSelectedCatalogCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
 
   const handleRemoveItemRow = (id: string) => {
     setNewItems((prev) => prev.filter((i) => i.id !== id));
@@ -683,29 +720,28 @@ export default function PurchaseRequisitionsPage() {
     }
   };
 
-  const handleApprovePR = async () => {
-    if (!selectedPR) return;
+  const [decidingPrId, setDecidingPrId] = useState<string | null>(null);
+
+  const decidePR = async (pr: PurchaseRequisition, status: "Approved" | "Rejected") => {
+    if (status === "Rejected" && !window.confirm(`Reject ${pr.prNumber}?`)) return;
+    setDecidingPrId(pr.id);
     try {
-      await psRequisitionService.update(selectedPR.id, { status: "Approved" });
+      await psRequisitionService.update(pr.id, { status });
       await reload();
-      setSelectedPR((prev) => (prev ? { ...prev, status: "Approved" } : null));
-      setToast({ message: `${selectedPR.prNumber} approved.`, variant: "success" });
+      setSelectedPR((prev) => (prev && prev.id === pr.id ? { ...prev, status } : prev));
+      setToast({
+        message: status === "Approved" ? `${pr.prNumber} approved. You can now create an RFQ or PO.` : `${pr.prNumber} rejected.`,
+        variant: status === "Approved" ? "success" : "info",
+      });
     } catch (e) {
-      setToast({ message: e instanceof Error ? e.message : "Approve failed", variant: "info" });
+      setToast({ message: e instanceof Error ? e.message : `${status === "Approved" ? "Approve" : "Reject"} failed`, variant: "info" });
+    } finally {
+      setDecidingPrId(null);
     }
   };
 
-  const handleRejectPR = async () => {
-    if (!selectedPR) return;
-    try {
-      await psRequisitionService.update(selectedPR.id, { status: "Rejected" });
-      await reload();
-      setSelectedPR((prev) => (prev ? { ...prev, status: "Rejected" } : null));
-      setToast({ message: `${selectedPR.prNumber} rejected.`, variant: "info" });
-    } catch (e) {
-      setToast({ message: e instanceof Error ? e.message : "Reject failed", variant: "info" });
-    }
-  };
+  const handleApprovePR = () => (selectedPR ? decidePR(selectedPR, "Approved") : undefined);
+  const handleRejectPR = () => (selectedPR ? decidePR(selectedPR, "Rejected") : undefined);
 
   if (!isMounted) return null;
 
@@ -1380,25 +1416,12 @@ export default function PurchaseRequisitionsPage() {
                   />
                 </FormField>
 
-                <div className="sm:col-span-2 xl:col-span-2">
+                <div className="sm:col-span-2 xl:col-span-3">
                   <span className="mb-1.5 block text-xs font-medium text-slate-600">
                     Priority <span className="text-red-500">*</span>
                   </span>
                   <PrioritySelector value={newPriority} onChange={setNewPriority} />
                 </div>
-
-                <FormField label="Cost Center">
-                  <SelectInput
-                    value={newCostCenter}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewCostCenter(e.target.value)}
-                    className={cn("block h-10 text-sm", !newCostCenter && "text-slate-400")}
-                  >
-                    <option value="">Optional</option>
-                    <option value="CC-HK-LINEN">CC-HK-LINEN (Housekeeping Linen Dept)</option>
-                    <option value="CC-ENG-HVAC">CC-ENG-HVAC (Engineering HVAC Maintenance)</option>
-                    <option value="CC-FB-[#001]">CC-FB-[#001] (F&B Main Kitchen Operating)</option>
-                  </SelectInput>
-                </FormField>
               </div>
             </ProcurementFormSection>
 
@@ -1631,8 +1654,8 @@ export default function PurchaseRequisitionsPage() {
       <Modal
         open={isInventoryModalOpen}
         onClose={() => setIsInventoryModalOpen(false)}
-        title="Select Inventory Item"
-        description="Search master catalog and select an item to add to requested items."
+        title="Select Inventory Items"
+        description="Search the master catalog and tick every item you want to add."
         size="lg"
         footer={
           <div className="flex items-center justify-end gap-2">
@@ -1646,11 +1669,13 @@ export default function PurchaseRequisitionsPage() {
             </Button>
             <Button
               type="button"
-              disabled={!selectedCatalogItem}
+              disabled={selectedCatalogCodes.size === 0}
               onClick={handleConfirmAddInventoryItem}
               className="h-9 px-4 text-xs font-bold !bg-[#0F8A5F] hover:!bg-[#0d7d56] text-white rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
             >
-              Add Selected Item
+              {selectedCatalogCodes.size > 1
+                ? `Add ${selectedCatalogCodes.size} Items`
+                : "Add Selected Item"}
             </Button>
           </div>
         }
@@ -1667,12 +1692,75 @@ export default function PurchaseRequisitionsPage() {
             />
           </div>
 
+          {/* Category pills */}
+          {inventoryCategories.length > 1 && (
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
+              {[["all", availableInventoryCatalog.length] as [string, number], ...inventoryCategories].map(([category, count]) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setInventoryCategory(category)}
+                  className={cn(
+                    "shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors",
+                    inventoryCategory === category
+                      ? "border-emerald-700 bg-emerald-700 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-800",
+                  )}
+                >
+                  {category === "all" ? "All" : category}
+                  <span className={cn("ml-1", inventoryCategory === category ? "text-emerald-100" : "text-slate-400")}>{count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between text-[11px] text-slate-500">
+            <span>
+              {selectedCatalogCodes.size > 0 ? (
+                <>
+                  <strong className="text-emerald-800">{selectedCatalogCodes.size}</strong> selected
+                </>
+              ) : (
+                "No items selected"
+              )}
+            </span>
+            {selectedCatalogCodes.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedCatalogCodes(new Set())}
+                className="font-semibold text-slate-500 hover:text-red-600"
+              >
+                Clear selection
+              </button>
+            )}
+          </div>
+
           {/* Master Inventory Catalog Table */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white max-h-[300px] overflow-y-auto">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white max-h-[340px] overflow-y-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500 z-10">
                 <tr>
-                  <th className="px-3 py-2 w-10 text-center">Select</th>
+                  <th className="px-3 py-2 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all visible items"
+                      checked={
+                        filteredInventoryCatalog.length > 0 &&
+                        filteredInventoryCatalog.every((item) => selectedCatalogCodes.has(item.itemCode))
+                      }
+                      onChange={(e) =>
+                        setSelectedCatalogCodes((prev) => {
+                          const next = new Set(prev);
+                          for (const item of filteredInventoryCatalog) {
+                            if (e.target.checked) next.add(item.itemCode);
+                            else next.delete(item.itemCode);
+                          }
+                          return next;
+                        })
+                      }
+                      className="accent-emerald-700 cursor-pointer"
+                    />
+                  </th>
                   <th className="px-3 py-2">Item Code</th>
                   <th className="px-3 py-2">Item Name</th>
                   <th className="px-3 py-2">Category</th>
@@ -1682,12 +1770,12 @@ export default function PurchaseRequisitionsPage() {
               <tbody className="divide-y divide-slate-100 text-xs">
                 {filteredInventoryCatalog.length > 0 ? (
                   filteredInventoryCatalog.map((catalogItem) => {
-                    const isSelected = selectedCatalogItem?.itemCode === catalogItem.itemCode;
+                    const isSelected = selectedCatalogCodes.has(catalogItem.itemCode);
 
                     return (
                       <tr
                         key={catalogItem.itemCode}
-                        onClick={() => setSelectedCatalogItem(catalogItem)}
+                        onClick={() => toggleCatalogItem(catalogItem.itemCode)}
                         className={cn(
                           "cursor-pointer transition-colors",
                           isSelected ? "bg-emerald-50/80" : "hover:bg-slate-50/70"
@@ -1695,10 +1783,10 @@ export default function PurchaseRequisitionsPage() {
                       >
                         <td className="px-3 py-2.5 text-center">
                           <input
-                            type="radio"
-                            name="inventorySelect"
+                            type="checkbox"
                             checked={isSelected}
-                            onChange={() => setSelectedCatalogItem(catalogItem)}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={() => toggleCatalogItem(catalogItem.itemCode)}
                             className="accent-emerald-700 cursor-pointer"
                           />
                         </td>
