@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { ClipboardCheck, FileText, Loader2, Plus, Upload, Wallet } from "lucide-react";
+import { Check, ClipboardCheck, FileText, Loader2, Plus, Upload, Wallet, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { DocumentApprovalFooter } from "@/components/purchase-stores/ui/DocumentApprovalFooter";
@@ -20,6 +20,85 @@ import type { GRNRecord } from "@/app/data/grnData";
 import type { InvoiceRecord } from "@/app/data/invoiceVerificationData";
 import { usePsList } from "@/hooks/usePsResource";
 import { psGrnService } from "@/services/purchase-stores/index";
+
+type LifecycleState = "done" | "current" | "failed" | "upcoming";
+
+/** Procurement lifecycle for a PO — mirrors the GRN receiving stepper. */
+function poLifecycle(
+  po: PORecord,
+  grns: GRNRecord[],
+): Array<{ label: string; state: LifecycleState }> {
+  if (po.status === "Cancelled") {
+    return [
+      { label: "PO Created", state: "done" },
+      { label: "Cancelled", state: "failed" },
+      { label: "Goods Received (GRN)", state: "upcoming" },
+      { label: "Posted to Stock", state: "upcoming" },
+    ];
+  }
+
+  const approved =
+    po.status === "Approved" || po.status === "Issued" || po.status === "Closed";
+  const pendingApproval = po.status === "Pending Approval";
+  const hasGrn = grns.length > 0;
+  const rejected = grns.some(
+    (g) => g.inspectionStatus === "Rejected" || g.status === "Return",
+  );
+  const stocked = grns.some(
+    (g) =>
+      g.status === "Completed" ||
+      g.status === "Approved" ||
+      g.inspectionStatus === "Passed" ||
+      g.inspectionStatus === "Partially Accepted",
+  );
+  const closed = po.status === "Closed";
+
+  const created: LifecycleState = "done";
+
+  let approvedStep: LifecycleState;
+  if (approved) approvedStep = "done";
+  else if (pendingApproval) approvedStep = "current";
+  else approvedStep = "current"; // Draft
+
+  let grnStep: LifecycleState;
+  if (!approved) grnStep = "upcoming";
+  else if (hasGrn) grnStep = "done";
+  else grnStep = "current";
+
+  let stockStep: LifecycleState;
+  if (rejected && !stocked) stockStep = "failed";
+  else if (stocked || closed) stockStep = "done";
+  else if (hasGrn) stockStep = "current";
+  else stockStep = "upcoming";
+
+  return [
+    { label: "PO Created", state: created },
+    {
+      label: pendingApproval ? "Pending Approval" : "PO Approved",
+      state: approvedStep,
+    },
+    {
+      label: hasGrn ? `Goods Received (${grns[0]?.grnNumber ?? "GRN"})` : "Goods Received (GRN)",
+      state: grnStep,
+    },
+    {
+      label: rejected && !stocked ? "QC Rejected / Return" : "Posted to Stock",
+      state: stockStep,
+    },
+  ];
+}
+
+function poLifecycleCurrentLabel(
+  steps: Array<{ label: string; state: LifecycleState }>,
+  po: PORecord,
+): string {
+  const current = steps.find((s) => s.state === "current");
+  if (current) return current.label;
+  if (steps.some((s) => s.state === "failed")) return "QC rejected — return to vendor";
+  if (po.status === "Closed") return "Closed";
+  if (steps.every((s) => s.state === "done")) return "Completed — stock posted";
+  return po.status;
+}
 
 type POTab = "details" | "items" | "payments" | "grns" | "invoices";
 
@@ -259,6 +338,66 @@ export function PODetailDrawer({
       }
     >
       <div className="space-y-4 pb-4 select-none">
+        {/* Procurement lifecycle — keep at top, same pattern as GRN */}
+        {(() => {
+          const steps = poLifecycle(po, grns);
+          const stageLabel = poLifecycleCurrentLabel(steps, po);
+          return (
+            <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-mono text-xs font-extrabold text-amber-900">{po.poNumber}</span>
+                {renderStatusBadge(po.status)}
+              </div>
+              <div className="border-t border-amber-200/80 pt-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <h5 className="text-[11px] font-bold uppercase tracking-wider text-amber-950">
+                    Procurement Lifecycle
+                  </h5>
+                  <span className="text-[11px] font-semibold text-amber-900">
+                    Current stage: <strong>{stageLabel}</strong>
+                  </span>
+                </div>
+                {grnsLoading ? (
+                  <p className="flex items-center gap-1.5 text-[11px] text-amber-800/80">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading receipt status…
+                  </p>
+                ) : (
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[10px] font-bold scrollbar-none">
+                    {steps.map((step, i) => (
+                      <React.Fragment key={`${step.label}-${i}`}>
+                        {i > 0 && (
+                          <div
+                            className={cn(
+                              "h-0.5 min-w-4 flex-1 rounded",
+                              step.state === "upcoming" ? "bg-amber-200" : "bg-emerald-400",
+                            )}
+                          />
+                        )}
+                        <span
+                          className={cn(
+                            "flex shrink-0 items-center gap-1 rounded-md border px-2 py-1",
+                            step.state === "done" && "border-emerald-300 bg-emerald-50 text-emerald-800",
+                            step.state === "current" && "border-amber-600 bg-amber-600 text-white shadow-sm",
+                            step.state === "failed" && "border-rose-600 bg-rose-600 text-white shadow-sm",
+                            step.state === "upcoming" && "border-slate-200 bg-white text-slate-400",
+                          )}
+                        >
+                          {step.state === "done" && <Check className="h-3 w-3" />}
+                          {step.state === "current" && (
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+                          )}
+                          {step.state === "failed" && <XCircle className="h-3 w-3" />}
+                          {step.label}
+                        </span>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
           <div className="flex items-center justify-between gap-2">
             <span className="font-mono text-sm font-extrabold text-emerald-900">{po.poNumber}</span>

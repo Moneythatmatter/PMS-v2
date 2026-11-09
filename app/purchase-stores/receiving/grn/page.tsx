@@ -105,9 +105,45 @@ function PoSummaryItem({
   );
 }
 
-/** "Completed" groups every accepted end state; other tabs match the status directly. */
+type FinalGrnStatus = {
+  label: string;
+  tone: "success" | "danger" | "warning" | "neutral";
+};
+
+/** One display status for the list — combines GRN + QC into a single outcome. */
+function finalGrnStatus(grn: GRNRecord): FinalGrnStatus {
+  if (grn.status === "Return" || grn.inspectionStatus === "Rejected") {
+    return { label: "Rejected", tone: "danger" };
+  }
+  if (grn.inspectionStatus === "Under QC") {
+    return { label: "Under QC", tone: "warning" };
+  }
+  if (grn.inspectionStatus === "Pending") {
+    return { label: "Pending QC", tone: "warning" };
+  }
+  if (grn.inspectionStatus === "Partially Accepted") {
+    return { label: "Partially Accepted", tone: "warning" };
+  }
+  if (
+    grn.status === "Completed" ||
+    grn.status === "Approved" ||
+    grn.status === "Received" ||
+    grn.inspectionStatus === "Passed"
+  ) {
+    return { label: "Completed", tone: "success" };
+  }
+  if (grn.status === "Pending") {
+    return { label: "Pending", tone: "warning" };
+  }
+  return { label: grn.status || "—", tone: "neutral" };
+}
+
+/** Status tabs follow the single final status shown in the table. */
 function matchesGrnStatusTab(grn: GRNRecord, tab: string): boolean {
-  if (tab === "Completed") return grn.status === "Completed" || grn.status === "Approved" || grn.status === "Received";
+  const final = finalGrnStatus(grn).label;
+  if (tab === "Completed") return final === "Completed" || final === "Partially Accepted";
+  if (tab === "Pending") return final === "Pending" || final === "Pending QC" || final === "Under QC";
+  if (tab === "Return") return final === "Rejected";
   return grn.status === tab;
 }
 
@@ -169,7 +205,6 @@ export default function GoodsReceiptNotePage() {
   // Search & Filters State
   const [search, setSearch] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("all");
-  const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [inspectionFilter, setInspectionFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("");
@@ -200,15 +235,13 @@ export default function GoodsReceiptNotePage() {
   const activeFilterCount = useMemo(() => {
     let n = 0;
     if (supplierFilter !== "all") n += 1;
-    if (warehouseFilter !== "all") n += 1;
     if (inspectionFilter !== "all") n += 1;
     if (dateFilter) n += 1;
     return n;
-  }, [supplierFilter, warehouseFilter, inspectionFilter, dateFilter]);
+  }, [supplierFilter, inspectionFilter, dateFilter]);
 
   const handleResetFilters = () => {
     setSupplierFilter("all");
-    setWarehouseFilter("all");
     setInspectionFilter("all");
     setDateFilter("");
   };
@@ -278,21 +311,13 @@ export default function GoodsReceiptNotePage() {
         g.deliveryChallan?.toLowerCase().includes(search.toLowerCase());
 
       const matchSupplier = supplierFilter === "all" || g.supplierName.toLowerCase().includes(supplierFilter.toLowerCase());
-      const matchWarehouse = warehouseFilter === "all" || g.warehouse.toLowerCase().includes(warehouseFilter.toLowerCase());
       const matchStatus = statusFilter === "all" || matchesGrnStatusTab(g, statusFilter);
       const matchInspection = inspectionFilter === "all" || g.inspectionStatus === inspectionFilter;
       const matchDate = !dateFilter || g.receiptDate.includes(dateFilter);
 
-      return (
-        matchSearch &&
-        matchSupplier &&
-        matchWarehouse &&
-        matchStatus &&
-        matchInspection &&
-        matchDate
-      );
+      return matchSearch && matchSupplier && matchStatus && matchInspection && matchDate;
     });
-  }, [grnList, search, supplierFilter, warehouseFilter, statusFilter, inspectionFilter, dateFilter]);
+  }, [grnList, search, supplierFilter, statusFilter, inspectionFilter, dateFilter]);
 
   const handleSaveGRN = async (actionType: "Submit" | "Print" | "Inspection") => {
     if (savingLockRef.current) return;
@@ -399,8 +424,7 @@ export default function GoodsReceiptNotePage() {
     }
   };
 
-  // Shared status badge style for Quality + GRN columns
-  const statusBadgeClass = (tone: "success" | "danger" | "warning" | "neutral") => {
+  const statusBadgeClass = (tone: FinalGrnStatus["tone"]) => {
     const tones = {
       success: "bg-emerald-50 text-emerald-700 border-emerald-200",
       danger: "bg-red-50 text-red-700 border-red-200",
@@ -408,110 +432,71 @@ export default function GoodsReceiptNotePage() {
       neutral: "bg-slate-50 text-slate-600 border-slate-200",
     };
     return cn(
-      "inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-md border",
+      "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold",
       tones[tone],
     );
   };
 
-  const renderStatusBadge = (status: string) => {
-    switch (status) {
-      case "Approved":
-      case "Completed":
-      case "Received":
-        return <span className={statusBadgeClass("success")}>{status}</span>;
-      case "Return":
-      case "Vendor Return":
-        return <span className={statusBadgeClass("danger")}>Return</span>;
-      case "Rejected":
-        return <span className={statusBadgeClass("danger")}>Rejected</span>;
-      case "Pending":
-      case "Pending Inspection":
-        return <span className={statusBadgeClass("warning")}>Pending</span>;
-      default:
-        return <span className={statusBadgeClass("neutral")}>{status}</span>;
-    }
-  };
-
-  const renderInspectionBadge = (inspStatus: string) => {
-    switch (inspStatus) {
-      case "Passed":
-        return <span className={statusBadgeClass("success")}>Passed</span>;
-      case "Partially Accepted":
-        return <span className={statusBadgeClass("warning")}>Partially Accepted</span>;
-      case "Rejected":
-        return <span className={statusBadgeClass("danger")}>Rejected</span>;
-      case "Pending":
-      case "Pending Inspection":
-      case "Under QC":
-        return <span className={statusBadgeClass("warning")}>Pending</span>;
-      default:
-        return <span className={statusBadgeClass("neutral")}>{inspStatus}</span>;
-    }
+  const renderFinalStatusBadge = (grn: GRNRecord) => {
+    const final = finalGrnStatus(grn);
+    return <span className={statusBadgeClass(final.tone)}>{final.label}</span>;
   };
 
   // Columns for ModuleDataTable
   const columns: ModuleColumn[] = [
     {
       key: "grnNumber",
-      header: "GRN Number",
+      header: "GRN",
       render: (r: GRNRecord) => (
-        <span className="font-mono font-extrabold text-slate-900 flex items-center gap-1.5">
-          <Package className="h-4 w-4 text-emerald-600" />
-          {r.grnNumber}
-        </span>
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 font-mono text-xs font-extrabold text-slate-900">
+            <Package className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            {r.grnNumber}
+          </p>
+          <p className="mt-0.5 pl-5 text-[11px] text-slate-500">{r.receiptDate}</p>
+        </div>
       ),
-    },
-    {
-      key: "receiptDate",
-      header: "Receipt Date",
-      render: (r: GRNRecord) => <span className="text-slate-700 font-medium text-xs">{r.receiptDate}</span>,
     },
     {
       key: "poNumber",
       header: "Purchase Order",
       render: (r: GRNRecord) => (
-        <span className="font-mono text-emerald-800 font-bold text-xs">{r.poNumber}</span>
+        <span className="font-mono text-xs font-bold text-emerald-800">{r.poNumber}</span>
       ),
     },
     {
       key: "supplierName",
       header: "Supplier",
-      render: (r: GRNRecord) => <span className="font-bold text-slate-900 text-xs">{r.supplierName}</span>,
-    },
-    {
-      key: "warehouse",
-      header: "Warehouse",
-      render: (r: GRNRecord) => <span className="text-slate-700 font-medium text-xs">{r.warehouse}</span>,
+      render: (r: GRNRecord) => <span className="text-xs font-semibold text-slate-900">{r.supplierName}</span>,
     },
     {
       key: "itemCount",
-      header: "Items Received",
+      header: "Items",
       align: "center",
-      render: (r: GRNRecord) => (
-        <span className="font-bold text-slate-800 text-xs">{r.items.length} Products</span>
-      ),
+      render: (r: GRNRecord) => {
+        const n = r.items.length;
+        return (
+          <span className="text-xs font-semibold text-slate-700">
+            {n} {n === 1 ? "item" : "items"}
+          </span>
+        );
+      },
     },
     {
       key: "totalAmount",
-      header: "Net Value (₹)",
+      header: "Net Value",
       align: "right",
       render: (r: GRNRecord) => (
-        <span className="font-black text-slate-900 text-xs">
+        <span className="text-xs font-extrabold tabular-nums text-slate-900">
           ₹{(r.totalAmount || 0).toLocaleString("en-IN")}
         </span>
       ),
     },
     {
-      key: "inspectionStatus",
-      header: "Quality Status",
-      align: "center",
-      render: (r: GRNRecord) => renderInspectionBadge(r.inspectionStatus),
-    },
-    {
       key: "status",
-      header: "GRN Status",
+      header: "Status",
       align: "center",
-      render: (r: GRNRecord) => renderStatusBadge(r.status),
+      render: (r: GRNRecord) => renderFinalStatusBadge(r),
     },
   ];
 
@@ -628,28 +613,17 @@ export default function GoodsReceiptNotePage() {
             </SelectInput>
           </FormField>
 
-          <FormField label="Warehouse">
-            <SelectInput
-              value={warehouseFilter}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWarehouseFilter(e.target.value)}
-              className="w-full text-xs rounded-xl h-9 bg-white"
-            >
-              <option value="all">All Warehouses</option>
-              <option value="Central Cold Storage">Cold Storage</option>
-              <option value="Main Kitchen Store">Kitchen Store</option>
-              <option value="Housekeeping Store">Housekeeping Store</option>
-            </SelectInput>
-          </FormField>
-
-          <FormField label="QC Status">
+          <FormField label="Status">
             <SelectInput
               value={inspectionFilter}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setInspectionFilter(e.target.value)}
               className="w-full text-xs rounded-xl h-9 bg-white"
             >
-              <option value="all">All QC Statuses</option>
-              <option value="Passed">Passed</option>
-              <option value="Pending">Pending</option>
+              <option value="all">All statuses</option>
+              <option value="Passed">Completed / Passed</option>
+              <option value="Pending">Pending QC</option>
+              <option value="Under QC">Under QC</option>
+              <option value="Partially Accepted">Partially Accepted</option>
               <option value="Rejected">Rejected</option>
             </SelectInput>
           </FormField>
@@ -938,15 +912,13 @@ export default function GoodsReceiptNotePage() {
                     </div>
 
                     <div className="overflow-x-auto px-4 py-3">
-                      <table className="w-full min-w-[720px] text-left">
+                      <table className="w-full min-w-[560px] text-left">
                         <thead>
                           <tr className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                             <th className="pb-1.5 pr-2 font-semibold">Batch No.</th>
                             <th className="w-24 pb-1.5 pr-2 font-semibold">Qty</th>
                             <th className="pb-1.5 pr-2 font-semibold">MFG Date</th>
                             <th className="pb-1.5 pr-2 font-semibold">Expiry</th>
-                            <th className="pb-1.5 pr-2 font-semibold">Warehouse</th>
-                            <th className="pb-1.5 pr-2 font-semibold">Bin</th>
                             <th className="pb-1.5 pr-2 text-right font-semibold">Value</th>
                             <th className="w-8 pb-1.5" />
                           </tr>
@@ -991,21 +963,6 @@ export default function GoodsReceiptNotePage() {
                                     type="date"
                                     value={batch.expiryDate}
                                     onChange={(e) => patch({ expiryDate: e.target.value })}
-                                    className="h-8 text-xs"
-                                  />
-                                </td>
-                                <td className="py-1 pr-2">
-                                  <TextInput
-                                    value={batch.storageWarehouse}
-                                    onChange={(e) => patch({ storageWarehouse: e.target.value })}
-                                    className="h-8 text-xs"
-                                  />
-                                </td>
-                                <td className="py-1 pr-2">
-                                  <TextInput
-                                    value={batch.storageLocation ?? ""}
-                                    onChange={(e) => patch({ storageLocation: e.target.value })}
-                                    placeholder="Optional"
                                     className="h-8 text-xs"
                                   />
                                 </td>
@@ -1174,10 +1131,7 @@ export default function GoodsReceiptNotePage() {
             <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-xs font-extrabold text-amber-900">{selectedGRN.grnNumber}</span>
-                <div className="flex items-center gap-2">
-                  {renderInspectionBadge(selectedGRN.inspectionStatus)}
-                  {renderStatusBadge(selectedGRN.status)}
-                </div>
+                {renderFinalStatusBadge(selectedGRN)}
               </div>
 
               {/* Workflow Diagram */}
@@ -1248,10 +1202,6 @@ export default function GoodsReceiptNotePage() {
                   <span className="font-bold text-slate-900">{selectedGRN.supplierName}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Target Warehouse</span>
-                  <span className="font-semibold text-slate-800">{selectedGRN.warehouse}</span>
-                </div>
-                <div>
                   <span className="text-[10px] text-slate-400 block font-medium">Received By</span>
                   <span className="font-semibold text-slate-800">{selectedGRN.receivedBy}</span>
                 </div>
@@ -1320,7 +1270,7 @@ export default function GoodsReceiptNotePage() {
                 <span className="flex items-center gap-2">
                   <ShieldCheck className="h-4 w-4 text-blue-600" /> Quality Inspection Sign-off
                 </span>
-                {renderInspectionBadge(selectedGRN.inspectionDetails?.status ?? "")}
+                {renderFinalStatusBadge(selectedGRN)}
               </h4>
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">

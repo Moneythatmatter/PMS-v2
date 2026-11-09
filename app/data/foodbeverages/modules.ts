@@ -706,7 +706,7 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
   /* ——— Inventory ——— */
   "/food-beverages/inventory/ingredients": page({
     title: "Ingredients",
-    description: "Raw materials and prepared items (batter, gravy, dough) used in the kitchen.",
+    description: "Raw materials used in the kitchen. Prepared items live under Menu → Conversion Items.",
     outletScope: "none",
     actionLabel: "Add Ingredient",
     searchPlaceholder: "Search ingredient…",
@@ -714,15 +714,12 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
       { id: "all", label: "All" },
       { id: "Active", label: "Active" },
       { id: "Low Stock", label: "Low Stock" },
-      { id: "raw", label: "Raw" },
-      { id: "prepared", label: "Prepared" },
     ],
-    filterKeys: ["status", "kind"],
+    filterKeys: ["status"],
     stats: [
       { label: "SKUs", value: 0, sublabel: "Ingredients" },
       { label: "Low Stock", value: 0, accent: "#ef4444", sublabel: "Below reorder" },
-      { label: "Prepared", value: 0, accent: "#0284c7", sublabel: "Pre-prep items" },
-      { label: "Raw", value: 0, sublabel: "Base materials" },
+      { label: "Active", value: 0, accent: "#059669", sublabel: "In use" },
     ],
     columns: [
       {
@@ -737,19 +734,8 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
         key: "name",
         header: "Ingredient",
         inputType: "text",
-        placeholder: "e.g. Basmati Rice / Pizza Dough",
-        helperText: "Ingredient name",
-        required: true,
-      },
-      {
-        key: "kind",
-        header: "Kind",
-        inputType: "select",
-        options: [
-          { value: "raw", label: "Raw" },
-          { value: "prepared", label: "Prepared" },
-        ],
-        helperText: "Raw material or kitchen pre-prep",
+        placeholder: "e.g. Basmati Rice / Tomato",
+        helperText: "Raw ingredient name",
         required: true,
       },
       {

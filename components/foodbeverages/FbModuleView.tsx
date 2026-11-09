@@ -380,6 +380,9 @@ function toApiPayload(path: string, row: ModuleRow): Record<string, unknown> {
     delete payload.status;
     delete payload.qr;
   }
+  if (path.includes("/inventory/ingredients")) {
+    payload.kind = "raw";
+  }
   return payload;
 }
 
@@ -451,18 +454,6 @@ function toModuleDefinition(
           return {
             ...stat,
             value: rows.filter((r) => Number(r.onHand) <= Number(r.reorder)).length,
-          };
-        }
-        if (stat.label === "Prepared" && path.includes("/inventory/ingredients")) {
-          return {
-            ...stat,
-            value: rows.filter((r) => String(r.kind ?? "raw").toLowerCase() === "prepared").length,
-          };
-        }
-        if (stat.label === "Raw" && path.includes("/inventory/ingredients")) {
-          return {
-            ...stat,
-            value: rows.filter((r) => String(r.kind ?? "raw").toLowerCase() !== "prepared").length,
           };
         }
         if (stat.label === "Active") {
@@ -605,6 +596,12 @@ export function FbModuleView({
           const data = await service.list();
           if (!cancelled) {
             let mapped = data.map((row) => normalizeRow(path, row));
+            // Prepared / conversion items are managed under Conversion Items — hide from Ingredients.
+            if (path.includes("/inventory/ingredients")) {
+              mapped = mapped.filter(
+                (r) => String(r.kind ?? "raw").toLowerCase() !== "prepared",
+              );
+            }
             if (path.includes("/menu/items")) {
               try {
                 const categories = await menuCategoryService.list();

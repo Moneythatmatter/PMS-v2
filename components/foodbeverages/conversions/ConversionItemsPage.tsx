@@ -159,7 +159,7 @@ export function ConversionItemsPage() {
       setToast({
         message: editing
           ? `${saved.name} updated.`
-          : `${saved.name} saved. Produce stock from Inventory → Conversion Stock.`,
+          : `${saved.name} saved — it now appears in Conversion Stock with 0 on hand.`,
         variant: "success",
       });
     } catch (e) {
