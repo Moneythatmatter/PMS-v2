@@ -376,9 +376,15 @@ export default function PurchaseOrdersPage() {
     }
   }, [editPO, products]);
 
-  // Computed Financial Totals
+  // Computed Financial Totals — tax only from each line's taxPercent (no flat GST rate).
   const subTotal = useMemo(() => formItems.reduce((acc, i) => acc + i.totalAmount, 0), [formItems]);
-  const taxTotal = useMemo(() => Math.round(subTotal * 0.18), [subTotal]);
+  const taxTotal = useMemo(
+    () =>
+      Math.round(
+        formItems.reduce((acc, i) => acc + i.totalAmount * ((Number(i.taxPercent) || 0) / 100), 0),
+      ),
+    [formItems],
+  );
   const grandTotal = subTotal + taxTotal;
   const isDirectForm = !editPO && isDirectPo({ linkedPR: formLinkedPR, linkedRFQ: formLinkedRFQ });
   const formStepAttachments = isDirectForm ? 5 : 4;
@@ -1276,8 +1282,12 @@ export default function PurchaseOrdersPage() {
                     <div className="space-y-0.5 text-emerald-900">
                       <p>
                         Subtotal <span className="font-semibold">₹{subTotal.toLocaleString("en-IN")}</span>
-                        <span className="mx-1.5 text-emerald-400">·</span>
-                        GST (18%) <span className="font-semibold">₹{taxTotal.toLocaleString("en-IN")}</span>
+                        {taxTotal > 0 && (
+                          <>
+                            <span className="mx-1.5 text-emerald-400">·</span>
+                            Tax <span className="font-semibold">₹{taxTotal.toLocaleString("en-IN")}</span>
+                          </>
+                        )}
                       </p>
                     </div>
                     <p className="text-base font-bold text-emerald-900">
@@ -1416,13 +1426,15 @@ export default function PurchaseOrdersPage() {
                 )}
               </dl>
               <div className="mt-4 border-t border-slate-100 pt-3">
-                <p className="text-[11px] text-slate-500">Estimated total (incl. GST)</p>
+                <p className="text-[11px] text-slate-500">Estimated total</p>
                 <p className="mt-0.5 text-xl font-bold text-slate-900">
                   ₹{grandTotal.toLocaleString("en-IN")}
                 </p>
                 {grandTotal > 0 && (
                   <p className="mt-1 text-[11px] text-slate-400">
-                    Subtotal ₹{subTotal.toLocaleString("en-IN")} · GST ₹{taxTotal.toLocaleString("en-IN")}
+                    {taxTotal > 0
+                      ? `Subtotal ₹${subTotal.toLocaleString("en-IN")} · Tax ₹${taxTotal.toLocaleString("en-IN")}`
+                      : `Items ₹${subTotal.toLocaleString("en-IN")}`}
                   </p>
                 )}
               </div>

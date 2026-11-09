@@ -81,7 +81,7 @@ export function normalizePoLineItem(
 
   const quantity = Number(raw.quantity ?? 0);
   const unitRate = Number(raw.unitRate ?? 0);
-  const taxPercent = Number(raw.taxPercent ?? 18);
+  const taxPercent = Number(raw.taxPercent ?? 0);
 
   return {
     id: String(raw.id ?? `pli-${index}`),
@@ -119,7 +119,7 @@ export function poLineFromProduct(product: ProductItem, quantity = 1): POLineIte
     quantity,
     unit: product.unit,
     unitRate,
-    taxPercent: 18,
+    taxPercent: 0,
     totalAmount: quantity * unitRate,
   };
 }
@@ -205,7 +205,7 @@ export function poLinesFromPr(
       quantity: qty,
       unit: item.unit,
       unitRate,
-      taxPercent: 18,
+      taxPercent: 0,
       totalAmount: qty * unitRate,
     };
   });
@@ -232,7 +232,7 @@ export function poLinesFromRfq(
       quantity: qty,
       unit: item.unit,
       unitRate,
-      taxPercent: 18,
+      taxPercent: 0,
       totalAmount: qty * unitRate,
     };
   });

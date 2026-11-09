@@ -730,7 +730,9 @@ export default function RequestForQuotationsPage() {
       return;
     }
     const subTotal = items.reduce((sum, line) => sum + line.totalAmount, 0);
-    const taxAmount = Math.round(subTotal * 0.18);
+    const taxAmount = Math.round(
+      items.reduce((sum, line) => sum + line.totalAmount * ((Number(line.taxPercent) || 0) / 100), 0),
+    );
     const ct = rfq.commercialTerms;
 
     setIsConvertingPO(true);
@@ -754,7 +756,7 @@ export default function RequestForQuotationsPage() {
         paymentDueDays: 30,
         discountPercent: 0,
         currency: ct.currency || "INR",
-        taxTerms: ct.tax || "18% GST",
+        taxTerms: ct.tax || "As applicable",
         subTotal,
         taxAmount,
         totalAmount: subTotal + taxAmount,
@@ -2888,9 +2890,9 @@ export default function RequestForQuotationsPage() {
                         <p className="font-bold text-slate-800">₹{Math.round(subTotal).toLocaleString("en-IN")}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase">Total (incl. 18% GST)</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Total</span>
                         <p className="font-extrabold text-emerald-800 text-sm">
-                          ₹{(Math.round(subTotal) + Math.round(subTotal * 0.18)).toLocaleString("en-IN")}
+                          ₹{Math.round(subTotal).toLocaleString("en-IN")}
                         </p>
                       </div>
                     </div>

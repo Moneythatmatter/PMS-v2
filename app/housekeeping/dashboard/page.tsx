@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Clock,
-  Layers,
   Sparkles,
   Trees,
   Users,
@@ -52,12 +51,6 @@ const quickLinks = [
     href: "/housekeeping/operations/laundry",
     icon: ArrowRightLeft,
     hint: "Linen flow",
-  },
-  {
-    label: "Inventory",
-    href: "/housekeeping/inventory",
-    icon: Layers,
-    hint: "Par & stock",
   },
   {
     label: "Staff",
@@ -184,7 +177,7 @@ export default function HousekeepingDashboard() {
       detail: stats.lowStock[0]
         ? `${stats.lowStock[0].name} below par`
         : "Public areas / inventory follow-up",
-      href: stats.lowStock.length > 0 ? "/housekeeping/inventory" : "/housekeeping/operations/public-cleaning",
+      href: stats.lowStock.length > 0 ? "/housekeeping/operations/requisition" : "/housekeeping/operations/public-cleaning",
     },
   ].filter(Boolean) as {
     id: string;

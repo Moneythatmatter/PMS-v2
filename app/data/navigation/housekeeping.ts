@@ -31,11 +31,6 @@ export const housekeepingNavItems: ModuleNavItem[] = [
     ],
   },
   {
-    label: "Inventory",
-    href: "/housekeeping/inventory",
-    icon: "tag",
-  },
-  {
     label: "Reports",
     href: "/housekeeping/reports",
     icon: "bar-chart",
