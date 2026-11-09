@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { AlertTriangle, ChefHat, Clock, Info, Scale, UtensilsCrossed, Warehouse } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ChefHat, Clock, Info, Scale, UtensilsCrossed, Warehouse } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/frontoffice/ui/Drawer";
 import { FormField, SelectInput, TextAreaInput, TextInput } from "@/components/frontoffice/ui";
@@ -10,7 +9,6 @@ import { ProcurementFormSection, ProcurementSummaryRow } from "@/components/purc
 import type { ProductItem } from "@/app/data/productMasterData";
 import type { WarehouseMasterItem } from "@/app/data/warehouseMasterData";
 import {
-  TARGET_FOOD_COST_PERCENT,
   YIELD_UNITS,
   defaultRecipeUnit,
   grossStockQuantity,
@@ -28,29 +26,16 @@ import { GROUP_INPUT, InputGroup } from "../ui/InputGroup";
 let lineSeq = 0;
 const nextKey = () => `ing-${++lineSeq}`;
 
-export function FoodCostBadge({ percent, hasPrice }: { percent: number; hasPrice: boolean }) {
-  if (!hasPrice) return <span className="text-slate-400">—</span>;
-  const high = percent > TARGET_FOOD_COST_PERCENT;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold",
-        high ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700",
-      )}
-    >
-      {percent.toFixed(1)}%
-    </span>
-  );
-}
-
 export function RecipeFormDrawer({
   open,
   onClose,
   initial,
   products,
   convertedProducts = [],
+  kitchenMaterialIds,
+  fbOnHandByMaterialId,
   fbCategoryNames,
-  avgCostByMaterial,
+  avgCostByMaterial: _avgCostByMaterial,
   onHandByStore,
   warehouses,
   menuItems,
@@ -65,6 +50,10 @@ export function RecipeFormDrawer({
   products: ProductItem[];
   /** Prepared conversion items exposed as PS materials for the recipe picker. */
   convertedProducts?: ProductItem[];
+  /** PS product ids linked to F&B Inventory → Ingredients (raw kitchen materials). */
+  kitchenMaterialIds?: Set<string>;
+  /** On-hand from F&B Ingredients for those kitchen materials. */
+  fbOnHandByMaterialId?: Map<string, number>;
   fbCategoryNames: Set<string>;
   avgCostByMaterial: Map<string, number>;
   onHandByStore: Map<string, number>;
@@ -75,6 +64,8 @@ export function RecipeFormDrawer({
   defaultStoreId: string;
   onSaved: (recipe: Recipe, message: string) => void;
 }) {
+  const kitchenIds = useMemo(() => kitchenMaterialIds ?? new Set<string>(), [kitchenMaterialIds]);
+  const fbOnHand = useMemo(() => fbOnHandByMaterialId ?? new Map<string, number>(), [fbOnHandByMaterialId]);
   const allProducts = useMemo(() => {
     const byId = new Map(products.map((p) => [p.id, p]));
     for (const p of convertedProducts) {
@@ -85,14 +76,12 @@ export function RecipeFormDrawer({
   const productById = useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
   const convertedIds = useMemo(() => new Set(convertedProducts.map((p) => p.id)), [convertedProducts]);
   const menuItemById = useMemo(() => new Map(menuItems.map((m) => [m.id, m])), [menuItems]);
-
   const [name, setName] = useState(initial?.name ?? "");
   const [menuItemId, setMenuItemId] = useState(initial?.menuItemId ?? "");
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
-  const [sellingPrice, setSellingPrice] = useState(initial ? String(initial.sellingPrice || "") : "");
   const [yieldQuantity, setYieldQuantity] = useState(initial ? String(initial.yieldQuantity) : "1");
   const [yieldUnit, setYieldUnit] = useState(initial?.yieldUnit ?? "Portions");
-  const [wastagePercent, setWastagePercent] = useState(initial ? String(initial.wastagePercent || "") : "");
+  const [prepCost, setPrepCost] = useState(initial ? String(initial.costPerPortion || "") : "");
   const [prepTime, setPrepTime] = useState(initial?.prepTimeMinutes != null ? String(initial.prepTimeMinutes) : "");
   const [storeId, setStoreId] = useState(initial?.issueWarehouseId ?? defaultStoreId);
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
@@ -106,7 +95,6 @@ export function RecipeFormDrawer({
         materialId: i.materialId,
         quantity: String(i.quantity),
         unit: i.unit,
-        wastagePercent: i.wastagePercent ? String(i.wastagePercent) : "",
         remarks: i.remarks,
       })) ?? [],
   );
@@ -114,9 +102,14 @@ export function RecipeFormDrawer({
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const recipeWastage = Number(wastagePercent) || 0;
   const yieldQty = Number(yieldQuantity) || 0;
-  const price = Number(sellingPrice) || 0;
+  const prepCostValue = Number(prepCost) || 0;
+
+  const materialOnHand = (materialId: string): number | null => {
+    if (fbOnHand.has(materialId)) return fbOnHand.get(materialId) ?? 0;
+    if (!storeId) return null;
+    return onHandByStore.get(`${materialId}|${storeId}`) ?? 0;
+  };
 
   const computed = useMemo(
     () =>
@@ -124,30 +117,25 @@ export function RecipeFormDrawer({
         const product = productById.get(l.materialId);
         const factor = product ? unitConversionFactor(l.unit, product.unit) : null;
         const stockQty = factor === null ? 0 : (Number(l.quantity) || 0) * factor;
-        const gross = grossStockQuantity(stockQty, Number(l.wastagePercent) || 0, recipeWastage);
-        const unitCost = avgCostByMaterial.get(l.materialId) ?? 0;
-        const onHand = storeId ? (onHandByStore.get(`${l.materialId}|${storeId}`) ?? 0) : null;
-        return { line: l, product, factor, gross, unitCost, cost: gross * unitCost, onHand };
+        const gross = grossStockQuantity(stockQty, 0, 0);
+        const onHand = materialOnHand(l.materialId);
+        return { line: l, product, factor, gross, unitCost: 0, cost: 0, onHand };
       }),
-    [lines, productById, recipeWastage, avgCostByMaterial, onHandByStore, storeId],
+    [lines, productById, onHandByStore, storeId, fbOnHand],
   );
-
-  const batchCost = computed.reduce((s, c) => s + c.cost, 0);
-  const costPerPortion = yieldQty > 0 ? batchCost / yieldQty : 0;
-  const foodCost = price > 0 ? (costPerPortion / price) * 100 : 0;
-  const uncosted = computed.filter((c) => c.product && c.unitCost === 0).length;
 
   const pickable = useMemo(() => {
     const chosen = new Set(lines.map((l) => l.materialId));
     const active = allProducts.filter((p) => p.status !== "Inactive" && !chosen.has(p.id));
     const converted = active.filter((p) => convertedIds.has(p.id));
     const raw = active.filter((p) => !convertedIds.has(p.id));
+    const isKitchen = (p: ProductItem) => fbCategoryNames.has(p.category) || kitchenIds.has(p.id);
     return {
       converted,
-      own: raw.filter((p) => fbCategoryNames.has(p.category)),
-      other: showAllMaterials ? raw.filter((p) => !fbCategoryNames.has(p.category)) : [],
+      own: raw.filter(isKitchen),
+      other: showAllMaterials ? raw.filter((p) => !isKitchen(p)) : [],
     };
-  }, [allProducts, lines, fbCategoryNames, showAllMaterials, convertedIds]);
+  }, [allProducts, lines, fbCategoryNames, showAllMaterials, convertedIds, kitchenIds]);
 
   const availableMenuItems = menuItems.filter((m) => m.id === initial?.menuItemId || !linkedMenuItemIds.has(m.id));
 
@@ -157,7 +145,6 @@ export function RecipeFormDrawer({
     setMenuItemId(id);
     if (!next) return;
     if (!name.trim() || name === prev?.name) setName(next.name);
-    if (!sellingPrice || Number(sellingPrice) === prev?.price) setSellingPrice(String(next.price || ""));
     if (next.categoryId && (!categoryId || categoryId === prev?.categoryId)) setCategoryId(next.categoryId);
   };
 
@@ -171,13 +158,12 @@ export function RecipeFormDrawer({
         materialId,
         quantity: "",
         unit: defaultRecipeUnit(product.unit),
-        wastagePercent: "",
         remarks: "",
       },
     ]);
   };
 
-  const updateLine = (key: string, field: "quantity" | "unit" | "wastagePercent" | "remarks", value: string) =>
+  const updateLine = (key: string, field: "quantity" | "unit" | "remarks", value: string) =>
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, [field]: value } : l)));
 
   const removeLine = (key: string) => setLines((prev) => prev.filter((l) => l.key !== key));
@@ -186,15 +172,13 @@ export function RecipeFormDrawer({
     const problems = [
       !name.trim() && "Enter the recipe name.",
       !(yieldQty > 0) && "Yield must be greater than 0.",
-      price < 0 && "Selling price cannot be negative.",
-      (recipeWastage < 0 || recipeWastage > 100) && "Process wastage must be between 0 and 100%.",
+      (prepCost === "" || Number.isNaN(Number(prepCost))) && "Enter the prep cost per portion.",
+      prepCostValue < 0 && "Prep cost cannot be negative.",
       lines.length === 0 && "Add at least one ingredient from the material master.",
       ...computed.map((c) => {
         const label = c.product?.productName ?? "An ingredient";
         if (!(Number(c.line.quantity) > 0)) return `${label}: enter a quantity greater than 0.`;
         if (c.factor === null) return `${label}: ${c.line.unit} can't be converted to ${c.product?.unit}.`;
-        const w = Number(c.line.wastagePercent) || 0;
-        if (w < 0 || w > 100) return `${label}: wastage must be between 0 and 100%.`;
         return null;
       }),
     ].filter((p): p is string => Boolean(p));
@@ -205,10 +189,12 @@ export function RecipeFormDrawer({
       name: name.trim(),
       menuItemId: menuItemId || null,
       categoryId: categoryId || null,
-      sellingPrice: price,
+      // Selling price lives on the menu item; prep cost is entered manually.
+      sellingPrice: menuItemById.get(menuItemId)?.price ?? initial?.sellingPrice ?? 0,
+      costPerPortion: prepCostValue,
       yieldQuantity: yieldQty,
       yieldUnit,
-      wastagePercent: recipeWastage,
+      wastagePercent: 0,
       prepTimeMinutes: prepTime === "" ? null : Number(prepTime),
       issueWarehouseId: storeId || null,
       isActive,
@@ -219,7 +205,7 @@ export function RecipeFormDrawer({
         materialId: l.materialId,
         quantity: Number(l.quantity),
         unit: l.unit,
-        wastagePercent: Number(l.wastagePercent) || 0,
+        wastagePercent: 0,
         remarks: l.remarks.trim(),
       })),
     };
@@ -261,8 +247,7 @@ export function RecipeFormDrawer({
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-slate-500">
-            <strong className="text-slate-800">{lines.length}</strong> ingredient{lines.length === 1 ? "" : "s"} · cost per{" "}
-            {yieldUnitLabel(yieldUnit).toLowerCase()} <strong className="text-slate-800">{formatMoney(costPerPortion)}</strong>
+            <strong className="text-slate-800">{lines.length}</strong> ingredient{lines.length === 1 ? "" : "s"}
           </p>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={onClose} disabled={saving}>
@@ -313,21 +298,6 @@ export function RecipeFormDrawer({
                   ))}
                 </SelectInput>
               </FormField>
-              <FormField label={`Selling Price (per ${yieldUnitLabel(yieldUnit).toLowerCase()})`}>
-                <InputGroup prefix="₹">
-                  <input
-                    type="number"
-                    min={0}
-                    step="any"
-                    inputMode="decimal"
-                    value={sellingPrice}
-                    onChange={(e) => setSellingPrice(e.target.value)}
-                    placeholder="0"
-                    className={GROUP_INPUT}
-                    aria-label="Selling price"
-                  />
-                </InputGroup>
-              </FormField>
               <FormField label="Yield" required helperText="How many units one batch of this recipe makes.">
                 <InputGroup
                   invalid={yieldQuantity !== "" && !(yieldQty > 0)}
@@ -359,19 +329,22 @@ export function RecipeFormDrawer({
                   />
                 </InputGroup>
               </FormField>
-              <FormField label="Process Wastage" helperText="Extra loss on the whole batch (spillage, evaporation).">
-                <InputGroup suffix="%" invalid={recipeWastage < 0 || recipeWastage > 100}>
+              <FormField
+                label={`Prep Cost (per ${yieldUnitLabel(yieldUnit).toLowerCase()})`}
+                required
+                helperText="Enter manually. This value is frozen on each order for the linked menu item."
+              >
+                <InputGroup prefix="₹" invalid={prepCost !== "" && prepCostValue < 0}>
                   <input
                     type="number"
                     min={0}
-                    max={100}
                     step="any"
                     inputMode="decimal"
-                    value={wastagePercent}
-                    onChange={(e) => setWastagePercent(e.target.value)}
+                    value={prepCost}
+                    onChange={(e) => setPrepCost(e.target.value)}
                     placeholder="0"
                     className={GROUP_INPUT}
-                    aria-label="Process wastage percent"
+                    aria-label="Prep cost per portion"
                   />
                 </InputGroup>
               </FormField>
@@ -429,20 +402,18 @@ export function RecipeFormDrawer({
                 { label: "Other materials", items: pickable.other },
               ]}
               emptyPickerHint={
-                pickable.converted.length === 0 && !showAllMaterials && fbCategoryNames.size > 0
-                  ? "Add converted items under Menu → Conversion Items, or turn on “All materials”."
-                  : "Add raw materials in Purchase & Stores, or converted items under Menu → Conversion Items."
+                pickable.own.length === 0 && pickable.converted.length === 0 && !showAllMaterials
+                  ? "Add ingredients under Inventory → Ingredients, converted items under Menu → Conversion Items, or turn on “All materials”."
+                  : "Add raw materials under Inventory → Ingredients, or converted items under Menu → Conversion Items."
               }
               onAdd={addMaterial}
               onUpdate={updateLine}
               onRemove={removeLine}
-              onHandFor={(id) => (storeId ? (onHandByStore.get(`${id}|${storeId}`) ?? 0) : null)}
-              costFor={(id) => avgCostByMaterial.get(id) ?? 0}
+              onHandFor={materialOnHand}
+              costFor={() => 0}
               storeName={storeName ?? "the issue store"}
               yieldQty={yieldQty}
               yieldUnit={yieldUnit}
-              batchCost={batchCost}
-              costPerPortion={costPerPortion}
             />
           </ProcurementFormSection>
 
@@ -470,45 +441,8 @@ export function RecipeFormDrawer({
 
         <aside className="space-y-4 lg:sticky lg:top-0 lg:self-start">
           <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <h3 className="mb-3 text-sm font-semibold text-slate-900">Costing</h3>
-            <div className="grid grid-cols-2 gap-2 text-center">
-              <div className="rounded-lg bg-slate-50 p-2">
-                <p className="text-[10px] font-semibold uppercase text-slate-400">Batch Cost</p>
-                <p className="truncate text-base font-bold text-slate-900">{formatMoney(batchCost)}</p>
-              </div>
-              <div className="rounded-lg bg-slate-50 p-2">
-                <p className="text-[10px] font-semibold uppercase text-slate-400">Cost / {yieldUnitLabel(yieldUnit)}</p>
-                <p className="truncate text-base font-bold text-slate-900">{formatMoney(costPerPortion)}</p>
-              </div>
-              <div className="rounded-lg bg-slate-50 p-2">
-                <p className="text-[10px] font-semibold uppercase text-slate-400">Selling Price</p>
-                <p className="truncate text-base font-bold text-slate-900">{price > 0 ? formatMoney(price) : "—"}</p>
-              </div>
-              <div className="rounded-lg bg-slate-50 p-2">
-                <p className="text-[10px] font-semibold uppercase text-slate-400">Food Cost</p>
-                <p
-                  className={cn(
-                    "text-base font-bold",
-                    price <= 0 ? "text-slate-400" : foodCost > TARGET_FOOD_COST_PERCENT ? "text-red-600" : "text-emerald-700",
-                  )}
-                >
-                  {price > 0 ? `${foodCost.toFixed(1)}%` : "—"}
-                </p>
-              </div>
-            </div>
-            {price > 0 && (
-              <p className="mt-3 text-xs text-slate-500">
-                Margin {formatMoney(price - costPerPortion)} per {yieldUnitLabel(yieldUnit).toLowerCase()} · target food cost ≤{" "}
-                {TARGET_FOOD_COST_PERCENT}%
-              </p>
-            )}
-            {uncosted > 0 && (
-              <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                {uncosted} ingredient{uncosted === 1 ? " has" : "s have"} no stock cost yet. Cost fills in after the first GRN.
-              </p>
-            )}
-            <dl className="mt-4 space-y-2.5 border-t border-slate-100 pt-4 text-xs">
+            <h3 className="mb-3 text-sm font-semibold text-slate-900">Summary</h3>
+            <dl className="space-y-2.5 text-xs">
               <ProcurementSummaryRow
                 icon={<UtensilsCrossed className="h-3.5 w-3.5" />}
                 label="Menu item"
@@ -519,9 +453,17 @@ export function RecipeFormDrawer({
                 label="Yield"
                 value={yieldQty > 0 ? `${formatQty(yieldQty)} ${yieldUnit}` : undefined}
               />
+              <ProcurementSummaryRow
+                icon={<Scale className="h-3.5 w-3.5" />}
+                label="Prep cost"
+                value={prepCost !== "" ? formatMoney(prepCostValue) : undefined}
+              />
               <ProcurementSummaryRow icon={<Clock className="h-3.5 w-3.5" />} label="Prep time" value={prepTime ? `${prepTime} min` : undefined} />
               <ProcurementSummaryRow icon={<Warehouse className="h-3.5 w-3.5" />} label="Issue store" value={storeName ?? "Default kitchen store"} />
             </dl>
+            <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
+              Prep cost is frozen on each order when the linked menu item is ordered.
+            </p>
           </section>
           <section className="rounded-xl border border-sky-100 bg-sky-50/60 p-4 text-xs text-sky-900">
             <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
@@ -529,7 +471,8 @@ export function RecipeFormDrawer({
             </h3>
             <ul className="list-disc space-y-1 pl-4">
               <li>Creating or editing a recipe never changes stock.</li>
-              <li>When the linked menu item is billed and paid in POS, raw materials and converted items on the recipe are both deducted from the issue store (and conversion stock stays in sync).</li>
+              <li>When the linked menu item is ordered (KOT sent), ingredients are deducted from the issue store and Ingredients on-hand stays in sync.</li>
+              <li>The recipe must be linked to the menu item you sell — otherwise stock will not move.</li>
               <li>Batch prep, staff meals or banquets can be recorded with &ldquo;Record Consumption&rdquo;.</li>
             </ul>
           </section>

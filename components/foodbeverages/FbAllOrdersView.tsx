@@ -59,6 +59,7 @@ type OrderItemView = {
   qty: number;
   status: string;
   lineTotal: number;
+  prepCostTotal?: number;
   note?: string;
   modifiers?: string;
 };
@@ -76,15 +77,19 @@ function modifierText(item: Record<string, unknown> | undefined) {
 }
 
 function parseOrderItems(items: unknown[]): OrderItemView[] {
-  return (items as Record<string, unknown>[]).map((item) => ({
-    id: String(item.id),
-    name: String(item.name ?? "Item"),
-    qty: Number(item.quantity ?? 1),
-    status: String(item.status ?? "ACTIVE").toUpperCase(),
-    lineTotal: Number(item.lineTotal ?? item.line_total ?? 0),
-    ...(item.note ? { note: String(item.note) } : {}),
-    ...(modifierText(item) ? { modifiers: modifierText(item) } : {}),
-  }));
+  return (items as Record<string, unknown>[]).map((item) => {
+    const prepCostTotal = Number(item.prepCostTotal ?? item.prep_cost_total ?? 0);
+    return {
+      id: String(item.id),
+      name: String(item.name ?? "Item"),
+      qty: Number(item.quantity ?? 1),
+      status: String(item.status ?? "ACTIVE").toUpperCase(),
+      lineTotal: Number(item.lineTotal ?? item.line_total ?? 0),
+      ...(prepCostTotal > 0 ? { prepCostTotal } : {}),
+      ...(item.note ? { note: String(item.note) } : {}),
+      ...(modifierText(item) ? { modifiers: modifierText(item) } : {}),
+    };
+  });
 }
 
 function parseOrderKots(details: { kots: unknown[]; items: unknown[] }) {
@@ -606,6 +611,11 @@ export function FbAllOrdersView() {
                           {!cancelled && line.lineTotal > 0 && (
                             <p className="text-[11px] text-slate-500">
                               {formatINR(line.lineTotal)}
+                            </p>
+                          )}
+                          {!cancelled && (line.prepCostTotal ?? 0) > 0 && (
+                            <p className="text-[10px] text-slate-400">
+                              Prep {formatINR(line.prepCostTotal ?? 0)}
                             </p>
                           )}
                         </div>

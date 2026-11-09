@@ -18,7 +18,7 @@ export interface ModuleStat {
 export interface ModuleColumn {
   key: string;
   header: string;
-  format?: "currency" | "percent";
+  format?: "currency" | "percent" | "qty";
   render?: (row: any) => React.ReactNode;
   align?: "left" | "center" | "right";
   sortable?: boolean;

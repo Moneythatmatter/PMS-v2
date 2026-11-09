@@ -32,7 +32,7 @@ export interface FbStat {
 export interface FbColumn {
   key: string;
   header: string;
-  format?: "currency" | "percent";
+  format?: "currency" | "percent" | "qty";
   align?: "left" | "center" | "right";
   inputType?: "text" | "number" | "select" | "searchSelect" | "currency" | "tel" | "time" | "date";
   options?: { value: string; label: string }[] | string[];
@@ -718,7 +718,7 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
     filterKeys: ["status"],
     stats: [
       { label: "SKUs", value: 0, sublabel: "Ingredients" },
-      { label: "Low Stock", value: 0, accent: "#ef4444", sublabel: "Below reorder" },
+      { label: "Low Stock", value: 0, accent: "#ef4444", sublabel: "Out of stock" },
       { label: "Active", value: 0, accent: "#059669", sublabel: "In use" },
     ],
     columns: [
@@ -756,20 +756,12 @@ export const fbPageDefinitions: Record<string, FbPageDefinition> = {
         key: "onHand",
         header: "On Hand",
         inputType: "number",
+        format: "qty",
+        align: "right",
         min: 0,
-        step: 1,
-        placeholder: "e.g. 86",
-        helperText: "Current stock quantity",
-        required: true,
-      },
-      {
-        key: "reorder",
-        header: "Reorder",
-        inputType: "number",
-        min: 0,
-        step: 1,
-        placeholder: "e.g. 40",
-        helperText: "Reorder level",
+        step: "any",
+        placeholder: "e.g. 20.19",
+        helperText: "Current stock quantity (decimals allowed, e.g. after gm usage)",
         required: true,
       },
       {

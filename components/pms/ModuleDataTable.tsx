@@ -5,10 +5,23 @@ import { ModuleStatusPill } from "./ModuleStatusPill";
 import { cn } from "@/lib/utils";
 import { formatINR } from "@/components/frontoffice/ui";
 
-function formatCell(value: string | number | undefined, format?: "currency" | "percent") {
+function formatQtyCell(value: string | number) {
+  const n = typeof value === "number" ? value : Number(String(value).replace(/,/g, ""));
+  if (!Number.isFinite(n)) return String(value);
+  // Keep fractional stock visible (e.g. 20.19 after gm consumption).
+  return n.toLocaleString("en-IN", {
+    minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
+    maximumFractionDigits: 3,
+  });
+}
+
+function formatCell(value: string | number | undefined, format?: "currency" | "percent" | "qty") {
   if (value === undefined || value === "—") return "—";
   if (format === "currency" && typeof value === "number") return formatINR(value);
   if (format === "percent" && typeof value === "number") return `${value}%`;
+  if (format === "qty" && (typeof value === "number" || (typeof value === "string" && value.trim() !== ""))) {
+    return formatQtyCell(value);
+  }
   return String(value);
 }
 

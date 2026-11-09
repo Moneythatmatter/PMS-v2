@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ChefHat,
   Clock,
   Link2,
-  Percent,
   Plus,
   RefreshCw,
   Scale,
@@ -32,20 +31,22 @@ import {
 } from "@/services/purchase-stores/index";
 import {
   conversionItemService,
+  ingredientService,
   menuCategoryService,
   menuItemService,
   recipeService,
 } from "@/services/food-beverages";
 import type { ProductItem } from "@/app/data/productMasterData";
-import { TARGET_FOOD_COST_PERCENT, yieldUnitLabel, type Recipe } from "@/app/data/foodbeverages/recipes";
-import { FoodCostBadge, RecipeFormDrawer } from "./RecipeFormDrawer";
+import type { FbIngredient } from "@/app/data/foodbeverages/conversions";
+import { yieldUnitLabel, type Recipe } from "@/app/data/foodbeverages/recipes";
+import { RecipeFormDrawer } from "./RecipeFormDrawer";
 import { RecipeConsumeModal } from "./RecipeConsumeModal";
 
 export type MenuItemOption = { id: string; name: string; price: number; categoryId: string | null; status?: string };
 export type MenuCategoryOption = { id: string; name: string; status?: string };
 
 type Tab = "recipes" | "log";
-type StatusTab = "all" | "active" | "inactive" | "high";
+type StatusTab = "all" | "active" | "inactive";
 
 const norm = (v: string) => v.trim().toLowerCase();
 
@@ -111,8 +112,6 @@ function StatusPill({ active }: { active: boolean }) {
   );
 }
 
-const isHigh = (r: Recipe) => r.sellingPrice > 0 && r.foodCostPercent > TARGET_FOOD_COST_PERCENT;
-
 function ingredientsSummary(recipe: Recipe) {
   if (recipe.ingredients.length === 0) return "No ingredients";
   const [first, ...rest] = recipe.ingredients;
@@ -124,6 +123,7 @@ export function RecipesPage() {
   const consumptions = usePsList(() => recipeService.consumptions(), []);
   const products = usePsList(() => psProductService.list(), []);
   const conversionItems = usePsList(() => conversionItemService.list(), []);
+  const ingredients = usePsList(() => ingredientService.list() as Promise<FbIngredient[]>, []);
   const categories = usePsList(() => psCategoryService.list(), []);
   const balances = usePsList(() => psStockBalanceService.list(), []);
   const warehouses = usePsList(() => psWarehouseService.list(), []);
@@ -153,6 +153,104 @@ export function RecipesPage() {
     const wanted = new Set(MODULE_REQUISITION_CONFIG.foodBeverage.categoryDepartments.map(norm));
     return new Set(categories.data.filter((c) => wanted.has(norm(c.department ?? ""))).map((c) => c.categoryName));
   }, [categories.data]);
+
+  const preferredFbCategory = useMemo(() => {
+    const names = [...fbCategoryNames];
+    return names.find((n) => /kitchen|grocer|food/i.test(n)) ?? names[0] ?? "Kitchen Groceries";
+  }, [fbCategoryNames]);
+
+  const rawKitchenIngredients = useMemo(
+    () =>
+      ingredients.data.filter(
+        (i) =>
+          String(i.kind ?? "raw").toLowerCase() !== "prepared" &&
+          String(i.status ?? "Active").toLowerCase() !== "inactive",
+      ),
+    [ingredients.data],
+  );
+
+  const syncingKitchenRef = useRef(false);
+  const ensureKitchenProductsInPs = useCallback(async () => {
+    if (syncingKitchenRef.current || rawKitchenIngredients.length === 0) return;
+    syncingKitchenRef.current = true;
+    try {
+      const byCode = new Map(products.data.map((p) => [norm(p.productCode), p]));
+      const byName = new Map(products.data.map((p) => [norm(p.productName), p]));
+      let changed = false;
+
+      for (const ing of rawKitchenIngredients) {
+        const codeKey = norm(ing.code ?? "");
+        const nameKey = norm(ing.name);
+        const match = (codeKey ? byCode.get(codeKey) : undefined) ?? byName.get(nameKey);
+
+        if (match) {
+          const needsCategory = preferredFbCategory && !fbCategoryNames.has(match.category);
+          const needsUnit = !(match.unit || "").trim() && !!(ing.uom || "").trim();
+          const needsActive = String(match.status ?? "Active") === "Inactive";
+          if (needsCategory || needsUnit || needsActive) {
+            await psProductService.update(match.id, {
+              ...(needsCategory ? { category: preferredFbCategory } : {}),
+              ...(needsUnit ? { unit: String(ing.uom).trim() } : {}),
+              ...(needsActive ? { status: "Active" } : {}),
+            });
+            changed = true;
+          }
+          continue;
+        }
+
+        const created = await psProductService.create({
+          productCode: (ing.code || "").trim() || `ING-${ing.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`,
+          productName: ing.name,
+          category: preferredFbCategory,
+          unit: (ing.uom || "Kg").trim() || "Kg",
+          minimumStock: 0,
+          maximumStock: 0,
+          parStock: 0,
+          reorderLevel: Number(ing.reorder) || 0,
+          storageType: "Dry Storage",
+          status: "Active",
+          createdDate: new Date().toISOString().slice(0, 10),
+          description: "Synced from F&B Ingredients",
+        });
+        byCode.set(norm(created.productCode), created);
+        byName.set(norm(created.productName), created);
+        changed = true;
+      }
+
+      if (changed) await products.reload();
+    } finally {
+      syncingKitchenRef.current = false;
+    }
+  }, [rawKitchenIngredients, products.data, preferredFbCategory, fbCategoryNames, products]);
+
+  useEffect(() => {
+    if (ingredients.loading || products.loading || categories.loading) return;
+    void ensureKitchenProductsInPs();
+  }, [ingredients.loading, products.loading, categories.loading, rawKitchenIngredients.length, ensureKitchenProductsInPs]);
+
+  /** PS product ids that map to F&B Inventory → Ingredients (raw). */
+  const kitchenMaterialIds = useMemo(() => {
+    const byCode = new Map(products.data.map((p) => [norm(p.productCode), p.id]));
+    const byName = new Map(products.data.map((p) => [norm(p.productName), p.id]));
+    const ids = new Set<string>();
+    for (const ing of rawKitchenIngredients) {
+      const id = (ing.code ? byCode.get(norm(ing.code)) : undefined) ?? byName.get(norm(ing.name));
+      if (id) ids.add(id);
+    }
+    return ids;
+  }, [products.data, rawKitchenIngredients]);
+
+  /** Prefer F&B ingredient on-hand when the material is a kitchen raw item. */
+  const fbOnHandByMaterialId = useMemo(() => {
+    const byCode = new Map(products.data.map((p) => [norm(p.productCode), p.id]));
+    const byName = new Map(products.data.map((p) => [norm(p.productName), p.id]));
+    const map = new Map<string, number>();
+    for (const ing of rawKitchenIngredients) {
+      const id = (ing.code ? byCode.get(norm(ing.code)) : undefined) ?? byName.get(norm(ing.name));
+      if (id) map.set(id, Number(ing.onHand) || 0);
+    }
+    return map;
+  }, [products.data, rawKitchenIngredients]);
 
   const { avgCostByMaterial, onHandByStore } = useMemo(() => {
     const value = new Map<string, { qty: number; value: number; lastRate: number }>();
@@ -222,7 +320,6 @@ export function RecipesPage() {
       all: rows.length,
       active: rows.filter((r) => r.isActive).length,
       inactive: rows.filter((r) => !r.isActive).length,
-      high: rows.filter(isHigh).length,
     }),
     [rows],
   );
@@ -232,7 +329,6 @@ export function RecipesPage() {
     return rows.filter((r) => {
       if (statusTab === "active" && !r.isActive) return false;
       if (statusTab === "inactive" && r.isActive) return false;
-      if (statusTab === "high" && !isHigh(r)) return false;
       if (categoryFilter !== "all" && r.categoryId !== categoryFilter) return false;
       if (linkFilter === "linked" && !r.menuItemId) return false;
       if (linkFilter === "unlinked" && r.menuItemId) return false;
@@ -245,14 +341,15 @@ export function RecipesPage() {
 
   const kpis = useMemo(() => {
     const active = rows.filter((r) => r.isActive);
-    const priced = active.filter((r) => r.sellingPrice > 0);
-    const avgFoodCost = priced.length ? priced.reduce((s, r) => s + r.foodCostPercent, 0) / priced.length : 0;
+    const withCost = active.filter((r) => r.costPerPortion > 0);
+    const avgPrepCost = withCost.length
+      ? withCost.reduce((s, r) => s + r.costPerPortion, 0) / withCost.length
+      : 0;
     return {
       active: active.length,
       linked: active.filter((r) => r.menuItemId).length,
       unlinkedMenu: activeMenuItems.filter((m) => !linkedMenuItemIds.has(m.id)).length,
-      avgFoodCost,
-      high: active.filter(isHigh).length,
+      avgPrepCost,
       uncosted: active.filter((r) => r.ingredients.some((i) => i.unitCost === 0)).length,
     };
   }, [rows, activeMenuItems, linkedMenuItemIds]);
@@ -264,13 +361,29 @@ export function RecipesPage() {
     await Promise.all([recipes.reload(), consumptions.reload(), balances.reload()]);
   };
 
-  const openCreate = () => {
+  const openCreate = async () => {
+    setBusy(true);
+    try {
+      await ensureKitchenProductsInPs();
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Could not sync kitchen ingredients", variant: "error" });
+    } finally {
+      setBusy(false);
+    }
     setEditing(null);
     setFormKey((k) => k + 1);
     setFormOpen(true);
   };
 
-  const openEdit = (recipe: Recipe) => {
+  const openEdit = async (recipe: Recipe) => {
+    setBusy(true);
+    try {
+      await ensureKitchenProductsInPs();
+    } catch (e) {
+      setToast({ message: e instanceof Error ? e.message : "Could not sync kitchen ingredients", variant: "error" });
+    } finally {
+      setBusy(false);
+    }
     setEditing(recipe);
     setFormKey((k) => k + 1);
     setSelectedId(null);
@@ -313,7 +426,7 @@ export function RecipesPage() {
           <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Food &amp; Beverage · Menu</span>
           <h1 className="text-xl font-extrabold tracking-tight text-slate-800">Recipes</h1>
           <p className="text-xs text-slate-500">
-            Recipe cards built from the Purchase &amp; Stores material master, with yield, wastage and live food cost.
+            Recipe cards from kitchen ingredients and converted items, with yield and live food cost.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -332,13 +445,12 @@ export function RecipesPage() {
       {toast && <AlertBanner variant={toast.variant} message={toast.message} onDismiss={() => setToast(null)} />}
       {recipes.error && <AlertBanner variant="error" message={`Could not load recipes: ${recipes.error}`} />}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard label="Active Recipes" value={String(kpis.active)} icon={ChefHat} tone="emerald" />
         <KpiCard label="Linked to Menu" value={String(kpis.linked)} icon={Link2} tone="sky" />
         <KpiCard label="Menu Items w/o Recipe" value={String(kpis.unlinkedMenu)} icon={UtensilsCrossed} tone="slate" />
-        <KpiCard label="Avg Food Cost" value={`${kpis.avgFoodCost.toFixed(1)}%`} icon={Percent} tone="emerald" />
-        <KpiCard label={`Above ${TARGET_FOOD_COST_PERCENT}% Cost`} value={String(kpis.high)} icon={AlertTriangle} tone="red" />
-        <KpiCard label="Missing Stock Cost" value={String(kpis.uncosted)} icon={Scale} tone="amber" />
+        <KpiCard label="Avg Prep Cost" value={formatMoney(kpis.avgPrepCost)} icon={Scale} tone="emerald" />
+        <KpiCard label="Missing Stock Cost" value={String(kpis.uncosted)} icon={AlertTriangle} tone="amber" />
       </div>
 
       <div className="border-b border-slate-200">
@@ -373,7 +485,6 @@ export function RecipesPage() {
               { id: "all", label: "All", count: statusCounts.all },
               { id: "active", label: "Active", count: statusCounts.active },
               { id: "inactive", label: "Inactive", count: statusCounts.inactive },
-              { id: "high", label: `Above ${TARGET_FOOD_COST_PERCENT}%`, count: statusCounts.high },
             ]}
             activeStatusTab={statusTab}
             onStatusTabChange={(id) => setStatusTab(id as StatusTab)}
@@ -388,9 +499,7 @@ export function RecipesPage() {
                   <th className="px-3 py-2.5">Menu Item</th>
                   <th className="px-3 py-2.5">Yield</th>
                   <th className="px-3 py-2.5">Ingredients</th>
-                  <th className="px-3 py-2.5 text-right">Cost / Unit</th>
-                  <th className="px-3 py-2.5 text-right">Selling Price</th>
-                  <th className="px-3 py-2.5">Food Cost</th>
+                  <th className="px-3 py-2.5 text-right">Prep Cost</th>
                   <th className="px-3 py-2.5">Status</th>
                   <th className="w-16 px-3 py-2.5 text-right">Action</th>
                 </tr>
@@ -398,13 +507,13 @@ export function RecipesPage() {
               <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-12 text-center text-sm font-medium text-slate-400">
+                    <td colSpan={8} className="px-3 py-12 text-center text-sm font-medium text-slate-400">
                       Loading recipes…
                     </td>
                   </tr>
                 ) : filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-12 text-center">
+                    <td colSpan={8} className="px-3 py-12 text-center">
                       <ChefHat className="mx-auto h-7 w-7 text-slate-300" />
                       <p className="mt-2 text-sm font-semibold text-slate-600">
                         {rows.length === 0 ? "No recipes yet" : "No recipes match these filters"}
@@ -440,10 +549,6 @@ export function RecipesPage() {
                         {ingredientsSummary(r)}
                       </td>
                       <td className="px-3 py-2.5 text-right font-extrabold text-slate-900">{formatMoney(r.costPerPortion)}</td>
-                      <td className="px-3 py-2.5 text-right">{r.sellingPrice > 0 ? formatMoney(r.sellingPrice) : "—"}</td>
-                      <td className="px-3 py-2.5">
-                        <FoodCostBadge percent={r.foodCostPercent} hasPrice={r.sellingPrice > 0} />
-                      </td>
                       <td className="px-3 py-2.5">
                         <StatusPill active={r.isActive} />
                       </td>
@@ -577,6 +682,8 @@ export function RecipesPage() {
           initial={editing}
           products={products.data}
           convertedProducts={convertedProducts}
+          kitchenMaterialIds={kitchenMaterialIds}
+          fbOnHandByMaterialId={fbOnHandByMaterialId}
           fbCategoryNames={fbCategoryNames}
           avgCostByMaterial={avgCostByMaterial}
           onHandByStore={onHandByStore}
@@ -606,7 +713,6 @@ export function RecipesPage() {
                     {selected.name}
                   </h2>
                   <StatusPill active={selected.isActive} />
-                  <FoodCostBadge percent={selected.foodCostPercent} hasPrice={selected.sellingPrice > 0} />
                 </div>
                 <p className="truncate text-xs text-slate-500">
                   <span className="font-mono">{selected.recipeCode}</span>
@@ -620,8 +726,8 @@ export function RecipesPage() {
             <div className="flex w-full flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-slate-500">
                 <strong className="text-slate-800">{selected.ingredients.length}</strong> ingredient
-                {selected.ingredients.length === 1 ? "" : "s"} · batch cost{" "}
-                <strong className="text-slate-800">{formatMoney(selected.batchCost)}</strong>
+                {selected.ingredients.length === 1 ? "" : "s"} · prep cost{" "}
+                <strong className="text-slate-800">{formatMoney(selected.costPerPortion)}</strong>
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" onClick={() => setSelectedId(null)}>
@@ -663,21 +769,11 @@ export function RecipesPage() {
         >
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
             <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {[
-                  { label: "Batch Cost", value: formatMoney(selected.batchCost) },
-                  { label: `Cost / ${yieldUnitLabel(selected.yieldUnit)}`, value: formatMoney(selected.costPerPortion) },
-                  { label: "Selling Price", value: selected.sellingPrice > 0 ? formatMoney(selected.sellingPrice) : "—" },
-                  {
-                    label: "Margin",
-                    value: selected.sellingPrice > 0 ? formatMoney(selected.sellingPrice - selected.costPerPortion) : "—",
-                  },
-                ].map((s) => (
-                  <div key={s.label} className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{s.label}</p>
-                    <p className="text-lg font-extrabold text-slate-900">{s.value}</p>
-                  </div>
-                ))}
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Prep Cost / {yieldUnitLabel(selected.yieldUnit)}
+                </p>
+                <p className="text-lg font-extrabold text-slate-900">{formatMoney(selected.costPerPortion)}</p>
               </div>
 
               <DetailSection
@@ -689,15 +785,12 @@ export function RecipesPage() {
                 }
               >
                 <div className="-m-4 overflow-x-auto">
-                  <table className="w-full min-w-[760px] text-left text-sm">
+                  <table className="w-full min-w-[560px] text-left text-sm">
                     <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       <tr>
                         <th className="px-4 py-2">Material</th>
                         <th className="px-4 py-2 text-right">Recipe Qty</th>
-                        <th className="px-4 py-2 text-right">Wastage</th>
                         <th className="px-4 py-2 text-right">Draws from Stock</th>
-                        <th className="px-4 py-2 text-right">Unit Cost</th>
-                        <th className="px-4 py-2 text-right">Cost</th>
                         <th className="px-4 py-2 text-right">In Issue Store</th>
                       </tr>
                     </thead>
@@ -714,14 +807,9 @@ export function RecipesPage() {
                             <td className="whitespace-nowrap px-4 py-2.5 text-right">
                               {formatQty(i.quantity)} <span className="text-xs text-slate-400">{i.unit}</span>
                             </td>
-                            <td className="px-4 py-2.5 text-right text-slate-600">{i.wastagePercent ? `${i.wastagePercent}%` : "—"}</td>
                             <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium">
                               {formatQty(i.grossStockQuantity)} <span className="text-xs text-slate-400">{i.stockUnit}</span>
                             </td>
-                            <td className="whitespace-nowrap px-4 py-2.5 text-right text-slate-600">
-                              {i.unitCost > 0 ? formatMoney(i.unitCost) : <span className="text-amber-600">No cost</span>}
-                            </td>
-                            <td className="px-4 py-2.5 text-right font-medium text-slate-900">{formatMoney(i.lineCost)}</td>
                             <td
                               className={cn(
                                 "whitespace-nowrap px-4 py-2.5 text-right",
@@ -734,20 +822,6 @@ export function RecipesPage() {
                         );
                       })}
                     </tbody>
-                    <tfoot className="bg-slate-50 font-semibold text-slate-900">
-                      <tr>
-                        <td className="px-4 py-2" colSpan={5}>
-                          Batch cost
-                          {selected.wastagePercent > 0 && (
-                            <span className="ml-1 text-xs font-normal text-slate-500">
-                              (includes {selected.wastagePercent}% process wastage)
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-right">{formatMoney(selected.batchCost)}</td>
-                        <td />
-                      </tr>
-                    </tfoot>
                   </table>
                 </div>
               </DetailSection>
@@ -776,11 +850,6 @@ export function RecipesPage() {
                     icon={<Scale className="h-3.5 w-3.5" />}
                     label="Yield"
                     value={`${formatQty(selected.yieldQuantity)} ${selected.yieldUnit}`}
-                  />
-                  <ProcurementSummaryRow
-                    icon={<Percent className="h-3.5 w-3.5" />}
-                    label="Process wastage"
-                    value={`${selected.wastagePercent}%`}
                   />
                   <ProcurementSummaryRow
                     icon={<Clock className="h-3.5 w-3.5" />}

@@ -382,6 +382,10 @@ function toApiPayload(path: string, row: ModuleRow): Record<string, unknown> {
   }
   if (path.includes("/inventory/ingredients")) {
     payload.kind = "raw";
+    // Reorder level is not used on the Ingredients screen — keep a harmless default for the DB column.
+    if (payload.reorder === undefined || payload.reorder === null || payload.reorder === "") {
+      payload.reorder = 0;
+    }
   }
   return payload;
 }
@@ -453,7 +457,7 @@ function toModuleDefinition(
         if (stat.label === "Low Stock" && path.includes("/inventory/ingredients")) {
           return {
             ...stat,
-            value: rows.filter((r) => Number(r.onHand) <= Number(r.reorder)).length,
+            value: rows.filter((r) => Number(r.onHand) <= 0 || String(r.status) === "Low Stock").length,
           };
         }
         if (stat.label === "Active") {

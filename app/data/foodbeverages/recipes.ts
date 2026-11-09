@@ -152,7 +152,7 @@ const UNIT_ALIASES: Record<string, { dimension: Dimension; base: number }> = {
 };
 
 const RECIPE_UNITS: Record<Dimension, string[]> = {
-  mass: ["g", "kg", "mg"],
+  mass: ["g", "gm", "kg", "mg"],
   volume: ["ml", "L"],
   count: ["pcs", "dozen"],
 };

@@ -13,7 +13,6 @@ export type IngredientFormLine = {
   materialId: string;
   quantity: string;
   unit: string;
-  wastagePercent: string;
   remarks: string;
 };
 
@@ -27,9 +26,9 @@ export type IngredientRowView = {
   onHand: number | null;
 };
 
-type EditableField = "quantity" | "unit" | "wastagePercent" | "remarks";
+type EditableField = "quantity" | "unit" | "remarks";
 
-const GRID = "md:grid-cols-[minmax(0,1fr)_196px_104px_136px_112px_36px]";
+const GRID = "md:grid-cols-[minmax(0,1fr)_196px_136px_36px]";
 
 export function AllMaterialsSwitch({ checked, onChange }: { checked: boolean; onChange: (next: boolean) => void }) {
   return (
@@ -232,8 +231,6 @@ export function RecipeIngredientsEditor({
   storeName,
   yieldQty,
   yieldUnit,
-  batchCost,
-  costPerPortion,
 }: {
   rows: IngredientRowView[];
   pickGroups: { label: string; items: ProductItem[] }[];
@@ -246,8 +243,6 @@ export function RecipeIngredientsEditor({
   storeName: string;
   yieldQty: number;
   yieldUnit: string;
-  batchCost: number;
-  costPerPortion: number;
 }) {
   const [noteOpen, setNoteOpen] = useState<Set<string>>(new Set());
   const shortCount = rows.filter((r) => r.onHand !== null && r.gross > 0 && r.onHand < r.gross).length;
@@ -283,18 +278,14 @@ export function RecipeIngredientsEditor({
           >
             <span>Material</span>
             <span>Qty per batch</span>
-            <span>Wastage</span>
             <span className="text-right">From stock</span>
-            <span className="text-right">Cost</span>
             <span />
           </div>
 
           <ul className="divide-y divide-slate-100">
-            {rows.map(({ line, product, factor, gross, unitCost, cost, onHand }, idx) => {
+            {rows.map(({ line, product, factor, gross, onHand }, idx) => {
               const label = product?.productName ?? "Unknown material";
               const qtyInvalid = line.quantity !== "" && !(Number(line.quantity) > 0);
-              const wastage = Number(line.wastagePercent) || 0;
-              const wastageInvalid = wastage < 0 || wastage > 100;
               const showNote = noteOpen.has(line.key) || line.remarks !== "";
               const short = onHand !== null && gross > 0 && onHand < gross;
               return (
@@ -381,34 +372,6 @@ export function RecipeIngredientsEditor({
                     {qtyInvalid && <p className="mt-1 text-[10px] font-medium text-red-600">Must be more than 0</p>}
                   </div>
 
-                  <div>
-                    <FieldLabel>Wastage</FieldLabel>
-                    <div
-                      className={cn(
-                        "flex h-9 overflow-hidden rounded-lg border bg-white transition focus-within:ring-2",
-                        wastageInvalid
-                          ? "border-red-300 focus-within:ring-red-100"
-                          : "border-slate-200 focus-within:border-emerald-500 focus-within:ring-emerald-100",
-                      )}
-                    >
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="any"
-                        inputMode="decimal"
-                        value={line.wastagePercent}
-                        placeholder="0"
-                        onChange={(e) => onUpdate(line.key, "wastagePercent", e.target.value)}
-                        className="w-full min-w-0 bg-transparent px-3 text-sm text-slate-900 placeholder:text-slate-300 focus:outline-none"
-                        aria-label={`Wastage percent for ${label}`}
-                      />
-                      <span className="flex items-center border-l border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-400">
-                        %
-                      </span>
-                    </div>
-                  </div>
-
                   <div className="md:text-right">
                     <FieldLabel>From stock</FieldLabel>
                     {factor === null ? (
@@ -433,14 +396,6 @@ export function RecipeIngredientsEditor({
                     ) : (
                       <p className="pt-2 text-xs text-slate-400">Enter quantity</p>
                     )}
-                  </div>
-
-                  <div className="md:text-right">
-                    <FieldLabel>Cost</FieldLabel>
-                    <p className="pt-1.5 text-sm font-semibold text-slate-900">{formatMoney(cost)}</p>
-                    <p className={cn("mt-0.5 text-[10px]", unitCost > 0 ? "text-slate-400" : "font-medium text-amber-600")}>
-                      {unitCost > 0 ? `${formatMoney(unitCost)} / ${product?.unit}` : "No stock cost yet"}
-                    </p>
                   </div>
 
                   <button
@@ -470,18 +425,6 @@ export function RecipeIngredientsEditor({
                   {shortCount} short in {storeName} for one batch
                 </p>
               )}
-            </div>
-            <div className="flex items-center gap-6">
-              <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Batch cost</p>
-                <p className="text-sm font-bold text-slate-900">{formatMoney(batchCost)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Per {yieldUnitLabel(yieldUnit).toLowerCase()}
-                </p>
-                <p className="text-base font-extrabold text-emerald-700">{formatMoney(costPerPortion)}</p>
-              </div>
             </div>
           </div>
         </div>
