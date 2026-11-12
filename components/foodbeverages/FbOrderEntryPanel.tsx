@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   MessageSquare,
   Minus,
+  PenLine,
   Plus,
   Receipt,
   Search,
@@ -43,6 +44,7 @@ import {
   SelectInput,
   TextInput,
 } from "@/components/frontoffice/ui";
+import { Modal } from "@/components/frontoffice/ui/Modal";
 import { cn } from "@/lib/utils";
 import {
   formatKotNumber,
@@ -61,6 +63,55 @@ import { Bone, FbOrderLinesSkeleton, FbSettleSkeleton } from "@/components/foodb
 
 const ORDER_TABS = ["Dine In", "Takeaway", "Room Service"] as const;
 export type OrderTab = (typeof ORDER_TABS)[number];
+
+function VegMark({ active = false }: { active?: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
+      <rect
+        x="1.5"
+        y="1.5"
+        width="13"
+        height="13"
+        rx="1.5"
+        fill="none"
+        stroke={active ? "#059669" : "#10b981"}
+        strokeWidth="1.75"
+      />
+      <circle cx="8" cy="8" r="3.25" fill={active ? "#059669" : "#10b981"} />
+    </svg>
+  );
+}
+
+function NonVegMark({ active = false }: { active?: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
+      <rect
+        x="1.5"
+        y="1.5"
+        width="13"
+        height="13"
+        rx="1.5"
+        fill="none"
+        stroke={active ? "#e11d48" : "#f43f5e"}
+        strokeWidth="1.75"
+      />
+      <path d="M8 4.2 L12.2 11.6 H3.8 Z" fill={active ? "#e11d48" : "#f43f5e"} />
+    </svg>
+  );
+}
+
+const DIET_FILTERS = [
+  { id: "veg", label: "Vegetarian only" },
+  { id: "both", label: "All items" },
+  { id: "nonveg", label: "Non-vegetarian only" },
+] as const;
+type DietFilter = (typeof DIET_FILTERS)[number]["id"];
+
+const DIET_SLIDE: Record<DietFilter, string> = {
+  veg: "translate-x-0",
+  both: "translate-x-full",
+  nonveg: "translate-x-[200%]",
+};
 
 export function normalizeOrderTab(value: string): OrderTab {
   if (value === "Takeaway" || value === "Online") return "Takeaway";
@@ -94,7 +145,30 @@ type CartLine = {
   price: number;
   basePrice: number;
   modifiers: SelectedModifier[];
+  /** Ad-hoc open item — no menu master / recipe link. */
+  isOpen?: boolean;
 };
+
+function toKotPayloadLine(
+  line: CartLine,
+  note?: string,
+): {
+  menuItemId?: string;
+  name: string;
+  qty: number;
+  unitPrice: number;
+  note?: string;
+  modifierIds?: string[];
+} {
+  return {
+    ...(line.isOpen || line.id.startsWith("open-") ? {} : { menuItemId: line.id }),
+    name: line.name,
+    qty: line.qty,
+    unitPrice: line.basePrice,
+    ...(line.modifiers.length ? { modifierIds: line.modifiers.map((m) => m.modifierId) } : {}),
+    ...(note ? { note } : {}),
+  };
+}
 
 const cartKey = (itemId: string, modifiers: Array<Pick<SelectedModifier, "modifierId">>) =>
   [itemId, ...modifiers.map((m) => m.modifierId).sort()].join("|");
@@ -246,6 +320,7 @@ export function FbOrderEntryPanel({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
   const [itemSearch, setItemSearch] = useState("");
   const [shortCode, setShortCode] = useState("");
+  const [dietFilter, setDietFilter] = useState<DietFilter>("both");
   const [formType, setFormType] = useState<OrderTab>(
     normalizeOrderTab(initialOrderType),
   );
@@ -274,6 +349,11 @@ export function FbOrderEntryPanel({
   const [formError, setFormError] = useState<string | null>(null);
   const modifierGroups = usePsList(() => modifierGroupService.list(), []);
   const [modifierTarget, setModifierTarget] = useState<FbPosMenuItem | null>(null);
+  const [openItemOpen, setOpenItemOpen] = useState(false);
+  const [openItemName, setOpenItemName] = useState("");
+  const [openItemPrice, setOpenItemPrice] = useState("");
+  const [openItemQty, setOpenItemQty] = useState("1");
+  const [openItemError, setOpenItemError] = useState<string | null>(null);
 
   const isAnyActionRunning =
     isKotLoading ||
@@ -443,6 +523,8 @@ export function FbOrderEntryPanel({
       if (selectedCategoryId !== "all" && item.categoryId !== selectedCategoryId) {
         return false;
       }
+      if (dietFilter === "veg" && !item.isVegetarian) return false;
+      if (dietFilter === "nonveg" && item.isVegetarian) return false;
       if (codeQ && !String(item.itemCode ?? "").toLowerCase().includes(codeQ)) {
         return false;
       }
@@ -452,7 +534,7 @@ export function FbOrderEntryPanel({
         String(item.itemCode ?? "").toLowerCase().includes(q)
       );
     });
-  }, [menuItems, selectedCategoryId, itemSearch, shortCode]);
+  }, [menuItems, selectedCategoryId, itemSearch, shortCode, dietFilter]);
 
   const customisableIds = useMemo(
     () => new Set(menuItems.filter((m) => groupsForItem(modifierGroups.data, m.id).length > 0).map((m) => m.id)),
@@ -509,6 +591,7 @@ export function FbOrderEntryPanel({
     item: FbPosMenuItem,
     modifiers: SelectedModifier[] = [],
     qty = 1,
+    opts?: { isOpen?: boolean },
   ) => {
     const key = cartKey(item.id, modifiers);
     const price = item.price + modifiers.reduce((s, m) => s + m.price, 0);
@@ -518,7 +601,16 @@ export function FbOrderEntryPanel({
       }
       return [
         ...prev,
-        { key, id: item.id, name: item.name, qty, price, basePrice: item.price, modifiers },
+        {
+          key,
+          id: item.id,
+          name: item.name,
+          qty,
+          price,
+          basePrice: item.price,
+          modifiers,
+          ...(opts?.isOpen ? { isOpen: true } : {}),
+        },
       ];
     });
     setFormError(null);
@@ -531,6 +623,35 @@ export function FbOrderEntryPanel({
       return;
     }
     addLine(item);
+  };
+
+  const openOpenItemDialog = () => {
+    if (isSettle) return;
+    setOpenItemName("");
+    setOpenItemPrice("");
+    setOpenItemQty("1");
+    setOpenItemError(null);
+    setOpenItemOpen(true);
+  };
+
+  const confirmOpenItem = () => {
+    const name = openItemName.trim();
+    const price = Number(openItemPrice);
+    const qty = Math.max(1, Math.floor(Number(openItemQty) || 1));
+    if (!name) {
+      setOpenItemError("Enter the item name.");
+      return;
+    }
+    if (openItemPrice.trim() === "" || Number.isNaN(price) || price < 0) {
+      setOpenItemError("Enter a valid price (0 or more).");
+      return;
+    }
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? `open-${crypto.randomUUID()}`
+        : `open-${Date.now()}`;
+    addLine({ id, name, price }, [], qty, { isOpen: true });
+    setOpenItemOpen(false);
   };
 
   const updateQty = (key: string, delta: number) => {
@@ -651,20 +772,9 @@ export function FbOrderEntryPanel({
         ...(reservationId ? { reservationId } : {}),
         ...(paxCount ? { pax: paxCount } : {}),
         server: currentUser.name,
-        lines: kotLines.map((l, index) => {
-          const note =
-            index === 0 && kotInstruction
-              ? kotInstruction
-              : undefined;
-          return {
-            menuItemId: l.id,
-            name: l.name,
-            qty: l.qty,
-            unitPrice: l.basePrice,
-            ...(l.modifiers.length ? { modifierIds: l.modifiers.map((m) => m.modifierId) } : {}),
-            ...(note ? { note } : {}),
-          };
-        }),
+        lines: kotLines.map((l, index) =>
+          toKotPayloadLine(l, index === 0 && kotInstruction ? kotInstruction : undefined),
+        ),
         print: options?.print,
       });
 
@@ -732,20 +842,9 @@ export function FbOrderEntryPanel({
       ...(activeOrderId ? { orderId: activeOrderId } : {}),
       guest: guestName,
       server: currentUser.name,
-      lines: formLines.map((l, index) => {
-        const note =
-          index === 0 && kotInstruction
-            ? kotInstruction
-            : undefined;
-        return {
-          menuItemId: l.id,
-          name: l.name,
-          qty: l.qty,
-          unitPrice: l.basePrice,
-          ...(l.modifiers.length ? { modifierIds: l.modifiers.map((m) => m.modifierId) } : {}),
-          ...(note ? { note } : {}),
-        };
-      }),
+      lines: formLines.map((l, index) =>
+        toKotPayloadLine(l, index === 0 && kotInstruction ? kotInstruction : undefined),
+      ),
     });
   };
 
@@ -1072,7 +1171,7 @@ export function FbOrderEntryPanel({
               {filteredItems.length} item{filteredItems.length === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -1090,6 +1189,53 @@ export function FbOrderEntryPanel({
               placeholder="Short code"
               className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none ring-emerald-500/30 focus:border-emerald-500 focus:ring-2 sm:w-28"
             />
+            <div
+              role="group"
+              aria-label="Diet filter"
+              className="relative mx-auto grid h-9 w-[120px] shrink-0 grid-cols-3 rounded-full border border-slate-200/90 bg-slate-100/80 p-0.5 shadow-inner"
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  "pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc((100%-4px)/3)] rounded-full bg-white shadow-sm ring-1 ring-black/5 transition-transform duration-200 ease-out",
+                  DIET_SLIDE[dietFilter],
+                  dietFilter === "veg" && "ring-emerald-200",
+                  dietFilter === "nonveg" && "ring-rose-200",
+                )}
+              />
+              {DIET_FILTERS.map((opt) => {
+                const active = dietFilter === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    title={opt.label}
+                    aria-label={opt.label}
+                    aria-pressed={active}
+                    onClick={() => setDietFilter(opt.id)}
+                    className={cn(
+                      "relative z-[1] flex items-center justify-center rounded-full transition-opacity",
+                      active ? "opacity-100" : "opacity-55 hover:opacity-90",
+                    )}
+                  >
+                    {opt.id === "veg" ? (
+                      <VegMark active={active} />
+                    ) : opt.id === "nonveg" ? (
+                      <NonVegMark active={active} />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={openOpenItemDialog}
+              className="h-9 shrink-0 gap-1.5 rounded-lg px-3 text-xs font-bold"
+            >
+              <PenLine className="h-3.5 w-3.5" />
+              Open item
+            </Button>
           </div>
         </div>
 
@@ -1250,19 +1396,28 @@ export function FbOrderEntryPanel({
               {formError}
             </p>
           )}
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
-            <FormField label="Outlet" required>
+          <div
+            className={cn(
+              "grid grid-cols-1 gap-2",
+              formType === "Room Service"
+                ? "sm:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_4.25rem]"
+                : formType === "Takeaway"
+                  ? "sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_5.5rem]"
+                  : "sm:grid-cols-[minmax(0,1fr)_5.5rem_5.75rem]",
+            )}
+          >
+            <FormField label="Outlet" required className="min-w-0">
               <FbOutletSelect
                 outlets={outlets}
                 value={activeOutletId}
                 onChange={onOutletChange}
                 allowAll
-                className="h-9 w-full"
+                className="h-9 w-full min-w-0"
               />
             </FormField>
             {formType === "Takeaway" ? (
               <>
-                <FormField label="Customer">
+                <FormField label="Customer" className="min-w-0 sm:col-span-1">
                   <TextInput
                     value={guestDetails.name}
                     onChange={(e) => updateGuestField("name", e.target.value)}
@@ -1276,7 +1431,7 @@ export function FbOrderEntryPanel({
                     value={guestDetails.phone}
                     onChange={(e) => updateGuestField("phone", e.target.value)}
                     placeholder="Mobile"
-                    className="w-full sm:w-32"
+                    className="w-full"
                   />
                 </FormField>
               </>
@@ -1291,13 +1446,15 @@ export function FbOrderEntryPanel({
                     : "Ref"
               }
               required={formType === "Dine In" || formType === "Room Service"}
+              className="min-w-0"
             >
               {formType === "Dine In" && formTables.length > 0 && !lockTable ? (
                 <SelectInput
                   value={formRef}
                   onChange={(e) => setFormRef(e.target.value)}
+                  className="w-full"
                 >
-                  <option value="">Select table</option>
+                  <option value="">Select</option>
                   {formTables.map((t) => (
                     <option key={t.id} value={t.tableNo}>
                       {!activeOutletId && t.outletId
@@ -1312,6 +1469,7 @@ export function FbOrderEntryPanel({
                 <SelectInput
                   value={selectedReservationId}
                   onChange={(e) => selectInHouseGuest(e.target.value)}
+                  className="w-full"
                 >
                   <option value="">Select in-house guest</option>
                   {inHouseGuests.map((g) => (
@@ -1327,17 +1485,18 @@ export function FbOrderEntryPanel({
                   onChange={(e) => setFormRef(e.target.value)}
                   readOnly={lockTable && formType === "Dine In"}
                   placeholder={formType === "Dine In" ? "Table" : "501"}
+                  className="w-full"
                 />
               )}
             </FormField>
-            <FormField label="Pax" className="flex flex-col">
+            <FormField label="Pax" className="flex min-w-0 flex-col">
               <TextInput
                 type="number"
                 min={1}
                 value={pax}
                 onChange={(e) => setPax(e.target.value)}
                 placeholder="Covers"
-                className="w-full sm:w-24"
+                className="w-full px-2"
               />
             </FormField>
             </>
@@ -1428,8 +1587,15 @@ export function FbOrderEntryPanel({
                   className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-2 px-3.5 py-3 text-sm transition-colors hover:bg-slate-50/50"
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-[15px] font-bold text-slate-900">
-                      {line.name}
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="block truncate text-[15px] font-bold text-slate-900">
+                        {line.name}
+                      </span>
+                      {line.isOpen && (
+                        <span className="shrink-0 rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 ring-1 ring-violet-200">
+                          Open
+                        </span>
+                      )}
                     </span>
                     <CartModifiers modifiers={line.modifiers} />
                   </span>
@@ -1589,6 +1755,73 @@ export function FbOrderEntryPanel({
           }}
         />
       )}
+
+      <Modal
+        open={openItemOpen}
+        onClose={() => setOpenItemOpen(false)}
+        title="Add open item"
+        description="Custom name and price — not linked to the menu."
+        size="sm"
+        footer={
+          <>
+            <Button type="button" variant="outline" onClick={() => setOpenItemOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="!bg-emerald-700 text-white hover:bg-emerald-800"
+              onClick={confirmOpenItem}
+            >
+              Add to order
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-3">
+          {openItemError && (
+            <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+              {openItemError}
+            </p>
+          )}
+          <FormField label="Item name" required>
+            <TextInput
+              value={openItemName}
+              onChange={(e) => {
+                setOpenItemName(e.target.value);
+                setOpenItemError(null);
+              }}
+              placeholder="e.g. Special thali / Extra chapati"
+              autoFocus
+            />
+          </FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Price (₹)" required>
+              <TextInput
+                type="number"
+                min={0}
+                step="any"
+                inputMode="decimal"
+                value={openItemPrice}
+                onChange={(e) => {
+                  setOpenItemPrice(e.target.value);
+                  setOpenItemError(null);
+                }}
+                placeholder="e.g. 150"
+              />
+            </FormField>
+            <FormField label="Qty" required>
+              <TextInput
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={openItemQty}
+                onChange={(e) => setOpenItemQty(e.target.value)}
+              />
+            </FormField>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
