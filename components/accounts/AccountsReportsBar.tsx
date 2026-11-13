@@ -3,14 +3,25 @@
 import { useRouter } from "next/navigation";
 import { BookOpen, CalendarClock, FileText, Scale, TrendingUp, type LucideIcon } from "lucide-react";
 import { SelectInput } from "@/components/frontoffice/ui";
+import {
+  ACCOUNTS_REPORT_IDS,
+  ACCOUNTS_REPORT_LABELS,
+  type AccountsReportId,
+} from "@/lib/accounts/reports";
 
-export const ACCOUNTS_REPORTS: { id: string; label: string; icon: LucideIcon }[] = [
-  { id: "trial-balance", label: "Trial Balance", icon: Scale },
-  { id: "profit-and-loss", label: "Profit & Loss", icon: TrendingUp },
-  { id: "balance-sheet", label: "Balance Sheet", icon: FileText },
-  { id: "general-ledger", label: "General Ledger", icon: BookOpen },
-  { id: "day-book", label: "Day Book", icon: CalendarClock },
-];
+const REPORT_ICONS: Record<AccountsReportId, LucideIcon> = {
+  "trial-balance": Scale,
+  "profit-and-loss": TrendingUp,
+  "balance-sheet": FileText,
+  "general-ledger": BookOpen,
+  "day-book": CalendarClock,
+};
+
+const ACCOUNTS_REPORTS = ACCOUNTS_REPORT_IDS.map((id) => ({
+  id,
+  label: ACCOUNTS_REPORT_LABELS[id],
+  icon: REPORT_ICONS[id],
+}));
 
 /** Report switcher shown above the selected Accounts report. */
 export function AccountsReportsBar({ type }: { type: string }) {

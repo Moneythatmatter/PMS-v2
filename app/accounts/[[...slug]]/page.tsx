@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { ACCOUNTS_REPORTS, AccountsReportsBar } from "@/components/accounts/AccountsReportsBar";
+import { AccountsReportsBar } from "@/components/accounts/AccountsReportsBar";
+import { isAccountsReportId } from "@/lib/accounts/reports";
 import { accountsNavItems } from "@/app/data/navigation/accounts";
 import { AccountsDashboardView } from "@/components/accounts/AccountsDashboardView";
 import { GLTransactionView } from "@/components/accounts/GLTransactionView";
@@ -428,7 +429,7 @@ export default async function AccountsPage({
   if (slugPath === "reports") {
     const query = await searchParams;
     const requested = typeof query.type === "string" ? query.type : "trial-balance";
-    const type = ACCOUNTS_REPORTS.some((r) => r.id === requested) ? requested : "trial-balance";
+    const type = isAccountsReportId(requested) ? requested : "trial-balance";
     const isoParam = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
     const accountId = typeof query.accountId === "string" ? query.accountId : undefined;
     const from = isoParam(query.from);
