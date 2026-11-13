@@ -960,15 +960,24 @@ export function FbOrderEntryPanel({
     try {
       setIsSettleLoading(true);
       setFormError(null);
-      await posService.payBill(activeBillId, {
+      const result = await posService.payBill(activeBillId, {
         amount,
         paymentMode,
-        fullPay: isRoomCharge || amount >= grandTotal,
+        fullPay: isRoomCharge || amount + 0.009 >= grandTotal,
       });
+      const paidStatus = String(
+        (result as { bill?: { paymentStatus?: string } })?.bill?.paymentStatus ?? "",
+      ).toUpperCase();
+      const fullyPaid = isRoomCharge || paidStatus === "PAID" || amount + 0.009 >= grandTotal;
+      if (!isRoomCharge && amount + 0.009 >= grandTotal && paidStatus && paidStatus !== "PAID") {
+        throw new Error(
+          `Payment recorded but bill is still ${paidStatus.replace(/_/g, " ")}. Try Confirm Settlement again.`,
+        );
+      }
       onToast(
         isRoomCharge
           ? `Settled · ${formatINR(grandTotal)} transferred to guest folio (Room Charge)`
-          : `Settled · ${formatINR(amount)} via ${paymentMode}${amount < grandTotal ? " (partial)" : ""}`,
+          : `Settled · ${formatINR(amount)} via ${paymentMode}${fullyPaid ? "" : " (partial)"}`,
       );
       onOrderCreated();
     } catch (e) {
@@ -1096,6 +1105,11 @@ export function FbOrderEntryPanel({
               <FbSettleSkeleton />
             ) : (
               <>
+                {formError && (
+                  <div className="mx-auto mb-4 w-full max-w-md rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {formError}
+                  </div>
+                )}
                 {allDisplayLines.length > 0 && (
                   <div className="mx-auto mb-4 w-full max-w-md rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
