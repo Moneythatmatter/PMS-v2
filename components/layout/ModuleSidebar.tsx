@@ -100,6 +100,8 @@ import {
   LogIn,
 } from "lucide-react";
 import type { ModuleNavItem } from "@/app/data/types";
+import { usePropertyOptional } from "@/components/platform/PropertyProvider";
+import { pageKeyForPath } from "@/lib/module-access";
 import { cn } from "@/lib/utils";
 import { useMobileNav } from "./MobileNavContext";
 
@@ -569,12 +571,34 @@ function SidebarNav({
   );
 }
 
+function navItemAllowed(
+  href: string,
+  canRead: ((key: string) => boolean) | undefined,
+): boolean {
+  if (!canRead) return true;
+  const pageKey = pageKeyForPath(href.split("?")[0]);
+  if (!pageKey) return true;
+  return canRead(pageKey);
+}
+
 export function ModuleSidebar({ title, subtitle = "Module menu", items }: ModuleSidebarProps) {
   const pathname = usePathname();
   const mobileNav = useMobileNav();
+  const propertyCtx = usePropertyOptional();
   const [hovered, setHovered] = useState(false);
   // Groups start expanded; the user can collapse them.
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  const visibleItems = items
+    .map((item) => {
+      if (item.children?.length) {
+        const children = item.children.filter((c) => navItemAllowed(c.href, propertyCtx?.canRead));
+        if (!children.length && !navItemAllowed(item.href, propertyCtx?.canRead)) return null;
+        return { ...item, children };
+      }
+      return navItemAllowed(item.href, propertyCtx?.canRead) ? item : null;
+    })
+    .filter((item): item is ModuleNavItem => item != null);
 
   const toggleGroup = (label: string) => {
     setExpandedGroups((prev) => ({ ...prev, [label]: !(prev[label] ?? true) }));
@@ -583,7 +607,7 @@ export function ModuleSidebar({ title, subtitle = "Module menu", items }: Module
   const navProps = {
     title,
     subtitle,
-    items,
+    items: visibleItems,
     pathname,
     expandedGroups,
     onToggleGroup: (label: string) => {

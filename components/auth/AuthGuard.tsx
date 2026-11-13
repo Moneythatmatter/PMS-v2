@@ -6,7 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { ShieldOff } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { usePropertyOptional } from "@/components/platform/PropertyProvider";
-import { MODULE_ROUTES, moduleRouteForPath } from "@/lib/module-access";
+import { MODULE_ROUTES, moduleRouteForPath, pageKeyForPath } from "@/lib/module-access";
+import { isPlatformAdmin } from "@/lib/auth";
 
 const PUBLIC_PATHS = new Set(["/login"]);
 const WORKSPACE_PATHS = /^\/properties(\/|$)/;
@@ -34,9 +35,37 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const firstAllowedRoute = propertyCtx?.firstAllowedRoute ?? null;
 
   const moduleRoute = moduleRouteForPath(pathname);
-  const checkModule = Boolean(user && property && !isWorkspace && !isGuestPortal && moduleRoute);
+  const pageKey = pageKeyForPath(pathname);
+
+  const checkModule = Boolean(user && property && !isWorkspace && !isGuestPortal && pageKey);
   const moduleDenied =
-    checkModule && permissionsReady && !!moduleRoute && !propertyCtx?.canRead(moduleRoute.key);
+    checkModule && permissionsReady && !!pageKey && !propertyCtx?.canRead(pageKey);
+
+  const checkWorkspacePage = Boolean(
+    user && isWorkspace && !isGuestPortal && pageKey && pageKey !== "workspace.properties",
+  );
+  const workspaceDenied =
+    checkWorkspacePage &&
+    permissionsReady &&
+    !!pageKey &&
+    !(
+      propertyCtx?.canRead(pageKey) ||
+      (pageKey === "workspace.user_management" && isPlatformAdmin(user))
+    );
+
+  const accessDenied = moduleDenied || workspaceDenied;
+  const deniedLabel =
+    moduleRoute?.label ??
+    (pageKey === "workspace.dashboard"
+      ? "Workspace dashboard"
+      : pageKey === "workspace.reports"
+        ? "Workspace reports"
+        : pageKey === "workspace.user_management"
+          ? "User management"
+          : pageKey === "workspace.roles"
+            ? "Roles"
+            : "this page");
+
   const redirectToAllowed =
     moduleDenied && moduleRoute?.key === "dashboard" && !!firstAllowedRoute;
 
@@ -82,12 +111,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (user && isLogin) return null;
   if (user && !isWorkspace && !property) return null;
 
-  if (checkModule && !permissionsReady) {
+  if ((checkModule || checkWorkspacePage) && !permissionsReady) {
     return <FullScreenMessage>Checking access…</FullScreenMessage>;
   }
   if (redirectToAllowed) return null;
 
-  if (moduleDenied && moduleRoute) {
+  if (accessDenied) {
     const allowedLabel = MODULE_ROUTES.find((m) => m.home === firstAllowedRoute)?.label;
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f7f8f7] px-4">
@@ -95,14 +124,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-600">
             <ShieldOff className="h-6 w-6" />
           </div>
-          <h1 className="mt-4 text-lg font-semibold text-slate-900">No access to {moduleRoute.label}</h1>
+          <h1 className="mt-4 text-lg font-semibold text-slate-900">No access to {deniedLabel}</h1>
           <p className="mt-2 text-sm text-slate-500">
-            {firstAllowedRoute
-              ? `You don't have permission to open ${moduleRoute.label} for ${property?.name ?? "this property"}. Ask an administrator if you need access.`
-              : `You don't have access to any module for ${property?.name ?? "this property"}. Ask an administrator to grant module permissions.`}
+            {firstAllowedRoute && !isWorkspace
+              ? `You don't have permission to open ${deniedLabel} for ${property?.name ?? "this property"}. Ask an administrator if you need access.`
+              : `You don't have access to ${deniedLabel}. Ask an administrator to grant page permissions.`}
           </p>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
-            {firstAllowedRoute && (
+            {firstAllowedRoute && !isWorkspace && (
               <Link
                 href={firstAllowedRoute}
                 className="inline-flex items-center justify-center rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
@@ -114,7 +143,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
               href="/properties"
               className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Switch property
+              {isWorkspace ? "Back to properties" : "Switch property"}
             </Link>
           </div>
         </div>

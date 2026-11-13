@@ -10,9 +10,11 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Shield,
   Users,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { usePropertyOptional } from "@/components/platform/PropertyProvider";
 import { isPlatformAdmin } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -22,19 +24,31 @@ type WorkspaceNavItem = {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  adminOnly?: boolean;
+  pageKey: string;
 };
 
 const navItems: WorkspaceNavItem[] = [
-  { href: "/properties/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/properties/reports", label: "Reports", icon: BarChart3 },
-  { href: "/properties", label: "Properties", icon: Building2 },
-  { href: "/properties/users", label: "User management", icon: Users, adminOnly: true },
+  { href: "/properties/dashboard", label: "Dashboard", icon: LayoutDashboard, pageKey: "workspace.dashboard" },
+  { href: "/properties/reports", label: "Reports", icon: BarChart3, pageKey: "workspace.reports" },
+  { href: "/properties", label: "Properties", icon: Building2, pageKey: "workspace.properties" },
+  {
+    href: "/properties/roles",
+    label: "Roles",
+    icon: Shield,
+    pageKey: "workspace.roles",
+  },
+  {
+    href: "/properties/users",
+    label: "User management",
+    icon: Users,
+    pageKey: "workspace.user_management",
+  },
 ];
 
 function WorkspaceSidebar({
   pathname,
   user,
+  canReadPage,
   onNavigate,
   onLogout,
   className,
@@ -42,6 +56,7 @@ function WorkspaceSidebar({
 }: {
   pathname: string | null;
   user: ReturnType<typeof useAuth>["user"];
+  canReadPage: (pageKey: string) => boolean;
   onNavigate?: () => void;
   onLogout: () => void;
   className?: string;
@@ -69,7 +84,12 @@ function WorkspaceSidebar({
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
         {navItems.map((item) => {
-          if (item.adminOnly && !isPlatformAdmin(user)) return null;
+          const allowed =
+            item.pageKey === "workspace.properties" ||
+            canReadPage(item.pageKey) ||
+            ((item.pageKey === "workspace.user_management" || item.pageKey === "workspace.roles") &&
+              isPlatformAdmin(user));
+          if (!allowed) return null;
           const Icon = item.icon;
           const active =
             pathname === item.href ||
@@ -146,6 +166,8 @@ export function WorkspaceShell({
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const propertyCtx = usePropertyOptional();
+  const canReadPage = (pageKey: string) => propertyCtx?.canRead(pageKey) ?? isPlatformAdmin(user);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [navPath, setNavPath] = useState(pathname);
   const [actionSlot, setActionSlot] = useState<HTMLDivElement | null>(null);
@@ -181,6 +203,7 @@ export function WorkspaceShell({
         <WorkspaceSidebar
           pathname={pathname}
           user={user}
+          canReadPage={canReadPage}
           onLogout={handleLogout}
           collapsed
           className="h-full w-16 border-r border-slate-800"
@@ -188,6 +211,7 @@ export function WorkspaceShell({
         <WorkspaceSidebar
           pathname={pathname}
           user={user}
+          canReadPage={canReadPage}
           onLogout={handleLogout}
           onNavigate={() => setSidebarHovered(false)}
           className={cn(
@@ -209,6 +233,7 @@ export function WorkspaceShell({
           <WorkspaceSidebar
             pathname={pathname}
             user={user}
+            canReadPage={canReadPage}
             onNavigate={() => setMobileNavOpen(false)}
             onLogout={handleLogout}
             className="relative h-full w-[min(100vw-3rem,16rem)] max-w-full shadow-2xl"

@@ -39,7 +39,8 @@ export function TopNav({ items }: TopNavProps) {
   const propertyCtx = usePropertyOptional();
   const visibleItems = items.filter((item) => {
     const route = moduleRouteForPath(item.href);
-    return !route || !propertyCtx || propertyCtx.canRead(route.key);
+    if (!route || !propertyCtx) return true;
+    return propertyCtx.canSeeModule?.(route.key) ?? propertyCtx.canRead(route.key);
   });
 
   return (

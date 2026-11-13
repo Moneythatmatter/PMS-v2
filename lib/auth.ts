@@ -8,6 +8,7 @@ export type AuthUser = {
   role: string;
   initials: string;
   isSuperAdmin?: boolean;
+  tenantId?: string | null;
 };
 
 export type LoginResult = {
@@ -70,10 +71,15 @@ export function logoutSession() {
   setSession(null);
 }
 
-/** Super admin flag or legacy Admin role — can manage users & properties. */
+/** Super Admin or Tenant Admin — can manage users & properties in PMS. */
 export function isPlatformAdmin(user?: AuthUser | null): boolean {
   if (!user) return false;
   if (user.isSuperAdmin) return true;
   const role = String(user.role ?? "").trim().toLowerCase();
-  return role === "admin" || role === "administrator";
+  return (
+    role === "super admin" ||
+    role === "superadmin" ||
+    role === "admin" ||
+    role === "administrator"
+  );
 }

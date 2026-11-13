@@ -13,10 +13,21 @@ export type PropertyDto = {
   accountsSetup?: { seeded: boolean; message: string };
 };
 
-export type PlatformModule = {
+export type PlatformPage = {
   key: string;
   label: string;
+  path?: string;
 };
+
+/** Grouped page catalog from GET /api/platform/modules */
+export type PlatformAccessGroup = {
+  key: string;
+  label: string;
+  pages: PlatformPage[];
+};
+
+/** @deprecated Prefer PlatformAccessGroup — kept for flat page rows in forms */
+export type PlatformModule = PlatformPage;
 
 export type UserPermissionDto = {
   propertyId: string;
@@ -42,6 +53,8 @@ export type ManagedUserDto = {
   isSuperAdmin?: boolean;
   employeeId?: string | null;
   employeeLabel?: string;
+  accessRoleId?: string | null;
+  accessRoleName?: string;
   propertyIds: string[];
   permissions: Array<{
     id?: string;
@@ -49,6 +62,16 @@ export type ManagedUserDto = {
     moduleKey: string;
     permission: PermissionLevel;
   }>;
+};
+
+export type ManagedRoleDto = {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string;
+  status: string;
+  permissions: Array<{ moduleKey: string; permission: PermissionLevel }>;
+  userCount: number;
 };
 
 export type PortfolioProperty = {
@@ -189,7 +212,7 @@ export const platformService = {
   }) => api.post<PropertyDto>("/api/platform/properties", body),
   updateProperty: (id: string, body: Partial<PropertyDto>) =>
     api.put<PropertyDto>(`/api/platform/properties/${id}`, body),
-  listModules: () => api.get<PlatformModule[]>("/api/platform/modules"),
+  listModules: () => api.get<PlatformAccessGroup[]>("/api/platform/modules"),
   myPermissions: (propertyId: string) =>
     api.get<Record<string, PermissionLevel>>(
       `/api/platform/permissions/me?propertyId=${encodeURIComponent(propertyId)}`,
@@ -206,6 +229,7 @@ export const platformService = {
     role?: string;
     isSuperAdmin?: boolean;
     employeeId?: string | null;
+    accessRoleId?: string | null;
     propertyIds?: string[];
     permissions?: UserPermissionDto[];
   }) => api.post<ManagedUserDto>("/api/platform/users", body),
@@ -217,9 +241,28 @@ export const platformService = {
       status: string;
       isSuperAdmin: boolean;
       employeeId: string | null;
+      accessRoleId: string | null;
       propertyIds: string[];
       permissions: UserPermissionDto[];
       password: string;
     }>,
   ) => api.put<ManagedUserDto>(`/api/platform/users/${id}`, body),
+
+  listRoles: () => api.get<ManagedRoleDto[]>("/api/platform/roles"),
+  createRole: (body: {
+    name: string;
+    description?: string;
+    permissions?: Array<{ moduleKey: string; permission: PermissionLevel }>;
+  }) => api.post<ManagedRoleDto>("/api/platform/roles", body),
+  updateRole: (
+    id: string,
+    body: Partial<{
+      name: string;
+      description: string;
+      status: string;
+      permissions: Array<{ moduleKey: string; permission: PermissionLevel }>;
+      reapplyToUsers: boolean;
+    }>,
+  ) => api.put<ManagedRoleDto>(`/api/platform/roles/${id}`, body),
+  deleteRole: (id: string) => api.delete<{ ok: boolean }>(`/api/platform/roles/${id}`),
 };

@@ -7,32 +7,27 @@ import { Button } from "@/components/ui/Button";
 import {
   platformService,
   type EmployeeLinkOption,
+  type ManagedRoleDto,
   type ManagedUserDto,
-  type PlatformModule,
+  type PlatformAccessGroup,
   type PropertyDto,
 } from "@/services/platform";
 import type { PermissionLevel } from "@/lib/property";
 import { cn } from "@/lib/utils";
 import { Avatar } from "./userUi";
+import { PageAccessTabs, staffPageLevel, type PageAccessLevel } from "@/components/platform/PageAccessTabs";
 
-type Level = PermissionLevel | "";
 type FormState = {
   name: string;
   email: string;
   password: string;
   role: string;
+  accessRoleId: string;
   isSuperAdmin: boolean;
   employeeId: string;
   propertyIds: string[];
   permissions: Record<string, Record<string, PermissionLevel>>;
 };
-
-const LEVELS: { id: Level; label: string; hint: string; on: string; swatch: string }[] = [
-  { id: "", label: "None", hint: "Module hidden", on: "bg-white text-slate-700 shadow-sm ring-1 ring-slate-200", swatch: "bg-slate-300" },
-  { id: "read", label: "Read", hint: "View only", on: "bg-sky-600 text-white shadow-sm", swatch: "bg-sky-600" },
-  { id: "write", label: "Write", hint: "Create & edit", on: "bg-emerald-600 text-white shadow-sm", swatch: "bg-emerald-600" },
-  { id: "admin", label: "Admin", hint: "Full control incl. settings", on: "bg-violet-600 text-white shadow-sm", swatch: "bg-violet-600" },
-];
 
 const INPUT =
   "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-slate-50 disabled:text-slate-500";
@@ -43,7 +38,8 @@ function formFromUser(u: ManagedUserDto | null, defaultPropertyId?: string): For
       name: "",
       email: "",
       password: "",
-      role: "Staff",
+      role: "User",
+      accessRoleId: "",
       isSuperAdmin: false,
       employeeId: "",
       propertyIds: defaultPropertyId ? [defaultPropertyId] : [],
@@ -53,13 +49,15 @@ function formFromUser(u: ManagedUserDto | null, defaultPropertyId?: string): For
   const permissions: FormState["permissions"] = {};
   for (const p of u.permissions) {
     if (!permissions[p.propertyId]) permissions[p.propertyId] = {};
-    permissions[p.propertyId][p.moduleKey] = p.permission;
+    const level = staffPageLevel(p.permission);
+    if (level) permissions[p.propertyId][p.moduleKey] = level;
   }
   return {
     name: u.name,
     email: u.email,
     password: "",
     role: u.role,
+    accessRoleId: u.accessRoleId ?? "",
     isSuperAdmin: Boolean(u.isSuperAdmin),
     employeeId: u.employeeId ?? "",
     propertyIds: [...u.propertyIds],
@@ -137,55 +135,46 @@ function IconInput({ icon: Icon, children }: { icon: React.ElementType; children
   );
 }
 
-function LevelPicker({ value, onChange, label }: { value: Level; onChange: (v: Level) => void; label: string }) {
-  return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg bg-slate-100 p-0.5">
-      {LEVELS.map((l) => (
-        <button
-          key={l.id || "none"}
-          type="button"
-          role="radio"
-          aria-checked={value === l.id}
-          title={l.hint}
-          onClick={() => onChange(l.id)}
-          className={cn(
-            "rounded-md px-2.5 py-1 text-[11px] font-semibold transition",
-            value === l.id ? l.on : "text-slate-500 hover:text-slate-800",
-          )}
-        >
-          {l.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export function UserFormDrawer({
   open,
   onClose,
   user,
   properties,
-  modules,
-  roleSuggestions,
+  accessGroups,
+  roles,
+  defaultPropertyId,
   onSaved,
 }: {
   open: boolean;
   onClose: () => void;
   user: ManagedUserDto | null;
   properties: PropertyDto[];
-  modules: PlatformModule[];
-  roleSuggestions: string[];
+  accessGroups: PlatformAccessGroup[];
+  roles: ManagedRoleDto[];
+  /** Prefill property access when creating a user (e.g. from list filter). */
+  defaultPropertyId?: string;
   onSaved: (message: string, email: string) => void;
 }) {
-  const [baseline] = useState<FormState>(() => formFromUser(user, properties[0]?.id));
+  const allPages = useMemo(() => accessGroups.flatMap((g) => g.pages), [accessGroups]);
+  const [baseline] = useState<FormState>(() =>
+    formFromUser(
+      user,
+      defaultPropertyId && properties.some((p) => p.id === defaultPropertyId)
+        ? defaultPropertyId
+        : properties[0]?.id,
+    ),
+  );
   const [form, setForm] = useState<FormState>(baseline);
   const [employeeOptions, setEmployeeOptions] = useState<EmployeeLinkOption[]>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const linkPropertyId = form.isSuperAdmin ? "" : (form.propertyIds[0] ?? "");
+  const selectedRole = useMemo(
+    () => roles.find((r) => r.id === form.accessRoleId) ?? null,
+    [roles, form.accessRoleId],
+  );
+  const linkPropertyId = form.propertyIds[0] ?? "";
   useEffect(() => {
     if (!linkPropertyId) return;
     let cancelled = false;
@@ -215,7 +204,7 @@ export function UserFormDrawer({
       };
     });
 
-  const setPerm = (propertyId: string, moduleKey: string, level: Level) =>
+  const setPerm = (propertyId: string, moduleKey: string, level: PageAccessLevel) =>
     setForm((f) => {
       const forProperty = { ...(f.permissions[propertyId] ?? {}) };
       if (level) forProperty[moduleKey] = level;
@@ -223,14 +212,24 @@ export function UserFormDrawer({
       return { ...f, permissions: { ...f.permissions, [propertyId]: forProperty } };
     });
 
-  const setAllForProperty = (propertyId: string, level: Level) =>
+  const setAllForProperty = (propertyId: string, level: PageAccessLevel) =>
     setForm((f) => ({
       ...f,
       permissions: {
         ...f.permissions,
-        [propertyId]: level ? Object.fromEntries(modules.map((m) => [m.key, level])) : {},
+        [propertyId]: level ? Object.fromEntries(allPages.map((m) => [m.key, level])) : {},
       },
     }));
+
+  const setAllForGroup = (propertyId: string, group: PlatformAccessGroup, level: PageAccessLevel) =>
+    setForm((f) => {
+      const forProperty = { ...(f.permissions[propertyId] ?? {}) };
+      for (const page of group.pages) {
+        if (level) forProperty[page.key] = level;
+        else delete forProperty[page.key];
+      }
+      return { ...f, permissions: { ...f.permissions, [propertyId]: forProperty } };
+    });
 
   const copyFromFirst = () =>
     setForm((f) => {
@@ -239,11 +238,12 @@ export function UserFormDrawer({
     });
 
   const problems = useMemo(() => {
-    const out: Partial<Record<"name" | "email" | "password" | "properties", string>> = {};
+    const out: Partial<Record<"name" | "email" | "password" | "properties" | "accessRoleId", string>> = {};
     if (!form.name.trim()) out.name = "Enter the user's full name.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) out.email = "Enter a valid email address.";
     if ((!user || form.password) && form.password.length < 6) out.password = "At least 6 characters.";
-    if (!form.isSuperAdmin && form.propertyIds.length === 0) out.properties = "Give access to at least one property.";
+    if (form.propertyIds.length === 0) out.properties = "Give access to at least one property.";
+    if (!form.accessRoleId) out.accessRoleId = "Assign a role so this user gets page access.";
     return out;
   }, [form, user]);
   const err = (key: keyof typeof problems) => (touched ? problems[key] : undefined);
@@ -259,15 +259,20 @@ export function UserFormDrawer({
       const payload = {
         name: form.name.trim(),
         email: form.email.trim(),
-        role: form.role.trim() || "Staff",
-        isSuperAdmin: form.isSuperAdmin,
+        role: selectedRole?.name || form.role.trim() || "User",
+        // Super Admin is the SaaS product owner — never assignable from PMS.
+        isSuperAdmin: false,
         employeeId: form.employeeId || null,
+        accessRoleId: form.accessRoleId || null,
         propertyIds: form.propertyIds,
-        permissions: Object.entries(form.permissions).flatMap(([propertyId, perms]) =>
-          form.propertyIds.includes(propertyId)
-            ? Object.entries(perms).map(([moduleKey, permission]) => ({ propertyId, moduleKey, permission }))
-            : [],
-        ),
+        // Role drives permissions; custom matrix only used when no role (blocked by validation).
+        permissions: form.accessRoleId
+          ? []
+          : Object.entries(form.permissions).flatMap(([propertyId, perms]) =>
+              form.propertyIds.includes(propertyId)
+                ? Object.entries(perms).map(([moduleKey, permission]) => ({ propertyId, moduleKey, permission }))
+                : [],
+            ),
       };
       if (user) {
         await platformService.updateUser(user.id, { ...payload, ...(form.password ? { password: form.password } : {}) });
@@ -300,13 +305,8 @@ export function UserFormDrawer({
             </span>
           )}
           <div className="min-w-0">
-            <h2 id="drawer-title" className="flex items-center gap-2 truncate text-base font-bold text-slate-900 sm:text-lg">
+            <h2 id="drawer-title" className="truncate text-base font-bold text-slate-900 sm:text-lg">
               {user ? form.name || user.name : "Create user"}
-              {user && form.isSuperAdmin && (
-                <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700 ring-1 ring-violet-200">
-                  Super admin
-                </span>
-              )}
             </h2>
             <p className="truncate text-xs text-slate-500">
               {user ? `${user.email} · ${user.status || "Active"}` : "Set up a login, then choose what this person can access."}
@@ -393,190 +393,168 @@ export function UserFormDrawer({
               </Field>
               <Field
                 label="Role"
-                hint={
-                  ["admin", "administrator"].includes(form.role.trim().toLowerCase())
-                    ? "Admin role = full access to every property and module, including creating properties."
-                    : "A label only — access comes from the permissions below. Use \"Admin\" for full administrator access."
-                }
+                required
+                error={err("accessRoleId")}
+                hint="Create roles under Workspace → Roles, then assign here. The user inherits that role’s page access."
               >
-                <input
-                  className={INPUT}
-                  list="user-role-suggestions"
-                  placeholder="e.g. Front Office"
-                  value={form.role}
-                  onChange={(e) => patch({ role: e.target.value })}
-                />
-                <datalist id="user-role-suggestions">
-                  {roleSuggestions.map((r) => (
-                    <option key={r} value={r} />
+                <select
+                  className={cn(INPUT, err("accessRoleId") && "border-red-300")}
+                  value={form.accessRoleId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const r = roles.find((x) => x.id === id);
+                    patch({ accessRoleId: id, role: r?.name || form.role || "User" });
+                  }}
+                >
+                  <option value="">Select a role…</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.permissions.length} page{r.permissions.length === 1 ? "" : "s"})
+                    </option>
                   ))}
-                </datalist>
+                </select>
+                {roles.length === 0 && (
+                  <span className="mt-1 block text-[11px] text-amber-700">
+                    No roles yet. Open Roles in the workspace sidebar and create one first.
+                  </span>
+                )}
               </Field>
             </div>
           </Section>
 
-          <Section step={2} title="Access level">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                { id: false, title: "Standard user", hint: "Only the properties and modules you pick below." },
-                { id: true, title: "Super administrator", hint: "Every property and module, including user management." },
-              ].map((opt) => {
-                const on = form.isSuperAdmin === opt.id;
-                return (
-                  <button
-                    key={String(opt.id)}
-                    type="button"
-                    onClick={() => patch({ isSuperAdmin: opt.id })}
-                    className={cn(
-                      "flex items-start gap-3 rounded-xl border p-3.5 text-left transition",
-                      on
-                        ? opt.id
-                          ? "border-violet-400 bg-violet-50 ring-1 ring-violet-400"
-                          : "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500"
-                        : "border-slate-200 hover:border-slate-300",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
-                        on ? (opt.id ? "border-violet-600 bg-violet-600" : "border-emerald-600 bg-emerald-600") : "border-slate-300",
-                      )}
+          <Section
+            step={2}
+            title="Select properties"
+            description="Choose which hotels this user can open after logging in."
+            action={
+              <div className="flex items-center gap-2">
+                {properties.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      className="text-[11px] font-semibold text-emerald-700 hover:underline"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          propertyIds: properties.map((p) => p.id),
+                        }))
+                      }
                     >
-                      {on && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
-                    </span>
-                    <span>
-                      <span className="block text-sm font-semibold text-slate-900">{opt.title}</span>
-                      <span className="block text-xs text-slate-500">{opt.hint}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </Section>
-
-          {!form.isSuperAdmin && (
-            <>
-              <Section
-                step={3}
-                title="Property access"
-                description="The hotels this user can switch into after logging in."
-                action={
-                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
-                    {form.propertyIds.length} of {properties.length}
-                  </span>
-                }
-              >
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {properties.map((p) => {
-                    const on = form.propertyIds.includes(p.id);
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => toggleProperty(p.id)}
-                        className={cn(
-                          "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition",
-                          on ? "border-emerald-500 bg-emerald-50/70 ring-1 ring-emerald-500" : "border-slate-200 hover:border-slate-300",
-                        )}
-                      >
-                        <span
+                      Select all
+                    </button>
+                    <span className="text-slate-300">·</span>
+                    <button
+                      type="button"
+                      className="text-[11px] font-semibold text-slate-500 hover:underline"
+                      onClick={() => setForm((f) => ({ ...f, propertyIds: [], permissions: {} }))}
+                    >
+                      Clear
+                    </button>
+                  </>
+                )}
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                  {form.propertyIds.length} of {properties.length}
+                </span>
+              </div>
+            }
+          >
+                {properties.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                    No properties available. Create a property first, then assign it here.
+                  </p>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {properties.map((p) => {
+                      const on = form.propertyIds.includes(p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => toggleProperty(p.id)}
                           className={cn(
-                            "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border",
-                            on ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 bg-white",
+                            "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition",
+                            on
+                              ? "border-emerald-500 bg-emerald-50/70 ring-1 ring-emerald-500"
+                              : "border-slate-200 hover:border-slate-300",
                           )}
                         >
-                          {on && <Check className="h-3.5 w-3.5" />}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-slate-900">{p.name}</span>
-                          <span className="block truncate text-[11px] text-slate-500">
-                            {[p.code, p.city].filter(Boolean).join(" · ") || "—"}
+                          <span
+                            className={cn(
+                              "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border",
+                              on ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 bg-white",
+                            )}
+                          >
+                            {on && <Check className="h-3.5 w-3.5" />}
                           </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold text-slate-900">{p.name}</span>
+                            <span className="block truncate text-[11px] text-slate-500">
+                              {[p.code, p.city].filter(Boolean).join(" · ") || "—"}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 {err("properties") && <p className="mt-2 text-[11px] text-red-600">{err("properties")}</p>}
               </Section>
 
-              {form.propertyIds.length > 0 && (
+              {form.propertyIds.length > 0 && selectedRole && (
                 <Section
-                  step={4}
-                  title="Module permissions"
-                  description="Pick what this user can do in each module, per property."
-                  action={
-                    form.propertyIds.length > 1 ? (
-                      <Button variant="outline" onClick={copyFromFirst} className="h-8 rounded-lg px-3 text-xs font-semibold">
-                        Copy {propertyName.get(form.propertyIds[0]) ?? "first"} to all
-                      </Button>
-                    ) : null
-                  }
+                  step={3}
+                  title="Access from role"
+                  description={`“${selectedRole.name}” grants the pages below on every selected property.`}
                 >
-                  <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
-                    {LEVELS.slice(1).map((l) => (
-                      <span key={l.id} className="inline-flex items-center gap-1.5">
-                        <span className={cn("h-2.5 w-2.5 rounded-sm", l.swatch)} />
-                        <strong className="font-semibold text-slate-700">{l.label}</strong> {l.hint.toLowerCase()}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="-mx-5 -mb-5 overflow-x-auto border-t border-slate-100">
-                    <table className="w-full min-w-max text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-100 bg-slate-50/70 text-left">
-                          <th className="sticky left-0 bg-slate-50 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                            Module
-                          </th>
-                          {form.propertyIds.map((pid) => (
-                            <th key={pid} className="px-4 py-2.5 align-top">
-                              <span className="block text-xs font-semibold text-slate-800">{propertyName.get(pid) ?? pid}</span>
-                              <span className="mt-1 flex items-center gap-2">
-                                <span className="text-[10px] font-medium text-slate-400">
-                                  {grantedCount(pid)} of {modules.length} on
-                                </span>
-                                <select
-                                  aria-label={`Set all modules for ${propertyName.get(pid) ?? pid}`}
-                                  value=""
-                                  onChange={(e) => setAllForProperty(pid, e.target.value as Level)}
-                                  className="h-6 rounded-md border border-slate-200 bg-white px-1.5 text-[10px] font-semibold text-slate-600 focus:outline-none"
-                                >
-                                  <option value="" disabled>
-                                    Set all…
-                                  </option>
-                                  {LEVELS.map((l) => (
-                                    <option key={l.id || "none"} value={l.id}>
-                                      {l.label}
-                                    </option>
-                                  ))}
-                                </select>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900">
+                    <p className="font-semibold">{selectedRole.permissions.length} page grant{selectedRole.permissions.length === 1 ? "" : "s"}</p>
+                    <p className="mt-1 text-xs text-emerald-800/80">
+                      {selectedRole.description || "Edit this role under Workspace → Roles to change access for all users with it."}
+                    </p>
+                    {selectedRole.permissions.length > 0 && (
+                      <ul className="mt-3 grid gap-1 sm:grid-cols-2">
+                        {selectedRole.permissions.slice(0, 12).map((p) => {
+                          const label =
+                            allPages.find((page) => page.key === p.moduleKey)?.label ?? p.moduleKey;
+                          return (
+                            <li key={p.moduleKey} className="flex items-center justify-between gap-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs">
+                              <span className="truncate font-medium text-slate-800">{label}</span>
+                              <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-semibold uppercase text-slate-600">
+                                {p.permission}
                               </span>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {modules.map((mod) => (
-                          <tr key={mod.key} className="hover:bg-slate-50/50">
-                            <td className="sticky left-0 bg-white px-5 py-2 font-medium text-slate-800">{mod.label}</td>
-                            {form.propertyIds.map((pid) => (
-                              <td key={`${mod.key}-${pid}`} className="px-4 py-2">
-                                <LevelPicker
-                                  label={`${mod.label} access for ${propertyName.get(pid) ?? pid}`}
-                                  value={form.permissions[pid]?.[mod.key] ?? ""}
-                                  onChange={(level) => setPerm(pid, mod.key, level)}
-                                />
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    {selectedRole.permissions.length > 12 && (
+                      <p className="mt-2 text-[11px] text-emerald-800/70">
+                        +{selectedRole.permissions.length - 12} more pages defined on the role
+                      </p>
+                    )}
                   </div>
                 </Section>
               )}
-            </>
-          )}
+
+              {form.propertyIds.length > 0 && !selectedRole && (
+                <Section
+                  step={3}
+                  title="Page access"
+                  description="Pick a module tab, then set Read or Write per page. Prefer assigning a role above when possible."
+                >
+                  <PageAccessTabs
+                    mode="byProperty"
+                    accessGroups={accessGroups}
+                    propertyIds={form.propertyIds}
+                    propertyName={(id) => propertyName.get(id) ?? id}
+                    permissions={form.permissions}
+                    onChange={setPerm}
+                    onSetGroup={setAllForGroup}
+                    onSetAll={setAllForProperty}
+                    onCopyFromFirst={form.propertyIds.length > 1 ? copyFromFirst : undefined}
+                  />
+                </Section>
+              )}
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-0 lg:self-start">
@@ -584,12 +562,24 @@ export function UserFormDrawer({
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
               <ShieldCheck className="h-4 w-4 text-slate-400" /> Access summary
             </h3>
-            {form.isSuperAdmin ? (
-              <p className="rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-800">
-                Full access to all {properties.length} properties and {modules.length} modules.
-              </p>
-            ) : form.propertyIds.length === 0 ? (
+            {form.propertyIds.length === 0 ? (
               <p className="text-xs text-slate-400">No property selected yet.</p>
+            ) : selectedRole ? (
+              <div className="space-y-2">
+                <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                  Role <strong>{selectedRole.name}</strong> · {selectedRole.permissions.length} page
+                  {selectedRole.permissions.length === 1 ? "" : "s"}
+                </p>
+                <ul className="space-y-1">
+                  {form.propertyIds.map((pid) => (
+                    <li key={pid} className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5 text-slate-400" /> {propertyName.get(pid) ?? pid}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : (
               <ul className="space-y-2">
                 {form.propertyIds.map((pid) => {
@@ -600,30 +590,35 @@ export function UserFormDrawer({
                         <Building2 className="h-3.5 w-3.5 text-slate-400" /> {propertyName.get(pid) ?? pid}
                       </p>
                       <p className="mt-1 flex flex-wrap gap-1 text-[10px] font-semibold">
-                        {LEVELS.slice(1).map((l) => {
-                          const n = perms.filter((p) => p === l.id).length;
+                        {(["read", "write"] as const).map((level) => {
+                          const n = perms.filter((p) => p === level).length;
                           return n ? (
-                            <span key={l.id} className={cn("rounded px-1.5 py-0.5 text-white", l.swatch)}>
-                              {n} {l.label.toLowerCase()}
+                            <span
+                              key={level}
+                              className={cn(
+                                "rounded px-1.5 py-0.5 text-white",
+                                level === "read" ? "bg-sky-600" : "bg-emerald-600",
+                              )}
+                            >
+                              {n} {level}
                             </span>
                           ) : null;
                         })}
-                        {perms.length === 0 && <span className="text-amber-700">No modules yet</span>}
+                        {perms.length === 0 && <span className="text-amber-700">No pages yet</span>}
                       </p>
                     </li>
                   );
                 })}
               </ul>
             )}
-            {!form.isSuperAdmin && (
-              <p className="mt-3 text-[11px] text-slate-500">
-                {totalGranted} module grant{totalGranted === 1 ? "" : "s"} across {form.propertyIds.length} propert
-                {form.propertyIds.length === 1 ? "y" : "ies"}.
-              </p>
-            )}
+            <p className="mt-3 text-[11px] text-slate-500">
+              {selectedRole
+                ? `${selectedRole.permissions.length} role page${selectedRole.permissions.length === 1 ? "" : "s"} × ${form.propertyIds.length} propert${form.propertyIds.length === 1 ? "y" : "ies"}`
+                : `${totalGranted} page grant${totalGranted === 1 ? "" : "s"} across ${form.propertyIds.length} propert${form.propertyIds.length === 1 ? "y" : "ies"}.`}
+            </p>
           </section>
 
-          {!form.isSuperAdmin && form.propertyIds.length > 0 && (
+          {form.propertyIds.length > 0 && (
             <section className="rounded-2xl border border-slate-200 bg-white p-4">
               <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <Link2 className="h-4 w-4 text-slate-400" /> Employee portal link

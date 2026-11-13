@@ -147,9 +147,11 @@ export function IngredientsPage() {
         status,
         kind: "raw" as const,
       };
-      const saved = editing
-        ? await ingredientService.update(editing.id, payload)
-        : await ingredientService.create(payload);
+      const saved = (
+        editing
+          ? await ingredientService.update(editing.id, payload)
+          : await ingredientService.create(payload)
+      ) as FbIngredient;
       await reload();
       setDrawerOpen(false);
       setToast({

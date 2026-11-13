@@ -29,6 +29,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const logout = useCallback(() => {
+    logoutSession();
+    setUser(null);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -45,15 +50,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // API 401 (inactive tenant / expired token) clears storage and fires this.
+  useEffect(() => {
+    const onUnauthorized = () => logout();
+    window.addEventListener("pms:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("pms:unauthorized", onUnauthorized);
+  }, [logout]);
+
   const login = useCallback(async (email: string, password: string) => {
     const next = await loginWithEmailPassword(email, password);
     setUser(next);
     return next;
-  }, []);
-
-  const logout = useCallback(() => {
-    logoutSession();
-    setUser(null);
   }, []);
 
   const value = useMemo(

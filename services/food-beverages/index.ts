@@ -10,6 +10,7 @@ import type {
   ConversionInput,
   ConversionItem,
   ConversionItemInput,
+  FbIngredient,
 } from "@/app/data/foodbeverages/conversions";
 import type { ModifierGroup, ModifierGroupInput } from "@/app/data/foodbeverages/modifiers";
 import type { CashierSession, CashierSessionDetail } from "../front-office/cashier-sessions";
@@ -479,7 +480,7 @@ export const modifierGroupService = {
   remove: (id: string) => api.delete<{ id: string }>(fbPath(`/menu/modifier-groups/${id}`)),
 };
 
-export const ingredientService = crud("/inventory/ingredients");
+export const ingredientService = crud<FbIngredient>("/inventory/ingredients");
 export const fbUnitService = crud("/masters/units");
 export const fbTaxGroupService = crud("/masters/tax-groups");
 export const fbOutletTypeService = crud("/masters/outlet-types");

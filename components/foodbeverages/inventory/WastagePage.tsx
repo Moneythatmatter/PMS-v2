@@ -260,9 +260,11 @@ export function WastagePage() {
         reason: reason.trim(),
         status: "Approved",
       };
-      const saved = editing
-        ? await wastageService.update(editing.id, payload)
-        : await wastageService.create(payload);
+      const saved = (
+        editing
+          ? await wastageService.update(editing.id, payload)
+          : await wastageService.create(payload)
+      ) as WastageRow;
       await Promise.all([wastage.reload(), ingredients.reload()]);
       setDrawerOpen(false);
       setToast({

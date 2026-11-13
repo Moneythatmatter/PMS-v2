@@ -14,10 +14,18 @@ import { ModuleStatusPill } from "./ModuleStatusPill";
 import { TableQrPreview } from "./TableQrCard";
 import { formatINR } from "@/components/frontoffice/ui";
 
-function formatValue(value: string | number | undefined, format?: "currency" | "percent") {
+function formatValue(value: string | number | undefined, format?: "currency" | "percent" | "qty") {
   if (value === undefined || value === "—") return "—";
   if (format === "currency" && typeof value === "number") return formatINR(value);
   if (format === "percent" && typeof value === "number") return `${value}%`;
+  if (format === "qty" && (typeof value === "number" || (typeof value === "string" && value.trim() !== ""))) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return String(value);
+    return n.toLocaleString("en-IN", {
+      minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
+      maximumFractionDigits: 3,
+    });
+  }
   return String(value);
 }
 

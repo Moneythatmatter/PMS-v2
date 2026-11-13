@@ -1,3 +1,6 @@
+import type { PermissionLevel } from "@/lib/property";
+import { registeredPageKeyForPath } from "@/lib/page-access-registry";
+
 export type ModuleKey =
   | "dashboard"
   | "front_office"
@@ -42,5 +45,69 @@ export function moduleRouteForPath(pathname: string | null | undefined): ModuleR
     MODULE_ROUTES.find(
       (m) => pathname === m.prefix || pathname.startsWith(`${m.prefix}/`),
     ) ?? null
+  );
+}
+
+export function levelAllowsRead(level?: PermissionLevel | "" | null): boolean {
+  return level === "read" || level === "write" || level === "admin";
+}
+
+export function levelAllowsWrite(level?: PermissionLevel | "" | null): boolean {
+  return level === "write" || level === "admin";
+}
+
+/**
+ * Resolve the page key required for a path.
+ * Prefers registered catalog paths (named pages); falls back to module / workspace keys.
+ */
+export function pageKeyForPath(pathname: string | null | undefined): string | null {
+  if (!pathname) return null;
+  const path = pathname.split("?")[0];
+
+  const registered = registeredPageKeyForPath(path);
+  if (registered) return registered;
+
+  if (path === "/properties" || path === "/properties/") return "workspace.properties";
+  if (path === "/properties/dashboard" || path.startsWith("/properties/dashboard/")) {
+    return "workspace.dashboard";
+  }
+  if (path === "/properties/reports" || path.startsWith("/properties/reports")) {
+    return "workspace.reports";
+  }
+  if (path === "/properties/users" || path.startsWith("/properties/users/")) {
+    return "workspace.user_management";
+  }
+  if (path === "/properties/roles" || path.startsWith("/properties/roles/")) {
+    return "workspace.roles";
+  }
+
+  const mod = moduleRouteForPath(path);
+  if (!mod) return null;
+  return mod.key;
+}
+
+/** Parent module key covers child page keys (front_office → front_office.dashboard). */
+export function permissionCovers(
+  permissions: Record<string, PermissionLevel | undefined>,
+  pageKey: string,
+): boolean {
+  if (levelAllowsRead(permissions[pageKey])) return true;
+  const dot = pageKey.indexOf(".");
+  if (dot > 0) {
+    const parent = pageKey.slice(0, dot);
+    if (parent !== "workspace" && levelAllowsRead(permissions[parent])) return true;
+  }
+  return false;
+}
+
+/** Module appears in TopNav if full module or any page under it is granted. */
+export function moduleVisible(
+  permissions: Record<string, PermissionLevel | undefined>,
+  moduleKey: string,
+): boolean {
+  if (levelAllowsRead(permissions[moduleKey])) return true;
+  const prefix = `${moduleKey}.`;
+  return Object.entries(permissions).some(
+    ([key, level]) => key.startsWith(prefix) && levelAllowsRead(level),
   );
 }

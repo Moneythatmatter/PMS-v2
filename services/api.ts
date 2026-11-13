@@ -66,6 +66,12 @@ export async function apiRequest<T>(
   }
 
   if (!res.ok || !json.success) {
+    // Tenant deactivate (or expired session) → clear local PMS session + notify AuthProvider.
+    if (res.status === 401 && typeof window !== "undefined") {
+      localStorage.removeItem("pms_token");
+      localStorage.removeItem("pms_session");
+      window.dispatchEvent(new Event("pms:unauthorized"));
+    }
     throw new ApiError(json.error || `Request failed (${res.status})`, res.status);
   }
 
